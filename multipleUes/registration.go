@@ -2,8 +2,8 @@ package multipleUes
 
 import (
 	"fmt"
-	"free5gc/lib/ngap/ngapSctp"
 	"git.cs.nctu.edu.tw/calee/sctp"
+	"my5G-RANTester/lib/ngap/ngapSctp"
 	"net"
 )
 
