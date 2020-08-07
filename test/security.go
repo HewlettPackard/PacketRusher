@@ -2,8 +2,8 @@ package test
 
 import (
 	"fmt"
-	"free5gc/lib/nas"
-	"free5gc/lib/nas/security"
+	"my5G-RANTester/lib/nas"
+	"my5G-RANTester/lib/nas/security"
 	"reflect"
 )
 

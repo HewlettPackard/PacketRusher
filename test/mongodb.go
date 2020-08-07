@@ -2,8 +2,8 @@ package test
 
 import (
 	"encoding/json"
-	"free5gc/lib/MongoDBLibrary"
-	"free5gc/lib/openapi/models"
+	"my5G-RANTester/lib/MongoDBLibrary"
+	"my5G-RANTester/lib/openapi/models"
 
 	"go.mongodb.org/mongo-driver/bson"
 )

@@ -1,12 +1,12 @@
 package test
 
 import (
-	"free5gc/lib/nas"
-	"free5gc/lib/nas/nasMessage"
+	"my5G-RANTester/lib/nas"
+	"my5G-RANTester/lib/nas/nasMessage"
 
 	// Nausf_UEAU_Client "free5gc/lib/openapi/Nausf_UEAuthentication"
-	"free5gc/lib/ngap"
-	"free5gc/src/test/ngapTestpacket"
+	"my5G-RANTester/lib/ngap"
+	"my5G-RANTester/test/ngapTestpacket"
 	// "free5gc/lib/openapi/models"
 )
 

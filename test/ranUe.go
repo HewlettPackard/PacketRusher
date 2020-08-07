@@ -2,10 +2,10 @@ package test
 
 import (
 	"encoding/hex"
-	"free5gc/lib/UeauCommon"
-	"free5gc/lib/milenage"
-	"free5gc/lib/nas/security"
-	"free5gc/lib/openapi/models"
+	"my5G-RANTester/lib/UeauCommon"
+	"my5G-RANTester/lib/milenage"
+	"my5G-RANTester/lib/nas/security"
+	"my5G-RANTester/lib/openapi/models"
 	"regexp"
 )
 

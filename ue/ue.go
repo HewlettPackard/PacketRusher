@@ -3,16 +3,16 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
-	"free5gc/lib/CommonConsumerTestData/UDM/TestGenAuthData"
-	"free5gc/lib/nas"
-	"free5gc/lib/nas/nasMessage"
-	"free5gc/lib/nas/nasTestpacket"
-	"free5gc/lib/nas/nasType"
-	"free5gc/lib/nas/security"
-	"free5gc/lib/ngap"
-	"free5gc/lib/openapi/models"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
+	"my5G-RANTester/lib/CommonConsumerTestData/UDM/TestGenAuthData"
+	"my5G-RANTester/lib/nas"
+	"my5G-RANTester/lib/nas/nasMessage"
+	"my5G-RANTester/lib/nas/nasTestpacket"
+	"my5G-RANTester/lib/nas/nasType"
+	"my5G-RANTester/lib/nas/security"
+	"my5G-RANTester/lib/ngap"
+	"my5G-RANTester/lib/openapi/models"
 	"my5G-RANTester/test"
 	"net"
 	"time"
@@ -270,7 +270,8 @@ func main() {
 		Sst: 1,
 		Sd:  "010203",
 	}
-	pdu = nasTestpacket.GetUlNasTransport_PduSessionEstablishmentRequest(10, nasMessage.ULNASTransportRequestTypeInitialRequest, "internet", &sNssai)
+	pdu = nasTestpacket.GetUlNasTransport_PduSessionEstablishmentRequest(10, nasMessage.ULNASTransportRequestTypeInitialRequest, "internet", (&sNssai))
+
 	pdu, err = test.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)
 	if err != nil {
 		fmt.Println("encode GetPduSessionEstablishmentRequest Msg")
