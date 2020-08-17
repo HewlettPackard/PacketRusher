@@ -1,4 +1,4 @@
-package multipleUes
+package main
 
 import (
 	"encoding/hex"
@@ -92,6 +92,8 @@ func main() {
 	var n int
 	var sendMsg []byte
 	var recvMsg = make([]byte, 2048)
+	var valorGtp int
+	var auxGtp string
 
 	// RAN connect to AMF
 	conn, err := connectToAmf("127.0.0.1", "127.0.0.1", 38412, 9487)
@@ -135,7 +137,7 @@ func main() {
 	// ue := test.NewRanUeContext("imsi-2089300007487", 1, security.AlgCiphering128NEA2, security.AlgIntegrity128NIA2)
 
 	// looping com a autenticação de vários ues.
-	for i := 1; i <= 52; i++ {
+	for i := 1; i <= 20; i++ {
 
 		// criando vários imsi diferentes para autenticação de varios ues.
 		var base string
@@ -303,12 +305,14 @@ func main() {
 		time.Sleep(100 * time.Millisecond)
 		// send GetPduSessionEstablishmentRequest Msg
 
-		// possível fonte de problema!!!!!!!!!
+		// called Single Network Slice Selection Assistance Information (S-NSSAI).
 		sNssai := models.Snssai{
-			Sst: 1,
+			Sst: 1, //The SST part of the S-NSSAI is mandatory and indicates the type of characteristics of the Network Slice.
 			Sd:  "010203",
 		}
-		pdu = nasTestpacket.GetUlNasTransport_PduSessionEstablishmentRequest(10, nasMessage.ULNASTransportRequestTypeInitialRequest, "internet", &sNssai)
+
+		pduSessionId := uint8(i)
+		pdu = nasTestpacket.GetUlNasTransport_PduSessionEstablishmentRequest(pduSessionId, nasMessage.ULNASTransportRequestTypeInitialRequest, "internet", &sNssai)
 		pdu, err = test.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)
 		if err != nil {
 			fmt.Println("encode GetPduSessionEstablishmentRequest Msg")
@@ -354,7 +358,19 @@ func main() {
 
 		// Send the dummy packet
 		// ping IP(tunnel IP) from 60.60.0.2(127.0.0.1) to 60.60.0.20(127.0.0.8)
-		gtpHdr, err := hex.DecodeString("32ff00340000000100000000")
+
+		// gerando vários GTP-TEID para vários ues.
+		if i == 1 {
+			valorGtp = 1
+		} else {
+			valorGtp = valorGtp + 2
+		}
+		if valorGtp <= 15 {
+			auxGtp = "32ff00340000000" + fmt.Sprintf("%x", valorGtp) + "00000000"
+		} else {
+			auxGtp = "32ff0034000000" + fmt.Sprintf("%x", valorGtp) + "00000000"
+		}
+		gtpHdr, err := hex.DecodeString(auxGtp)
 		if err != nil {
 			return
 		}

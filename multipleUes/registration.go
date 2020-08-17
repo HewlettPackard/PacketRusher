@@ -1,4 +1,4 @@
-package multipleUes
+package main
 
 import (
 	"fmt"

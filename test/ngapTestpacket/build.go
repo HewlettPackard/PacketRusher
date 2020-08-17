@@ -764,7 +764,7 @@ func BuildInitialContextSetupResponse(amfUeNgapID, ranUeNgapID int64, ipv4 strin
 	// PDU Session Resource Setup Response Item in PDU Session Resource Setup Response List
 	pDUSessionResourceSetupItemCxtRes := ngapType.PDUSessionResourceSetupItemCxtRes{}
 	pDUSessionResourceSetupItemCxtRes.PDUSessionID.Value = 10
-	pDUSessionResourceSetupItemCxtRes.PDUSessionResourceSetupResponseTransfer = GetPDUSessionResourceSetupResponseTransfer(ipv4)
+	pDUSessionResourceSetupItemCxtRes.PDUSessionResourceSetupResponseTransfer = GetPDUSessionResourceSetupResponseTransfer(ipv4, 1)
 
 	pDUSessionResourceSetupListCxtRes.List = append(pDUSessionResourceSetupListCxtRes.List, pDUSessionResourceSetupItemCxtRes)
 
@@ -1517,7 +1517,7 @@ func BuildPDUSessionResourceSetupResponse(amfUeNgapID, ranUeNgapID int64, ipv4 s
 	pDUSessionResourceSetupItemSURes := ngapType.PDUSessionResourceSetupItemSURes{}
 	pDUSessionResourceSetupItemSURes.PDUSessionID.Value = 10
 
-	pDUSessionResourceSetupItemSURes.PDUSessionResourceSetupResponseTransfer = GetPDUSessionResourceSetupResponseTransfer(ipv4)
+	pDUSessionResourceSetupItemSURes.PDUSessionResourceSetupResponseTransfer = GetPDUSessionResourceSetupResponseTransfer(ipv4, 1)
 
 	pDUSessionResourceSetupListSURes.List = append(pDUSessionResourceSetupListSURes.List, pDUSessionResourceSetupItemSURes)
 
@@ -1596,7 +1596,7 @@ func BuildPDUSessionResourceSetupResponseForPaging(amfUeNgapID, ranUeNgapID int6
 	pDUSessionResourceSetupItemSURes := ngapType.PDUSessionResourceSetupItemSURes{}
 	pDUSessionResourceSetupItemSURes.PDUSessionID.Value = 10
 
-	pDUSessionResourceSetupItemSURes.PDUSessionResourceSetupResponseTransfer = GetPDUSessionResourceSetupResponseTransfer(ipv4)
+	pDUSessionResourceSetupItemSURes.PDUSessionResourceSetupResponseTransfer = GetPDUSessionResourceSetupResponseTransfer(ipv4, 1)
 
 	pDUSessionResourceSetupListSURes.List = append(pDUSessionResourceSetupListSURes.List, pDUSessionResourceSetupItemSURes)
 
@@ -3187,7 +3187,7 @@ func BuildCellTrafficTrace(amfUeNgapID, ranUeNgapID int64) (pdu ngapType.NGAPPDU
 	return
 }
 
-func buildPDUSessionResourceSetupResponseTransfer(ipv4 string) (data ngapType.PDUSessionResourceSetupResponseTransfer) {
+func buildPDUSessionResourceSetupResponseTransfer(ipv4 string, amfId int64) (data ngapType.PDUSessionResourceSetupResponseTransfer) {
 
 	// QoS Flow per TNL Information
 	qosFlowPerTNLInformation := &data.QosFlowPerTNLInformation
@@ -3197,7 +3197,16 @@ func buildPDUSessionResourceSetupResponseTransfer(ipv4 string) (data ngapType.PD
 	upTransportLayerInformation := &qosFlowPerTNLInformation.UPTransportLayerInformation
 	upTransportLayerInformation.Present = ngapType.UPTransportLayerInformationPresentGTPTunnel
 	upTransportLayerInformation.GTPTunnel = new(ngapType.GTPTunnel)
-	upTransportLayerInformation.GTPTunnel.GTPTEID.Value = aper.OctetString("\x00\x00\x00\x01")
+
+	// criando vários GTPTEID para o endpoint UPF-RAN.
+	var valorGTPTEID = []string{"\x00\x00\x00\x01", "\x00\x00\x00\x02", "\x00\x00\x00\x03",
+		"\x00\x00\x00\x04", "\x00\x00\x00\x05", "\x00\x00\x00\x06", "\x00\x00\x00\x07",
+		"\x00\x00\x00\x08", "\x00\x00\x00\x09", "\x00\x00\x00\x0a", "\x00\x00\x00\x0b",
+		"\x00\x00\x00\x0c", "\x00\x00\x00\x0d", "\x00\x00\x00\x0e", "\x00\x00\x00\x0f",
+		"\x00\x00\x00\x10", "\x00\x00\x00\x11", "\x00\x00\x00\x12", "\x00\x00\x00\x13",
+		"\x00\x00\x00\x14"}
+
+	upTransportLayerInformation.GTPTunnel.GTPTEID.Value = aper.OctetString(valorGTPTEID[amfId-1])
 	upTransportLayerInformation.GTPTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(ipv4, "")
 
 	// Associated QoS Flow List in QoS Flow per TNL Information
@@ -3471,8 +3480,8 @@ func buildSourceToTargetTransparentTransfer(targetGNBID []byte, targetCellID []b
 	return
 }
 
-func GetPDUSessionResourceSetupResponseTransfer(ipv4 string) []byte {
-	data := buildPDUSessionResourceSetupResponseTransfer(ipv4)
+func GetPDUSessionResourceSetupResponseTransfer(ipv4 string, amfId int64) []byte {
+	data := buildPDUSessionResourceSetupResponseTransfer(ipv4, amfId)
 	encodeData, _ := aper.MarshalWithParams(data, "valueExt")
 	return encodeData
 }
@@ -3664,9 +3673,11 @@ func BuildPDUSessionResourceSetupResponseForRegistrationTest(amfUeNgapID, ranUeN
 
 	// PDU Session Resource Setup Response Item in PDU Session Resource Setup Response List
 	pDUSessionResourceSetupItemSURes := ngapType.PDUSessionResourceSetupItemSURes{}
-	pDUSessionResourceSetupItemSURes.PDUSessionID.Value = 10
 
-	pDUSessionResourceSetupItemSURes.PDUSessionResourceSetupResponseTransfer = GetPDUSessionResourceSetupResponseTransfer(ipv4)
+	// change pdu session to dynamic value.
+	pDUSessionResourceSetupItemSURes.PDUSessionID.Value = amfUeNgapID
+
+	pDUSessionResourceSetupItemSURes.PDUSessionResourceSetupResponseTransfer = GetPDUSessionResourceSetupResponseTransfer(ipv4, amfUeNgapID)
 
 	pDUSessionResourceSetupListSURes.List = append(pDUSessionResourceSetupListSURes.List, pDUSessionResourceSetupItemSURes)
 
