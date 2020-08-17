@@ -1,0 +1,12 @@
+# Toolchain
+# Goland project folder
+.idea/
+# Visual Studio Code
+.vscode/
+
+database
+# debug
+testkeylog/
+go.sum
+*.log
+*.pcap
