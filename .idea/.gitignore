@@ -6,3 +6,13 @@
 /dataSources.local.xml
 # Editor-based HTTP Client requests
 /httpRequests/
+# Toolchain
+# Goland project folder
+.idea/
+# Visual Studio Code
+.vscode/
+
+# debug/
+go.sum
+*.log
+*.pcap
