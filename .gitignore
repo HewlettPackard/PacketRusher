@@ -4,9 +4,7 @@
 # Visual Studio Code
 .vscode/
 
-database
-# debug
-testkeylog/
+# debug/
 go.sum
 *.log
 *.pcap
