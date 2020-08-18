@@ -2,6 +2,7 @@ package ngapTestpacket
 
 import (
 	"encoding/hex"
+	"fmt"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap/ngapConvert"
 	"my5G-RANTester/lib/ngap/ngapType"
@@ -3198,15 +3199,19 @@ func buildPDUSessionResourceSetupResponseTransfer(ipv4 string, amfId int64) (dat
 	upTransportLayerInformation.Present = ngapType.UPTransportLayerInformationPresentGTPTunnel
 	upTransportLayerInformation.GTPTunnel = new(ngapType.GTPTunnel)
 
-	// criando vários GTPTEID para o endpoint UPF-RAN.
-	var valorGTPTEID = []string{"\x00\x00\x00\x01", "\x00\x00\x00\x02", "\x00\x00\x00\x03",
-		"\x00\x00\x00\x04", "\x00\x00\x00\x05", "\x00\x00\x00\x06", "\x00\x00\x00\x07",
-		"\x00\x00\x00\x08", "\x00\x00\x00\x09", "\x00\x00\x00\x0a", "\x00\x00\x00\x0b",
-		"\x00\x00\x00\x0c", "\x00\x00\x00\x0d", "\x00\x00\x00\x0e", "\x00\x00\x00\x0f",
-		"\x00\x00\x00\x10", "\x00\x00\x00\x11", "\x00\x00\x00\x12", "\x00\x00\x00\x13",
-		"\x00\x00\x00\x14"}
-
-	upTransportLayerInformation.GTPTunnel.GTPTEID.Value = aper.OctetString(valorGTPTEID[amfId-1])
+	// generate some GTP-TEID for UPF-RAN tunnels(downlink)
+	var aux string
+	if amfId <= 15 {
+		aux = "0000000" + fmt.Sprintf("%x", amfId)
+	} else {
+		aux = "000000" + fmt.Sprintf("%x", amfId)
+	}
+	resu, err := hex.DecodeString(aux)
+	if err != nil {
+		fmt.Println("error in GTPTEID for endpoint UPF-RAN")
+		fmt.Println(err)
+	}
+	upTransportLayerInformation.GTPTunnel.GTPTEID.Value = aper.OctetString(resu)
 	upTransportLayerInformation.GTPTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(ipv4, "")
 
 	// Associated QoS Flow List in QoS Flow per TNL Information
