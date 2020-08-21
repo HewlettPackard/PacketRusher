@@ -3199,7 +3199,7 @@ func buildPDUSessionResourceSetupResponseTransfer(ipv4 string, amfId int64) (dat
 	upTransportLayerInformation.Present = ngapType.UPTransportLayerInformationPresentGTPTunnel
 	upTransportLayerInformation.GTPTunnel = new(ngapType.GTPTunnel)
 
-	// generate some GTP-TEID for UPF-RAN tunnels(downlink)
+	// generates some GTP-TEIDs for UPF-RAN tunnels(downlink)
 	var aux string
 	if amfId <= 15 {
 		aux = "0000000" + fmt.Sprintf("%x", amfId)

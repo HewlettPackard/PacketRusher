@@ -137,7 +137,7 @@ func main() {
 	// ue := test.NewRanUeContext("imsi-2089300007487", 1, security.AlgCiphering128NEA2, security.AlgIntegrity128NIA2)
 
 	// looping com a autenticação de vários ues.
-	for i := 1; i <= 20; i++ {
+	for i := 1; i <= 52; i++ {
 
 		// criando vários imsi diferentes para autenticação de varios ues.
 		var base string
@@ -359,7 +359,7 @@ func main() {
 		// Send the dummy packet
 		// ping IP(tunnel IP) from 60.60.0.2(127.0.0.1) to 60.60.0.20(127.0.0.8)
 
-		// gerando vários GTP-TEID para vários ues.
+		// generates some GTP-TEIDs for the RAN-UPF tunnels(uplink) in order to make the GTP header.
 		if i == 1 {
 			valorGtp = 1
 		} else {
@@ -370,6 +370,7 @@ func main() {
 		} else {
 			auxGtp = "32ff0034000000" + fmt.Sprintf("%x", valorGtp) + "00000000"
 		}
+
 		gtpHdr, err := hex.DecodeString(auxGtp)
 		if err != nil {
 			return
