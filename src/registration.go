@@ -1,8 +1,11 @@
-package src
+package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"git.cs.nctu.edu.tw/calee/sctp"
+	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
 	"my5G-RANTester/lib/CommonConsumerTestData/UDM/TestGenAuthData"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
@@ -124,9 +127,26 @@ func connectToUpf(enbIP, upfIP string, gnbPort, upfPort int) (*net.UDPConn, erro
 	return net.DialUDP("udp", gnbAddr, upfAddr)
 }
 
+func ipv4HeaderChecksum(hdr *ipv4.Header) uint32 {
+	var Checksum uint32
+	Checksum += uint32((hdr.Version<<4|(20>>2&0x0f))<<8 | hdr.TOS)
+	Checksum += uint32(hdr.TotalLen)
+	Checksum += uint32(hdr.ID)
+	Checksum += uint32((hdr.FragOff & 0x1fff) | (int(hdr.Flags) << 13))
+	Checksum += uint32((hdr.TTL << 8) | (hdr.Protocol))
+
+	src := hdr.Src.To4()
+	Checksum += uint32(src[0])<<8 | uint32(src[1])
+	Checksum += uint32(src[2])<<8 | uint32(src[3])
+	dst := hdr.Dst.To4()
+	Checksum += uint32(dst[0])<<8 | uint32(dst[1])
+	Checksum += uint32(dst[2])<<8 | uint32(dst[3])
+	return ^(Checksum&0xffff0000>>16 + Checksum&0xffff)
+}
+
 // registration testing code.
 
-// registration and authentication to a single GNB
+// registration and authentication to a GNB
 func registrationGNB(connN2 *sctp.SCTPConn, gnbId []byte, nameGNB string) error {
 	var sendMsg []byte
 	var recvMsg = make([]byte, 2048)
@@ -161,12 +181,12 @@ func registrationGNB(connN2 *sctp.SCTPConn, gnbId []byte, nameGNB string) error 
 		return fmt.Errorf("Error decoding GNB %s NGSetup Response Msg", nameGNB)
 	}
 
-	// function works fine.
+	// function worked fine.
 	return nil
 }
 
-// registration and authentication to a single UE.
-func registrationUE(connN2 *sctp.SCTPConn, imsiSupi string, ranUeId int64, suciV1 uint8, suciV2 uint8) error {
+// registration and authentication to a UE.
+func registrationUE(connN2 *sctp.SCTPConn, imsiSupi string, ranUeId int64, suciV1 uint8, suciV2 uint8, ranIpAddr string) error {
 	var sendMsg []byte
 	var recvMsg = make([]byte, 2048)
 	var n int
@@ -287,28 +307,169 @@ func registrationUE(connN2 *sctp.SCTPConn, imsiSupi string, ranUeId int64, suciV
 
 	time.Sleep(100 * time.Millisecond)
 
+	// send GetPduSessionEstablishmentRequest Msg
+
+	// called Single Network Slice Selection Assistance Information (S-NSSAI).
+	sNssai := models.Snssai{
+		Sst: 1, //The SST part of the S-NSSAI is mandatory and indicates the type of characteristics of the Network Slice.
+		Sd:  "010203",
+	}
+
+	pdu = nasTestpacket.GetUlNasTransport_PduSessionEstablishmentRequest(uint8(ranUeId), nasMessage.ULNASTransportRequestTypeInitialRequest, "internet", (&sNssai))
+	pdu, err = test.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)
+	if err != nil {
+		return fmt.Errorf("Error encoding %s ue PduSession Establishment Request Msg", imsiSupi)
+	}
+
+	sendMsg, err = test.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+	if err != nil {
+		return fmt.Errorf("Error getting %s ue PduSession Establishment Request Msg", imsiSupi)
+	}
+
+	_, err = connN2.Write(sendMsg)
+	if err != nil {
+		return fmt.Errorf("Error sending %s ue PduSession Establishment Request Msg", imsiSupi)
+	}
+
+	// receive 12. NGAP-PDU Session Resource Setup Request(DL nas transport((NAS msg-PDU session setup Accept)))
+	n, err = connN2.Read(recvMsg)
+	if err != nil {
+		return fmt.Errorf("Error sending %s ue NGAP-PDU Session Establishment Setup accept", imsiSupi)
+	}
+	_, err = ngap.Decoder(recvMsg[:n])
+	if err != nil {
+		return fmt.Errorf("Error decoding %s ue NGAP-PDU Session Establishment Setup accept", imsiSupi)
+	}
+
+	// send 14. NGAP-PDU Session Resource Setup Response.
+	sendMsg, err = test.GetPDUSessionResourceSetupResponse(ue.AmfUeNgapId, ue.RanUeNgapId, ranIpAddr)
+	if err != nil {
+		return fmt.Errorf("Error getting %s ue NGAP-PDU Session Resource Setup Response", imsiSupi)
+	}
+	_, err = connN2.Write(sendMsg)
+	if err != nil {
+		return fmt.Errorf("Error sending %s ue NGAP-PDU Session Resource Setup Response", imsiSupi)
+	}
+
+	// wait 1s
+	time.Sleep(1 * time.Second)
+
+	// function worked fine.
+	return nil
 }
 
-// registration and authentication to a single UE.
+// UE ping.
+func pingUE(connN3 *net.UDPConn, ranUeId int, ipUe string) error {
+	var valorGtp int
+	var auxGtp string
+
+	// generates some GTP-TEIDs for the RAN-UPF tunnels(uplink) in order to make the GTP header.
+	valorGtp = 1 + 2*(ranUeId-1)
+	if valorGtp < 16 {
+		auxGtp = "32ff00340000000" + fmt.Sprintf("%x", valorGtp) + "00000000"
+	} else if valorGtp < 256 {
+		auxGtp = "32ff0034000000" + fmt.Sprintf("%x", valorGtp) + "00000000"
+	} else {
+		auxGtp = "32ff003400000" + fmt.Sprintf("%x", valorGtp) + "00000000"
+	}
+
+	gtpHdr, err := hex.DecodeString(auxGtp)
+	if err != nil {
+		return fmt.Errorf("Error getting gtp header")
+	}
+	icmpData, err := hex.DecodeString("8c870d0000000000101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323334353637")
+	if err != nil {
+		return fmt.Errorf("Error getting icmp data")
+	}
+
+	// included ping source.
+	basePing := ipUe
+	fmt.Println(basePing)
+
+	ipv4hdr := ipv4.Header{
+		Version:  4,
+		Len:      20,
+		Protocol: 1,
+		Flags:    0,
+		TotalLen: 48,
+		TTL:      64,
+		Src:      net.ParseIP(basePing).To4(),
+		Dst:      net.ParseIP("60.60.0.101").To4(),
+		ID:       1,
+	}
+	checksum := ipv4HeaderChecksum(&ipv4hdr)
+	ipv4hdr.Checksum = int(checksum)
+
+	v4HdrBuf, err := ipv4hdr.Marshal()
+	if err != nil {
+		return fmt.Errorf("Error in ping!")
+	}
+	tt := append(gtpHdr, v4HdrBuf...)
+	if err != nil {
+		return fmt.Errorf("Error in ping!")
+	}
+
+	m := icmp.Message{
+		Type: ipv4.ICMPTypeEcho, Code: 0,
+		Body: &icmp.Echo{
+			ID: 12394, Seq: 1,
+			Data: icmpData,
+		},
+	}
+	b, err := m.Marshal(nil)
+	if err != nil {
+		return fmt.Errorf("Error in ping!")
+	}
+	b[2] = 0xaf
+	b[3] = 0x88
+
+	_, err = connN3.Write(append(tt, b...))
+	if err != nil {
+		return fmt.Errorf("Error in ping!")
+	}
+	time.Sleep(1 * time.Second)
+
+	// function worked fine.
+	return nil
+}
+
+// registration and authentication to a UE.
 func testAttachUe() error {
 	const ranIpAddr string = "10.200.200.2"
 
 	// make N2(RAN connect to AMF)
 	conn, err := connectToAmf("127.0.0.1", "127.0.0.1", 38412, 9487)
 	if err != nil {
-		return fmt.Errorf("Test fails when creating the n2 socket! Error:%s", err)
+		return fmt.Errorf("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
 	}
 
 	// make n3(RAN connect to UPF)
 	upfConn, err := connectToUpf(ranIpAddr, "10.200.200.102", 2152, 2152)
 	if err != nil {
-		return fmt.Errorf("Test fails when creating the n3 socket! Error:%s", err)
+		return fmt.Errorf("The test failed when udp socket tried to connect to UPF! Error:%s", err)
 	}
 
-	// authentication and authorization for GNB.
+	// authentication to a GNB.
 	err = registrationGNB(conn, []byte("\x00\x01\x02"), "free5gc")
 	if err != nil {
-		return fmt.Errorf("Test fails when GNB attaching! Error:%s", err)
+		return fmt.Errorf("The test failed when GNB tried to attach! Error:%s", err)
 	}
 
+	// authentication to a UE.
+	err = registrationUE(conn, "imsi-2089300000001", 1, 0x00, 0x10, ranIpAddr)
+	if err != nil {
+		return fmt.Errorf("The test failed when UE tried to attach! Error:%s", err)
+	}
+
+	// using the data plane UE
+	err = pingUE(upfConn, 1, "60.60.0.1")
+	if err != nil {
+		return fmt.Errorf("The test failed when UE tried to use ping! Error:%s", err)
+	}
+
+	// end sockets.
+	conn.Close()
+	upfConn.Close()
+
+	return nil
 }
