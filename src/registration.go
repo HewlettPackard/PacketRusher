@@ -17,6 +17,7 @@ import (
 	"my5G-RANTester/lib/openapi/models"
 	"my5G-RANTester/test"
 	"net"
+	"strconv"
 	"time"
 )
 
@@ -144,7 +145,67 @@ func ipv4HeaderChecksum(hdr *ipv4.Header) uint32 {
 	return ^(Checksum&0xffff0000>>16 + Checksum&0xffff)
 }
 
-// registration testing code.
+// calculate suci ue.
+func decodeUeSuci(s string) (uint8, uint8, error) {
+
+	// reverse imsi string.
+	var aux string
+	for _, valor := range s {
+		aux = string(valor) + aux
+	}
+
+	// calculate decimal value.
+	suci, error := hex.DecodeString(aux[:4])
+	if error != nil {
+		return 0, 0, fmt.Errorf("Error in decode hexadecimal for suci ue")
+	}
+
+	// return decimal value
+	// Function worked fine.
+	return uint8(suci[0]), uint8(suci[1]), nil
+}
+
+// generated a IMSI from integer.
+func generateImsi(i int) string {
+
+	var base string
+	switch true {
+	case i < 10:
+		base = "imsi-208930000000"
+	case i < 100:
+		base = "imsi-20893000000"
+	case i >= 100:
+		base = "imsi-2089300000"
+	}
+
+	imsi := base + strconv.Itoa(i)
+	return imsi
+}
+
+// get source ping.
+func getSrcPing(i int) string {
+	basePing := "60.60.0."
+	srcPing := basePing + strconv.Itoa(i)
+	return srcPing
+}
+
+// get GTP Header from UE id(function used for multiple attach ue).
+func generateGtpHeader(ranUeId int) string {
+	var valorGtp int
+	var auxGtp string
+
+	// generates some GTP-TEIDs for the RAN-UPF tunnels(uplink) in order to make the GTP header.
+	valorGtp = 1 + 2*(ranUeId-1)
+	if valorGtp < 16 {
+		auxGtp = "32ff00340000000" + fmt.Sprintf("%x", valorGtp) + "00000000"
+	} else if valorGtp < 256 {
+		auxGtp = "32ff0034000000" + fmt.Sprintf("%x", valorGtp) + "00000000"
+	} else {
+		auxGtp = "32ff003400000" + fmt.Sprintf("%x", valorGtp) + "00000000"
+	}
+
+	return auxGtp
+}
 
 // registration and authentication to a GNB
 func registrationGNB(connN2 *sctp.SCTPConn, gnbId []byte, nameGNB string) error {
@@ -358,22 +419,11 @@ func registrationUE(connN2 *sctp.SCTPConn, imsiSupi string, ranUeId int64, suciV
 	return nil
 }
 
-// UE ping.
-func pingUE(connN3 *net.UDPConn, ranUeId int, ipUe string) error {
-	var valorGtp int
-	var auxGtp string
+// UE after its authentication and registration.
+func pingUE(connN3 *net.UDPConn, gtpHeader string, ipUe string) error {
 
-	// generates some GTP-TEIDs for the RAN-UPF tunnels(uplink) in order to make the GTP header.
-	valorGtp = 1 + 2*(ranUeId-1)
-	if valorGtp < 16 {
-		auxGtp = "32ff00340000000" + fmt.Sprintf("%x", valorGtp) + "00000000"
-	} else if valorGtp < 256 {
-		auxGtp = "32ff0034000000" + fmt.Sprintf("%x", valorGtp) + "00000000"
-	} else {
-		auxGtp = "32ff003400000" + fmt.Sprintf("%x", valorGtp) + "00000000"
-	}
-
-	gtpHdr, err := hex.DecodeString(auxGtp)
+	// gtpheader = GTP-TEIDs for the RAN-UPF tunnels(uplink)
+	gtpHdr, err := hex.DecodeString(gtpHeader)
 	if err != nil {
 		return fmt.Errorf("Error getting gtp header")
 	}
@@ -383,9 +433,6 @@ func pingUE(connN3 *net.UDPConn, ranUeId int, ipUe string) error {
 	}
 
 	// included ping source.
-	basePing := ipUe
-	fmt.Println(basePing)
-
 	ipv4hdr := ipv4.Header{
 		Version:  4,
 		Len:      20,
@@ -393,7 +440,7 @@ func pingUE(connN3 *net.UDPConn, ranUeId int, ipUe string) error {
 		Flags:    0,
 		TotalLen: 48,
 		TTL:      64,
-		Src:      net.ParseIP(basePing).To4(),
+		Src:      net.ParseIP(ipUe).To4(),
 		Dst:      net.ParseIP("60.60.0.101").To4(),
 		ID:       1,
 	}
@@ -430,46 +477,5 @@ func pingUE(connN3 *net.UDPConn, ranUeId int, ipUe string) error {
 	time.Sleep(1 * time.Second)
 
 	// function worked fine.
-	return nil
-}
-
-// registration and authentication to a UE.
-func testAttachUe() error {
-	const ranIpAddr string = "10.200.200.2"
-
-	// make N2(RAN connect to AMF)
-	conn, err := connectToAmf("127.0.0.1", "127.0.0.1", 38412, 9487)
-	if err != nil {
-		return fmt.Errorf("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
-	}
-
-	// make n3(RAN connect to UPF)
-	upfConn, err := connectToUpf(ranIpAddr, "10.200.200.102", 2152, 2152)
-	if err != nil {
-		return fmt.Errorf("The test failed when udp socket tried to connect to UPF! Error:%s", err)
-	}
-
-	// authentication to a GNB.
-	err = registrationGNB(conn, []byte("\x00\x01\x02"), "free5gc")
-	if err != nil {
-		return fmt.Errorf("The test failed when GNB tried to attach! Error:%s", err)
-	}
-
-	// authentication to a UE.
-	err = registrationUE(conn, "imsi-2089300000001", 1, 0x00, 0x10, ranIpAddr)
-	if err != nil {
-		return fmt.Errorf("The test failed when UE tried to attach! Error:%s", err)
-	}
-
-	// using the data plane UE
-	err = pingUE(upfConn, 1, "60.60.0.1")
-	if err != nil {
-		return fmt.Errorf("The test failed when UE tried to use ping! Error:%s", err)
-	}
-
-	// end sockets.
-	conn.Close()
-	upfConn.Close()
-
 	return nil
 }

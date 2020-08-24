@@ -3201,10 +3201,12 @@ func buildPDUSessionResourceSetupResponseTransfer(ipv4 string, amfId int64) (dat
 
 	// generates some GTP-TEIDs for UPF-RAN tunnels(downlink)
 	var aux string
-	if amfId <= 15 {
+	if amfId < 16 {
 		aux = "0000000" + fmt.Sprintf("%x", amfId)
-	} else {
+	} else if amfId < 256 {
 		aux = "000000" + fmt.Sprintf("%x", amfId)
+	} else {
+		aux = "00000" + fmt.Sprintf("%x", amfId)
 	}
 	resu, err := hex.DecodeString(aux)
 	if err != nil {
