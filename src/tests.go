@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"sync"
 )
@@ -78,6 +79,46 @@ func testAttachGnb() error {
 	upfConn.Close()
 
 	// function worked fine.
+	return nil
+}
+
+// testing multiple GNBs authentication.
+func testMultiAttachGnb(numberGnbs int) error {
+
+	// make N2(RAN connect to AMF)
+	conn, err := connectToAmf("127.0.0.1", "127.0.0.1", 38412, 9487)
+	if err != nil {
+		return fmt.Errorf("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
+	}
+
+	for i := 1; i <= numberGnbs; i++ {
+
+		// multiple names for GNBs.
+		nameGNB := "my5gRanTester" + string(i)
+
+		// generate GNB id.
+		var aux string
+		if i < 16 {
+			aux = "00000" + fmt.Sprintf("%x", i)
+		} else if i < 256 {
+			aux = "0000" + fmt.Sprintf("%x", i)
+		} else {
+			aux = "000" + fmt.Sprintf("%x", i)
+		}
+
+		resu, err := hex.DecodeString(aux)
+		if err != nil {
+			return fmt.Errorf("error in GNB id for testing multiple GNBs")
+		}
+
+		// authentication to a GNB.
+		err = registrationGNB(conn, resu, nameGNB)
+		if err != nil {
+			return fmt.Errorf("The test failed when GNB tried to attach! Error:%s", err)
+		}
+	}
+
+	// functions worked fine.
 	return nil
 }
 
@@ -189,7 +230,8 @@ func testMultiAttachUesInConcurrency() error {
 
 		defer wg.Done()
 
-		for i := 1; i <= 2; i++ {
+		for i := 1; i <= 5; i++ {
+
 			// generating some IMSIs to each UE.
 			imsi := generateImsi(i)
 
@@ -217,7 +259,7 @@ func testMultiAttachUesInConcurrency() error {
 
 		defer wg.Done()
 
-		for i := 3; i <= 4; i++ {
+		for i := 6; i <= 10; i++ {
 			// generating some IMSIs to each UE.
 			imsi := generateImsi(i)
 
