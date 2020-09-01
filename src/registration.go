@@ -395,7 +395,7 @@ func registrationUE(connN2 *sctp.SCTPConn, imsiSupi string, ranUeId int64, suciV
 	// receive 12. NGAP-PDU Session Resource Setup Request(DL nas transport((NAS msg-PDU session setup Accept)))
 	n, err = connN2.Read(recvMsg)
 	if err != nil {
-		return fmt.Errorf("Error sending %s ue NGAP-PDU Session Establishment Setup accept", imsiSupi)
+		return fmt.Errorf("Error reading %s ue NGAP-PDU Session Establishment Setup accept", imsiSupi)
 	}
 	_, err = ngap.Decoder(recvMsg[:n])
 	if err != nil {
@@ -413,7 +413,7 @@ func registrationUE(connN2 *sctp.SCTPConn, imsiSupi string, ranUeId int64, suciV
 	}
 
 	// wait 1s
-	time.Sleep(1 * time.Second)
+	//time.Sleep(1 * time.Second)
 
 	// function worked fine.
 	return nil

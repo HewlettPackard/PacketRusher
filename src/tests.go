@@ -6,50 +6,45 @@ import (
 	"sync"
 )
 
-// testing attach and ping for a UE.
-func testAttachUe() error {
-	const ranIpAddr string = "10.200.200.2"
+// testing attach and ping for a UE with TNLA.
+func AttachUeWithTnla(imsi string, ranUeId int64, ranIpAddr string, wg *sync.WaitGroup, ranPort int) {
+
+	defer wg.Done()
 
 	// make N2(RAN connect to AMF)
-	conn, err := connectToAmf("127.0.0.1", "127.0.0.1", 38412, 9487)
+	conn, err := connectToAmf("127.0.0.1", "127.0.0.1", 38412, ranPort)
 	if err != nil {
-		return fmt.Errorf("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
-	}
-
-	// make n3(RAN connect to UPF)
-	upfConn, err := connectToUpf(ranIpAddr, "10.200.200.102", 2152, 2152)
-	if err != nil {
-		return fmt.Errorf("The test failed when udp socket tried to connect to UPF! Error:%s", err)
+		fmt.Println("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
 	}
 
 	// authentication to a GNB.
 	err = registrationGNB(conn, []byte("\x00\x01\x02"), "free5gc")
 	if err != nil {
-		return fmt.Errorf("The test failed when GNB tried to attach! Error:%s", err)
+		fmt.Println("The test failed when GNB tried to attach! Error:%s", err)
 	}
 
 	// authentication to a UE.
-	suciv1, suciv2, err := decodeUeSuci("imsi-2089300000001")
+	suciv1, suciv2, err := decodeUeSuci(imsi)
 	if err != nil {
-		return fmt.Errorf("The test failed when SUCI was created! Error:%s", err)
+		fmt.Println("The test failed when SUCI was created! Error:%s", err)
 	}
-	err = registrationUE(conn, "imsi-2089300000001", 1, suciv2, suciv1, ranIpAddr)
+	err = registrationUE(conn, imsi, ranUeId, suciv2, suciv1, ranIpAddr)
 	if err != nil {
-		return fmt.Errorf("The test failed when UE tried to attach! Error:%s", err)
+		fmt.Println("The test failed when UE tried to attach! Error:%s", err)
 	}
 
 	// data plane UE
-	gtpHeader := generateGtpHeader(1)
-	err = pingUE(upfConn, gtpHeader, "60.60.0.1")
-	if err != nil {
-		return fmt.Errorf("The test failed when UE tried to use ping! Error:%s", err)
-	}
+	// gtpHeader := generateGtpHeader(1)
+	// err = pingUE(upfConn, gtpHeader, "60.60.0.1")
+	// if err != nil {
+	// return fmt.Errorf("The test failed when UE tried to use ping! Error:%s", err)
+	//}
 
 	// end sockets.
 	conn.Close()
-	upfConn.Close()
+	//upfConn.Close()
 
-	return nil
+	fmt.Println("Thread with imsi:%s worked fine", imsi)
 }
 
 // testing authentication for a GNB
@@ -122,8 +117,8 @@ func testMultiAttachGnb(numberGnbs int) error {
 	return nil
 }
 
-// testing attach and ping for multiple UEs.
-func testMultiAttachUes(numberUes int) error {
+// testing attach and ping for multiple queued UEs.
+func testMultiAttachUesInQueue(numberUes int) error {
 	const ranIpAddr string = "10.200.200.2"
 
 	// make N2(RAN connect to AMF)
@@ -178,7 +173,8 @@ func testMultiAttachUes(numberUes int) error {
 	return nil
 }
 
-func testMultiAttachUesInConcurrency() error {
+// testing attach and ping for multiple concurrent UEs using 2 GNBs.
+func testMultiAttachUesInConcurrencyWithGNBs() error {
 	const ranIpAddr string = "10.200.200.2"
 	const ran2IpAddr string = "10.200.200.1"
 
@@ -220,7 +216,7 @@ func testMultiAttachUesInConcurrency() error {
 		return fmt.Errorf("The test failed when GNB tried to attach! Error:%s", err)
 	}
 
-	// authentication and ping to some UEs in parallel.
+	// authentication and ping to some concurrent UEs.
 
 	// Launch several goroutines and increment the WaitGroup counter for each.
 	wg.Add(1)
@@ -289,5 +285,29 @@ func testMultiAttachUesInConcurrency() error {
 	// upfConn.Close()
 	// upfConn2.Close()
 
+	return nil
+}
+
+// testing attach and ping for multiple concurrent UEs using TNLAs.
+func testMultiAttachUesInConcurrencyWithTNLAs() error {
+
+	var wg sync.WaitGroup
+
+	// authentication and ping to some  concurrent UEs.
+
+	// Launch several goroutines and increment the WaitGroup counter for each.
+	wg.Add(1)
+	go AttachUeWithTnla("imsi-2089300000001", 1, "10.200.200.2", &wg, 9487)
+
+	wg.Add(1)
+	go AttachUeWithTnla("imsi-2089300000002", 2, "10.200.200.2", &wg, 9488)
+
+	wg.Add(1)
+	go AttachUeWithTnla("imsi-2089300000003", 3, "10.200.200.2", &wg, 9489)
+
+	// wait for multiple goroutines.
+	wg.Wait()
+
+	// function worked fine.
 	return nil
 }

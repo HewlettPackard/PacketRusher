@@ -8,9 +8,11 @@ func main() {
 	//fmt.Println(testAttachGnb())
 
 	// testing attach and ping with 80 UEs.
-	//fmt.Println(testMultiAttachUes(80))
+	//fmt.Println(testMultiAttachUesInQueue(1))
 
-	// testing UEs registration in parallel.
-	fmt.Println(testMultiAttachUesInConcurrency())
+	// testing concurrent UEs registration with GNBs.
+	//fmt.Println(testMultiAttachUesInConcurrencyWithGNBs())
 
+	// testing concurrent UEs registration with TNLAs.
+	fmt.Println(testMultiAttachUesInConcurrencyWithTNLAs())
 }
