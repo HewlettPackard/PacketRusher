@@ -47,7 +47,7 @@ func AttachUeWithTnla(imsi string, ranUeId int64, ranIpAddr string, wg *sync.Wai
 	fmt.Println("Thread with imsi:%s worked fine", imsi)
 }
 
-// testing authentication for a GNB
+// testing authentication for a GNB( Control plane and User plane).
 func testAttachGnb() error {
 	const ranIpAddr string = "10.200.200.2"
 
@@ -77,8 +77,8 @@ func testAttachGnb() error {
 	return nil
 }
 
-// testing multiple GNBs authentication.
-func testMultiAttachGnb(numberGnbs int) error {
+// testing multiple GNBs authentication( control plane only)-> NGAP Request and response tester.
+func testMultiAttachGnbInQueue(numberGnbs int) error {
 
 	// make N2(RAN connect to AMF)
 	conn, err := connectToAmf("127.0.0.1", "127.0.0.1", 38412, 9487)
@@ -114,6 +114,59 @@ func testMultiAttachGnb(numberGnbs int) error {
 	}
 
 	// functions worked fine.
+	return nil
+}
+
+// testing multiple GNBs authentication(control plane only)-> NGAP Request and response tester.
+func testMultiAttachGnbInConcurrency(numberGnbs int) error {
+
+	ranPort := 9487
+	var wg sync.WaitGroup
+
+	// multiple concurrent GNBs authentication using goroutines.
+	for i := 1; i <= numberGnbs; i++ {
+
+		wg.Add(1)
+		go func(wg *sync.WaitGroup, ranPort int, i int) {
+
+			defer wg.Done()
+
+			// make N2(RAN connect to AMF)
+			conn, err := connectToAmf("127.0.0.1", "127.0.0.1", 38412, ranPort)
+			if err != nil {
+				fmt.Printf("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
+			}
+
+			// multiple names for GNBs.
+			nameGNB := "my5gRanTester" + string(i)
+
+			// generate GNB id.
+			var aux string
+			if i < 16 {
+				aux = "00000" + fmt.Sprintf("%x", i)
+			} else if i < 256 {
+				aux = "0000" + fmt.Sprintf("%x", i)
+			} else {
+				aux = "000" + fmt.Sprintf("%x", i)
+			}
+
+			resu, err := hex.DecodeString(aux)
+			if err != nil {
+				fmt.Printf("error in GNB id for testing multiple GNBs")
+			}
+
+			// authentication to a GNB.
+			err = registrationGNB(conn, resu, nameGNB)
+			if err != nil {
+				fmt.Printf("The test failed when GNB tried to attach! Error:%s", err)
+			}
+		}(&wg, ranPort, i)
+		ranPort++
+	}
+
+	// wait threads.
+	wg.Wait()
+
 	return nil
 }
 

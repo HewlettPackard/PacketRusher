@@ -14,5 +14,9 @@ func main() {
 	// fmt.Println(testMultiAttachUesInConcurrencyWithGNBs())
 
 	// testing concurrent UEs registration with TNLAs.
-	fmt.Println(testMultiAttachUesInConcurrencyWithTNLAs(2))
+	//fmt.Println(testMultiAttachUesInConcurrencyWithTNLAs(2))
+
+	// testing multiple GNBs authentication(control plane only)-> NGAP Request and response tester.
+	// fmt.Println(testMultiAttachGnbInQueue(100))
+	fmt.Println(testMultiAttachGnbInConcurrency(200))
 }
