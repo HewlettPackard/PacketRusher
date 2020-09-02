@@ -205,13 +205,13 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 	//}
 
 	// authentication to a GNB1.
-	err = registrationGNB(conn, []byte("\x00\x01\x02"), "free5gc")
+	err = registrationGNB(conn, []byte("\x00\x01\x01"), "free5gc")
 	if err != nil {
 		return fmt.Errorf("The test failed when GNB tried to attach! Error:%s", err)
 	}
 
 	// authentication to a GNB2.
-	err = registrationGNB(conn2, []byte("\x00\x01\x01"), "free5gc2")
+	err = registrationGNB(conn2, []byte("\x00\x01\x02"), "free5gc2")
 	if err != nil {
 		return fmt.Errorf("The test failed when GNB tried to attach! Error:%s", err)
 	}
@@ -226,7 +226,7 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 
 		defer wg.Done()
 
-		for i := 1; i <= 5; i++ {
+		for i := 1; i <= 3; i++ {
 
 			// generating some IMSIs to each UE.
 			imsi := generateImsi(i)
@@ -245,6 +245,8 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 			fmt.Println("Thread with imsi:%s worked fine", imsi)
 		}
 
+		conn.Close()
+
 	}(&wg)
 
 	// increment the WaitGroup counter.
@@ -255,7 +257,7 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 
 		defer wg.Done()
 
-		for i := 6; i <= 10; i++ {
+		for i := 4; i <= 6; i++ {
 			// generating some IMSIs to each UE.
 			imsi := generateImsi(i)
 
@@ -274,14 +276,13 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 			fmt.Println("Thread with imsi:%s worked fine", imsi)
 		}
 
+		conn2.Close()
+
 	}(&wg)
 
 	// wait for multiple goroutines.
 	wg.Wait()
 
-	// end sockets.
-	conn.Close()
-	conn2.Close()
 	// upfConn.Close()
 	// upfConn2.Close()
 
@@ -289,21 +290,20 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 }
 
 // testing attach and ping for multiple concurrent UEs using TNLAs.
-func testMultiAttachUesInConcurrencyWithTNLAs() error {
+func testMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 
 	var wg sync.WaitGroup
+	ranPort := 9487
 
-	// authentication and ping to some  concurrent UEs.
+	// authentication and ping to some concurrent UEs.
 
 	// Launch several goroutines and increment the WaitGroup counter for each.
-	wg.Add(1)
-	go AttachUeWithTnla("imsi-2089300000001", 1, "10.200.200.2", &wg, 9487)
-
-	wg.Add(1)
-	go AttachUeWithTnla("imsi-2089300000002", 2, "10.200.200.2", &wg, 9488)
-
-	wg.Add(1)
-	go AttachUeWithTnla("imsi-2089300000003", 3, "10.200.200.2", &wg, 9489)
+	for i := 1; i <= numberUesConcurrency; i++ {
+		imsi := generateImsi(i)
+		wg.Add(1)
+		go AttachUeWithTnla(imsi, int64(i), "10.200.200.2", &wg, ranPort)
+		ranPort++
+	}
 
 	// wait for multiple goroutines.
 	wg.Wait()
