@@ -8,7 +8,7 @@ func main() {
 	//fmt.Println(testAttachGnb())
 
 	// testing attach and ping with 80 UEs.
-	// fmt.Println(testMultiAttachUesInQueue(80))
+	fmt.Println(testMultiAttachUesInQueue(120))
 
 	// testing concurrent UEs registration with GNBs.
 	// fmt.Println(testMultiAttachUesInConcurrencyWithGNBs())
@@ -18,5 +18,5 @@ func main() {
 
 	// testing multiple GNBs authentication(control plane only)-> NGAP Request and response tester.
 	// fmt.Println(testMultiAttachGnbInQueue(100))
-	fmt.Println(testMultiAttachGnbInConcurrency(200))
+	// fmt.Println(testMultiAttachGnbInConcurrency(200))
 }

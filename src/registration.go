@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
-	"git.cs.nctu.edu.tw/calee/sctp"
+	"github.com/ishidawataru/sctp"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"my5G-RANTester/lib/CommonConsumerTestData/UDM/TestGenAuthData"
@@ -413,7 +413,8 @@ func registrationUE(connN2 *sctp.SCTPConn, imsiSupi string, ranUeId int64, suciV
 	}
 
 	// wait 1s
-	//time.Sleep(1 * time.Second)
+	// time.Sleep(1 * time.Second)
+	time.Sleep(100 * time.Millisecond)
 
 	// function worked fine.
 	return nil

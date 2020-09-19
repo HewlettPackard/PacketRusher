@@ -3,13 +3,11 @@ package ngapSctp
 import (
 	"encoding/binary"
 	"errors"
+	"github.com/ishidawataru/sctp"
+	"my5G-RANTester/lib/ngap/logger"
 	"net"
 	"strings"
 	"unsafe"
-
-	"git.cs.nctu.edu.tw/calee/sctp"
-
-	"my5G-RANTester/lib/ngap/logger"
 )
 
 var clientNum int
