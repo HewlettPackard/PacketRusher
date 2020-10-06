@@ -24,7 +24,7 @@ func AttachUeWithTnla(imsi string, ranUeId int64, ranIpAddr string, wg *sync.Wai
 	}
 
 	// authentication to a UE.
-	suciv1, suciv2, err := decodeUeSuci(imsi)
+	suciv1, suciv2, err := encodeUeSuci(imsi)
 	if err != nil {
 		fmt.Println("The test failed when SUCI was created! Error:%s", err)
 	}
@@ -199,7 +199,7 @@ func testMultiAttachUesInQueue(numberUes int) error {
 		imsi := generateImsi(i)
 
 		// authentication to a UE.
-		suciv1, suciv2, err := decodeUeSuci(imsi)
+		suciv1, suciv2, err := encodeUeSuci(imsi)
 		if err != nil {
 			return fmt.Errorf("The test failed when SUCI was created! Error:%s", err)
 		}
@@ -285,7 +285,7 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 			imsi := generateImsi(i)
 
 			// authentication to a UE.
-			suciv1, suciv2, err := decodeUeSuci(imsi)
+			suciv1, suciv2, err := encodeUeSuci(imsi)
 			if err != nil {
 				fmt.Println("The test failed when SUCI was created! Error:%s in Thread with imsi:%s", err, imsi)
 			}
@@ -315,7 +315,7 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 			imsi := generateImsi(i)
 
 			// authentication to a UE.
-			suciv1, suciv2, err := decodeUeSuci(imsi)
+			suciv1, suciv2, err := encodeUeSuci(imsi)
 			if err != nil {
 				fmt.Println("The test failed when SUCI was created! Error:%s in Thread with imsi:%s", err, imsi)
 			}

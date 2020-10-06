@@ -146,7 +146,7 @@ func ipv4HeaderChecksum(hdr *ipv4.Header) uint32 {
 }
 
 // calculate suci ue.
-func decodeUeSuci(s string) (uint8, uint8, error) {
+func encodeUeSuci(s string) (uint8, uint8, error) {
 
 	// reverse imsi string.
 	var aux string
