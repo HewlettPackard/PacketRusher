@@ -24,7 +24,7 @@ func KDFLen(input []byte) []byte {
 	return r
 }
 
-// This function implements the KDF defined in TS.33220 cluase B.2.0.
+// This function implements the KDF defined in TS.33220 clause B.2.0.
 //
 // For P0-Pn, the ones that will be used directly as a string (e.g. "WLAN") should be type-casted by []byte(),
 // and the ones originially in hex (e.g. "bb52e91c747a") should be converted by using hex.DecodeString().

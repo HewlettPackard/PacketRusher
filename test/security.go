@@ -37,7 +37,7 @@ func NASEncode(ue *RanUeContext, msg *nas.Message, securityContextAvailable bool
 			security.DirectionUplink, payload); err != nil {
 			return
 		}
-		// add sequece number
+		// add sequence number
 		payload = append([]byte{sequenceNumber}, payload[:]...)
 		mac32 := make([]byte, 4)
 
