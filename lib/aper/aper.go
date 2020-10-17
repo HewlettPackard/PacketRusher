@@ -2,7 +2,6 @@ package aper
 
 import (
 	"fmt"
-	"my5G-RANTester/lib/aper/logger"
 	"path"
 	"reflect"
 	"runtime"
@@ -18,9 +17,11 @@ func perTrace(level int, s string) {
 
 	_, file, line, ok := runtime.Caller(1)
 	if !ok {
-		logger.AperLog.Debugln(s)
+		// logger.AperLog.Debugln(s)
+		fmt.Sprintf(s)
 	} else {
-		logger.AperLog.Debugf("%s (%s:%d)\n", s, path.Base(file), line)
+		// logger.AperLog.Debugf("%s (%s:%d)\n", s, path.Base(file), line)
+		fmt.Sprintf(s, path.Base(file), line)
 	}
 }
 
@@ -750,7 +751,7 @@ func parseField(v reflect.Value, pd *perBitData, params fieldParameters) (err er
 			} else {
 				present, err = pd.getChoiceIndex(valueExtensible, params.valueUpperBound)
 				if err != nil {
-					logger.AperLog.Errorf("pd.getChoiceIndex Error")
+					// logger.AperLog.Errorf("pd.getChoiceIndex Error")
 				}
 				val.Field(0).SetInt(int64(present))
 				if present == 0 {

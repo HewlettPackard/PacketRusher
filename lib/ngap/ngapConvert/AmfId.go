@@ -3,7 +3,6 @@ package ngapConvert
 import (
 	"encoding/hex"
 	"my5G-RANTester/lib/aper"
-	"my5G-RANTester/lib/ngap/logger"
 )
 
 func AmfIdToNgap(amfId string) (regionId, setId, ptrId aper.BitString) {
@@ -11,12 +10,12 @@ func AmfIdToNgap(amfId string) (regionId, setId, ptrId aper.BitString) {
 	setId = HexToBitString(amfId[2:5], 10)
 	tmpByte, err := hex.DecodeString(amfId[4:])
 	if err != nil {
-		logger.NgapLog.Warningln("AmfId From Models To NGAP Error: ", err.Error())
+		//logger.NgapLog.Warningln("AmfId From Models To NGAP Error: ", err.Error())
 		return
 	}
 	shiftByte, err := aper.GetBitString(tmpByte, 2, 6)
 	if err != nil {
-		logger.NgapLog.Warningln("AmfId From Models To NGAP Error: ", err.Error())
+		//logger.NgapLog.Warningln("AmfId From Models To NGAP Error: ", err.Error())
 		return
 	}
 	ptrId.BitLength = 6

@@ -3,7 +3,6 @@ package nasMessage
 import (
 	"bytes"
 	"encoding/binary"
-	"my5G-RANTester/lib/nas/logger"
 	"my5G-RANTester/lib/nas/nasType"
 )
 
@@ -67,7 +66,7 @@ func (a *PDUSessionEstablishmentRequest) EncodePDUSessionEstablishmentRequest(bu
 		binary.Write(buffer, binary.BigEndian, &a.SMPDUDNRequestContainer.Buffer)
 	}
 	if a.ExtendedProtocolConfigurationOptions != nil {
-		logger.NasMsgLog.Infoln("Encode ExtendedProtocolConfigurationOptions in EncodePDUSessionEstablishmentRequest")
+		// logger.NasMsgLog.Infoln("Encode ExtendedProtocolConfigurationOptions in EncodePDUSessionEstablishmentRequest")
 		binary.Write(buffer, binary.BigEndian, a.ExtendedProtocolConfigurationOptions.GetIei())
 		binary.Write(buffer, binary.BigEndian, a.ExtendedProtocolConfigurationOptions.GetLen())
 		binary.Write(buffer, binary.BigEndian, &a.ExtendedProtocolConfigurationOptions.Buffer)

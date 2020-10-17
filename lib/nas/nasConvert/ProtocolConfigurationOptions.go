@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"my5G-RANTester/lib/nas/logger"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"net"
-	"strconv"
 )
 
 type ProtocolOrContainerUnit struct {
@@ -69,7 +67,7 @@ func (protocolConfigurationOptions *ProtocolConfigurationOptions) Marshal() (nas
 }
 
 func (protocolConfigurationOptions *ProtocolConfigurationOptions) UnMarshal(data []byte) (err error) {
-	logger.ConvertLog.Traceln("In ProtocolConfigurationOptions UnMarshal")
+	// logger.ConvertLog.Traceln("In ProtocolConfigurationOptions UnMarshal")
 
 	var Buf uint8
 	numOfBytes := len(data)
@@ -92,7 +90,7 @@ func (protocolConfigurationOptions *ProtocolConfigurationOptions) UnMarshal(data
 			if err != nil {
 				return err
 			}
-			logger.ConvertLog.Traceln("Reading ID: ", strconv.Itoa(int(curContainer.ProtocolOrContainerID)))
+			// logger.ConvertLog.Traceln("Reading ID: ", strconv.Itoa(int(curContainer.ProtocolOrContainerID)))
 			readingState = ReadingLength
 			numOfBytes = numOfBytes - 2
 		case ReadingLength:
@@ -100,12 +98,12 @@ func (protocolConfigurationOptions *ProtocolConfigurationOptions) UnMarshal(data
 			if err != nil {
 				return err
 			}
-			logger.ConvertLog.Traceln("Reading Length: ", strconv.Itoa(int(curContainer.LengthofContents)))
+			// logger.ConvertLog.Traceln("Reading Length: ", strconv.Itoa(int(curContainer.LengthofContents)))
 			readingState = ReadingContent
 			numOfBytes = numOfBytes - 1
 			if curContainer.LengthofContents == 0 {
 				protocolConfigurationOptions.ProtocolOrContainerList = append(protocolConfigurationOptions.ProtocolOrContainerList, curContainer)
-				logger.ConvertLog.Traceln("For loop ProtocolOrContainerList: ", protocolConfigurationOptions.ProtocolOrContainerList)
+				// logger.ConvertLog.Traceln("For loop ProtocolOrContainerList: ", protocolConfigurationOptions.ProtocolOrContainerList)
 			}
 		case ReadingContent:
 			if curContainer.LengthofContents > 0 {
@@ -115,14 +113,14 @@ func (protocolConfigurationOptions *ProtocolConfigurationOptions) UnMarshal(data
 					return err
 				}
 				protocolConfigurationOptions.ProtocolOrContainerList = append(protocolConfigurationOptions.ProtocolOrContainerList, curContainer)
-				logger.ConvertLog.Traceln("For loop ProtocolOrContainerList: ", protocolConfigurationOptions.ProtocolOrContainerList)
+				// logger.ConvertLog.Traceln("For loop ProtocolOrContainerList: ", protocolConfigurationOptions.ProtocolOrContainerList)
 			}
 			numOfBytes = numOfBytes - int(curContainer.LengthofContents)
 			readingState = ReadingID
 		}
 	}
 
-	logger.ConvertLog.Infoln("ProtocolOrContainerList: ", protocolConfigurationOptions.ProtocolOrContainerList)
+	// logger.ConvertLog.Infoln("ProtocolOrContainerList: ", protocolConfigurationOptions.ProtocolOrContainerList)
 	return
 }
 
@@ -166,14 +164,14 @@ func (protocolConfigurationOptions *ProtocolConfigurationOptions) AddDNSServerIP
 		return
 	}
 
-	logger.ConvertLog.Traceln("In AddDNSServerIPv4Address")
+	// logger.ConvertLog.Traceln("In AddDNSServerIPv4Address")
 	protocolOrContainerUnit := NewProtocolOrContainerUnit()
 
 	protocolOrContainerUnit.ProtocolOrContainerID = nasMessage.DNSServerIPv4AddressDL
 	protocolOrContainerUnit.LengthofContents = uint8(net.IPv4len)
-	logger.ConvertLog.Traceln("LengthofContents: ", protocolOrContainerUnit.LengthofContents)
+	// logger.ConvertLog.Traceln("LengthofContents: ", protocolOrContainerUnit.LengthofContents)
 	protocolOrContainerUnit.Contents = append(protocolOrContainerUnit.Contents, dnsIP.To4()...)
-	logger.ConvertLog.Traceln("Contents: ", protocolOrContainerUnit.Contents)
+	// logger.ConvertLog.Traceln("Contents: ", protocolOrContainerUnit.Contents)
 
 	protocolConfigurationOptions.ProtocolOrContainerList = append(protocolConfigurationOptions.ProtocolOrContainerList, protocolOrContainerUnit)
 	return

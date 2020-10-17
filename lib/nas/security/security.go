@@ -5,7 +5,6 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
-	"my5G-RANTester/lib/nas/logger"
 	"my5G-RANTester/lib/nas/security/snow3g"
 
 	"github.com/aead/cmac"
@@ -24,7 +23,7 @@ func NASEncrypt(AlgoID uint8, KnasEnc [16]byte, Count uint32, Bearer uint8, Dire
 
 	switch AlgoID {
 	case AlgCiphering128NEA0:
-		logger.SecurityLog.Debugf("ALG_CIPHERING is ALG_CIPHERING_128_NEA0")
+		// logger.SecurityLog.Debugf("ALG_CIPHERING is ALG_CIPHERING_128_NEA0")
 		return nil
 	case AlgCiphering128NEA1:
 		output, err := NEA1(KnasEnc, Count, uint32(Bearer), uint32(Direction), payload, uint32(len(payload))*8)
@@ -62,14 +61,14 @@ func NASMacCalculate(AlgoID uint8, KnasInt [16]uint8, Count uint32, Bearer uint8
 
 	switch AlgoID {
 	case AlgIntegrity128NIA0:
-		logger.SecurityLog.Warningln("Integrity NIA0 is emergency.")
+		// logger.SecurityLog.Warningln("Integrity NIA0 is emergency.")
 		return nil, nil
 	case AlgCiphering128NEA1:
 		return NIA1(KnasInt, Count, Bearer, uint32(Direction), msg, uint64(len(msg))*8)
 	case AlgIntegrity128NIA2:
 		return NIA2(KnasInt, Count, Bearer, Direction, msg)
 	case AlgIntegrity128NIA3:
-		logger.SecurityLog.Errorf("NIA3 not implement yet.")
+		// logger.SecurityLog.Errorf("NIA3 not implement yet.")
 		return nil, nil
 	default:
 		return nil, fmt.Errorf("Unknown Algorithm Identity[%d]", AlgoID)

@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"github.com/ishidawataru/sctp"
-	"my5G-RANTester/lib/ngap/logger"
 	"net"
 	"strings"
 	"unsafe"
@@ -57,10 +56,10 @@ func Server(addrStr string) *sctp.SCTPListener {
 
 	for _, i := range strings.Split(addrStr, ",") {
 		if a, err := net.ResolveIPAddr("ip", i); err == nil {
-			logger.NgapLog.Debugf("Resolved address '%s' to %s\n", i, a)
+			//logger.NgapLog.Debugf("Resolved address '%s' to %s\n", i, a)
 			ips = append(ips, *a)
 		} else {
-			logger.NgapLog.Errorf("Error resolving address '%s': %v\n", i, err)
+			//logger.NgapLog.Errorf("Error resolving address '%s': %v\n", i, err)
 		}
 	}
 
@@ -73,9 +72,9 @@ func Server(addrStr string) *sctp.SCTPListener {
 	ln, err := sctp.ListenSCTPExt("sctp", addr,
 		sctp.InitMsg{NumOstreams: 3, MaxInstreams: 5, MaxAttempts: 4, MaxInitTimeout: 8})
 	if err != nil {
-		logger.NgapLog.Errorf("failed to listen: %v", err)
+		//logger.NgapLog.Errorf("failed to listen: %v", err)
 	}
-	logger.NgapLog.Infof("Listen on %s", ln.Addr())
+	//logger.NgapLog.Infof("Listen on %s", ln.Addr())
 
 	return ln
 }
@@ -84,27 +83,27 @@ func Server(addrStr string) *sctp.SCTPListener {
 func Accept(sctpLn *sctp.SCTPListener) (*sctp.SCTPConn, error) {
 	sctpConn, err := sctpLn.AcceptSCTP()
 	if err != nil {
-		logger.NgapLog.Errorf("failed to accept: %v", err)
+		//logger.NgapLog.Errorf("failed to accept: %v", err)
 		return nil, err
 	}
 	info, _ := sctpConn.GetDefaultSentParam()
 	info.PPID = NGAP_PPID
 	err = sctpConn.SetDefaultSentParam(info)
 	if err != nil {
-		logger.NgapLog.Errorf("failed to accept: %v", err)
+		//logger.NgapLog.Errorf("failed to accept: %v", err)
 		return nil, err
 	}
 	err = sctpConn.SubscribeEvents(sctp.SCTP_EVENT_DATA_IO)
 	if err != nil {
-		logger.NgapLog.Errorf("failed to accept: %v", err)
+		//logger.NgapLog.Errorf("failed to accept: %v", err)
 		return nil, err
 	}
 
-	logger.NgapLog.Debugf("Accepted Connection from RemoteAddr: %s", sctpConn.RemoteAddr())
+	//logger.NgapLog.Debugf("Accepted Connection from RemoteAddr: %s", sctpConn.RemoteAddr())
 
 	// wconn := sctp.NewSCTPSndRcvInfoWrappedConn(conn.(*sctp.SCTPConn))
 	clientNum++
-	logger.NgapLog.Debugf("A new Connection %d.\n", clientNum)
+	//logger.NgapLog.Debugf("A new Connection %d.\n", clientNum)
 
 	return sctpConn, nil
 }
@@ -122,14 +121,14 @@ func Start(conn *sctp.SCTPConn, readChan chan ConnData) {
 		buffer := make([]byte, 8192)
 		n, info, err := conn.SCTPRead(buffer)
 		if err != nil {
-			logger.NgapLog.Debugf("Error %v", err)
+			//logger.NgapLog.Debugf("Error %v", err)
 			readChan <- ConnData{remoteAddr: raddrStr, data: nil, err: err}
 			break
 		} else if info == nil || info.PPID != NGAP_PPID {
-			logger.NgapLog.Warnf("Recv SCTP PPID != 60")
+			//logger.NgapLog.Warnf("Recv SCTP PPID != 60")
 			continue
 		}
-		logger.NgapLog.Debugf("Read: %s, %s, %x", raddrStr, string(buffer[:n]), buffer[:n])
+		//logger.NgapLog.Debugf("Read: %s, %s, %x", raddrStr, string(buffer[:n]), buffer[:n])
 		readChan <- ConnData{remoteAddr: raddrStr, data: buffer[:n], err: nil}
 	}
 }
@@ -140,10 +139,10 @@ func SendMsg(conn net.Conn, msg []byte) error {
 		// conn error
 		return errors.New("Connection no Remote Address")
 	}
-	logger.NgapLog.Debugf("Write: %s, %s, %x", conn.RemoteAddr().String(), string(msg), msg)
+	//logger.NgapLog.Debugf("Write: %s, %s, %x", conn.RemoteAddr().String(), string(msg), msg)
 	_, err := conn.Write(msg)
 	if err != nil {
-		logger.NgapLog.Errorf("Error %v", err)
+		//logger.NgapLog.Errorf("Error %v", err)
 		return err
 	}
 	return nil
@@ -153,12 +152,12 @@ func closeConnection(conn net.Conn) {
 
 	conn.Close()
 	clientNum--
-	logger.NgapLog.Debugf("Now, %d connections is alive.\n", clientNum)
+	//logger.NgapLog.Debugf("Now, %d connections is alive.\n", clientNum)
 
 }
 
 // Destroy - Destroy the SCTP Server Resource
 func Destroy(ln *sctp.SCTPListener) error {
-	logger.NgapLog.Infoln("Close listener")
+	//logger.NgapLog.Infoln("Close listener")
 	return ln.Close()
 }

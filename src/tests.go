@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // testing attach and ping for a UE with TNLA.
@@ -279,7 +280,7 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 
 		defer wg.Done()
 
-		for i := 1; i <= 3; i++ {
+		for i := 1; i <= 1; i++ {
 
 			// generating some IMSIs to each UE.
 			imsi := generateImsi(i)
@@ -310,7 +311,7 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 
 		defer wg.Done()
 
-		for i := 4; i <= 6; i++ {
+		for i := 2; i <= 2; i++ {
 			// generating some IMSIs to each UE.
 			imsi := generateImsi(i)
 
@@ -356,6 +357,8 @@ func testMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 		wg.Add(1)
 		go AttachUeWithTnla(imsi, int64(i), "10.200.200.2", &wg, ranPort)
 		ranPort++
+		// interval between each ue.
+		time.Sleep(60 * time.Millisecond)
 	}
 
 	// wait for multiple goroutines.

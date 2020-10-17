@@ -2,7 +2,6 @@ package ngapConvert
 
 import (
 	"my5G-RANTester/lib/aper"
-	"my5G-RANTester/lib/ngap/logger"
 	"my5G-RANTester/lib/ngap/ngapType"
 	"net"
 )
@@ -37,7 +36,7 @@ func IPAddressToString(ipAddr ngapType.TransportLayerAddress) (ipv4Addr, ipv6Add
 func IPAddressToNgap(ipv4Addr, ipv6Addr string) (ipAddr ngapType.TransportLayerAddress) {
 
 	if ipv4Addr == "" && ipv6Addr == "" {
-		logger.NgapLog.Warningln("IPAddressToNgap: Both ipv4 & ipv6 are nil string")
+		//logger.NgapLog.Warningln("IPAddressToNgap: Both ipv4 & ipv6 are nil string")
 		return
 	}
 

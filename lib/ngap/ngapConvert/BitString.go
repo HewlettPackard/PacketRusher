@@ -3,7 +3,6 @@ package ngapConvert
 import (
 	"encoding/hex"
 	"my5G-RANTester/lib/aper"
-	"my5G-RANTester/lib/ngap/logger"
 )
 
 func BitStringToHex(bitString *aper.BitString) (hexString string) {
@@ -16,7 +15,7 @@ func BitStringToHex(bitString *aper.BitString) (hexString string) {
 func HexToBitString(hexString string, bitLength int) (bitString aper.BitString) {
 	hexLen := len(hexString)
 	if hexLen != (bitLength+3)/4 {
-		logger.NgapLog.Warningln("hexLen[", hexLen, "] doesn't match bitLength[", bitLength, "]")
+		// logger.NgapLog.Warningln("hexLen[", hexLen, "] doesn't match bitLength[", bitLength, "]")
 		return
 	}
 	if hexLen%2 == 1 {
@@ -35,7 +34,7 @@ func HexToBitString(hexString string, bitLength int) (bitString aper.BitString) 
 func ByteToBitString(byteArray []byte, bitLength int) (bitString aper.BitString) {
 	byteLen := (bitLength + 7) / 8
 	if byteLen > len(byteArray) {
-		logger.NgapLog.Warningln("bitLength[", bitLength, "] is beyond byteArray size[", len(byteArray), "]")
+		// logger.NgapLog.Warningln("bitLength[", bitLength, "] is beyond byteArray size[", len(byteArray), "]")
 		return
 	}
 	bitString.Bytes = byteArray

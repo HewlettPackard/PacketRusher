@@ -3,7 +3,6 @@ package ngapConvert
 import (
 	"encoding/hex"
 	"my5G-RANTester/lib/aper"
-	"my5G-RANTester/lib/ngap/logger"
 	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/lib/openapi/models"
 	"strings"
@@ -17,7 +16,7 @@ func TraceDataToModels(traceActivation ngapType.TraceActivation) (traceData mode
 func TraceDataToNgap(traceData models.TraceData, trsr string) (traceActivation ngapType.TraceActivation) {
 
 	if len(trsr) != 4 {
-		logger.NgapLog.Warningln("Trace Recording Session Reference should be 2 octets")
+		// logger.NgapLog.Warningln("Trace Recording Session Reference should be 2 octets")
 		return
 	}
 
@@ -25,7 +24,7 @@ func TraceDataToNgap(traceData models.TraceData, trsr string) (traceActivation n
 	subStringSlice := strings.Split(traceData.TraceRef, "-")
 
 	if len(subStringSlice) != 2 {
-		logger.NgapLog.Warningln("TraceRef format is not correct")
+		// logger.NgapLog.Warningln("TraceRef format is not correct")
 		return
 	}
 
