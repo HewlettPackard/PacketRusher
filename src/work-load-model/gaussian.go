@@ -1,4 +1,4 @@
-package WorkLoadModel
+package work_load_model
 
 /*
 #cgo CFLAGS: -I /home/lucas-baleeiro/gsl/include

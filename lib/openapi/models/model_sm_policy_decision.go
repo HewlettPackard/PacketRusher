@@ -27,7 +27,7 @@ type SmPolicyDecision struct {
 	ChargingInfo *ChargingInformation    `json:"chargingInfo,omitempty" yaml:"chargingInfo" bson:"chargingInfo" mapstructure:"ChargingInfo"`
 	// Map of Traffic Control data policy decisions.
 	TraffContDecs map[string]TrafficControlData `json:"traffContDecs,omitempty" yaml:"traffContDecs" bson:"traffContDecs" mapstructure:"TraffContDecs"`
-	// Map of Usage Monitoring data policy decisions.
+	// Map of Usage monitoring data policy decisions.
 	UmDecs map[string]UsageMonitoringData `json:"umDecs,omitempty" yaml:"umDecs" bson:"umDecs" mapstructure:"UmDecs"`
 	// Map of QoS characteristics for non standard 5QIs. This map uses the 5QI values as keys.
 	QosChars           map[string]QosCharacteristics `json:"qosChars,omitempty" yaml:"qosChars" bson:"qosChars" mapstructure:"QosChars"`

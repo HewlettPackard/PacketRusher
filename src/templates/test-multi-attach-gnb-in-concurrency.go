@@ -1,4 +1,4 @@
-package Templates
+package templates
 
 import (
 	"encoding/hex"
