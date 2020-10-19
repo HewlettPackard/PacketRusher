@@ -2,6 +2,7 @@ package control_test_engine
 
 import (
 	"encoding/hex"
+	"fmt"
 	"my5G-RANTester/lib/CommonConsumerTestData/UDM/TestGenAuthData"
 	"my5G-RANTester/lib/UeauCommon"
 	"my5G-RANTester/lib/milenage"
@@ -10,6 +11,7 @@ import (
 	"my5G-RANTester/lib/nas/security"
 	"my5G-RANTester/lib/openapi/models"
 	"regexp"
+	"strconv"
 )
 
 type gnbContext struct {
@@ -30,6 +32,25 @@ type RanUeContext struct {
 	KnasInt            [16]uint8
 	Kamf               []uint8
 	AuthenticationSubs models.AuthenticationSubscription
+}
+
+func (ue *RanUeContext) encodeUeSuci() (uint8, uint8, error) {
+
+	// reverse imsi string.
+	var aux string
+	for _, valor := range ue.Supi {
+		aux = string(valor) + aux
+	}
+
+	// calculate decimal value.
+	suci, error := hex.DecodeString(aux[:4])
+	if error != nil {
+		return 0, 0, fmt.Errorf("Error in decode hexadecimal for suci ue")
+	}
+
+	// return decimal value
+	// Function worked fine.
+	return uint8(suci[0]), uint8(suci[1]), nil
 }
 
 func (ue *RanUeContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription, RAND []byte, snNmae string) []byte {
@@ -110,10 +131,28 @@ func (ue *RanUeContext) DerivateAlgKey() {
 	copy(ue.KnasInt[:], kint[16:32])
 }
 
-func (ue *RanUeContext) NewRanUeContext(supi string, ranUeNgapId int64, cipheringAlg, integrityAlg uint8) {
-	ue = &RanUeContext{}
+// generated a IMSI from integer.
+func (ue *RanUeContext) generateImsi(i int) {
+
+	var base string
+	switch true {
+	case i < 10:
+		base = "imsi-208930000000"
+	case i < 100:
+		base = "imsi-20893000000"
+	case i >= 100:
+		base = "imsi-2089300000"
+	}
+
+	imsi := base + strconv.Itoa(i)
+	ue.Supi = imsi
+}
+
+func (ue *RanUeContext) NewRanUeContext(i int, ranUeNgapId int64, cipheringAlg, integrityAlg uint8) {
 	ue.RanUeNgapId = ranUeNgapId
-	ue.Supi = supi
+	// ue.Supi = generateImsi(i)
+	// make supi
+	ue.generateImsi(i)
 	ue.CipheringAlg = cipheringAlg
 	ue.IntegrityAlg = integrityAlg
 }
