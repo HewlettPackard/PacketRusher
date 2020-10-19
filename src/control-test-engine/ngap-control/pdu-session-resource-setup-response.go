@@ -65,8 +65,8 @@ func BuildPDUSessionResourceSetupResponseForRegistrationTest(amfUeNgapID, ranUeN
 	// PDU Session Resource Setup Response Item in PDU Session Resource Setup Response List
 	pDUSessionResourceSetupItemSURes := ngapType.PDUSessionResourceSetupItemSURes{}
 
-	// change pdu session to dynamic value.
-	pDUSessionResourceSetupItemSURes.PDUSessionID.Value = amfUeNgapID
+	// PDU session identifier.
+	pDUSessionResourceSetupItemSURes.PDUSessionID.Value = 10
 
 	pDUSessionResourceSetupItemSURes.PDUSessionResourceSetupResponseTransfer = GetPDUSessionResourceSetupResponseTransfer(ipv4, amfUeNgapID)
 
