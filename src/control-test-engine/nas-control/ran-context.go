@@ -55,6 +55,7 @@ func (ue *RanUeContext) EncodeUeSuci() (uint8, uint8, error) {
 
 func (ue *RanUeContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription, RAND []byte, snNmae string) []byte {
 
+	// SQN is hardcode.
 	SQN, _ := hex.DecodeString(authSubs.SequenceNumber)
 
 	AMF, _ := hex.DecodeString(authSubs.AuthenticationManagementField)
