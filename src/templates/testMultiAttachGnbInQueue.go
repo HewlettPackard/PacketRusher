@@ -3,13 +3,14 @@ package templates
 import (
 	"encoding/hex"
 	"fmt"
+	control_test_engine "my5G-RANTester/src/control-test-engine"
 )
 
 // testing multiple GNBs authentication( control plane only)-> NGAP Request and response tester.
 func testMultiAttachGnbInQueue(numberGnbs int) error {
 
 	// make N2(RAN connect to AMF)
-	conn, err := connectToAmf("127.0.0.1", "127.0.0.1", 38412, 9487)
+	conn, err := control_test_engine.ConnectToAmf("127.0.0.1", "127.0.0.1", 38412, 9487)
 	if err != nil {
 		return fmt.Errorf("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
 	}
@@ -35,7 +36,7 @@ func testMultiAttachGnbInQueue(numberGnbs int) error {
 		}
 
 		// authentication to a GNB.
-		err = registrationGNB(conn, resu, nameGNB)
+		err = control_test_engine.RegistrationGNB(conn, resu, nameGNB)
 		if err != nil {
 			return fmt.Errorf("The test failed when GNB tried to attach! Error:%s", err)
 		}

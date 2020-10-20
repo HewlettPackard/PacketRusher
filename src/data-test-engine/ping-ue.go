@@ -34,7 +34,7 @@ func ipv4HeaderChecksum(hdr *ipv4.Header) uint32 {
 	return ^(Checksum&0xffff0000>>16 + Checksum&0xffff)
 }
 
-func pingUE(connN3 *net.UDPConn, gtpHeader string, ipUe string) error {
+func PingUE(connN3 *net.UDPConn, gtpHeader string, ipUe int) error {
 
 	// gtpheader = GTP-TEIDs for the RAN-UPF tunnels(uplink)
 	gtpHdr, err := hex.DecodeString(gtpHeader)
@@ -54,7 +54,7 @@ func pingUE(connN3 *net.UDPConn, gtpHeader string, ipUe string) error {
 		Flags:    0,
 		TotalLen: 48,
 		TTL:      64,
-		Src:      net.ParseIP(ipUe).To4(),
+		Src:      net.ParseIP(getSrcPing(ipUe)).To4(),
 		Dst:      net.ParseIP("60.60.0.101").To4(),
 		ID:       1,
 	}

@@ -3,10 +3,11 @@ package templates
 import (
 	"encoding/hex"
 	"fmt"
+	"my5G-RANTester/src/control-test-engine"
 	"sync"
 )
 
-func testMultiAttachGnbInConcurrency(numberGnbs int) error {
+func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 
 	ranPort := 9487
 	var wg sync.WaitGroup
@@ -20,7 +21,7 @@ func testMultiAttachGnbInConcurrency(numberGnbs int) error {
 			defer wg.Done()
 
 			// make N2(RAN connect to AMF)
-			conn, err := connectToAmf("127.0.0.1", "127.0.0.1", 38412, ranPort)
+			conn, err := control_test_engine.ConnectToAmf("127.0.0.1", "127.0.0.1", 38412, ranPort)
 			if err != nil {
 				fmt.Printf("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
 			}
@@ -44,7 +45,7 @@ func testMultiAttachGnbInConcurrency(numberGnbs int) error {
 			}
 
 			// authentication to a GNB.
-			err = registrationGNB(conn, resu, nameGNB)
+			err = control_test_engine.RegistrationGNB(conn, resu, nameGNB)
 			if err != nil {
 				fmt.Printf("The test failed when GNB tried to attach! Error:%s", err)
 			}

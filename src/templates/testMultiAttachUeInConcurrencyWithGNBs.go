@@ -2,18 +2,19 @@ package templates
 
 import (
 	"fmt"
+	control_test_engine "my5G-RANTester/src/control-test-engine"
 	"sync"
 )
 
 // testing attach and ping for multiple concurrent UEs using 2 GNBs.
-func testMultiAttachUesInConcurrencyWithGNBs() error {
+func TestMultiAttachUesInConcurrencyWithGNBs() error {
 	const ranIpAddr string = "10.200.200.2"
 	const ran2IpAddr string = "10.200.200.1"
 
 	var wg sync.WaitGroup
 
 	// make N2(RAN connect to AMF)
-	conn, err := connectToAmf("127.0.0.1", "127.0.0.1", 38412, 9487)
+	conn, err := control_test_engine.ConnectToAmf("127.0.0.1", "127.0.0.1", 38412, 9487)
 	if err != nil {
 		return fmt.Errorf("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
 	}
@@ -25,7 +26,7 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 	//}
 
 	// make N2(RAN2 connect to AMF)
-	conn2, err := connectToAmf("127.0.0.1", "127.0.0.1", 38412, 9488)
+	conn2, err := control_test_engine.ConnectToAmf("127.0.0.1", "127.0.0.1", 38412, 9488)
 	if err != nil {
 		return fmt.Errorf("The test failed when sctp socket 2 tried to connect to AMF! Error:%s", err)
 	}
@@ -37,13 +38,13 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 	//}
 
 	// authentication to a GNB1.
-	err = registrationGNB(conn, []byte("\x00\x01\x01"), "free5gc")
+	err = control_test_engine.RegistrationGNB(conn, []byte("\x00\x01\x01"), "free5gc")
 	if err != nil {
 		return fmt.Errorf("The test failed when GNB tried to attach! Error:%s", err)
 	}
 
 	// authentication to a GNB2.
-	err = registrationGNB(conn2, []byte("\x00\x01\x02"), "free5gc2")
+	err = control_test_engine.RegistrationGNB(conn2, []byte("\x00\x01\x02"), "free5gc2")
 	if err != nil {
 		return fmt.Errorf("The test failed when GNB tried to attach! Error:%s", err)
 	}
@@ -61,20 +62,20 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 		for i := 1; i <= 3; i++ {
 
 			// generating some IMSIs to each UE.
-			imsi := generateImsi(i)
+			// imsi := generateImsi(i)
 
 			// authentication to a UE.
-			suciv1, suciv2, err := encodeUeSuci(imsi)
-			if err != nil {
-				fmt.Println("The test failed when SUCI was created! Error:%s in Thread with imsi:%s", err, imsi)
-			}
+			//suciv1, suciv2, err := encodeUeSuci(imsi)
+			//if err != nil {
+			//	fmt.Println("The test failed when SUCI was created! Error:%s in Thread with imsi:%s", err, imsi)
+			//}
 
-			err = registrationUE(conn, imsi, int64(i), suciv2, suciv1, ranIpAddr)
+			imsi, err := control_test_engine.RegistrationUE(conn, i, int64(i), ranIpAddr)
 			if err != nil {
 				fmt.Println("The test failed when UE tried to attach! Error:%s in Thread with imsi:%s", err, imsi)
 			}
 			// thread worked fine.
-			fmt.Println("Thread with imsi:%s worked fine", imsi)
+			// fmt.Println("Thread with imsi:%s worked fine", imsi)
 		}
 
 		conn.Close()
@@ -91,21 +92,21 @@ func testMultiAttachUesInConcurrencyWithGNBs() error {
 
 		for i := 4; i <= 6; i++ {
 			// generating some IMSIs to each UE.
-			imsi := generateImsi(i)
+			// imsi := generateImsi(i)
 
 			// authentication to a UE.
-			suciv1, suciv2, err := encodeUeSuci(imsi)
-			if err != nil {
-				fmt.Println("The test failed when SUCI was created! Error:%s in Thread with imsi:%s", err, imsi)
-			}
+			// suciv1, suciv2, err := encodeUeSuci(imsi)
+			// if err != nil {
+			//	fmt.Println("The test failed when SUCI was created! Error:%s in Thread with imsi:%s", err, imsi)
+			// }
 
-			err = registrationUE(conn2, imsi, int64(i), suciv2, suciv1, ran2IpAddr)
+			imsi, err := control_test_engine.RegistrationUE(conn2, i, int64(i), ranIpAddr)
 			if err != nil {
 				fmt.Println("The test failed when UE tried to attach! Error:%s in Thread with imsi:%s", err, imsi)
 			}
 
 			// thread worked fine.
-			fmt.Println("Thread with imsi:%s worked fine", imsi)
+			// fmt.Println("Thread with imsi:%s worked fine", imsi)
 		}
 
 		conn2.Close()

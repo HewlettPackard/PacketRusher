@@ -7,7 +7,7 @@ import (
 	"my5G-RANTester/src/control-test-engine/ngap-control"
 )
 
-func registrationGNB(connN2 *sctp.SCTPConn, gnbId []byte, nameGNB string) error {
+func RegistrationGNB(connN2 *sctp.SCTPConn, gnbId []byte, nameGNB string) error {
 	var sendMsg []byte
 	var recvMsg = make([]byte, 2048)
 	var n int

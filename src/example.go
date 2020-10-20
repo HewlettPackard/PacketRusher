@@ -1,22 +1,21 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 func main() {
 
-	// testing authentication for a GNB
-	//fmt.Println(testAttachGnb())
-
-	// testing attach and ping with 80 UEs.
-	// fmt.Println(testMultiAttachUesInQueue(1))
+	// testing attach and ping with a number of UEs.
+	// fmt.Println( templates.TestMultiAttachUesInQueue(1) )
 
 	// testing concurrent UEs registration with GNBs.
-	// fmt.Println(testMultiAttachUesInConcurrencyWithGNBs())
+	// fmt.Println( templates.TestMultiAttachUesInConcurrencyWithGNBs() )
 
-	// testing concurrent UEs registration with TNLAs.
-	fmt.Println(testMultiAttachUesInConcurrencyWithTNLAs(1))
+	// testing concurrent UEs registration with some SCTPs associations.
+	// fmt.Println( templates.TestMultiAttachUesInConcurrencyWithTNLAs(1) )
 
 	// testing multiple GNBs authentication(control plane only)-> NGAP Request and response tester.
-	// fmt.Println(testMultiAttachGnbInQueue(100))
-	// fmt.Println(testMultiAttachGnbInConcurrency(200))
+	fmt.Println(testMultiAttachGnbInQueue(100))
+	// fmt.Println( templates.TestMultiAttachGnbInConcurrency(1) )
 }

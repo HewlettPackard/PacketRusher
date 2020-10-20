@@ -3,7 +3,7 @@ package data_test_engine
 import "fmt"
 
 // get GTP Header from UE id(function used for multiple attach ue).
-func generateGtpHeader(ranUeId int) string {
+func GenerateGtpHeader(ranUeId int) string {
 	var valorGtp int
 	var auxGtp string
 

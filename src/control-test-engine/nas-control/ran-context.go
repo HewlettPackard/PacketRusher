@@ -1,4 +1,4 @@
-package control_test_engine
+package nas_control
 
 import (
 	"encoding/hex"
@@ -34,7 +34,7 @@ type RanUeContext struct {
 	AuthenticationSubs models.AuthenticationSubscription
 }
 
-func (ue *RanUeContext) encodeUeSuci() (uint8, uint8, error) {
+func (ue *RanUeContext) EncodeUeSuci() (uint8, uint8, error) {
 
 	// reverse imsi string.
 	var aux string
@@ -157,7 +157,7 @@ func (ue *RanUeContext) NewRanUeContext(i int, ranUeNgapId int64, cipheringAlg, 
 	ue.IntegrityAlg = integrityAlg
 }
 
-func (ue *RanUeContext) setAuthSubscription(k, opc, op, amf string) {
+func (ue *RanUeContext) SetAuthSubscription(k, opc, op, amf string) {
 	ue.AuthenticationSubs.PermanentKey = &models.PermanentKey{
 		PermanentKeyValue: k,
 	}
@@ -175,7 +175,7 @@ func (ue *RanUeContext) setAuthSubscription(k, opc, op, amf string) {
 	ue.AuthenticationSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
 }
 
-func setUESecurityCapability(ue *RanUeContext) (UESecurityCapability *nasType.UESecurityCapability) {
+func SetUESecurityCapability(ue *RanUeContext) (UESecurityCapability *nasType.UESecurityCapability) {
 	UESecurityCapability = &nasType.UESecurityCapability{
 		Iei:    nasMessage.RegistrationRequestUESecurityCapabilityType,
 		Len:    8,

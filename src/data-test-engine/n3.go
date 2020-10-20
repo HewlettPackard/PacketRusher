@@ -5,7 +5,7 @@ import (
 	"net"
 )
 
-func connectToUpf(gnbIP, upfIP string, gnbPort, upfPort int) (*net.UDPConn, error) {
+func ConnectToUpf(gnbIP, upfIP string, gnbPort, upfPort int) (*net.UDPConn, error) {
 	upfAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", upfIP, upfPort))
 	if err != nil {
 		return nil, err

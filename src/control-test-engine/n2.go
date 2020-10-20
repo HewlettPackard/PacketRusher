@@ -34,7 +34,7 @@ func getNgapIp(amfIP, ranIP string, amfPort, ranPort int) (amfAddr, ranAddr *sct
 	return
 }
 
-func connectToAmf(amfIP, ranIP string, amfPort, ranPort int) (*sctp.SCTPConn, error) {
+func ConnectToAmf(amfIP, ranIP string, amfPort, ranPort int) (*sctp.SCTPConn, error) {
 	amfAddr, ranAddr, err := getNgapIp(amfIP, ranIP, amfPort, ranPort)
 	if err != nil {
 		return nil, err
