@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"my5G-RANTester/src/templates"
 )
 
 func main() {
 
 	// testing attach and ping with a number of UEs.
-	// fmt.Println( templates.TestMultiAttachUesInQueue(1) )
+	fmt.Println(templates.TestMultiAttachUesInQueue(1))
 
 	// testing concurrent UEs registration with GNBs.
 	// fmt.Println( templates.TestMultiAttachUesInConcurrencyWithGNBs() )
@@ -16,6 +17,6 @@ func main() {
 	// fmt.Println( templates.TestMultiAttachUesInConcurrencyWithTNLAs(1) )
 
 	// testing multiple GNBs authentication(control plane only)-> NGAP Request and response tester.
-	fmt.Println(testMultiAttachGnbInQueue(100))
+	//fmt.Println(testMultiAttachGnbInQueue(100))
 	// fmt.Println( templates.TestMultiAttachGnbInConcurrency(1) )
 }
