@@ -9,7 +9,6 @@ require (
 	github.com/google/uuid v1.1.1 // indirect
 	github.com/ishidawataru/sctp v0.0.0-20191218070446-00ab2ac2db07
 	github.com/mitchellh/mapstructure v1.3.3 // indirect
-	github.com/sirupsen/logrus v1.4.2
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
 )
