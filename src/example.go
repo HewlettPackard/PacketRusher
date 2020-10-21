@@ -8,15 +8,15 @@ import (
 func main() {
 
 	// testing attach and ping with a number of UEs.
-	//fmt.Println(templates.TestMultiAttachUesInQueue(10))
+	fmt.Println(templates.TestMultiAttachUesInQueue(12))
 
 	// testing concurrent UEs registration with GNBs.
 	// fmt.Println( templates.TestMultiAttachUesInConcurrencyWithGNBs() )
 
 	// testing concurrent UEs registration with some SCTPs associations.
-	fmt.Println(templates.TestMultiAttachUesInConcurrencyWithTNLAs(10))
+	// fmt.Println(templates.TestMultiAttachUesInConcurrencyWithTNLAs(30))
 
 	// testing multiple GNBs authentication(control plane only)-> NGAP Request and response tester.
 	//fmt.Println(testMultiAttachGnbInQueue(100))
-	// fmt.Println( templates.TestMultiAttachGnbInConcurrency(1) )
+	// fmt.Println( templates.TestMultiAttachGnbInConcurrency(200) )
 }
