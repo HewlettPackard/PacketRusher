@@ -149,13 +149,14 @@ func (ue *RanUeContext) generateImsi(i int) {
 	ue.Supi = imsi
 }
 
-func (ue *RanUeContext) NewRanUeContext(i int, ranUeNgapId int64, cipheringAlg, integrityAlg uint8) {
+func (ue *RanUeContext) NewRanUeContext(i int, ranUeNgapId int64, cipheringAlg, integrityAlg uint8, k string, opc string, op string, amf string) {
+
 	ue.RanUeNgapId = ranUeNgapId
-	// ue.Supi = generateImsi(i)
 	// make supi
 	ue.generateImsi(i)
 	ue.CipheringAlg = cipheringAlg
 	ue.IntegrityAlg = integrityAlg
+	ue.SetAuthSubscription(k, opc, op, amf)
 }
 
 func (ue *RanUeContext) SetAuthSubscription(k, opc, op, amf string) {

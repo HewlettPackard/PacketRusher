@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
 	"my5G-RANTester/internal/control-test-engine/nas-control"
+	"my5G-RANTester/internal/control-test-engine/nas-control/mm_5gs"
 	"my5G-RANTester/internal/control-test-engine/ngap-control"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
@@ -23,10 +24,10 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 	ue := &nas_control.RanUeContext{}
 
 	// new UE Context
-	ue.NewRanUeContext(ueId, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2)
+	ue.NewRanUeContext(ueId, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, "5122250214c33e723a5dd523fc145fc0", "981d464c7c52eb6e5036234984ad0bcf", "c9e8763286b5b9ffbdf56e1297d0887b", "8000")
+
 	// ue.amfUENgap is received by AMF in authentication request.(? changed this).
 	ue.AmfUeNgapId = ranUeId
-	ue.SetAuthSubscription("5122250214c33e723a5dd523fc145fc0", "981d464c7c52eb6e5036234984ad0bcf", "c9e8763286b5b9ffbdf56e1297d0887b", "8000")
 
 	// send InitialUeMessage(Registration Request)(imsi-2089300007487)
 
@@ -41,7 +42,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 		Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV1, suciV2},
 	}
 	ueSecurityCapability := nas_control.SetUESecurityCapability(ue)
-	registrationRequest := nas_control.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, mobileIdentity5GS, nil, nil, ueSecurityCapability)
+	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, mobileIdentity5GS, nil, nil, ueSecurityCapability)
 	sendMsg, err = ngap_control.GetInitialUEMessage(ue.RanUeNgapId, registrationRequest, "")
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error getting %s ue initial message", ue.Supi)
@@ -72,7 +73,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 	resStat := ue.DeriveRESstarAndSetKey(ue.AuthenticationSubs, rand[:], "5G:mnc093.mcc208.3gppnetwork.org")
 
 	// send NAS Authentication Response
-	pdu := nas_control.GetAuthenticationResponse(resStat, "")
+	pdu := mm_5gs.GetAuthenticationResponse(resStat, "")
 	sendMsg, err = ngap_control.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error getting %s NAS Authentication Response", ue.Supi)
@@ -94,7 +95,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 	}
 
 	// send NAS Security Mode Complete Msg
-	pdu = nas_control.GetSecurityModeComplete(registrationRequest)
+	pdu = mm_5gs.GetSecurityModeComplete(registrationRequest)
 	pdu, err = nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCipheredWithNew5gNasSecurityContext, true, true)
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error encoding %s ue NAS Security Mode Complete Message", ue.Supi)
@@ -129,7 +130,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 	}
 
 	// send NAS Registration Complete Msg
-	pdu = nas_control.GetRegistrationComplete(nil)
+	pdu = mm_5gs.GetRegistrationComplete(nil)
 	pdu, err = nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error encoding %s ue NAS Registration Complete Msg", ue.Supi)
@@ -153,7 +154,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 		Sd:  "010203",
 	}
 
-	pdu = nas_control.GetUlNasTransport_PduSessionEstablishmentRequest(uint8(ranUeId), nasMessage.ULNASTransportRequestTypeInitialRequest, "internet", (&sNssai))
+	pdu = mm_5gs.GetUlNasTransport_PduSessionEstablishmentRequest(uint8(ranUeId), nasMessage.ULNASTransportRequestTypeInitialRequest, "internet", (&sNssai))
 	pdu, err = nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error encoding %s ue PduSession Establishment Request Msg", ue.Supi)

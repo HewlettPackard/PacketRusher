@@ -1,4 +1,4 @@
-package nas_control
+package mm_5gs
 
 import (
 	"bytes"
