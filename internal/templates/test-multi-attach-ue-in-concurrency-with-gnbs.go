@@ -62,7 +62,7 @@ func TestMultiAttachUesInConcurrencyWithGNBs() error {
 		for i := 1; i <= 3; i++ {
 
 			// generating some IMSIs to each UE.
-			// imsi := generateImsi(i)
+			imsi := control_test_engine.ImsiGenerator(i)
 
 			// authentication to a UE.
 			//suciv1, suciv2, err := encodeUeSuci(imsi)
@@ -70,7 +70,7 @@ func TestMultiAttachUesInConcurrencyWithGNBs() error {
 			//	fmt.Println("The test failed when SUCI was created! Error:%s in Thread with imsi:%s", err, imsi)
 			//}
 
-			imsi, err := control_test_engine.RegistrationUE(conn, i, int64(i), ranIpAddr)
+			imsi, err := control_test_engine.RegistrationUE(conn, imsi, int64(i), ranIpAddr)
 			if err != nil {
 				fmt.Println("The test failed when UE tried to attach! Error:%s in Thread with imsi:%s", err, imsi)
 			}
@@ -92,7 +92,7 @@ func TestMultiAttachUesInConcurrencyWithGNBs() error {
 
 		for i := 4; i <= 6; i++ {
 			// generating some IMSIs to each UE.
-			// imsi := generateImsi(i)
+			imsi := control_test_engine.ImsiGenerator(i)
 
 			// authentication to a UE.
 			// suciv1, suciv2, err := encodeUeSuci(imsi)
@@ -100,7 +100,7 @@ func TestMultiAttachUesInConcurrencyWithGNBs() error {
 			//	fmt.Println("The test failed when SUCI was created! Error:%s in Thread with imsi:%s", err, imsi)
 			// }
 
-			imsi, err := control_test_engine.RegistrationUE(conn2, i, int64(i), ranIpAddr)
+			imsi, err := control_test_engine.RegistrationUE(conn2, imsi, int64(i), ranIpAddr)
 			if err != nil {
 				fmt.Println("The test failed when UE tried to attach! Error:%s in Thread with imsi:%s", err, imsi)
 			}

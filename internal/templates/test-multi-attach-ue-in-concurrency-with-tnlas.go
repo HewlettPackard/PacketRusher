@@ -7,7 +7,7 @@ import (
 )
 
 // testing attach and ping for a UE with TNLA.
-func attachUeWithTnla(ranUeId int64, ranIpAddr string, wg *sync.WaitGroup, ranPort int) {
+func attachUeWithTnla(imsi string, ranUeId int64, ranIpAddr string, wg *sync.WaitGroup, ranPort int) {
 
 	defer wg.Done()
 
@@ -29,9 +29,9 @@ func attachUeWithTnla(ranUeId int64, ranIpAddr string, wg *sync.WaitGroup, ranPo
 	//fmt.Println("The test failed when SUCI was created! Error:%s", err)
 	//}
 
-	imsi, err := control_test_engine.RegistrationUE(conn, int(ranUeId), ranUeId, ranIpAddr)
+	suci, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, ranIpAddr)
 	if err != nil {
-		fmt.Println("The test failed when UE %s tried to attach! Error:%s", imsi, err)
+		fmt.Println("The test failed when UE %s tried to attach! Error:%s", suci, err)
 	}
 
 	// data plane UE
@@ -60,9 +60,9 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 
 	// Launch several goroutines and increment the WaitGroup counter for each.
 	for i := 1; i <= numberUesConcurrency; i++ {
-		// imsi := generateImsi(i)
+		imsi := control_test_engine.ImsiGenerator(i)
 		wg.Add(1)
-		go attachUeWithTnla(int64(i), "10.200.200.2", &wg, ranPort)
+		go attachUeWithTnla(imsi, int64(i), "10.200.200.2", &wg, ranPort)
 		ranPort++
 	}
 
