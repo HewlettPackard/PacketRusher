@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"my5G-RANTester/internal/control-test-engine/nas-control/sm_5gs"
+	"my5G-RANTester/internal/control_test_engine/nas_control/sm_5gs"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"my5G-RANTester/lib/nas/nasType"

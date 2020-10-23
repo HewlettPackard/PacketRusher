@@ -1,4 +1,4 @@
-package ngap_control
+package pdu_session_management
 
 import (
 	"encoding/hex"

@@ -2,7 +2,7 @@ package templates
 
 import (
 	"fmt"
-	control_test_engine "my5G-RANTester/internal/control-test-engine"
+	control_test_engine "my5G-RANTester/internal/control_test_engine"
 	"sync"
 )
 

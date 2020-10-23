@@ -1,4 +1,4 @@
-package ngap_control
+package interface_management
 
 import (
 	"my5G-RANTester/lib/aper"

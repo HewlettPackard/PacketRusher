@@ -3,19 +3,20 @@ package control_test_engine
 import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
-	"my5G-RANTester/internal/control-test-engine/nas-control"
-	"my5G-RANTester/internal/control-test-engine/nas-control/mm_5gs"
-	"my5G-RANTester/internal/control-test-engine/ngap-control"
+	"my5G-RANTester/internal/control_test_engine/nas_control"
+	"my5G-RANTester/internal/control_test_engine/nas_control/mm_5gs"
+	"my5G-RANTester/internal/control_test_engine/ngap_control/nas_transport"
+	"my5G-RANTester/internal/control_test_engine/ngap_control/pdu_session_management"
+	"my5G-RANTester/internal/control_test_engine/ngap_control/ue_context_management"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
-	"my5G-RANTester/lib/nas/nasType"
 	"my5G-RANTester/lib/nas/security"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/openapi/models"
 	"time"
 )
 
-func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr string) (string, error) {
+func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, ranIpAddr string) (string, error) {
 	var sendMsg []byte
 	var recvMsg = make([]byte, 2048)
 	var n int
@@ -24,26 +25,27 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 	ue := &nas_control.RanUeContext{}
 
 	// new UE Context
-	ue.NewRanUeContext(ueId, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, "5122250214c33e723a5dd523fc145fc0", "981d464c7c52eb6e5036234984ad0bcf", "c9e8763286b5b9ffbdf56e1297d0887b", "8000")
+	ue.NewRanUeContext(imsi, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, "5122250214c33e723a5dd523fc145fc0", "981d464c7c52eb6e5036234984ad0bcf", "c9e8763286b5b9ffbdf56e1297d0887b", "8000")
 
-	// ue.amfUENgap is received by AMF in authentication request.(? changed this).
+	// TODO ue.amfUENgap is received by AMF in authentication request.(? changed this).
 	ue.AmfUeNgapId = ranUeId
 
 	// send InitialUeMessage(Registration Request)(imsi-2089300007487)
 
 	// generate suci for authentication.
-	suciV2, suciV1, err := ue.EncodeUeSuci()
-	if err != nil {
-		return ue.Supi, fmt.Errorf("The test failed when SUCI was created! Error:%s", err)
-	}
+	/*
+		suciV2, suciV1 := ue.EncodeUeSuci()
 
-	mobileIdentity5GS := nasType.MobileIdentity5GS{
-		Len:    12, // suci
-		Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV1, suciV2},
-	}
+
+		mobileIdentity5GS := nasType.MobileIdentity5GS{
+			Len:    12, // suci
+			Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV1, suciV2},
+		}
+	*/
+
 	ueSecurityCapability := nas_control.SetUESecurityCapability(ue)
-	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, mobileIdentity5GS, nil, nil, ueSecurityCapability)
-	sendMsg, err = ngap_control.GetInitialUEMessage(ue.RanUeNgapId, registrationRequest, "")
+	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ueSecurityCapability)
+	sendMsg, err := nas_transport.GetInitialUEMessage(ue.RanUeNgapId, registrationRequest, "")
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error getting %s ue initial message", ue.Supi)
 	}
@@ -74,7 +76,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 
 	// send NAS Authentication Response
 	pdu := mm_5gs.GetAuthenticationResponse(resStat, "")
-	sendMsg, err = ngap_control.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+	sendMsg, err = nas_transport.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error getting %s NAS Authentication Response", ue.Supi)
 	}
@@ -100,7 +102,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error encoding %s ue NAS Security Mode Complete Message", ue.Supi)
 	}
-	sendMsg, err = ngap_control.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+	sendMsg, err = nas_transport.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error getting %s ue NAS Security Mode Complete Message", ue.Supi)
 	}
@@ -120,7 +122,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 	}
 
 	// send ngap Initial Context Setup Response Msg
-	sendMsg, err = ngap_control.GetInitialContextSetupResponse(ue.AmfUeNgapId, ue.RanUeNgapId)
+	sendMsg, err = ue_context_management.GetInitialContextSetupResponse(ue.AmfUeNgapId, ue.RanUeNgapId)
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error getting %s ue ngap Initial Context Setup Response Msg", ue.Supi)
 	}
@@ -135,7 +137,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error encoding %s ue NAS Registration Complete Msg", ue.Supi)
 	}
-	sendMsg, err = ngap_control.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+	sendMsg, err = nas_transport.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error getting %s ue NAS Registration Complete Msg", ue.Supi)
 	}
@@ -160,7 +162,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 		return ue.Supi, fmt.Errorf("Error encoding %s ue PduSession Establishment Request Msg", ue.Supi)
 	}
 
-	sendMsg, err = ngap_control.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+	sendMsg, err = nas_transport.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error getting %s ue PduSession Establishment Request Msg", ue.Supi)
 	}
@@ -181,7 +183,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, ueId int, ranUeId int64, ranIpAddr st
 	}
 
 	// send 14. NGAP-PDU Session Resource Setup Response.
-	sendMsg, err = ngap_control.GetPDUSessionResourceSetupResponse(ue.AmfUeNgapId, ue.RanUeNgapId, ranIpAddr)
+	sendMsg, err = pdu_session_management.GetPDUSessionResourceSetupResponse(ue.AmfUeNgapId, ue.RanUeNgapId, ranIpAddr)
 	if err != nil {
 		return ue.Supi, fmt.Errorf("Error getting %s ue NGAP-PDU Session Resource Setup Response", ue.Supi)
 	}

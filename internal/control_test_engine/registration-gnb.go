@@ -3,7 +3,7 @@ package control_test_engine
 import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
-	"my5G-RANTester/internal/control-test-engine/ngap-control"
+	"my5G-RANTester/internal/control_test_engine/ngap_control/interface_management"
 	"my5G-RANTester/lib/ngap"
 )
 
@@ -13,7 +13,7 @@ func RegistrationGNB(connN2 *sctp.SCTPConn, gnbId []byte, nameGNB string) error 
 	var n int
 
 	// send NGSetup request msg.
-	sendMsg, err := ngap_control.GetNGSetupRequest(gnbId, 24, nameGNB)
+	sendMsg, err := interface_management.GetNGSetupRequest(gnbId, 24, nameGNB)
 	if err != nil {
 		fmt.Println("get NGSetupRequest Msg")
 		return fmt.Errorf("Error getting GNB %s NGSetup Request Msg", nameGNB)

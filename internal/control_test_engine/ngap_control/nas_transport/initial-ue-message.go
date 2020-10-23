@@ -1,4 +1,4 @@
-package ngap_control
+package nas_transport
 
 import (
 	"encoding/hex"
@@ -10,6 +10,7 @@ import (
 var TestPlmn ngapType.PLMNIdentity
 
 func init() {
+	// TODO PLMN is hardcode here.
 	TestPlmn.Value = aper.OctetString("\x02\xf8\x39")
 }
 

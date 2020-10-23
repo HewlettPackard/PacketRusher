@@ -1,4 +1,4 @@
-package ngap_control
+package ue_context_management
 
 import (
 	"my5G-RANTester/lib/ngap"

@@ -3,7 +3,7 @@ package templates
 import (
 	"encoding/hex"
 	"fmt"
-	"my5G-RANTester/internal/control-test-engine"
+	"my5G-RANTester/internal/control_test_engine"
 	"sync"
 )
 

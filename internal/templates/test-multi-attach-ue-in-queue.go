@@ -2,8 +2,8 @@ package templates
 
 import (
 	"fmt"
-	control_test_engine "my5G-RANTester/internal/control-test-engine"
-	"my5G-RANTester/internal/data-test-engine"
+	control_test_engine "my5G-RANTester/internal/control_test_engine"
+	"my5G-RANTester/internal/data_test_engine"
 )
 
 // testing attach and ping for multiple queued UEs.
@@ -32,7 +32,7 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 	for i := 1; i <= numberUes; i++ {
 
 		// generating some IMSIs to each UE.
-		// imsi := generateImsi(i)
+		imsi := control_test_engine.ImsiGenerator(i)
 
 		// authentication to a UE.
 		// suciv1, suciv2, err := encodeUeSuci(imsi)
@@ -40,7 +40,7 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 		//	return fmt.Errorf("The test failed when SUCI was created! Error:%s", err)
 		// }
 
-		imsi, err := control_test_engine.RegistrationUE(conn, i, int64(i), ranIpAddr)
+		imsi, err := control_test_engine.RegistrationUE(conn, imsi, int64(i), ranIpAddr)
 		if err != nil {
 			return fmt.Errorf("The test failed when UE %s tried to attach! Error:%s", imsi, err)
 		}

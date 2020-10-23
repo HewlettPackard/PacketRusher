@@ -2,7 +2,6 @@ package nas_control
 
 import (
 	"encoding/hex"
-	"fmt"
 	"my5G-RANTester/lib/CommonConsumerTestData/UDM/TestGenAuthData"
 	"my5G-RANTester/lib/UeauCommon"
 	"my5G-RANTester/lib/milenage"
@@ -11,7 +10,6 @@ import (
 	"my5G-RANTester/lib/nas/security"
 	"my5G-RANTester/lib/openapi/models"
 	"regexp"
-	"strconv"
 )
 
 type gnbContext struct {
@@ -32,9 +30,10 @@ type RanUeContext struct {
 	KnasInt            [16]uint8
 	Kamf               []uint8
 	AuthenticationSubs models.AuthenticationSubscription
+	Suci               nasType.MobileIdentity5GS
 }
 
-func (ue *RanUeContext) EncodeUeSuci() (uint8, uint8, error) {
+func (ue *RanUeContext) EncodeUeSuci() (uint8, uint8) {
 
 	// reverse imsi string.
 	var aux string
@@ -45,12 +44,12 @@ func (ue *RanUeContext) EncodeUeSuci() (uint8, uint8, error) {
 	// calculate decimal value.
 	suci, error := hex.DecodeString(aux[:4])
 	if error != nil {
-		return 0, 0, fmt.Errorf("Error in decode hexadecimal for suci ue")
+		return 0, 0
 	}
 
 	// return decimal value
 	// Function worked fine.
-	return uint8(suci[0]), uint8(suci[1]), nil
+	return uint8(suci[0]), uint8(suci[1])
 }
 
 func (ue *RanUeContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription, RAND []byte, snNmae string) []byte {
@@ -132,31 +131,32 @@ func (ue *RanUeContext) DerivateAlgKey() {
 	copy(ue.KnasInt[:], kint[16:32])
 }
 
-// generated a IMSI from integer.
-func (ue *RanUeContext) generateImsi(i int) {
+func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipheringAlg, integrityAlg uint8, k string, opc string, op string, amf string) {
 
-	var base string
-	switch true {
-	case i < 10:
-		base = "imsi-208930000000"
-	case i < 100:
-		base = "imsi-20893000000"
-	case i >= 100:
-		base = "imsi-2089300000"
-	}
-
-	imsi := base + strconv.Itoa(i)
-	ue.Supi = imsi
-}
-
-func (ue *RanUeContext) NewRanUeContext(i int, ranUeNgapId int64, cipheringAlg, integrityAlg uint8, k string, opc string, op string, amf string) {
-
+	// added Ran UE NGAP ID.
 	ue.RanUeNgapId = ranUeNgapId
-	// make supi
-	ue.generateImsi(i)
+
+	// added SUPI.
+	ue.Supi = imsi
+
+	// added ciphering algorithm.
 	ue.CipheringAlg = cipheringAlg
+
+	// added integrity algorithm.
 	ue.IntegrityAlg = integrityAlg
+
+	// added key, AuthenticationManagementField and opc or op.
 	ue.SetAuthSubscription(k, opc, op, amf)
+
+	// added suci.
+	suciV2, suciV1 := ue.EncodeUeSuci()
+
+	// added suci to mobileIdentity5GS
+	// TODO MCC and MNC is hardcode(here and in GNB).
+	ue.Suci = nasType.MobileIdentity5GS{
+		Len:    12, // suci
+		Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV1, suciV2},
+	}
 }
 
 func (ue *RanUeContext) SetAuthSubscription(k, opc, op, amf string) {

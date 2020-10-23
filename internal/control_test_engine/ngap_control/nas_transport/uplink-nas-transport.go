@@ -1,4 +1,4 @@
-package ngap_control
+package nas_transport
 
 import (
 	"my5G-RANTester/lib/aper"

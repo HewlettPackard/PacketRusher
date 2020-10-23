@@ -1,0 +1,1 @@
+package ue_radio_capability_management
