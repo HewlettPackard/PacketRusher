@@ -3,14 +3,14 @@ package control_test_engine
 import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
+	"my5G-RANTester/internal/control-test-engine/nas-control"
+	"my5G-RANTester/internal/control-test-engine/ngap-control"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"my5G-RANTester/lib/nas/nasType"
 	"my5G-RANTester/lib/nas/security"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/openapi/models"
-	"my5G-RANTester/src/control-test-engine/nas-control"
-	"my5G-RANTester/src/control-test-engine/ngap-control"
 	"time"
 )
 

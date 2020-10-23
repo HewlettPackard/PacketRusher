@@ -3,7 +3,7 @@ package templates
 import (
 	"encoding/hex"
 	"fmt"
-	control_test_engine "my5G-RANTester/src/control-test-engine"
+	control_test_engine "my5G-RANTester/internal/control-test-engine"
 )
 
 // testing multiple GNBs authentication( control plane only)-> NGAP Request and response tester.

@@ -2,8 +2,8 @@ package templates
 
 import (
 	"fmt"
-	control_test_engine "my5G-RANTester/src/control-test-engine"
-	"my5G-RANTester/src/data-test-engine"
+	control_test_engine "my5G-RANTester/internal/control-test-engine"
+	"my5G-RANTester/internal/data-test-engine"
 )
 
 // testing attach and ping for multiple queued UEs.

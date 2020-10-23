@@ -3,8 +3,8 @@ package control_test_engine
 import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
+	"my5G-RANTester/internal/control-test-engine/ngap-control"
 	"my5G-RANTester/lib/ngap"
-	"my5G-RANTester/src/control-test-engine/ngap-control"
 )
 
 func RegistrationGNB(connN2 *sctp.SCTPConn, gnbId []byte, nameGNB string) error {

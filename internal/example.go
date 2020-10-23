@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"my5G-RANTester/src/templates"
+	"my5G-RANTester/internal/templates"
 )
 
 func main() {
