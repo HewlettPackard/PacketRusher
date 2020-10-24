@@ -2,22 +2,29 @@ package templates
 
 import (
 	"fmt"
+	"my5G-RANTester/config"
 	control_test_engine "my5G-RANTester/internal/control_test_engine"
 	"my5G-RANTester/internal/data_test_engine"
 )
 
 // testing attach and ping for multiple queued UEs.
 func TestMultiAttachUesInQueue(numberUes int) error {
-	const ranIpAddr string = "10.200.200.2"
+
+	cfg, err := config.GetConfig()
+	if err != nil {
+		return nil
+	}
+
+	fmt.Println("mytest: ", cfg.GNodeB.ControlIF.Ip, cfg.GNodeB.ControlIF.Port)
 
 	// make N2(RAN connect to AMF)
-	conn, err := control_test_engine.ConnectToAmf("127.0.0.1", "127.0.0.1", 38412, 9487)
+	conn, err := control_test_engine.ConnectToAmf(cfg.AMF.Ip, cfg.GNodeB.ControlIF.Ip, cfg.AMF.Port, cfg.GNodeB.ControlIF.Port)
 	if err != nil {
 		return fmt.Errorf("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
 	}
 
 	// make n3(RAN connect to UPF)
-	upfConn, err := data_test_engine.ConnectToUpf(ranIpAddr, "10.200.200.102", 2152, 2152)
+	upfConn, err := data_test_engine.ConnectToUpf(cfg.GNodeB.DataIF.Ip, cfg.UPF.Ip, cfg.GNodeB.DataIF.Port, cfg.UPF.Port)
 	if err != nil {
 		return fmt.Errorf("The test failed when udp socket tried to connect to UPF! Error:%s", err)
 	}
@@ -40,7 +47,7 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 		//	return fmt.Errorf("The test failed when SUCI was created! Error:%s", err)
 		// }
 
-		imsi, err := control_test_engine.RegistrationUE(conn, imsi, int64(i), ranIpAddr)
+		imsi, err := control_test_engine.RegistrationUE(conn, imsi, int64(i), cfg.GNodeB.DataIF.Ip)
 		if err != nil {
 			return fmt.Errorf("The test failed when UE %s tried to attach! Error:%s", imsi, err)
 		}
