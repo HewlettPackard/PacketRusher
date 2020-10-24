@@ -10,7 +10,6 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ngap_control/ue_context_management"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
-	"my5G-RANTester/lib/nas/security"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/openapi/models"
 	"time"
@@ -24,92 +23,103 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, ranIpAddr
 	// instance new ue.
 	ue := &nas_control.RanUeContext{}
 
-	// new UE Context
-	ue.NewRanUeContext(imsi, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, "5122250214c33e723a5dd523fc145fc0", "981d464c7c52eb6e5036234984ad0bcf", "c9e8763286b5b9ffbdf56e1297d0887b", "8000")
+	// make initial UE message.
+	err := nas_transport.InitialUEMessage(connN2, ue, imsi, ranUeId)
+	if err != nil {
+		fmt.Println(err)
+	}
 
-	// TODO ue.amfUENgap is received by AMF in authentication request.(? changed this).
-	ue.AmfUeNgapId = ranUeId
-
-	// send InitialUeMessage(Registration Request)(imsi-2089300007487)
-
-	// generate suci for authentication.
 	/*
-		suciV2, suciV1 := ue.EncodeUeSuci()
+		n, err = connN2.Read(recvMsg)
+		if err != nil {
+			return ue.Supi, fmt.Errorf("Error receiving %s ue nas authentication request message")
+		}
+		ngapMsg, err := ngap.Decoder(recvMsg[:n])
+		if err != nil {
+			return ue.Supi, fmt.Errorf("Error decoding %s ue nas authentication request message")
 
-
-		mobileIdentity5GS := nasType.MobileIdentity5GS{
-			Len:    12, // suci
-			Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV1, suciV2},
 		}
 	*/
 
-	ueSecurityCapability := nas_control.SetUESecurityCapability(ue)
-	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ueSecurityCapability)
-	sendMsg, err := nas_transport.GetInitialUEMessage(ue.RanUeNgapId, registrationRequest, "")
-	if err != nil {
-		return ue.Supi, fmt.Errorf("Error getting %s ue initial message", ue.Supi)
-	}
-	_, err = connN2.Write(sendMsg)
-	if err != nil {
-		return ue.Supi, fmt.Errorf("Error sending %s ue initial message", ue.Supi)
-	}
-
 	// receive NAS Authentication Request Msg
-	n, err = connN2.Read(recvMsg)
+	ngapMsg, err := nas_transport.DownlinkNasTransport(connN2)
 	if err != nil {
-		return ue.Supi, fmt.Errorf("Error receiving %s ue nas authentication request message")
-	}
-	ngapMsg, err := ngap.Decoder(recvMsg[:n])
-	if err != nil {
-		return ue.Supi, fmt.Errorf("Error decoding %s ue nas authentication request message")
-
+		fmt.Println(err)
 	}
 
-	// Calculate for RES*
-	nasPdu := nas_control.GetNasPdu(ngapMsg.InitiatingMessage.Value.DownlinkNASTransport)
-	if nasPdu == nil {
-		return ue.Supi, fmt.Errorf("Invalid NAS PDU")
-	}
+	/*
 
-	rand := nasPdu.AuthenticationRequest.GetRANDValue()
-	resStat := ue.DeriveRESstarAndSetKey(ue.AuthenticationSubs, rand[:], "5G:mnc093.mcc208.3gppnetwork.org")
+		// Calculate for RES*
+		nasPdu := nas_control.GetNasPdu(ngapMsg.InitiatingMessage.Value.DownlinkNASTransport)
+		if nasPdu == nil {
+			return ue.Supi, fmt.Errorf("Invalid NAS PDU")
+		}
+
+		rand := nasPdu.AuthenticationRequest.GetRANDValue()
+		resStat := ue.DeriveRESstarAndSetKey(ue.AuthenticationSubs, rand[:], "5G:mnc093.mcc208.3gppnetwork.org")
+
+		// send NAS Authentication Response
+		pdu := mm_5gs.GetAuthenticationResponse(resStat, "")
+		sendMsg, err = nas_transport.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+		if err != nil {
+			return ue.Supi, fmt.Errorf("Error getting %s NAS Authentication Response", ue.Supi)
+		}
+		_, err = connN2.Write(sendMsg)
+			if err != nil {
+				return ue.Supi, fmt.Errorf("Error sending %s NAS Authentication Response", ue.Supi)
+			}
+	*/
 
 	// send NAS Authentication Response
-	pdu := mm_5gs.GetAuthenticationResponse(resStat, "")
-	sendMsg, err = nas_transport.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+	pdu, err := mm_5gs.AuthenticationResponse(ue, ngapMsg)
 	if err != nil {
-		return ue.Supi, fmt.Errorf("Error getting %s NAS Authentication Response", ue.Supi)
+		fmt.Println(err)
 	}
+	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
 
-	_, err = connN2.Write(sendMsg)
-	if err != nil {
-		return ue.Supi, fmt.Errorf("Error sending %s NAS Authentication Response", ue.Supi)
-	}
+	/*
+		n, err = connN2.Read(recvMsg)
+		if err != nil {
+			return ue.Supi, fmt.Errorf("Error reading %s NAS Security Mode Command Message", ue.Supi)
+		}
+		_, err = ngap.Decoder(recvMsg[:n])
+		if err != nil {
+			return ue.Supi, fmt.Errorf("Error decoding %s NAS Security Mode Command Message", ue.Supi)
+		}
+	*/
 
 	// receive NAS Security Mode Command Msg
-	n, err = connN2.Read(recvMsg)
+	_, err = nas_transport.DownlinkNasTransport(connN2)
 	if err != nil {
-		return ue.Supi, fmt.Errorf("Error reading %s NAS Security Mode Command Message", ue.Supi)
-	}
-	_, err = ngap.Decoder(recvMsg[:n])
-	if err != nil {
-		return ue.Supi, fmt.Errorf("Error decoding %s NAS Security Mode Command Message", ue.Supi)
+		fmt.Println(err)
 	}
 
 	// send NAS Security Mode Complete Msg
-	pdu = mm_5gs.GetSecurityModeComplete(registrationRequest)
-	pdu, err = nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCipheredWithNew5gNasSecurityContext, true, true)
+	/*
+		pdu = mm_5gs.GetSecurityModeComplete(registrationRequest)
+		pdu, err = nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCipheredWithNew5gNasSecurityContext, true, true)
+		if err != nil {
+			return ue.Supi, fmt.Errorf("Error encoding %s ue NAS Security Mode Complete Message", ue.Supi)
+		}
+	*/
+
+	// send NAS Security Mode Complete Msg
+	pdu, err = mm_5gs.SecurityModeComplete(ue)
 	if err != nil {
-		return ue.Supi, fmt.Errorf("Error encoding %s ue NAS Security Mode Complete Message", ue.Supi)
+		fmt.Println(err)
 	}
-	sendMsg, err = nas_transport.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
-	if err != nil {
-		return ue.Supi, fmt.Errorf("Error getting %s ue NAS Security Mode Complete Message", ue.Supi)
-	}
-	_, err = connN2.Write(sendMsg)
-	if err != nil {
-		return ue.Supi, fmt.Errorf("Error sending %s ue NAS Security Mode Complete Message", ue.Supi)
-	}
+	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+
+	/*
+		sendMsg, err = nas_transport.GetUplinkNASTransport(ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+		if err != nil {
+			return ue.Supi, fmt.Errorf("Error getting %s ue NAS Security Mode Complete Message", ue.Supi)
+		}
+		_, err = connN2.Write(sendMsg)
+		if err != nil {
+			return ue.Supi, fmt.Errorf("Error sending %s ue NAS Security Mode Complete Message", ue.Supi)
+		}
+	*/
 
 	// receive ngap Initial Context Setup Request Msg
 	n, err = connN2.Read(recvMsg)

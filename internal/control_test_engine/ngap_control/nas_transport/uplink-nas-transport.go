@@ -1,17 +1,19 @@
 package nas_transport
 
 import (
+	"fmt"
+	"github.com/ishidawataru/sctp"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapType"
 )
 
-func GetUplinkNASTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte) ([]byte, error) {
-	message := BuildUplinkNasTransport(amfUeNgapID, ranUeNgapID, nasPdu)
+func getUplinkNASTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte) ([]byte, error) {
+	message := buildUplinkNasTransport(amfUeNgapID, ranUeNgapID, nasPdu)
 	return ngap.Encoder(message)
 }
 
-func BuildUplinkNasTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte) (pdu ngapType.NGAPPDU) {
+func buildUplinkNasTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte) (pdu ngapType.NGAPPDU) {
 
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -87,4 +89,17 @@ func BuildUplinkNasTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte) (pdu
 	uplinkNasTransportIEs.List = append(uplinkNasTransportIEs.List, ie)
 
 	return
+}
+
+func UplinkNasTransport(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUeNgapID int64, nasPdu []byte) error {
+
+	sendMsg, err := getUplinkNASTransport(amfUeNgapID, ranUeNgapID, nasPdu)
+	if err != nil {
+		return fmt.Errorf("Error getting ueId %d NAS Authentication Response", ranUeNgapID)
+	}
+
+	_, err = connN2.Write(sendMsg)
+	if err != nil {
+		return fmt.Errorf("Error sending ueId %d NAS Authentication Response", ranUeNgapID)
+	}
 }

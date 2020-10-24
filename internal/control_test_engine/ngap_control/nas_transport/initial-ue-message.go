@@ -2,7 +2,13 @@ package nas_transport
 
 import (
 	"encoding/hex"
+	"fmt"
+	"github.com/ishidawataru/sctp"
+	"my5G-RANTester/internal/control_test_engine/nas_control"
+	"my5G-RANTester/internal/control_test_engine/nas_control/mm_5gs"
 	"my5G-RANTester/lib/aper"
+	"my5G-RANTester/lib/nas/nasMessage"
+	"my5G-RANTester/lib/nas/security"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapType"
 )
@@ -131,4 +137,41 @@ func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string) 
 
 	// Allowed NSSAI (optional)
 	return
+}
+
+func InitialUEMessage(connN2 *sctp.SCTPConn, ue *nas_control.RanUeContext, imsi string, ranUeId int64) error {
+
+	// new UE Context
+	// TODO opc, key, op and amf is hardcode.
+	ue.NewRanUeContext(imsi, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, "5122250214c33e723a5dd523fc145fc0", "981d464c7c52eb6e5036234984ad0bcf", "c9e8763286b5b9ffbdf56e1297d0887b", "8000")
+
+	// TODO ue.amfUENgap is received by AMF in authentication request.(? changed this).
+	ue.AmfUeNgapId = ranUeId
+
+	// send InitialUeMessage(Registration Request)(imsi-2089300007487)
+
+	// generate suci for authentication.
+	/*
+		suciV2, suciV1 := ue.EncodeUeSuci()
+
+
+		mobileIdentity5GS := nasType.MobileIdentity5GS{
+			Len:    12, // suci
+			Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV1, suciV2},
+		}
+	*/
+
+	ueSecurityCapability := nas_control.SetUESecurityCapability(ue)
+	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ueSecurityCapability)
+	sendMsg, err := GetInitialUEMessage(ue.RanUeNgapId, registrationRequest, "")
+	if err != nil {
+		return fmt.Errorf("Error in %s ue initial message", ue.Supi)
+	}
+
+	_, err = connN2.Write(sendMsg)
+	if err != nil {
+		return fmt.Errorf("Error sending %s ue initial message", ue.Supi)
+	}
+
+	return fmt.Errorf("InitialUeMessage worked fine")
 }
