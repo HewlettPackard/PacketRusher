@@ -3,18 +3,32 @@ package pdu_session_management
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/ishidawataru/sctp"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapConvert"
 	"my5G-RANTester/lib/ngap/ngapType"
 )
 
-func GetPDUSessionResourceSetupResponse(amfUeNgapID int64, ranUeNgapID int64, ipv4 string) ([]byte, error) {
-	message := BuildPDUSessionResourceSetupResponseForRegistrationTest(amfUeNgapID, ranUeNgapID, ipv4)
+func PDUSessionResourceSetupResponse(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUeNgapID int64, supi string, ranIpAddr string) error {
+	sendMsg, err := getPDUSessionResourceSetupResponse(amfUeNgapID, ranUeNgapID, ranIpAddr)
+	if err != nil {
+		return fmt.Errorf("Error getting %s ue NGAP-PDU Session Resource Setup Response", supi)
+	}
+	_, err = connN2.Write(sendMsg)
+	if err != nil {
+		return fmt.Errorf("Error sending %s ue NGAP-PDU Session Resource Setup Response", supi)
+	}
+
+	return fmt.Errorf("initialContextSetupResponse worked fine")
+}
+
+func getPDUSessionResourceSetupResponse(amfUeNgapID int64, ranUeNgapID int64, ipv4 string) ([]byte, error) {
+	message := buildPDUSessionResourceSetupResponseForRegistrationTest(amfUeNgapID, ranUeNgapID, ipv4)
 	return ngap.Encoder(message)
 }
 
-func BuildPDUSessionResourceSetupResponseForRegistrationTest(amfUeNgapID, ranUeNgapID int64, ipv4 string) (pdu ngapType.NGAPPDU) {
+func buildPDUSessionResourceSetupResponseForRegistrationTest(amfUeNgapID, ranUeNgapID int64, ipv4 string) (pdu ngapType.NGAPPDU) {
 
 	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
 	pdu.SuccessfulOutcome = new(ngapType.SuccessfulOutcome)

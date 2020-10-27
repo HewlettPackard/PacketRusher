@@ -1,6 +1,8 @@
 package interface_management
 
 import (
+	"fmt"
+	"github.com/ishidawataru/sctp"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapType"
@@ -103,7 +105,7 @@ func BuildNGSetupRequest() (pdu ngapType.NGAPPDU) {
 	return
 }
 
-func GetNGSetupRequest(gnbId []byte, bitlength uint64, name string) ([]byte, error) {
+func getNGSetupRequest(gnbId []byte, bitlength uint64, name string) ([]byte, error) {
 	message := BuildNGSetupRequest()
 	// GlobalRANNodeID
 	ie := message.InitiatingMessage.Value.NGSetupRequest.ProtocolIEs.List[0]
@@ -115,4 +117,20 @@ func GetNGSetupRequest(gnbId []byte, bitlength uint64, name string) ([]byte, err
 	ie.Value.RANNodeName.Value = name
 
 	return ngap.Encoder(message)
+}
+
+func NgSetupRequest(connN2 *sctp.SCTPConn, gnbId []byte, bitlength uint64, name string) error {
+	var sendMsg []byte
+
+	sendMsg, err := getNGSetupRequest(gnbId, bitlength, name)
+	if err != nil {
+		return fmt.Errorf("Error getting GNB %s NGSetup Request Msg", name)
+	}
+
+	_, err = connN2.Write(sendMsg)
+	if err != nil {
+		return fmt.Errorf("Error sending GNB %s NGSetup Request Msg", name)
+	}
+
+	return fmt.Errorf("NGSetupRequest worked fine!")
 }

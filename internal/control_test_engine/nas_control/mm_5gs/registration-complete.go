@@ -3,12 +3,24 @@ package mm_5gs
 import (
 	"bytes"
 	"fmt"
+	"my5G-RANTester/internal/control_test_engine/nas_control"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"my5G-RANTester/lib/nas/nasType"
 )
 
-func GetRegistrationComplete(sorTransparentContainer []uint8) (nasPdu []byte) {
+func RegistrationComplete(ue *nas_control.RanUeContext) ([]byte, error) {
+
+	pdu := getRegistrationComplete(nil)
+	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)
+	if err != nil {
+		return nil, fmt.Errorf("Error encoding %s ue NAS Registration Complete Msg", ue.Supi)
+	}
+
+	return pdu, fmt.Errorf("Registration Complete worked fine!")
+}
+
+func getRegistrationComplete(sorTransparentContainer []uint8) (nasPdu []byte) {
 
 	m := nas.NewMessage()
 	m.GmmMessage = nas.NewGmmMessage()

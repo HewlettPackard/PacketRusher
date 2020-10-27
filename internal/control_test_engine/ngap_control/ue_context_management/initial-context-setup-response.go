@@ -1,11 +1,27 @@
 package ue_context_management
 
 import (
+	"fmt"
+	"github.com/ishidawataru/sctp"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapType"
 )
 
-func GetInitialContextSetupResponse(amfUeNgapID int64, ranUeNgapID int64) ([]byte, error) {
+func InitialContextSetupResponse(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUeNgapID int64, supi string) error {
+
+	sendMsg, err := getInitialContextSetupResponse(amfUeNgapID, ranUeNgapID)
+	if err != nil {
+		return fmt.Errorf("Error getting %s ue ngap Initial Context Setup Response Msg", supi)
+	}
+	_, err = connN2.Write(sendMsg)
+	if err != nil {
+		return fmt.Errorf("Error sending %s ue Initial Context Setup Response Msg", supi)
+	}
+
+	return fmt.Errorf("initialContextSetupResponse worked fine")
+}
+
+func getInitialContextSetupResponse(amfUeNgapID int64, ranUeNgapID int64) ([]byte, error) {
 	message := BuildInitialContextSetupResponseForRegistraionTest(amfUeNgapID, ranUeNgapID)
 
 	return ngap.Encoder(message)

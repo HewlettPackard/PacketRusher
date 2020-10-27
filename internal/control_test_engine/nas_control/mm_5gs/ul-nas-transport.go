@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"my5G-RANTester/internal/control_test_engine/nas_control"
 	"my5G-RANTester/internal/control_test_engine/nas_control/sm_5gs"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
@@ -11,7 +12,18 @@ import (
 	"my5G-RANTester/lib/openapi/models"
 )
 
-func GetUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, requestType uint8, dnnString string, sNssai *models.Snssai) (nasPdu []byte) {
+func UlNasTransport(ue *nas_control.RanUeContext, pduSessionId uint8, requestType uint8, dnnString string, sNssai *models.Snssai) ([]byte, error) {
+
+	pdu := getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId, requestType, dnnString, sNssai)
+	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)
+	if err != nil {
+		return nil, fmt.Errorf("Error encoding %s ue PduSession Establishment Request Msg", ue.Supi)
+	}
+
+	return pdu, fmt.Errorf("UlNasTransport worked fine!")
+}
+
+func getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, requestType uint8, dnnString string, sNssai *models.Snssai) (nasPdu []byte) {
 
 	pduSessionEstablishmentRequest := sm_5gs.GetPduSessionEstablishmentRequest(pduSessionId)
 

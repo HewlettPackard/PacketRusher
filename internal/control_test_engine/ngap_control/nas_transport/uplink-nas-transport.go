@@ -102,4 +102,6 @@ func UplinkNasTransport(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUeNgapID in
 	if err != nil {
 		return fmt.Errorf("Error sending ueId %d NAS Authentication Response", ranUeNgapID)
 	}
+
+	return fmt.Errorf("UplinkNasTransport worked fine!")
 }
