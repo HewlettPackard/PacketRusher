@@ -15,12 +15,15 @@ import (
 func UlNasTransport(ue *nas_control.RanUeContext, pduSessionId uint8, requestType uint8, dnnString string, sNssai *models.Snssai) ([]byte, error) {
 
 	pdu := getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId, requestType, dnnString, sNssai)
+	if pdu == nil {
+		return nil, fmt.Errorf("Error encoding %s ue PduSession Establishment Request Msg", ue.Supi)
+	}
 	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)
 	if err != nil {
 		return nil, fmt.Errorf("Error encoding %s ue PduSession Establishment Request Msg", ue.Supi)
 	}
 
-	return pdu, fmt.Errorf("UlNasTransport worked fine!")
+	return pdu, nil
 }
 
 func getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, requestType uint8, dnnString string, sNssai *models.Snssai) (nasPdu []byte) {

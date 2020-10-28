@@ -173,5 +173,5 @@ func InitialUEMessage(connN2 *sctp.SCTPConn, ue *nas_control.RanUeContext, imsi 
 		return fmt.Errorf("Error sending %s ue initial message", ue.Supi)
 	}
 
-	return fmt.Errorf("InitialUeMessage worked fine")
+	return nil
 }

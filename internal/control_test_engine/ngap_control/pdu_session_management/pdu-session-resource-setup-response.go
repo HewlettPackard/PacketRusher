@@ -20,7 +20,7 @@ func PDUSessionResourceSetupResponse(connN2 *sctp.SCTPConn, amfUeNgapID int64, r
 		return fmt.Errorf("Error sending %s ue NGAP-PDU Session Resource Setup Response", supi)
 	}
 
-	return fmt.Errorf("initialContextSetupResponse worked fine")
+	return nil
 }
 
 func getPDUSessionResourceSetupResponse(amfUeNgapID int64, ranUeNgapID int64, ipv4 string) ([]byte, error) {

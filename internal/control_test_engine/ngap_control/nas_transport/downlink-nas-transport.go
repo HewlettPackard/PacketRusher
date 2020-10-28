@@ -22,5 +22,5 @@ func DownlinkNasTransport(connN2 *sctp.SCTPConn) (*ngapType.NGAPPDU, error) {
 		return nil, fmt.Errorf("Error decoding %s ue NGAP message in downlinkNasTransport")
 	}
 
-	return ngapMsg, fmt.Errorf("DowlinkNasTransport worked fine")
+	return ngapMsg, nil
 }

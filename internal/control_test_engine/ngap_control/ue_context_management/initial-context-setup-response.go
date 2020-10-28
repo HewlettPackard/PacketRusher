@@ -18,7 +18,7 @@ func InitialContextSetupResponse(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUe
 		return fmt.Errorf("Error sending %s ue Initial Context Setup Response Msg", supi)
 	}
 
-	return fmt.Errorf("initialContextSetupResponse worked fine")
+	return nil
 }
 
 func getInitialContextSetupResponse(amfUeNgapID int64, ranUeNgapID int64) ([]byte, error) {

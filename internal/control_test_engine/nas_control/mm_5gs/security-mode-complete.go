@@ -59,5 +59,5 @@ func SecurityModeComplete(ue *nas_control.RanUeContext) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Error encoding ueID %d NAS Security Mode Complete Message", ue.RanUeNgapId)
 	}
-	return pdu, fmt.Errorf("securityModeComplete worked fine!")
+	return pdu, nil
 }

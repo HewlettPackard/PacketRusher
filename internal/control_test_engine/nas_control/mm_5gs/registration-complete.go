@@ -17,7 +17,7 @@ func RegistrationComplete(ue *nas_control.RanUeContext) ([]byte, error) {
 		return nil, fmt.Errorf("Error encoding %s ue NAS Registration Complete Msg", ue.Supi)
 	}
 
-	return pdu, fmt.Errorf("Registration Complete worked fine!")
+	return pdu, nil
 }
 
 func getRegistrationComplete(sorTransparentContainer []uint8) (nasPdu []byte) {

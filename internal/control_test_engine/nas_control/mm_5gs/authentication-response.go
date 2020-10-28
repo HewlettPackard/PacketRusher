@@ -61,5 +61,5 @@ func AuthenticationResponse(ue *nas_control.RanUeContext, ngapMsg *ngapType.NGAP
 
 	// send NAS Authentication Response.
 	pdu := getAuthenticationResponse(resStat, "")
-	return pdu, fmt.Errorf("AuthenticationResponse worked fine")
+	return pdu, nil
 }
