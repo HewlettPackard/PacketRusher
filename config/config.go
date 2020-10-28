@@ -20,14 +20,20 @@ type Config struct {
 			Port int    `yaml: "port"`
 		} `yaml: "dataif"`
 	} `yaml:"gnodeb"`
+	Ue struct {
+		Imsi string `yaml: "imsi"`
+		Key  string `yaml: "key"`
+		Opc  string `yaml: "opc"`
+		Amf  string `yaml: "amf"`
+	} `yaml:"ue"`
 	AMF struct {
 		Ip   string `yaml: "ip"`
 		Port int    `yaml: "port"`
-	} `yaml:"amf"`
+	} `yaml:"amfif"`
 	UPF struct {
 		Ip   string `yaml: "ip"`
 		Port int    `yaml: "port"`
-	} `yaml:"upf"`
+	} `yaml:"upfif"`
 }
 
 func rootDir() string {

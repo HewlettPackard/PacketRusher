@@ -47,7 +47,7 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 		//	return fmt.Errorf("The test failed when SUCI was created! Error:%s", err)
 		// }
 
-		imsi, err := control_test_engine.RegistrationUE(conn, imsi, int64(i), cfg.GNodeB.DataIF.Ip)
+		imsi, err := control_test_engine.RegistrationUE(conn, imsi, int64(i), cfg.GNodeB.DataIF.Ip, cfg.Ue.Key, cfg.Ue.Opc, cfg.Ue.Amf)
 		if err != nil {
 			return fmt.Errorf("The test failed when UE %s tried to attach! Error:%s", imsi, err)
 		}

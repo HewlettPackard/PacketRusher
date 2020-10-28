@@ -8,7 +8,7 @@ import (
 )
 
 // testing attach and ping for a UE with TNLA.
-func attachUeWithTnla(imsi string, ranUeId int64, amfIp string, ranIp string, amfPort int, ranIpAddr string, wg *sync.WaitGroup, ranPort int) {
+func attachUeWithTnla(imsi string, ranUeId int64, amfIp string, ranIp string, amfPort int, ranIpAddr string, wg *sync.WaitGroup, ranPort int, k string, opc string, amf string) {
 
 	defer wg.Done()
 
@@ -24,7 +24,7 @@ func attachUeWithTnla(imsi string, ranUeId int64, amfIp string, ranIp string, am
 		fmt.Println("The test failed when GNB tried to attach! Error:%s", err)
 	}
 
-	suci, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, ranIpAddr)
+	suci, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, ranIpAddr, k, opc, amf)
 	if err != nil {
 		fmt.Println("The test failed when UE %s tried to attach! Error:%s", suci, err)
 	}
@@ -55,7 +55,7 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 		imsi := control_test_engine.ImsiGenerator(i)
 		ranPort := cfg.GNodeB.ControlIF.Port
 		wg.Add(1)
-		go attachUeWithTnla(imsi, int64(i), cfg.AMF.Ip, cfg.GNodeB.ControlIF.Ip, cfg.AMF.Port, cfg.GNodeB.DataIF.Ip, &wg, ranPort)
+		go attachUeWithTnla(imsi, int64(i), cfg.AMF.Ip, cfg.GNodeB.ControlIF.Ip, cfg.AMF.Port, cfg.GNodeB.DataIF.Ip, &wg, ranPort, cfg.Ue.Key, cfg.Ue.Opc, cfg.Ue.Amf)
 		ranPort++
 	}
 

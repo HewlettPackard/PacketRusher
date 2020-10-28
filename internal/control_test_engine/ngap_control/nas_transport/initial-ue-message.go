@@ -139,27 +139,14 @@ func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string) 
 	return
 }
 
-func InitialUEMessage(connN2 *sctp.SCTPConn, ue *nas_control.RanUeContext, imsi string, ranUeId int64) error {
+func InitialUEMessage(connN2 *sctp.SCTPConn, ue *nas_control.RanUeContext, imsi string, ranUeId int64, key string, opc string, amf string) error {
 
 	// new UE Context
 	// TODO opc, key, op and amf is hardcode.
-	ue.NewRanUeContext(imsi, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, "5122250214c33e723a5dd523fc145fc0", "981d464c7c52eb6e5036234984ad0bcf", "c9e8763286b5b9ffbdf56e1297d0887b", "8000")
+	ue.NewRanUeContext(imsi, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, key, opc, "c9e8763286b5b9ffbdf56e1297d0887b", amf)
 
 	// TODO ue.amfUENgap is received by AMF in authentication request.(? changed this).
 	ue.AmfUeNgapId = ranUeId
-
-	// send InitialUeMessage(Registration Request)(imsi-2089300007487)
-
-	// generate suci for authentication.
-	/*
-		suciV2, suciV1 := ue.EncodeUeSuci()
-
-
-		mobileIdentity5GS := nasType.MobileIdentity5GS{
-			Len:    12, // suci
-			Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV1, suciV2},
-		}
-	*/
 
 	ueSecurityCapability := nas_control.SetUESecurityCapability(ue)
 	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ueSecurityCapability)

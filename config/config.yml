@@ -5,9 +5,14 @@ gnodeb:
   dataif:
     ip: "10.200.200.2"
     port: 2152
-amf:
+ue:
+  imsi: "imsi-2089300000001"
+  key: "5122250214c33e723a5dd523fc145fc0"
+  opc: "981d464c7c52eb6e5036234984ad0bcf"
+  amf: "8000"
+amfif:
   ip: "127.0.0.1"
   port: 38412
-upf:
+upfif:
   ip: "10.200.200.102"
   port: 2152

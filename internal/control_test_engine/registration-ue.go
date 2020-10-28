@@ -13,13 +13,13 @@ import (
 	"time"
 )
 
-func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, ranIpAddr string) (string, error) {
+func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, ranIpAddr string, key string, opc string, amf string) (string, error) {
 
 	// instance new ue.
 	ue := &nas_control.RanUeContext{}
 
 	// make initial UE message.
-	err := nas_transport.InitialUEMessage(connN2, ue, imsi, ranUeId)
+	err := nas_transport.InitialUEMessage(connN2, ue, imsi, ranUeId, key, opc, amf)
 	if logging.Check_error(err, "send Initial Ue Message") {
 		return ue.Supi, err
 	}
