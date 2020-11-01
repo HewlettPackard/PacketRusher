@@ -132,5 +132,5 @@ func NgSetupRequest(connN2 *sctp.SCTPConn, gnbId []byte, bitlength uint64, name 
 		return fmt.Errorf("Error sending GNB %s NGSetup Request Msg", name)
 	}
 
-	return fmt.Errorf("NGSetupRequest worked fine!")
+	return nil
 }
