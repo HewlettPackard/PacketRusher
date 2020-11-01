@@ -2,7 +2,6 @@ package nas_control
 
 import (
 	"encoding/hex"
-	"my5G-RANTester/lib/CommonConsumerTestData/UDM/TestGenAuthData"
 	"my5G-RANTester/lib/UeauCommon"
 	"my5G-RANTester/lib/milenage"
 	"my5G-RANTester/lib/nas/nasMessage"
@@ -52,20 +51,45 @@ func (ue *RanUeContext) EncodeUeSuci() (uint8, uint8) {
 	return uint8(suci[0]), uint8(suci[1])
 }
 
-func (ue *RanUeContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription, RAND []byte, snNmae string) []byte {
+func (ue *RanUeContext) deriveSQN(autn []byte, ak []uint8) []byte {
+	sqn := make([]byte, 6)
 
-	// SQN is hardcode.
-	SQN, _ := hex.DecodeString(authSubs.SequenceNumber)
+	// get SQNxorAK
+	SQNxorAK := autn[0:6]
 
+	// get sqn
+	for i := 0; i < len(SQNxorAK); i++ {
+		sqn[i] = SQNxorAK[i] ^ ak[i]
+	}
+
+	// return sqn
+	return sqn
+}
+
+func (ue *RanUeContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription, RAND []byte, snNmae string, AUTN []byte) []byte {
+
+	// SQN, _ := hex.DecodeString(authSubs.SequenceNumber)
+
+	// get management field.
 	AMF, _ := hex.DecodeString(authSubs.AuthenticationManagementField)
 
 	// Run milenage
+	// TODO: verify MAC
 	MAC_A, MAC_S := make([]byte, 8), make([]byte, 8)
 	CK, IK := make([]byte, 16), make([]byte, 16)
 	RES := make([]byte, 8)
 	AK, AKstar := make([]byte, 6), make([]byte, 6)
+
+	// generate OPC, K.
 	OPC, _ := hex.DecodeString(authSubs.Opc.OpcValue)
 	K, _ := hex.DecodeString(authSubs.PermanentKey.PermanentKeyValue)
+
+	// Generate RES, CK, IK, AK, AKstar
+	milenage.F2345_Test(OPC, K, RAND, RES, CK, IK, AK, AKstar)
+
+	// Generate SQN.
+	SQN := ue.deriveSQN(AUTN, AK)
+
 	// Generate MAC_A, MAC_S
 	milenage.F1_Test(OPC, K, RAND, SQN, AMF, MAC_A, MAC_S)
 
@@ -173,7 +197,7 @@ func (ue *RanUeContext) SetAuthSubscription(k, opc, op, amf string) {
 	}
 	ue.AuthenticationSubs.AuthenticationManagementField = amf
 
-	ue.AuthenticationSubs.SequenceNumber = TestGenAuthData.MilenageTestSet19.SQN
+	//ue.AuthenticationSubs.SequenceNumber = TestGenAuthData.MilenageTestSet19.SQN
 	ue.AuthenticationSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
 }
 

@@ -54,10 +54,12 @@ func AuthenticationResponse(ue *nas_control.RanUeContext, ngapMsg *ngapType.NGAP
 		return nil, fmt.Errorf("Error in get NAS PDU from Authentication request")
 	}
 
+	// get rand and autn from the message.
 	rand := nasPdu.AuthenticationRequest.GetRANDValue()
+	autn := nasPdu.AuthenticationRequest.GetAUTN()
 
 	// TODO snn is hardcode here.
-	resStat := ue.DeriveRESstarAndSetKey(ue.AuthenticationSubs, rand[:], "5G:mnc093.mcc208.3gppnetwork.org")
+	resStat := ue.DeriveRESstarAndSetKey(ue.AuthenticationSubs, rand[:], "5G:mnc093.mcc208.3gppnetwork.org", autn[:])
 
 	// send NAS Authentication Response.
 	pdu := getAuthenticationResponse(resStat, "")
