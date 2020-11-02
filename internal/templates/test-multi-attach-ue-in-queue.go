@@ -47,7 +47,6 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 		}
 
 		// data plane UE
-		// ipUe := getSrcPing(i)
 		gtpHeader := data_test_engine.GenerateGtpHeader(i)
 
 		err = data_test_engine.PingUE(upfConn, gtpHeader, i)
