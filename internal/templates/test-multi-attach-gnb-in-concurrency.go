@@ -6,7 +6,6 @@ import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine"
 	"sync"
-	"time"
 )
 
 func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
@@ -58,8 +57,6 @@ func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 			if err != nil {
 				fmt.Printf("The test failed when GNB tried to attach! Error:%s", err)
 			}
-
-			time.Sleep(60 * time.Second)
 
 			// close sctp socket.
 			conn.Close()

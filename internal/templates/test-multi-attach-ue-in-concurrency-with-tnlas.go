@@ -49,11 +49,11 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 
 	// authentication and ping to some concurrent UEs.
 	fmt.Println("mytest: ", cfg.GNodeB.ControlIF.Ip, cfg.GNodeB.ControlIF.Port)
+	ranPort := cfg.GNodeB.ControlIF.Port
 
 	// Launch several goroutines and increment the WaitGroup counter for each.
 	for i := 1; i <= numberUesConcurrency; i++ {
 		imsi := control_test_engine.ImsiGenerator(i)
-		ranPort := cfg.GNodeB.ControlIF.Port
 		wg.Add(1)
 		go attachUeWithTnla(imsi, int64(i), cfg.AMF.Ip, cfg.GNodeB.ControlIF.Ip, cfg.AMF.Port, cfg.GNodeB.DataIF.Ip, &wg, ranPort, cfg.Ue.Key, cfg.Ue.Opc, cfg.Ue.Amf)
 		ranPort++
