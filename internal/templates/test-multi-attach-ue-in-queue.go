@@ -41,12 +41,6 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 		// generating some IMSIs to each UE.
 		imsi := control_test_engine.ImsiGenerator(i)
 
-		// authentication to a UE.
-		// suciv1, suciv2, err := encodeUeSuci(imsi)
-		// if err != nil {
-		//	return fmt.Errorf("The test failed when SUCI was created! Error:%s", err)
-		// }
-
 		imsi, err := control_test_engine.RegistrationUE(conn, imsi, int64(i), cfg.GNodeB.DataIF.Ip, cfg.Ue.Key, cfg.Ue.Opc, cfg.Ue.Amf)
 		if err != nil {
 			return fmt.Errorf("The test failed when UE %s tried to attach! Error:%s", imsi, err)

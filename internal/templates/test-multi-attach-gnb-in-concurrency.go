@@ -3,14 +3,22 @@ package templates
 import (
 	"encoding/hex"
 	"fmt"
+	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine"
 	"sync"
+	"time"
 )
 
 func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 
-	ranPort := 9487
 	var wg sync.WaitGroup
+
+	cfg, err := config.GetConfig()
+	if err != nil {
+		return nil
+	}
+
+	ranPort := cfg.GNodeB.ControlIF.Port
 
 	// multiple concurrent GNBs authentication using goroutines.
 	for i := 1; i <= numberGnbs; i++ {
@@ -21,13 +29,14 @@ func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 			defer wg.Done()
 
 			// make N2(RAN connect to AMF)
-			conn, err := control_test_engine.ConnectToAmf("127.0.0.1", "127.0.0.1", 38412, ranPort)
+			conn, err := control_test_engine.ConnectToAmf(cfg.AMF.Ip, cfg.GNodeB.ControlIF.Ip, cfg.AMF.Port, ranPort)
 			if err != nil {
 				fmt.Printf("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
 			}
 
 			// multiple names for GNBs.
-			nameGNB := "my5gRanTester" + string(i)
+			nameGNB := fmt.Sprint("my5gRanTester", i)
+			// fmt.Println(nameGNB)
 
 			// generate GNB id.
 			var aux string
@@ -49,6 +58,11 @@ func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 			if err != nil {
 				fmt.Printf("The test failed when GNB tried to attach! Error:%s", err)
 			}
+
+			time.Sleep(60 * time.Second)
+
+			// close sctp socket.
+			conn.Close()
 		}(&wg, ranPort, i)
 		ranPort++
 	}
