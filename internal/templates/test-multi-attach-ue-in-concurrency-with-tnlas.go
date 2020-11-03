@@ -65,7 +65,7 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 		wg.Add(1)
 		go attachUeWithTnla(imsi, int64(i), cfg.AMF.Ip, cfg.GNodeB.ControlIF.Ip, cfg.AMF.Port, cfg.GNodeB.DataIF.Ip, &wg, ranPort, cfg.Ue.Key, cfg.Ue.Opc, cfg.Ue.Amf)
 		ranPort++
-		time.Sleep(1 * time.Second)
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	// wait for multiple goroutines.
@@ -81,6 +81,7 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 		if err != nil {
 			fmt.Println("The test failed when UE tried to use ping! Error:%s", err)
 		}
+		time.Sleep(1 * time.Second)
 	}
 
 	// function worked fine.
