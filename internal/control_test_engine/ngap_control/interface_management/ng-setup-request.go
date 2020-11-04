@@ -55,7 +55,7 @@ func BuildNGSetupRequest() (pdu ngapType.NGAPPDU) {
 	ie.Value.RANNodeName = new(ngapType.RANNodeName)
 
 	rANNodeName := ie.Value.RANNodeName
-	rANNodeName.Value = "free5GC"
+	rANNodeName.Value = "my5gRANTester"
 	nGSetupRequestIEs.List = append(nGSetupRequestIEs.List, ie)
 	// SupportedTAList
 	ie = ngapType.NGSetupRequestIEs{}

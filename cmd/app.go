@@ -53,11 +53,12 @@ func main() {
 				},
 			},
 			{
-				Name:    "complete",
-				Aliases: []string{"c"},
-				Usage:   "complete a task on the list",
+				Name:    "gnb",
+				Aliases: []string{"gnb"},
+				Usage:   "gnb procedures",
 				Action: func(c *cli.Context) error {
-					fmt.Println("completed task: ", c.Args().First())
+					// fmt.Println("completed task: ", c.Args().First())
+					fmt.Println(templates.TestMultiAttachGnbInConcurrency(1))
 					return nil
 				},
 			},
