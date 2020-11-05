@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/internal/control_test_engine/nas_control"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
@@ -46,7 +47,7 @@ func getAuthenticationResponse(authenticationResponseParam []uint8, eapMsg strin
 	return
 }
 
-func AuthenticationResponse(ue *nas_control.RanUeContext, ngapMsg *ngapType.NGAPPDU) ([]byte, error) {
+func AuthenticationResponse(ue *context.RanUeContext, ngapMsg *ngapType.NGAPPDU) ([]byte, error) {
 
 	// Calculate for RES*
 	nasPdu := nas_control.GetNasPdu(ngapMsg.InitiatingMessage.Value.DownlinkNASTransport)

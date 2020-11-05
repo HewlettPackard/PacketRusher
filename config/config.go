@@ -19,6 +19,15 @@ type Config struct {
 			Ip   string `yaml: "ip"`
 			Port int    `yaml: "port"`
 		} `yaml: "dataif"`
+		PlmnList struct {
+			Mcc string `yaml: "mmc"`
+			Mnc string `yaml: "mnc"`
+			Tac string `yaml: "tac"`
+		} `yaml: "plmnlist"`
+		SliceSupportList struct {
+			St  string `yaml: "st"`
+			Sst string `yaml: "sst"`
+		} `yaml: "slicesupportlist"`
 	} `yaml:"gnodeb"`
 	Ue struct {
 		Imsi string `yaml: "imsi"`

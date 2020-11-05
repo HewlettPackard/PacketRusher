@@ -1,19 +1,18 @@
 package templates
 
 import (
-	"encoding/hex"
 	"fmt"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine"
 	"sync"
 )
 
-func attachUeWithGNB(imsi string, ranUeId int64, amfIp string, ranIp string, amfPort int, ranIpAddr string, wg *sync.WaitGroup, ranPort int, k string, opc string, amf string) {
+func attachUeWithGNB(imsi string, conf config.Config, ranUeId int64, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
 	// make N2(RAN connect to AMF)
-	conn, err := control_test_engine.ConnectToAmf(amfIp, ranIp, amfPort, ranPort)
+	conn, err := control_test_engine.ConnectToAmf(conf.AMF.Ip, conf.GNodeB.ControlIF.Ip, conf.AMF.Port, conf.GNodeB.ControlIF.Port)
 	if err != nil {
 		fmt.Println("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
 	}
@@ -30,19 +29,21 @@ func attachUeWithGNB(imsi string, ranUeId int64, amfIp string, ranIp string, amf
 	} else {
 		aux = "000" + fmt.Sprintf("%x", ranUeId)
 	}
+	/*
+		resu, err := hex.DecodeString(aux)
+		if err != nil {
+			fmt.Printf("error in GNB id for testing multiple GNBs")
+		}
 
-	resu, err := hex.DecodeString(aux)
-	if err != nil {
-		fmt.Printf("error in GNB id for testing multiple GNBs")
-	}
+	*/
 
 	// authentication to a GNB.
-	err = control_test_engine.RegistrationGNB(conn, resu, nameGNB)
+	err = control_test_engine.RegistrationGNB(conn, aux, nameGNB, conf)
 	if err != nil {
 		fmt.Println("The test failed when GNB tried to attach! Error:%s", err)
 	}
 
-	suci, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, ranIpAddr, k, opc, amf)
+	suci, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, conf.GNodeB.DataIF.Ip, conf.Ue.Key, conf.Ue.Opc, conf.Ue.Amf)
 	if err != nil {
 		fmt.Println("The test failed when UE %s tried to attach! Error:%s", suci, err)
 	}
@@ -73,7 +74,7 @@ func TestMultiAttachUesInConcurrencyWithGNBs(numberGNBs int) error {
 	for i := 1; i <= numberGNBs; i++ {
 		imsi := control_test_engine.ImsiGenerator(i)
 		wg.Add(1)
-		go attachUeWithGNB(imsi, int64(i), cfg.AMF.Ip, cfg.GNodeB.ControlIF.Ip, cfg.AMF.Port, cfg.GNodeB.DataIF.Ip, &wg, ranPort, cfg.Ue.Key, cfg.Ue.Opc, cfg.Ue.Amf)
+		go attachUeWithGNB(imsi, cfg, int64(i), &wg)
 		ranPort++
 		// time.Sleep(10* time.Millisecond)
 	}

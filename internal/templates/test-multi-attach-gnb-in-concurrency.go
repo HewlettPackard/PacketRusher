@@ -1,7 +1,6 @@
 package templates
 
 import (
-	"encoding/hex"
 	"fmt"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine"
@@ -47,13 +46,15 @@ func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 				aux = "000" + fmt.Sprintf("%x", i)
 			}
 
-			resu, err := hex.DecodeString(aux)
-			if err != nil {
-				fmt.Printf("error in GNB id for testing multiple GNBs")
-			}
+			/*
+				resu, err := hex.DecodeString(aux)
+				if err != nil {
+					fmt.Printf("error in GNB id for testing multiple GNBs")
+				}
+			*/
 
 			// authentication to a GNB.
-			err = control_test_engine.RegistrationGNB(conn, resu, nameGNB)
+			err = control_test_engine.RegistrationGNB(conn, aux, nameGNB, cfg)
 			if err != nil {
 				fmt.Printf("The test failed when GNB tried to attach! Error:%s", err)
 			}

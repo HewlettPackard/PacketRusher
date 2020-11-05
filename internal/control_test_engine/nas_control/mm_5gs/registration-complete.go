@@ -3,13 +3,14 @@ package mm_5gs
 import (
 	"bytes"
 	"fmt"
+	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/internal/control_test_engine/nas_control"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"my5G-RANTester/lib/nas/nasType"
 )
 
-func RegistrationComplete(ue *nas_control.RanUeContext) ([]byte, error) {
+func RegistrationComplete(ue *context.RanUeContext) ([]byte, error) {
 
 	pdu := getRegistrationComplete(nil)
 	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)

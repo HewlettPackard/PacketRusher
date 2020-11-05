@@ -5,6 +5,13 @@ gnodeb:
   dataif:
     ip: "10.200.200.2"
     port: 2152
+  plmnlist:
+    mcc: "208"
+    mnc: "93"
+    tac: "000001"
+  slicesupportlist:
+    st: "01"
+    sst: "010203"
 ue:
   imsi: "imsi-2089300000001"
   key: "5122250214c33e723a5dd523fc145fc0"

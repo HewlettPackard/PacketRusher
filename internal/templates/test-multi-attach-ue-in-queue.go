@@ -30,7 +30,7 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 	}
 
 	// authentication to a GNB.
-	err = control_test_engine.RegistrationGNB(conn, []byte("\x00\x01\x02"), "free5gc")
+	err = control_test_engine.RegistrationGNB(conn, "000102", "free5gc", cfg)
 	if err != nil {
 		return fmt.Errorf("The test failed when GNB tried to attach! Error:%s", err)
 	}

@@ -3,6 +3,7 @@ package mm_5gs
 import (
 	"bytes"
 	"fmt"
+	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/internal/control_test_engine/nas_control"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
@@ -49,9 +50,9 @@ func getSecurityModeComplete(nasMessageContainer []uint8) (nasPdu []byte) {
 	return
 }
 
-func SecurityModeComplete(ue *nas_control.RanUeContext) ([]byte, error) {
+func SecurityModeComplete(ue *context.RanUeContext) ([]byte, error) {
 
-	ueSecurityCapability := nas_control.SetUESecurityCapability(ue)
+	ueSecurityCapability := context.SetUESecurityCapability(ue)
 	registrationRequest := GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ueSecurityCapability)
 
 	pdu := getSecurityModeComplete(registrationRequest)

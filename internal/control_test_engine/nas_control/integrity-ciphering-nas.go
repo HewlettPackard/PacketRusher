@@ -2,12 +2,13 @@ package nas_control
 
 import (
 	"fmt"
+	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"my5G-RANTester/lib/nas/security"
 )
 
-func EncodeNasPduWithSecurity(ue *RanUeContext, pdu []byte, securityHeaderType uint8, securityContextAvailable, newSecurityContext bool) ([]byte, error) {
+func EncodeNasPduWithSecurity(ue *context.RanUeContext, pdu []byte, securityHeaderType uint8, securityContextAvailable, newSecurityContext bool) ([]byte, error) {
 	m := nas.NewMessage()
 	err := m.PlainNasDecode(&pdu)
 	if err != nil {
@@ -20,7 +21,7 @@ func EncodeNasPduWithSecurity(ue *RanUeContext, pdu []byte, securityHeaderType u
 	return NASEncode(ue, m, securityContextAvailable, newSecurityContext)
 }
 
-func NASEncode(ue *RanUeContext, msg *nas.Message, securityContextAvailable bool, newSecurityContext bool) (payload []byte, err error) {
+func NASEncode(ue *context.RanUeContext, msg *nas.Message, securityContextAvailable bool, newSecurityContext bool) (payload []byte, err error) {
 	var sequenceNumber uint8
 	if ue == nil {
 		err = fmt.Errorf("amfUe is nil")

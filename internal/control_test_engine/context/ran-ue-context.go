@@ -1,4 +1,4 @@
-package nas_control
+package context
 
 import (
 	"encoding/hex"
@@ -10,12 +10,6 @@ import (
 	"my5G-RANTester/lib/openapi/models"
 	"regexp"
 )
-
-type gnbContext struct {
-	mcc string
-	mnc string
-	// added other information about gnb
-}
 
 type RanUeContext struct {
 	Supi               string

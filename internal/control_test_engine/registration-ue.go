@@ -2,7 +2,7 @@ package control_test_engine
 
 import (
 	"github.com/ishidawataru/sctp"
-	"my5G-RANTester/internal/control_test_engine/nas_control"
+	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/internal/control_test_engine/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ngap_control/nas_transport"
 	"my5G-RANTester/internal/control_test_engine/ngap_control/pdu_session_management"
@@ -16,7 +16,7 @@ import (
 func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, ranIpAddr string, key string, opc string, amf string) (string, error) {
 
 	// instance new ue.
-	ue := &nas_control.RanUeContext{}
+	ue := &context.RanUeContext{}
 
 	// make initial UE message.
 	err := nas_transport.InitialUEMessage(connN2, ue, imsi, ranUeId, key, opc, amf)

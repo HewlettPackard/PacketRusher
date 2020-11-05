@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/internal/control_test_engine/nas_control"
 	"my5G-RANTester/internal/control_test_engine/nas_control/sm_5gs"
 	"my5G-RANTester/lib/nas"
@@ -12,7 +13,7 @@ import (
 	"my5G-RANTester/lib/openapi/models"
 )
 
-func UlNasTransport(ue *nas_control.RanUeContext, pduSessionId uint8, requestType uint8, dnnString string, sNssai *models.Snssai) ([]byte, error) {
+func UlNasTransport(ue *context.RanUeContext, pduSessionId uint8, requestType uint8, dnnString string, sNssai *models.Snssai) ([]byte, error) {
 
 	pdu := getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId, requestType, dnnString, sNssai)
 	if pdu == nil {

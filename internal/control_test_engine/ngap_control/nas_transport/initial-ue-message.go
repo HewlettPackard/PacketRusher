@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/ishidawataru/sctp"
-	"my5G-RANTester/internal/control_test_engine/nas_control"
+	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/internal/control_test_engine/nas_control/mm_5gs"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/nas/nasMessage"
@@ -139,16 +139,15 @@ func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string) 
 	return
 }
 
-func InitialUEMessage(connN2 *sctp.SCTPConn, ue *nas_control.RanUeContext, imsi string, ranUeId int64, key string, opc string, amf string) error {
+func InitialUEMessage(connN2 *sctp.SCTPConn, ue *context.RanUeContext, imsi string, ranUeId int64, key string, opc string, amf string) error {
 
 	// new UE Context
-	// TODO opc, key, op and amf is hardcode.
 	ue.NewRanUeContext(imsi, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, key, opc, "c9e8763286b5b9ffbdf56e1297d0887b", amf)
 
 	// TODO ue.amfUENgap is received by AMF in authentication request.(? changed this).
 	ue.AmfUeNgapId = ranUeId
 
-	ueSecurityCapability := nas_control.SetUESecurityCapability(ue)
+	ueSecurityCapability := context.SetUESecurityCapability(ue)
 	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ueSecurityCapability)
 	sendMsg, err := GetInitialUEMessage(ue.RanUeNgapId, registrationRequest, "")
 	if err != nil {

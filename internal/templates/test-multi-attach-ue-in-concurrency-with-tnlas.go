@@ -10,23 +10,23 @@ import (
 )
 
 // testing attach and ping for a UE with TNLA.
-func attachUeWithTnla(imsi string, ranUeId int64, amfIp string, ranIp string, amfPort int, ranIpAddr string, wg *sync.WaitGroup, ranPort int, k string, opc string, amf string) {
+func attachUeWithTnla(imsi string, conf config.Config, ranUeId int64, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
 	// make N2(RAN connect to AMF)
-	conn, err := control_test_engine.ConnectToAmf(amfIp, ranIp, amfPort, ranPort)
+	conn, err := control_test_engine.ConnectToAmf(conf.AMF.Ip, conf.GNodeB.ControlIF.Ip, conf.AMF.Port, conf.GNodeB.ControlIF.Port)
 	if err != nil {
 		fmt.Println("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
 	}
 
 	// authentication to a GNB.
-	err = control_test_engine.RegistrationGNB(conn, []byte("\x00\x01\x02"), "free5gc")
+	err = control_test_engine.RegistrationGNB(conn, "000102", "free5gc", conf)
 	if err != nil {
 		fmt.Println("The test failed when GNB tried to attach! Error:%s", err)
 	}
 
-	suci, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, ranIpAddr, k, opc, amf)
+	suci, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, conf.GNodeB.DataIF.Ip, conf.Ue.Key, conf.Ue.Opc, conf.Ue.Amf)
 	if err != nil {
 		fmt.Println("The test failed when UE %s tried to attach! Error:%s", suci, err)
 	}
@@ -63,7 +63,7 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 	for i := 1; i <= numberUesConcurrency; i++ {
 		imsi := control_test_engine.ImsiGenerator(i)
 		wg.Add(1)
-		go attachUeWithTnla(imsi, int64(i), cfg.AMF.Ip, cfg.GNodeB.ControlIF.Ip, cfg.AMF.Port, cfg.GNodeB.DataIF.Ip, &wg, ranPort, cfg.Ue.Key, cfg.Ue.Opc, cfg.Ue.Amf)
+		go attachUeWithTnla(imsi, cfg, int64(i), &wg)
 		ranPort++
 		time.Sleep(10 * time.Millisecond)
 	}
