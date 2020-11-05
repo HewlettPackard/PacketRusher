@@ -3,12 +3,13 @@ package interface_management
 import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
+	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapType"
 )
 
-func BuildNGSetupRequest() (pdu ngapType.NGAPPDU) {
+func BuildNGSetupRequest(gnb *context.RanGnbContext) (pdu ngapType.NGAPPDU) {
 
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -35,7 +36,8 @@ func BuildNGSetupRequest() (pdu ngapType.NGAPPDU) {
 	globalRANNodeID.GlobalGNBID = new(ngapType.GlobalGNBID)
 
 	globalGNBID := globalRANNodeID.GlobalGNBID
-	globalGNBID.PLMNIdentity.Value = aper.OctetString("\x02\xf8\x39")
+	// globalGNBID.PLMNIdentity.Value = aper.OctetString("\x02\xf8\x39")
+	globalGNBID.PLMNIdentity.Value = gnb.GetMccAndMncInOctets()
 	globalGNBID.GNBID.Present = ngapType.GNBIDPresentGNBID
 	globalGNBID.GNBID.GNBID = new(aper.BitString)
 
@@ -68,20 +70,26 @@ func BuildNGSetupRequest() (pdu ngapType.NGAPPDU) {
 
 	// SupportedTAItem in SupportedTAList
 	supportedTAItem := ngapType.SupportedTAItem{}
-	supportedTAItem.TAC.Value = aper.OctetString("\x00\x00\x01")
+	// supportedTAItem.TAC.Value = aper.OctetString("\x00\x00\x01")
+	supportedTAItem.TAC.Value = gnb.GetTacInBytes()
 
 	broadcastPLMNList := &supportedTAItem.BroadcastPLMNList
 	// BroadcastPLMNItem in BroadcastPLMNList
 	broadcastPLMNItem := ngapType.BroadcastPLMNItem{}
-	broadcastPLMNItem.PLMNIdentity.Value = aper.OctetString("\x02\xf8\x39")
+	// broadcastPLMNItem.PLMNIdentity.Value = aper.OctetString("\x02\xf8\x39")
+	broadcastPLMNItem.PLMNIdentity.Value = gnb.GetMccAndMncInOctets()
 
 	sliceSupportList := &broadcastPLMNItem.TAISliceSupportList
+
 	// SliceSupportItem in SliceSupportList
 	sliceSupportItem := ngapType.SliceSupportItem{}
-	sliceSupportItem.SNSSAI.SST.Value = aper.OctetString("\x01")
+	st, sst := gnb.GetSliceInBytes()
+	// sliceSupportItem.SNSSAI.SST.Value = aper.OctetString("\x01")
+	sliceSupportItem.SNSSAI.SST.Value = st
 	// optional
 	sliceSupportItem.SNSSAI.SD = new(ngapType.SD)
-	sliceSupportItem.SNSSAI.SD.Value = aper.OctetString("\x01\x02\x03")
+	// sliceSupportItem.SNSSAI.SD.Value = aper.OctetString("\x01\x02\x03")
+	sliceSupportItem.SNSSAI.SD.Value = sst
 
 	sliceSupportList.List = append(sliceSupportList.List, sliceSupportItem)
 
@@ -105,12 +113,13 @@ func BuildNGSetupRequest() (pdu ngapType.NGAPPDU) {
 	return
 }
 
-func getNGSetupRequest(gnbId []byte, bitlength uint64, name string) ([]byte, error) {
-	message := BuildNGSetupRequest()
+func getNGSetupRequest(gnb *context.RanGnbContext, bitlength uint64, name string) ([]byte, error) {
+
+	message := BuildNGSetupRequest(gnb)
 	// GlobalRANNodeID
 	ie := message.InitiatingMessage.Value.NGSetupRequest.ProtocolIEs.List[0]
 	gnbID := ie.Value.GlobalRANNodeID.GlobalGNBID.GNBID.GNBID
-	gnbID.Bytes = gnbId
+	gnbID.Bytes = gnb.GetGnbIdInBytes()
 	gnbID.BitLength = bitlength
 	// RANNodeName
 	ie = message.InitiatingMessage.Value.NGSetupRequest.ProtocolIEs.List[1]
@@ -119,10 +128,10 @@ func getNGSetupRequest(gnbId []byte, bitlength uint64, name string) ([]byte, err
 	return ngap.Encoder(message)
 }
 
-func NgSetupRequest(connN2 *sctp.SCTPConn, gnbId []byte, bitlength uint64, name string) error {
+func NgSetupRequest(connN2 *sctp.SCTPConn, gnb *context.RanGnbContext, bitlength uint64, name string) error {
 	var sendMsg []byte
 
-	sendMsg, err := getNGSetupRequest(gnbId, bitlength, name)
+	sendMsg, err := getNGSetupRequest(gnb, bitlength, name)
 	if err != nil {
 		return fmt.Errorf("Error getting GNB %s NGSetup Request Msg", name)
 	}

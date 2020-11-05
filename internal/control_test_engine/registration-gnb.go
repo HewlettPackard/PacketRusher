@@ -17,8 +17,8 @@ func RegistrationGNB(connN2 *sctp.SCTPConn, gnbId string, nameGNB string, conf c
 	gnb.NewRanGnbContext(gnbId, conf.GNodeB.PlmnList.Mcc, conf.GNodeB.PlmnList.Mnc, conf.GNodeB.PlmnList.Tac, conf.GNodeB.SliceSupportList.St, conf.GNodeB.SliceSupportList.Sst)
 
 	// send NGSetup request msg.
-	gnbIdInBytes := gnb.GetGnbIdInBytes()
-	err := interface_management.NgSetupRequest(connN2, gnbIdInBytes, 24, nameGNB)
+	// gnbIdInBytes := gnb.GetGnbIdInBytes()
+	err := interface_management.NgSetupRequest(connN2, gnb, 24, nameGNB)
 	if logging.Check_error(err, "send NGSetupRequest Message") {
 		return err
 	}

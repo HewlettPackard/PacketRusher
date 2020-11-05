@@ -52,7 +52,7 @@ func (gnb *RanGnbContext) getTac() string {
 	return gnb.tac
 }
 
-func (gnb *RanGnbContext) getTacInBytes() []byte {
+func (gnb *RanGnbContext) GetTacInBytes() []byte {
 	// changed for bytes.
 	resu, err := hex.DecodeString(gnb.tac)
 	if err != nil {
@@ -65,7 +65,7 @@ func (gnb *RanGnbContext) getSlice() (string, string) {
 	return gnb.slice.st, gnb.slice.sst
 }
 
-func (gnb *RanGnbContext) getSliceInBytes() ([]byte, []byte) {
+func (gnb *RanGnbContext) GetSliceInBytes() ([]byte, []byte) {
 	stBytes, err := hex.DecodeString(gnb.slice.st)
 	if err != nil {
 		fmt.Println(err)
@@ -82,7 +82,7 @@ func (gnb *RanGnbContext) getMccAndMnc() (string, string) {
 	return gnb.mcc, gnb.mnc
 }
 
-func (gnb *RanGnbContext) getMccAndMncInOctets() []byte {
+func (gnb *RanGnbContext) GetMccAndMncInOctets() []byte {
 
 	// reverse mcc and mnc
 	mcc := reverse(gnb.mcc)
