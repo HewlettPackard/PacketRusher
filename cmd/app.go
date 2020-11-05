@@ -17,7 +17,7 @@ func main() {
 				Name:    "load-test",
 				Aliases: []string{"load-test"},
 				Usage: "\nLoad endurance stress tests.\n" +
-					"Example: load-test -n 10 \n" +
+					"Example: load-test -n 5 \n" +
 					"Example for concurrency testing with different GNBs: load-test -g -n 10\n" +
 					"Example for concurrency testing with some TNLAs: load-test -t -n 10\n",
 				Flags: []cli.Flag{

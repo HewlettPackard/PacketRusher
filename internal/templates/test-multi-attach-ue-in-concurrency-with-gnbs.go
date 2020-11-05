@@ -7,12 +7,12 @@ import (
 	"sync"
 )
 
-func attachUeWithGNB(imsi string, conf config.Config, ranUeId int64, wg *sync.WaitGroup) {
+func attachUeWithGNB(imsi string, conf config.Config, ranUeId int64, wg *sync.WaitGroup, ranPort int) {
 
 	defer wg.Done()
 
 	// make N2(RAN connect to AMF)
-	conn, err := control_test_engine.ConnectToAmf(conf.AMF.Ip, conf.GNodeB.ControlIF.Ip, conf.AMF.Port, conf.GNodeB.ControlIF.Port)
+	conn, err := control_test_engine.ConnectToAmf(conf.AMF.Ip, conf.GNodeB.ControlIF.Ip, conf.AMF.Port, ranPort)
 	if err != nil {
 		fmt.Println("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
 	}
@@ -29,13 +29,6 @@ func attachUeWithGNB(imsi string, conf config.Config, ranUeId int64, wg *sync.Wa
 	} else {
 		aux = "000" + fmt.Sprintf("%x", ranUeId)
 	}
-	/*
-		resu, err := hex.DecodeString(aux)
-		if err != nil {
-			fmt.Printf("error in GNB id for testing multiple GNBs")
-		}
-
-	*/
 
 	// authentication to a GNB.
 	err = control_test_engine.RegistrationGNB(conn, aux, nameGNB, conf)
@@ -74,7 +67,7 @@ func TestMultiAttachUesInConcurrencyWithGNBs(numberGNBs int) error {
 	for i := 1; i <= numberGNBs; i++ {
 		imsi := control_test_engine.ImsiGenerator(i)
 		wg.Add(1)
-		go attachUeWithGNB(imsi, cfg, int64(i), &wg)
+		go attachUeWithGNB(imsi, cfg, int64(i), &wg, ranPort)
 		ranPort++
 		// time.Sleep(10* time.Millisecond)
 	}

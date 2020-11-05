@@ -10,12 +10,12 @@ import (
 )
 
 // testing attach and ping for a UE with TNLA.
-func attachUeWithTnla(imsi string, conf config.Config, ranUeId int64, wg *sync.WaitGroup) {
+func attachUeWithTnla(imsi string, conf config.Config, ranUeId int64, wg *sync.WaitGroup, ranPort int) {
 
 	defer wg.Done()
 
 	// make N2(RAN connect to AMF)
-	conn, err := control_test_engine.ConnectToAmf(conf.AMF.Ip, conf.GNodeB.ControlIF.Ip, conf.AMF.Port, conf.GNodeB.ControlIF.Port)
+	conn, err := control_test_engine.ConnectToAmf(conf.AMF.Ip, conf.GNodeB.ControlIF.Ip, conf.AMF.Port, ranPort)
 	if err != nil {
 		fmt.Println("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
 	}
@@ -63,7 +63,7 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 	for i := 1; i <= numberUesConcurrency; i++ {
 		imsi := control_test_engine.ImsiGenerator(i)
 		wg.Add(1)
-		go attachUeWithTnla(imsi, cfg, int64(i), &wg)
+		go attachUeWithTnla(imsi, cfg, int64(i), &wg, ranPort)
 		ranPort++
 		time.Sleep(10 * time.Millisecond)
 	}
