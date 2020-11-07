@@ -22,6 +22,7 @@ type RanUeContext struct {
 	DLCount            security.Count
 	CipheringAlg       uint8
 	IntegrityAlg       uint8
+	Snn                string
 	KnasEnc            [16]uint8
 	KnasInt            [16]uint8
 	Kamf               []uint8
@@ -50,10 +51,10 @@ func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipherin
 	// added key, AuthenticationManagementField and opc or op.
 	ue.SetAuthSubscription(k, opc, op, amf)
 
-	// added suci.
-	suciV2, suciV1 := ue.EncodeUeSuci()
+	// added suci
+	suciV1, suciV2, suciV3 := ue.EncodeUeSuci()
 
-	// added mcc and mnc.
+	// added mcc and mnc
 	ue.mcc = mcc
 	ue.mnc = mnc
 
@@ -65,12 +66,41 @@ func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipherin
 	resu := ue.GetMccAndMncInOctets()
 
 	// added suci to mobileIdentity5GS
-	// TODO MCC and MNC is hardcode(here and in GNB).
-	ue.Suci = nasType.MobileIdentity5GS{
-		Len: 12, // suci
-		// Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV1, suciV2},
-		Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV1, suciV2},
+	/*
+		(imsi-2089300007487)
+		mobileIdentity5GS := nasType.MobileIdentity5GS{
+			Len:    12, // suci
+			Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, 0x47, 0x78},
+		}
+	*/
+	// fmt.Println( len(ue.Supi) )
+	if len(ue.Supi) == 18 {
+		ue.Suci = nasType.MobileIdentity5GS{
+			Len:    12, // suci
+			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, 0x00, suciV3, suciV2, suciV1},
+		}
+	} else {
+		ue.Suci = nasType.MobileIdentity5GS{
+			Len:    13, // suci
+			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV3, suciV2, suciV1},
+		}
 	}
+
+	// added snn.
+	ue.Snn = ue.deriveSNN()
+	fmt.Println(ue.Snn)
+}
+
+func (ue *RanUeContext) deriveSNN() string {
+	// 5G:mnc093.mcc208.3gppnetwork.org
+	var resu string
+	if len(ue.mnc) == 2 {
+		resu = "5G:mnc0" + ue.mnc + ".mcc" + ue.mcc + ".3gppnetwork.org"
+	} else {
+		resu = "5G:mnc" + ue.mnc + ".mcc" + ue.mcc + ".3gppnetwork.org"
+	}
+
+	return resu
 }
 
 func (ue *RanUeContext) GetMccAndMncInOctets() []byte {
@@ -100,27 +130,20 @@ func (ue *RanUeContext) GetMccAndMncInOctets() []byte {
 	return resu
 }
 
-func (ue *RanUeContext) EncodeUeSuci() (uint8, uint8) {
-
-	/*
-		var aux string
-		for _, valor := range ue.Supi {
-			aux = string(valor) + aux
-		}
-	*/
+func (ue *RanUeContext) EncodeUeSuci() (uint8, uint8, uint8) {
 
 	// reverse imsi string.
 	aux := reverse(ue.Supi)
 
 	// calculate decimal value.
-	suci, error := hex.DecodeString(aux[:4])
+	suci, error := hex.DecodeString(aux[:6])
 	if error != nil {
-		return 0, 0
+		return 0, 0, 0
 	}
 
 	// return decimal value
 	// Function worked fine.
-	return uint8(suci[0]), uint8(suci[1])
+	return uint8(suci[0]), uint8(suci[1]), uint8(suci[2])
 }
 
 func (ue *RanUeContext) deriveSQN(autn []byte, ak []uint8) []byte {

@@ -20,9 +20,10 @@ type Config struct {
 			Port int    `yaml: "port"`
 		} `yaml: "dataif"`
 		PlmnList struct {
-			Mcc string `yaml: "mmc"`
-			Mnc string `yaml: "mnc"`
-			Tac string `yaml: "tac"`
+			Mcc   string `yaml: "mmc"`
+			Mnc   string `yaml: "mnc"`
+			Tac   string `yaml: "tac"`
+			GnbId string `yaml: "gnbid"`
 		} `yaml: "plmnlist"`
 		SliceSupportList struct {
 			St  string `yaml: "st"`

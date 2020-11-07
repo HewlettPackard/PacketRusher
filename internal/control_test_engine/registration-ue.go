@@ -22,9 +22,6 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 	// new UE Context
 	ue.NewRanUeContext(imsi, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, conf.Ue.Key, conf.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, mcc, mnc, int32(conf.Ue.Snssai.Sd), conf.Ue.Snssai.Sst)
 
-	// TODO ue.amfUENgap is received by AMF in authentication request.(? changed this).
-	ue.AmfUeNgapId = ranUeId
-
 	// make initial UE message.
 	// ueSecurityCapability := context.SetUESecurityCapability(ue)
 	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ue)
@@ -89,14 +86,6 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 	}
 
 	time.Sleep(100 * time.Millisecond)
-
-	// called Single Network Slice Selection Assistance Information (S-NSSAI).
-	/*
-		sNssai := models.Snssai{
-			Sst: 1, //The SST part of the S-NSSAI is mandatory and indicates the type of characteristics of the Network Slice.
-			Sd:  "010203",
-		}
-	*/
 
 	// send PduSessionEstablishmentRequest Msg
 	pdu, err = mm_5gs.UlNasTransport(ue, uint8(ranUeId), nasMessage.ULNASTransportRequestTypeInitialRequest, "internet", &ue.Snssai)

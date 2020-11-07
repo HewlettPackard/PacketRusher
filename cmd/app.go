@@ -53,12 +53,11 @@ func main() {
 				},
 			},
 			{
-				Name:    "gnb",
-				Aliases: []string{"gnb"},
-				Usage:   "gnb procedures",
+				Name:    "ue",
+				Aliases: []string{"ue"},
+				Usage:   "test attach for ue with configuration",
 				Action: func(c *cli.Context) error {
-					// fmt.Println("completed task: ", c.Args().First())
-					fmt.Println(templates.TestMultiAttachGnbInConcurrency(1))
+					fmt.Println(templates.TestAttachUeWithConfiguration())
 					return nil
 				},
 			},
