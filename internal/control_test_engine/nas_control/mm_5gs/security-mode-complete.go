@@ -52,8 +52,8 @@ func getSecurityModeComplete(nasMessageContainer []uint8) (nasPdu []byte) {
 
 func SecurityModeComplete(ue *context.RanUeContext) ([]byte, error) {
 
-	ueSecurityCapability := context.SetUESecurityCapability(ue)
-	registrationRequest := GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ueSecurityCapability)
+	// ueSecurityCapability := context.SetUESecurityCapability(ue)
+	registrationRequest := GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ue)
 
 	pdu := getSecurityModeComplete(registrationRequest)
 	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCipheredWithNew5gNasSecurityContext, true, true)

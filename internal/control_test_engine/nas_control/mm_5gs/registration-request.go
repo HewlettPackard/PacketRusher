@@ -3,12 +3,16 @@ package mm_5gs
 import (
 	"bytes"
 	"fmt"
+	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"my5G-RANTester/lib/nas/nasType"
 )
 
-func GetRegistrationRequestWith5GMM(registrationType uint8, mobileIdentity nasType.MobileIdentity5GS, requestedNSSAI *nasType.RequestedNSSAI, uplinkDataStatus *nasType.UplinkDataStatus, ueSecurityCapability *nasType.UESecurityCapability) (nasPdu []byte) {
+func GetRegistrationRequestWith5GMM(registrationType uint8, mobileIdentity nasType.MobileIdentity5GS, requestedNSSAI *nasType.RequestedNSSAI, uplinkDataStatus *nasType.UplinkDataStatus, ue *context.RanUeContext) (nasPdu []byte) {
+
+	ueSecurityCapability := context.SetUESecurityCapability(ue)
+
 	m := nas.NewMessage()
 	m.GmmMessage = nas.NewGmmMessage()
 	m.GmmHeader.SetMessageType(nas.MsgTypeRegistrationRequest)

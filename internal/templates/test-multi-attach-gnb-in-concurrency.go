@@ -54,10 +54,12 @@ func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 			*/
 
 			// authentication to a GNB.
-			err = control_test_engine.RegistrationGNB(conn, aux, nameGNB, cfg)
+			contextgnb, err := control_test_engine.RegistrationGNB(conn, aux, nameGNB, cfg)
 			if err != nil {
 				fmt.Printf("The test failed when GNB tried to attach! Error:%s", err)
 			}
+
+			fmt.Println(contextgnb)
 
 			// close sctp socket.
 			conn.Close()

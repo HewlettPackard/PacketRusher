@@ -26,15 +26,6 @@ func (gnb *RanGnbContext) NewRanGnbContext(gnbId, mcc, mnc, tac, st, sst string)
 	gnb.slice.sst = sst
 }
 
-func reverse(s string) string {
-	// reverse string.
-	var aux string
-	for _, valor := range s {
-		aux = string(valor) + aux
-	}
-	return aux
-}
-
 func (gnb *RanGnbContext) getGnbId() string {
 	return gnb.gnbId
 }

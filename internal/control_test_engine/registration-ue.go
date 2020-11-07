@@ -2,6 +2,7 @@ package control_test_engine
 
 import (
 	"github.com/ishidawataru/sctp"
+	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/internal/control_test_engine/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ngap_control/nas_transport"
@@ -9,17 +10,25 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ngap_control/ue_context_management"
 	"my5G-RANTester/internal/logging"
 	"my5G-RANTester/lib/nas/nasMessage"
-	"my5G-RANTester/lib/openapi/models"
+	"my5G-RANTester/lib/nas/security"
 	"time"
 )
 
-func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, ranIpAddr string, key string, opc string, amf string) (string, error) {
+func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf config.Config, gnb *context.RanGnbContext, mcc, mnc string) (string, error) {
 
 	// instance new ue.
 	ue := &context.RanUeContext{}
 
+	// new UE Context
+	ue.NewRanUeContext(imsi, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, conf.Ue.Key, conf.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, mcc, mnc, int32(conf.Ue.Snssai.Sd), conf.Ue.Snssai.Sst)
+
+	// TODO ue.amfUENgap is received by AMF in authentication request.(? changed this).
+	ue.AmfUeNgapId = ranUeId
+
 	// make initial UE message.
-	err := nas_transport.InitialUEMessage(connN2, ue, imsi, ranUeId, key, opc, amf)
+	// ueSecurityCapability := context.SetUESecurityCapability(ue)
+	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ue)
+	err := nas_transport.InitialUEMessage(connN2, registrationRequest, ue, gnb)
 	if logging.Check_error(err, "send Initial Ue Message") {
 		return ue.Supi, err
 	}
@@ -36,7 +45,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, ranIpAddr
 		return ue.Supi, err
 	}
 
-	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu, gnb)
 	if logging.Check_error(err, "send UplinkNasTransport/Authentication Response") {
 		return ue.Supi, err
 	}
@@ -52,7 +61,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, ranIpAddr
 	if logging.Check_error(err, "Security Mode Complete worked fine!") {
 		return ue.Supi, err
 	}
-	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu, gnb)
 	if logging.Check_error(err, "send UplinkNasTransport/Security Mode Complete Msg!") {
 		return ue.Supi, err
 	}
@@ -74,7 +83,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, ranIpAddr
 	if logging.Check_error(err, "NAS registration complete worked fine") {
 		return ue.Supi, err
 	}
-	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu, gnb)
 	if logging.Check_error(err, "send UplinkNasTransport/registration complete") {
 		return ue.Supi, err
 	}
@@ -82,18 +91,20 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, ranIpAddr
 	time.Sleep(100 * time.Millisecond)
 
 	// called Single Network Slice Selection Assistance Information (S-NSSAI).
-	sNssai := models.Snssai{
-		Sst: 1, //The SST part of the S-NSSAI is mandatory and indicates the type of characteristics of the Network Slice.
-		Sd:  "010203",
-	}
+	/*
+		sNssai := models.Snssai{
+			Sst: 1, //The SST part of the S-NSSAI is mandatory and indicates the type of characteristics of the Network Slice.
+			Sd:  "010203",
+		}
+	*/
 
 	// send PduSessionEstablishmentRequest Msg
-	pdu, err = mm_5gs.UlNasTransport(ue, uint8(ranUeId), nasMessage.ULNASTransportRequestTypeInitialRequest, "internet", &sNssai)
+	pdu, err = mm_5gs.UlNasTransport(ue, uint8(ranUeId), nasMessage.ULNASTransportRequestTypeInitialRequest, "internet", &ue.Snssai)
 	if logging.Check_error(err, "NAS UlNasTransport worked fine!") {
 		return ue.Supi, err
 	}
 
-	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu)
+	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu, gnb)
 	if logging.Check_error(err, "send UplinkNasTransport/Ul Nas Transport/PduSession Establishment request") {
 		return ue.Supi, err
 	}
@@ -105,7 +116,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, ranIpAddr
 	}
 
 	// send 14. NGAP-PDU Session Resource Setup Response.
-	err = pdu_session_management.PDUSessionResourceSetupResponse(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, ue.Supi, ranIpAddr)
+	err = pdu_session_management.PDUSessionResourceSetupResponse(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, ue.Supi, conf.GNodeB.DataIF.Ip)
 	if logging.Check_error(err, "send PDU Session Resource Setup Response") {
 		return ue.Supi, err
 	}

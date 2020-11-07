@@ -30,7 +30,7 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 	}
 
 	// authentication to a GNB.
-	err = control_test_engine.RegistrationGNB(conn, "000102", "free5gc", cfg)
+	contextGnb, err := control_test_engine.RegistrationGNB(conn, "000102", "free5gc", cfg)
 	if err != nil {
 		return fmt.Errorf("The test failed when GNB tried to attach! Error:%s", err)
 	}
@@ -41,7 +41,7 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 		// generating some IMSIs to each UE.
 		imsi := control_test_engine.ImsiGenerator(i)
 
-		imsi, err := control_test_engine.RegistrationUE(conn, imsi, int64(i), cfg.GNodeB.DataIF.Ip, cfg.Ue.Key, cfg.Ue.Opc, cfg.Ue.Amf)
+		imsi, err := control_test_engine.RegistrationUE(conn, imsi, int64(i), cfg, contextGnb, "208", "93")
 		if err != nil {
 			return fmt.Errorf("The test failed when UE %s tried to attach! Error:%s", imsi, err)
 		}

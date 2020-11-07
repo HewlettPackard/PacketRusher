@@ -8,7 +8,7 @@ import (
 	"my5G-RANTester/internal/logging"
 )
 
-func RegistrationGNB(connN2 *sctp.SCTPConn, gnbId string, nameGNB string, conf config.Config) error {
+func RegistrationGNB(connN2 *sctp.SCTPConn, gnbId string, nameGNB string, conf config.Config) (*context.RanGnbContext, error) {
 
 	// instance new gnb.
 	gnb := &context.RanGnbContext{}
@@ -20,15 +20,15 @@ func RegistrationGNB(connN2 *sctp.SCTPConn, gnbId string, nameGNB string, conf c
 	// gnbIdInBytes := gnb.GetGnbIdInBytes()
 	err := interface_management.NgSetupRequest(connN2, gnb, 24, nameGNB)
 	if logging.Check_error(err, "send NGSetupRequest Message") {
-		return err
+		return nil, err
 	}
 
 	// receive NGSetupResponse Msg
 	_, err = interface_management.NgSetupResponse(connN2)
 	if logging.Check_error(err, "receive NGSetupResponse Message") {
-		return err
+		return nil, err
 	}
 
 	// function worked fine.
-	return nil
+	return gnb, nil
 }

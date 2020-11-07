@@ -30,10 +30,18 @@ type Config struct {
 		} `yaml: "slicesupportlist"`
 	} `yaml:"gnodeb"`
 	Ue struct {
-		Imsi string `yaml: "imsi"`
-		Key  string `yaml: "key"`
-		Opc  string `yaml: "opc"`
-		Amf  string `yaml: "amf"`
+		Imsi  string `yaml: "imsi"`
+		Key   string `yaml: "key"`
+		Opc   string `yaml: "opc"`
+		Amf   string `yaml: "amf"`
+		Hplmn struct {
+			Mcc string `yaml: "mcc"`
+			Mnc string `yaml: "mnc"`
+		} `yaml: "hplmn"`
+		Snssai struct {
+			Sd  int    `yaml: "sd"`
+			Sst string `yaml: "sst"`
+		} `yaml: "snssai"`
 	} `yaml:"ue"`
 	AMF struct {
 		Ip   string `yaml: "ip"`

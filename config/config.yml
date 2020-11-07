@@ -17,6 +17,12 @@ ue:
   key: "5122250214c33e723a5dd523fc145fc0"
   opc: "981d464c7c52eb6e5036234984ad0bcf"
   amf: "8000"
+  hplmn:
+    mcc: "208"
+    mnc: "93"
+  snssai:
+    sd: 1
+    sst: "010203"
 amfif:
   ip: "127.0.0.1"
   port: 38412

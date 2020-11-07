@@ -3,17 +3,18 @@ package nas_transport
 import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
+	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapType"
 )
 
-func getUplinkNASTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte) ([]byte, error) {
-	message := buildUplinkNasTransport(amfUeNgapID, ranUeNgapID, nasPdu)
+func getUplinkNASTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte, plmn []byte, tac []byte) ([]byte, error) {
+	message := buildUplinkNasTransport(amfUeNgapID, ranUeNgapID, nasPdu, plmn, tac)
 	return ngap.Encoder(message)
 }
 
-func buildUplinkNasTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte) (pdu ngapType.NGAPPDU) {
+func buildUplinkNasTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte, plmn []byte, tac []byte) (pdu ngapType.NGAPPDU) {
 
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -77,23 +78,23 @@ func buildUplinkNasTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte) (pdu
 	userLocationInformation.UserLocationInformationNR = new(ngapType.UserLocationInformationNR)
 
 	userLocationInformationNR := userLocationInformation.UserLocationInformationNR
-	userLocationInformationNR.NRCGI.PLMNIdentity.Value = aper.OctetString("\x02\xf8\x39")
+	userLocationInformationNR.NRCGI.PLMNIdentity.Value = plmn
 	userLocationInformationNR.NRCGI.NRCellIdentity.Value = aper.BitString{
 		Bytes:     []byte{0x00, 0x00, 0x00, 0x00, 0x10},
 		BitLength: 36,
 	}
 
-	userLocationInformationNR.TAI.PLMNIdentity.Value = aper.OctetString("\x02\xf8\x39")
-	userLocationInformationNR.TAI.TAC.Value = aper.OctetString("\x00\x00\x01")
+	userLocationInformationNR.TAI.PLMNIdentity.Value = plmn
+	userLocationInformationNR.TAI.TAC.Value = tac
 
 	uplinkNasTransportIEs.List = append(uplinkNasTransportIEs.List, ie)
 
 	return
 }
 
-func UplinkNasTransport(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUeNgapID int64, nasPdu []byte) error {
+func UplinkNasTransport(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUeNgapID int64, nasPdu []byte, gnb *context.RanGnbContext) error {
 
-	sendMsg, err := getUplinkNASTransport(amfUeNgapID, ranUeNgapID, nasPdu)
+	sendMsg, err := getUplinkNASTransport(amfUeNgapID, ranUeNgapID, nasPdu, gnb.GetMccAndMncInOctets(), gnb.GetTacInBytes())
 	if err != nil {
 		return fmt.Errorf("Error getting ueId %d NAS Authentication Response", ranUeNgapID)
 	}

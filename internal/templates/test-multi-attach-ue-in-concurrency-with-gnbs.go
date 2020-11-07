@@ -31,12 +31,12 @@ func attachUeWithGNB(imsi string, conf config.Config, ranUeId int64, wg *sync.Wa
 	}
 
 	// authentication to a GNB.
-	err = control_test_engine.RegistrationGNB(conn, aux, nameGNB, conf)
+	gnbContext, err := control_test_engine.RegistrationGNB(conn, aux, nameGNB, conf)
 	if err != nil {
 		fmt.Println("The test failed when GNB tried to attach! Error:%s", err)
 	}
 
-	suci, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, conf.GNodeB.DataIF.Ip, conf.Ue.Key, conf.Ue.Opc, conf.Ue.Amf)
+	suci, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, conf, gnbContext, "208", "93")
 	if err != nil {
 		fmt.Println("The test failed when UE %s tried to attach! Error:%s", suci, err)
 	}

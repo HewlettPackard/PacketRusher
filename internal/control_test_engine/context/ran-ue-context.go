@@ -2,6 +2,7 @@ package context
 
 import (
 	"encoding/hex"
+	"fmt"
 	"my5G-RANTester/lib/UeauCommon"
 	"my5G-RANTester/lib/milenage"
 	"my5G-RANTester/lib/nas/nasMessage"
@@ -15,6 +16,8 @@ type RanUeContext struct {
 	Supi               string
 	RanUeNgapId        int64
 	AmfUeNgapId        int64
+	mcc                string
+	mnc                string
 	ULCount            security.Count
 	DLCount            security.Count
 	CipheringAlg       uint8
@@ -24,15 +27,90 @@ type RanUeContext struct {
 	Kamf               []uint8
 	AuthenticationSubs models.AuthenticationSubscription
 	Suci               nasType.MobileIdentity5GS
+	Snssai             models.Snssai
+}
+
+func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipheringAlg, integrityAlg uint8, k, opc, op, amf, mcc, mnc string, sst int32, sd string) {
+
+	// added Ran UE NGAP ID.
+	ue.RanUeNgapId = ranUeNgapId
+
+	// added SUPI.
+	ue.Supi = imsi
+
+	// TODO ue.amfUENgap is received by AMF in authentication request.(? changed this).
+	ue.AmfUeNgapId = ranUeNgapId
+
+	// added ciphering algorithm.
+	ue.CipheringAlg = cipheringAlg
+
+	// added integrity algorithm.
+	ue.IntegrityAlg = integrityAlg
+
+	// added key, AuthenticationManagementField and opc or op.
+	ue.SetAuthSubscription(k, opc, op, amf)
+
+	// added suci.
+	suciV2, suciV1 := ue.EncodeUeSuci()
+
+	// added mcc and mnc.
+	ue.mcc = mcc
+	ue.mnc = mnc
+
+	// added network slice
+	ue.Snssai.Sd = sd
+	ue.Snssai.Sst = sst
+
+	// encode mcc and mnc for mobileIdentity5Gs.
+	resu := ue.GetMccAndMncInOctets()
+
+	// added suci to mobileIdentity5GS
+	// TODO MCC and MNC is hardcode(here and in GNB).
+	ue.Suci = nasType.MobileIdentity5GS{
+		Len: 12, // suci
+		// Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV1, suciV2},
+		Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV1, suciV2},
+	}
+}
+
+func (ue *RanUeContext) GetMccAndMncInOctets() []byte {
+
+	// reverse mcc and mnc
+	mcc := reverse(ue.mcc)
+	mnc := reverse(ue.mnc)
+
+	// include mcc and mnc in octets
+	oct5 := mcc[1:3]
+	var oct6 string
+	var oct7 string
+	if len(ue.mnc) == 2 {
+		oct6 = "f" + string(mcc[0])
+		oct7 = mnc
+	} else {
+		oct6 = string(mnc[0]) + string(mcc[0])
+		oct7 = mnc[1:3]
+	}
+
+	// changed for bytes.
+	resu, err := hex.DecodeString(oct5 + oct6 + oct7)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return resu
 }
 
 func (ue *RanUeContext) EncodeUeSuci() (uint8, uint8) {
 
+	/*
+		var aux string
+		for _, valor := range ue.Supi {
+			aux = string(valor) + aux
+		}
+	*/
+
 	// reverse imsi string.
-	var aux string
-	for _, valor := range ue.Supi {
-		aux = string(valor) + aux
-	}
+	aux := reverse(ue.Supi)
 
 	// calculate decimal value.
 	suci, error := hex.DecodeString(aux[:4])
@@ -147,34 +225,6 @@ func (ue *RanUeContext) DerivateAlgKey() {
 
 	kint := UeauCommon.GetKDFValue(ue.Kamf, UeauCommon.FC_FOR_ALGORITHM_KEY_DERIVATION, P0, L0, P1, L1)
 	copy(ue.KnasInt[:], kint[16:32])
-}
-
-func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipheringAlg, integrityAlg uint8, k string, opc string, op string, amf string) {
-
-	// added Ran UE NGAP ID.
-	ue.RanUeNgapId = ranUeNgapId
-
-	// added SUPI.
-	ue.Supi = imsi
-
-	// added ciphering algorithm.
-	ue.CipheringAlg = cipheringAlg
-
-	// added integrity algorithm.
-	ue.IntegrityAlg = integrityAlg
-
-	// added key, AuthenticationManagementField and opc or op.
-	ue.SetAuthSubscription(k, opc, op, amf)
-
-	// added suci.
-	suciV2, suciV1 := ue.EncodeUeSuci()
-
-	// added suci to mobileIdentity5GS
-	// TODO MCC and MNC is hardcode(here and in GNB).
-	ue.Suci = nasType.MobileIdentity5GS{
-		Len:    12, // suci
-		Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV1, suciV2},
-	}
 }
 
 func (ue *RanUeContext) SetAuthSubscription(k, opc, op, amf string) {

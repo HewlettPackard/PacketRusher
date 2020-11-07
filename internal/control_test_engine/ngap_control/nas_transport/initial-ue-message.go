@@ -5,10 +5,7 @@ import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
 	"my5G-RANTester/internal/control_test_engine/context"
-	"my5G-RANTester/internal/control_test_engine/nas_control/mm_5gs"
 	"my5G-RANTester/lib/aper"
-	"my5G-RANTester/lib/nas/nasMessage"
-	"my5G-RANTester/lib/nas/security"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapType"
 )
@@ -20,12 +17,12 @@ func init() {
 	TestPlmn.Value = aper.OctetString("\x02\xf8\x39")
 }
 
-func GetInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string) ([]byte, error) {
-	message := BuildInitialUEMessage(ranUeNgapID, nasPdu, fiveGSTmsi)
+func GetInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, plmn []byte, tac []byte) ([]byte, error) {
+	message := BuildInitialUEMessage(ranUeNgapID, nasPdu, fiveGSTmsi, plmn, tac)
 	return ngap.Encoder(message)
 }
 
-func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string) (pdu ngapType.NGAPPDU) {
+func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, plmn []byte, tac []byte) (pdu ngapType.NGAPPDU) {
 
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -77,14 +74,15 @@ func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string) 
 	userLocationInformation.UserLocationInformationNR = new(ngapType.UserLocationInformationNR)
 
 	userLocationInformationNR := userLocationInformation.UserLocationInformationNR
-	userLocationInformationNR.NRCGI.PLMNIdentity.Value = TestPlmn.Value
+	userLocationInformationNR.NRCGI.PLMNIdentity.Value = plmn
 	userLocationInformationNR.NRCGI.NRCellIdentity.Value = aper.BitString{
 		Bytes:     []byte{0x00, 0x00, 0x00, 0x00, 0x10},
 		BitLength: 36,
 	}
 
-	userLocationInformationNR.TAI.PLMNIdentity.Value = TestPlmn.Value
-	userLocationInformationNR.TAI.TAC.Value = aper.OctetString("\x00\x00\x01")
+	userLocationInformationNR.TAI.PLMNIdentity.Value = plmn
+	// userLocationInformationNR.TAI.TAC.Value = aper.OctetString("\x00\x00\x01")
+	userLocationInformationNR.TAI.TAC.Value = tac
 
 	initialUEMessageIEs.List = append(initialUEMessageIEs.List, ie)
 
@@ -139,17 +137,14 @@ func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string) 
 	return
 }
 
-func InitialUEMessage(connN2 *sctp.SCTPConn, ue *context.RanUeContext, imsi string, ranUeId int64, key string, opc string, amf string) error {
+func InitialUEMessage(connN2 *sctp.SCTPConn, registrationRequest []byte, ue *context.RanUeContext, gnb *context.RanGnbContext) error {
 
 	// new UE Context
-	ue.NewRanUeContext(imsi, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, key, opc, "c9e8763286b5b9ffbdf56e1297d0887b", amf)
+	// ue.NewRanUeContext(imsi, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, key, opc, "c9e8763286b5b9ffbdf56e1297d0887b", amf)
 
-	// TODO ue.amfUENgap is received by AMF in authentication request.(? changed this).
-	ue.AmfUeNgapId = ranUeId
-
-	ueSecurityCapability := context.SetUESecurityCapability(ue)
-	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ueSecurityCapability)
-	sendMsg, err := GetInitialUEMessage(ue.RanUeNgapId, registrationRequest, "")
+	// ueSecurityCapability := context.SetUESecurityCapability(ue)
+	// registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ueSecurityCapability)
+	sendMsg, err := GetInitialUEMessage(ue.RanUeNgapId, registrationRequest, "", gnb.GetMccAndMncInOctets(), gnb.GetTacInBytes())
 	if err != nil {
 		return fmt.Errorf("Error in %s ue initial message", ue.Supi)
 	}
