@@ -6,8 +6,8 @@ gnodeb:
     ip: "10.200.200.2"
     port: 2152
   plmnlist:
-    mcc: "208"
-    mnc: "93"
+    mcc: "901"
+    mnc: "70"
     tac: "000001"
     gnbid: "000002"
   slicesupportlist:

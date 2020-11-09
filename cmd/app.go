@@ -61,6 +61,24 @@ func main() {
 					return nil
 				},
 			},
+			{
+				Name:    "gnb",
+				Aliases: []string{"gnb"},
+				Usage: "test attach with some gnbs with configuration.\n" +
+					"Example for testing attached gnbs: gnb -n 5",
+				Flags: []cli.Flag{
+					&cli.IntFlag{Name: "number-of-gnbs", Value: 1, Aliases: []string{"n"}},
+				},
+				Action: func(c *cli.Context) error {
+					numGnbs, err := strconv.Atoi(c.String("number-of-gnbs"))
+					if err != nil {
+						fmt.Println("Error in convert string to int")
+					}
+					fmt.Printf("Testing attach with %d gnbs\n", numGnbs)
+					fmt.Println(templates.TestMultiAttachGnbInConcurrency(numGnbs))
+					return nil
+				},
+			},
 		},
 	}
 

@@ -46,13 +46,6 @@ func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 				aux = "000" + fmt.Sprintf("%x", i)
 			}
 
-			/*
-				resu, err := hex.DecodeString(aux)
-				if err != nil {
-					fmt.Printf("error in GNB id for testing multiple GNBs")
-				}
-			*/
-
 			// authentication to a GNB.
 			contextgnb, err := control_test_engine.RegistrationGNB(conn, aux, nameGNB, cfg)
 			if err != nil {
