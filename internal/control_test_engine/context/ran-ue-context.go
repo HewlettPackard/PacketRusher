@@ -40,7 +40,7 @@ func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipherin
 	ue.Supi = imsi
 
 	// TODO ue.amfUENgap is received by AMF in authentication request.(? changed this).
-	ue.AmfUeNgapId = ranUeNgapId
+	// ue.AmfUeNgapId = ranUeNgapId
 
 	// added ciphering algorithm.
 	ue.CipheringAlg = cipheringAlg
@@ -89,6 +89,11 @@ func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipherin
 	// added snn.
 	ue.Snn = ue.deriveSNN()
 	fmt.Println(ue.Snn)
+}
+
+func (ue *RanUeContext) SetAmfNgapId(amfUeId int64) {
+	fmt.Println(amfUeId)
+	ue.AmfUeNgapId = amfUeId
 }
 
 func (ue *RanUeContext) deriveSNN() string {

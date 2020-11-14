@@ -23,7 +23,6 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 	ue.NewRanUeContext(imsi, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, conf.Ue.Key, conf.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, mcc, mnc, int32(conf.Ue.Snssai.Sd), conf.Ue.Snssai.Sst)
 
 	// make initial UE message.
-	// ueSecurityCapability := context.SetUESecurityCapability(ue)
 	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ue)
 	err := nas_transport.InitialUEMessage(connN2, registrationRequest, ue, gnb)
 	if logging.Check_error(err, "send Initial Ue Message") {
@@ -42,6 +41,10 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 		return ue.Supi, err
 	}
 
+	// get UeAmfNgapId from DownlinkNasTransport message.
+	ue.SetAmfNgapId(ngapMsg.InitiatingMessage.Value.DownlinkNASTransport.ProtocolIEs.List[0].Value.AMFUENGAPID.Value)
+
+	// send Nas Authentication response within UplinkNasTransport.
 	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu, gnb)
 	if logging.Check_error(err, "send UplinkNasTransport/Authentication Response") {
 		return ue.Supi, err
@@ -53,7 +56,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 		return ue.Supi, err
 	}
 
-	// send NAS Security Mode Complete Msg
+	// send NAS Security Mode Complete within UplinkNasTransport
 	pdu, err = mm_5gs.SecurityModeComplete(ue)
 	if logging.Check_error(err, "Security Mode Complete worked fine!") {
 		return ue.Supi, err
@@ -88,7 +91,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 	time.Sleep(100 * time.Millisecond)
 
 	// send PduSessionEstablishmentRequest Msg
-	pdu, err = mm_5gs.UlNasTransport(ue, uint8(ranUeId), nasMessage.ULNASTransportRequestTypeInitialRequest, "internet", &ue.Snssai)
+	pdu, err = mm_5gs.UlNasTransport(ue, uint8(ue.AmfUeNgapId), nasMessage.ULNASTransportRequestTypeInitialRequest, "internet", &ue.Snssai)
 	if logging.Check_error(err, "NAS UlNasTransport worked fine!") {
 		return ue.Supi, err
 	}

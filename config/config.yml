@@ -6,15 +6,15 @@ gnodeb:
     ip: "10.200.200.2"
     port: 2152
   plmnlist:
-    mcc: "901"
-    mnc: "70"
+    mcc: "208"
+    mnc: "93"
     tac: "000001"
     gnbid: "000002"
   slicesupportlist:
     st: "01"
     sst: "010203"
 ue:
-  imsi: "imsi-20893000002130"
+  imsi: "imsi-2089300000223"
   key: "70d49a71dd1a2b806a25abe0ef749f1e"
   opc: "6f1bf53d624b3a43af6592854e2444c7"
   amf: "8000"
