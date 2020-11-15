@@ -43,8 +43,8 @@ func TestAttachUeWithConfiguration() error {
 	// data plane UE
 	gtpHeader := data_test_engine.GenerateGtpHeader(1)
 
-	// ping UE
-	err = data_test_engine.PingUE(upfConn, gtpHeader, 1)
+	// ping
+	err = data_test_engine.PingUE(upfConn, gtpHeader, data_test_engine.GetSrcPing(1), cfg.Ue.Ping)
 	if err != nil {
 		return fmt.Errorf("The test failed when UE tried to use ping! Error:%s", err)
 	}

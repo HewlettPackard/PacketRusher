@@ -49,7 +49,7 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 		// data plane UE
 		gtpHeader := data_test_engine.GenerateGtpHeader(i)
 
-		err = data_test_engine.PingUE(upfConn, gtpHeader, i)
+		err = data_test_engine.PingUE(upfConn, gtpHeader, data_test_engine.GetSrcPing(i), cfg.Ue.Ping)
 		if err != nil {
 			return fmt.Errorf("The test failed when UE tried to use ping! Error:%s", err)
 		}

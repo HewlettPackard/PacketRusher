@@ -7,11 +7,10 @@ import (
 	"golang.org/x/net/ipv4"
 	"net"
 	"strconv"
-	"time"
 )
 
 // get source ping.
-func getSrcPing(i int) string {
+func GetSrcPing(i int) string {
 	basePing := "60.60.0."
 	srcPing := basePing + strconv.Itoa(i)
 	return srcPing
@@ -34,7 +33,7 @@ func ipv4HeaderChecksum(hdr *ipv4.Header) uint32 {
 	return ^(Checksum&0xffff0000>>16 + Checksum&0xffff)
 }
 
-func PingUE(connN3 *net.UDPConn, gtpHeader string, ipUe int) error {
+func PingUE(connN3 *net.UDPConn, gtpHeader string, ipUe string, ipDst string) error {
 
 	// gtpheader = GTP-TEIDs for the RAN-UPF tunnels(uplink)
 	gtpHdr, err := hex.DecodeString(gtpHeader)
@@ -54,8 +53,8 @@ func PingUE(connN3 *net.UDPConn, gtpHeader string, ipUe int) error {
 		Flags:    0,
 		TotalLen: 48,
 		TTL:      64,
-		Src:      net.ParseIP(getSrcPing(ipUe)).To4(),
-		Dst:      net.ParseIP("60.60.0.101").To4(),
+		Src:      net.ParseIP(ipUe).To4(),
+		Dst:      net.ParseIP(ipDst).To4(),
 		ID:       1,
 	}
 	checksum := ipv4HeaderChecksum(&ipv4hdr)
@@ -88,7 +87,7 @@ func PingUE(connN3 *net.UDPConn, gtpHeader string, ipUe int) error {
 	if err != nil {
 		return fmt.Errorf("Error in ping!")
 	}
-	time.Sleep(1 * time.Second)
+	//time.Sleep(1 * time.Second)
 
 	// function worked fine.
 	return nil
