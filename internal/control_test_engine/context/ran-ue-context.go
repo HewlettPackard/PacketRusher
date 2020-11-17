@@ -29,6 +29,7 @@ type RanUeContext struct {
 	AuthenticationSubs models.AuthenticationSubscription
 	Suci               nasType.MobileIdentity5GS
 	Snssai             models.Snssai
+	UeIp               string
 }
 
 func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipheringAlg, integrityAlg uint8, k, opc, op, amf, mcc, mnc string, sst int32, sd string) {
@@ -66,14 +67,6 @@ func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipherin
 	resu := ue.GetMccAndMncInOctets()
 
 	// added suci to mobileIdentity5GS
-	/*
-		(imsi-2089300007487)
-		mobileIdentity5GS := nasType.MobileIdentity5GS{
-			Len:    12, // suci
-			Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, 0x47, 0x78},
-		}
-	*/
-	// fmt.Println( len(ue.Supi) )
 	if len(ue.Supi) == 18 {
 		ue.Suci = nasType.MobileIdentity5GS{
 			Len:    12, // suci
@@ -91,8 +84,17 @@ func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipherin
 	fmt.Println(ue.Snn)
 }
 
+func (ue *RanUeContext) SetIp(ip [12]uint8) {
+	ue.UeIp = fmt.Sprintf("%d", ip[0]) + "." + fmt.Sprintf("%d", ip[1]) + "." + fmt.Sprintf("%d", ip[2]) + "." + fmt.Sprintf("%d", ip[3])
+	fmt.Println(ue.UeIp)
+}
+
+func (ue *RanUeContext) GetIp() string {
+	return ue.UeIp
+}
+
 func (ue *RanUeContext) SetAmfNgapId(amfUeId int64) {
-	fmt.Println(amfUeId)
+	// fmt.Println(amfUeId)
 	ue.AmfUeNgapId = amfUeId
 }
 

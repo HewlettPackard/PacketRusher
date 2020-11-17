@@ -36,7 +36,7 @@ func attachUeWithGNB(imsi string, conf config.Config, ranUeId int64, wg *sync.Wa
 		fmt.Println("The test failed when GNB tried to attach! Error:%s", err)
 	}
 
-	suci, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, conf, gnbContext, "208", "93")
+	suci, err, ueIp := control_test_engine.RegistrationUE(conn, imsi, ranUeId, conf, gnbContext, "208", "93")
 	if err != nil {
 		fmt.Println("The test failed when UE %s tried to attach! Error:%s", suci, err)
 	}
@@ -45,7 +45,7 @@ func attachUeWithGNB(imsi string, conf config.Config, ranUeId int64, wg *sync.Wa
 	conn.Close()
 
 	if err == nil {
-		fmt.Println("Thread with imsi:%s worked fine", imsi)
+		fmt.Println("Thread with imsi:%s and Ip: %s worked fine", imsi, ueIp)
 	}
 }
 

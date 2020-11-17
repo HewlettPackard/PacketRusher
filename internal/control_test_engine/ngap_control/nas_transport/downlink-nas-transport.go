@@ -37,13 +37,13 @@ func DownlinkNasTransport(connN2 *sctp.SCTPConn, supi string) (*ngapType.NGAPPDU
 	select {
 
 	case msg1 := <-c1:
-		fmt.Println("Problem")
+		// fmt.Println("Problem")
 		return nil, msg1
 	case msg2 := <-c2:
-		fmt.Println("OK")
+		// fmt.Println("OK")
 		return msg2, nil
 	case <-time.After(2 * time.Second):
-		fmt.Println("time")
+		// fmt.Println("time")
 		return nil, nil
 	}
 	// return ngapMsg, nil

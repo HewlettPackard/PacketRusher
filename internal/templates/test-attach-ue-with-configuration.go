@@ -35,7 +35,7 @@ func TestAttachUeWithConfiguration() error {
 	}
 
 	// authentication to a UE.
-	imsi, err := control_test_engine.RegistrationUE(conn, cfg.Ue.Imsi, int64(1), cfg, contextGnb, cfg.Ue.Hplmn.Mcc, cfg.Ue.Hplmn.Mnc)
+	imsi, err, ueIp := control_test_engine.RegistrationUE(conn, cfg.Ue.Imsi, int64(1), cfg, contextGnb, cfg.Ue.Hplmn.Mcc, cfg.Ue.Hplmn.Mnc)
 	if err != nil {
 		return fmt.Errorf("The test failed when UE %s tried to attach! Error:%s", imsi, err)
 	}
@@ -44,7 +44,7 @@ func TestAttachUeWithConfiguration() error {
 	gtpHeader := data_test_engine.GenerateGtpHeader(1)
 
 	// ping
-	err = data_test_engine.PingUE(upfConn, gtpHeader, data_test_engine.GetSrcPing(1), cfg.Ue.Ping)
+	err = data_test_engine.PingUE(upfConn, gtpHeader, ueIp, cfg.Ue.Ping)
 	if err != nil {
 		return fmt.Errorf("The test failed when UE tried to use ping! Error:%s", err)
 	}

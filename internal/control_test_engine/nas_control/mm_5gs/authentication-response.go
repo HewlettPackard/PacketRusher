@@ -50,7 +50,7 @@ func getAuthenticationResponse(authenticationResponseParam []uint8, eapMsg strin
 func AuthenticationResponse(ue *context.RanUeContext, ngapMsg *ngapType.NGAPPDU) ([]byte, error) {
 
 	// Calculate for RES*
-	nasPdu := nas_control.GetNasPdu(ngapMsg.InitiatingMessage.Value.DownlinkNASTransport)
+	nasPdu := nas_control.GetNasPduFromDownlink(ngapMsg.InitiatingMessage.Value.DownlinkNASTransport)
 	if nasPdu == nil {
 		return nil, fmt.Errorf("Error in get NAS PDU from Authentication request")
 	}
