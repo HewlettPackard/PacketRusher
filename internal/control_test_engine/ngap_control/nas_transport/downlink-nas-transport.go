@@ -10,6 +10,24 @@ import (
 
 func DownlinkNasTransport(connN2 *sctp.SCTPConn, supi string) (*ngapType.NGAPPDU, error) {
 
+	var recvMsg = make([]byte, 2048)
+	var n int
+
+	n, err := connN2.Read(recvMsg)
+	if err != nil {
+		return nil, fmt.Errorf("Error receiving %s ue NGAP message in downlinkNasTransport", supi)
+	}
+
+	ngapMsg, err := ngap.Decoder(recvMsg[:n])
+	if err != nil {
+		return nil, fmt.Errorf("Error decoding %s ue NGAP message in downlinkNasTransport", supi)
+	}
+
+	return ngapMsg, nil
+}
+
+func DownlinkNasTransportForConfigurationUpdateCommand(connN2 *sctp.SCTPConn, supi string) (*ngapType.NGAPPDU, error) {
+
 	// make channels
 	c1 := make(chan error)
 	c2 := make(chan *ngapType.NGAPPDU)
@@ -42,8 +60,7 @@ func DownlinkNasTransport(connN2 *sctp.SCTPConn, supi string) (*ngapType.NGAPPDU
 	case msg2 := <-c2:
 		// fmt.Println("OK")
 		return msg2, nil
-	case <-time.After(2 * time.Second):
-		// fmt.Println("time")
+	case <-time.After(1000 * time.Millisecond):
 		return nil, nil
 	}
 	// return ngapMsg, nil
