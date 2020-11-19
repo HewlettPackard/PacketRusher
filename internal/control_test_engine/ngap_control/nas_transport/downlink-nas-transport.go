@@ -26,10 +26,10 @@ func DownlinkNasTransport(connN2 *sctp.SCTPConn, supi string) (*ngapType.NGAPPDU
 	return ngapMsg, nil
 }
 
-func DownlinkNasTransportForConfigurationUpdateCommand(connN2 *sctp.SCTPConn, supi string) (*ngapType.NGAPPDU, error) {
+func DownlinkNasTransportForConfigurationUpdateCommand(connN2 *sctp.SCTPConn, supi string) *ngapType.NGAPPDU {
 
 	// make channels
-	c1 := make(chan error)
+	c1 := make(chan bool)
 	c2 := make(chan *ngapType.NGAPPDU)
 
 	// receive NGAP message from AMF.
@@ -39,12 +39,12 @@ func DownlinkNasTransportForConfigurationUpdateCommand(connN2 *sctp.SCTPConn, su
 
 		n, err := connN2.Read(recvMsg)
 		if err != nil {
-			c1 <- fmt.Errorf("Error receiving %s ue NGAP message in downlinkNasTransport", supi)
+			c1 <- true
 		}
 
 		ngapMsg, err := ngap.Decoder(recvMsg[:n])
 		if err != nil {
-			c1 <- fmt.Errorf("Error decoding %s ue NGAP message in downlinkNasTransport", supi)
+			c1 <- true
 		}
 
 		// worked fine.
@@ -54,14 +54,16 @@ func DownlinkNasTransportForConfigurationUpdateCommand(connN2 *sctp.SCTPConn, su
 	// monitoring thread
 	select {
 
-	case msg1 := <-c1:
-		// fmt.Println("Problem")
-		return nil, msg1
-	case msg2 := <-c2:
-		// fmt.Println("OK")
-		return msg2, nil
+	case <-c1:
+		fmt.Println("Error in receive configuration update command")
+		break
+	case <-c2:
+		fmt.Println("Receive configuration update command")
+		return <-c2
 	case <-time.After(1000 * time.Millisecond):
-		return nil, nil
+		close(c1)
+		close(c2)
+		fmt.Println("timeout")
 	}
-	// return ngapMsg, nil
+	return nil
 }

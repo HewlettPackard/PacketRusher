@@ -1,7 +1,6 @@
 package control_test_engine
 
 import (
-	"fmt"
 	"github.com/ishidawataru/sctp"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/context"
@@ -13,6 +12,7 @@ import (
 	"my5G-RANTester/internal/logging"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"my5G-RANTester/lib/nas/security"
+	"strings"
 	"time"
 )
 
@@ -91,9 +91,11 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 	}
 
 	// included configuration update command here.
-	confUpdate, err := nas_transport.DownlinkNasTransportForConfigurationUpdateCommand(connN2, ue.Supi)
-	if logging.Check_Ngap(confUpdate, "receive DownlinkNasTransport/ConfigurationUpdateCommand") {
-		fmt.Println("does not receive DownlinkNasTransport/ConfigurationUpdateCommand")
+	if strings.ToLower(conf.AMF.Name) == "open5gs" {
+		_, err = nas_transport.DownlinkNasTransport(connN2, ue.Supi)
+		if logging.Check_error(err, "receive DownlinkNasTransport/ConfigurationUpdateCommand") {
+			return nil, err
+		}
 	}
 
 	// send PduSessionEstablishmentRequest Msg

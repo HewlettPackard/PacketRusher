@@ -28,6 +28,7 @@ ue:
 amfif:
   ip: "127.0.0.1"
   port: 38412
+  name: "free5gc"
 upfif:
   ip: "10.200.200.102"
   port: 2152

@@ -65,7 +65,7 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 		wg.Add(1)
 		go attachUeWithTnla(imsi, cfg, int64(i), &wg, ranPort)
 		ranPort++
-		time.Sleep(10 * time.Millisecond)
+		// time.Sleep(10 * time.Millisecond)
 	}
 
 	// wait for multiple goroutines.
