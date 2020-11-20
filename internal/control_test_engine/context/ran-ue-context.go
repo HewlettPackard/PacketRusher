@@ -94,7 +94,6 @@ func (ue *RanUeContext) SetUeTeid(teid uint8) {
 
 func (ue *RanUeContext) SetIp(ip [12]uint8) {
 	ue.UeIp = fmt.Sprintf("%d", ip[0]) + "." + fmt.Sprintf("%d", ip[1]) + "." + fmt.Sprintf("%d", ip[2]) + "." + fmt.Sprintf("%d", ip[3])
-	fmt.Println(ue.UeIp)
 }
 
 func (ue *RanUeContext) GetIp() string {
