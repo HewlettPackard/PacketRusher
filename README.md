@@ -28,7 +28,7 @@ We have now different types of tests for testing some kinds of behaviors from Co
     other values in config/config.yml. For example opc,k. But the imsi and will follow the range above.
     
   - Load-test with gnbs. You can use the command to test 10 gnbs attach to core:
-    * ./app gnb -g 3
+    * ./app gnb -g 10
     - You can change all configurations in config/config.yml as your interest.
     
   - Test ue and gnb. You can use command to test:
