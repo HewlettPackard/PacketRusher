@@ -11,16 +11,16 @@ We have now different types of tests for testing some kinds of behaviors from Co
       * ./app load-test -n 10
     - Important in this testing that imsi ues was fixed and you have to included them in web UI from the test core as show below:
     Example: if you want to test 10 ues you have to subscribe imsi range to 2089300000001 from 2089300000010. You can change
-    other values in config/config.yml for example opc,k. But the imsi and hplm will not change.
+    other values in config/config.yml for example opc,k.
     Example: if you want to test 2 ues you have to subscribe imsi 2089300000001 and 2089300000002 in web UI from the test core.
    
   - Load-test with ues attach at the same time(concurrency) using one gnb. You can use the command to test with 3 ues:
-      * ./app load-test -t -n 10
+      * ./app load-test -t -n 3
     - Important in this testing that imsi ues was fixed and you have to included them in web UI from the test core as show below:
     Example: if you want to test 2 ues you have to subscribe imsi 2089300000001 and 2089300000002 in web UI from the test core. You can change
     other values in config/config.yml for example opc,k. But the imsi and hplm does not change.
     
-  - Load-test with ues attach at the same time(concurrency) using a gnb to ue. You can use the command to test with 3 ues with 3 gnbs:
+  - Load-test with ues attach at the same time(concurrency) using a gnb per ue. You can use the command to test with 3 ues with 3 gnbs:
       * ./app load-test -g -n 3
      - You can change plm list in config/config.yml and tester will use this values with all emulate gnbs.
      - Important in this testing that imsi ues was fixed and you have to included them in web UI from the test core as show below:
