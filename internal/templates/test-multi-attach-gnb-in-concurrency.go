@@ -15,6 +15,7 @@ func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 	if err != nil {
 		return nil
 	}
+	fmt.Printf("[CORE]%s Core in Testing\n", cfg.AMF.Name)
 
 	ranPort := cfg.GNodeB.ControlIF.Port
 

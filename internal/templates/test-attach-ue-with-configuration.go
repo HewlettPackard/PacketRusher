@@ -15,6 +15,7 @@ func TestAttachUeWithConfiguration() error {
 	}
 
 	fmt.Println("mytest: ", cfg.GNodeB.ControlIF.Ip, cfg.GNodeB.ControlIF.Port)
+	fmt.Printf("[CORE]%s Core in Testing\n", cfg.AMF.Name)
 
 	// make N2(RAN connect to AMF)
 	conn, err := control_test_engine.ConnectToAmf(cfg.AMF.Ip, cfg.GNodeB.ControlIF.Ip, cfg.AMF.Port, cfg.GNodeB.ControlIF.Port)

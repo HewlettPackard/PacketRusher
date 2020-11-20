@@ -161,7 +161,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 	// time.Sleep(1 * time.Second)
 	time.Sleep(100 * time.Millisecond)
 
-	msg = fmt.Sprintf("[UE%d][%s] RECEIVE IP:%s AND TEID:0x0000000%x", ranUeId, imsi, ue.GetIp(), ue.GetUeTeid())
+	msg = fmt.Sprintf("[UE%d][%s] RECEIVE IP:%s AND UP-TEID:0x0000000%x DL-TEID:x0000000%x", ranUeId, imsi, ue.GetIp(), ue.GetUeTeid(), ue.AmfUeNgapId)
 	fmt.Println(msg)
 	fmt.Println("REGISTRATION FINISHED")
 

@@ -32,7 +32,7 @@ func RegistrationGNB(connN2 *sctp.SCTPConn, gnbId string, nameGNB string, conf c
 		return nil, err
 	}
 
-	fmt.Println("GNB AUTHENTICATION FINISHED")
+	fmt.Println("[GNB] GNB AUTHENTICATION FINISHED")
 
 	// function worked fine.
 	return gnb, nil

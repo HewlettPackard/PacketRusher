@@ -60,6 +60,7 @@ func TestMultiAttachUesInConcurrencyWithGNBs(numberGNBs int) error {
 	}
 
 	fmt.Println("mytest: ", cfg.GNodeB.ControlIF.Ip, cfg.GNodeB.ControlIF.Port)
+	fmt.Printf("[CORE]%s Core in Testing\n", cfg.AMF.Name)
 
 	ranPort := cfg.GNodeB.ControlIF.Port
 
