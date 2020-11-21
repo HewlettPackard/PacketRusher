@@ -36,28 +36,37 @@ My5g-RANTester is a GNB/UE simulator for testing 3GPP standard and stress in 5G 
 
 ### We have now different types of test for testing some kinds of behaviors from Core, that are show below:
 
-  - Load-test with UEs in queue.
+  - Load-test with UEs in queue*
     - You can use the command to test:
-            - ```./app load-test -n <number of ues> ```
+            ``` ./app load-test -n <number of ues>  ```
     - For example for testing with 3 ues:
-            - ```./app load-test -n 3 ```
+            ``` ./app load-test -n 3  ```
    
-  - Load-test with UEs attached at the same time(concurrency) using a unique gnb. 
-    You can use the command to test with 3 ues: 
-              ```./app load-test -t -n 3 ```
+  - Load-test with UEs attached at the same time(concurrency) using a unique gnb* 
+    - You can use the command to test with number of ues: 
+              ``` ./app load-test -t -n <number of ues>  ```
+    - You can use the command to test with 3:
+              ``` ./app load-test -t -n 3  ```
     
-  - Load-test with ues attached at the same time(concurrency) using a gnb per ue. You can use the command to test with 3 ues with 3 gnbs: 
-              ```./app load-test -g -n 3  ```
+  - Load-test with ues attached at the same time(concurrency) using a gnb per ue* 
+    - You can use the command to test with number of ues: 
+             ``` ./app load-test -g -n <number ues> ```
+    - You can use the command to test with 3 gnbs, each one with an ue:
+             ``` ./app load-test -g -n 3 ```
+
+  - Load test with ues attached at the same time based a poisson and exponential distribution*
               
-  - Load-test with gnbs. You can use the command to test 10 gnbs attach to core: 
-                ```./app gnb -g 10 ```            
-    - You can change all configurations in config/config.yml as your interest.
+  - Load-test with gnbs 
+    - You can use the command to test 10 gnbs attached to core: 
+              ``` ./app gnb -g <number of ues>  ```            
+    - Configurations in config/config.yml.
     
-  - Test ue and gnb. You can use command to test: 
-                  ```./app ue ```
-     - You can change all configurations in config/config.yml and test with an ue and a gnb.
+  - Test with an ue and a gnb. 
+     - You can use command to test: 
+              ``` ./app ue ```
+     - Configurations in config/config.yml.
    
-   *** For tests 1, 2 and 3 imsi UEs was automatized and you have to include them in web UI of test core as show below.
+  - For tests with * imsi UEs was automatized and you have to include them in web UI of test core as show below.
     - Example: if you want to test 10 ues you have to included imsi UE range to 2089300000001 from 2089300000010 in web UI. You can change other values in config/config.yml for example opc,k as you interest and used them in testing but imsi and hplmn will follow the range above.
     - Example: if you want to test 2 ues you have to include imsi 2089300000001 and 2089300000002 in web UI of test core.
 
