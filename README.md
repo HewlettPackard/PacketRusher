@@ -36,24 +36,24 @@ My5g-RANTester is a GNB/UE simulator for testing 3GPP standard and stress in 5G 
 
 ### We have now different types of test for testing some kinds of behaviors from Core, that are show below:
 
-  1- Load-test with UEs in queue.
+  - Load-test with UEs in queue.
     - You can use the command to test:
             - ```./app load-test -n <number of ues> ```
     - For example for testing with 3 ues:
             - ```./app load-test -n 3 ```
    
-  2- Load-test with UEs attached at the same time(concurrency) using a unique gnb. 
-    - You can use the command to test with 3 ues: 
+  - Load-test with UEs attached at the same time(concurrency) using a unique gnb. 
+    You can use the command to test with 3 ues: 
               ```./app load-test -t -n 3 ```
     
-  3- Load-test with ues attached at the same time(concurrency) using a gnb per ue. You can use the command to test with 3 ues with 3 gnbs: 
+  - Load-test with ues attached at the same time(concurrency) using a gnb per ue. You can use the command to test with 3 ues with 3 gnbs: 
               ```./app load-test -g -n 3  ```
               
-  4- Load-test with gnbs. You can use the command to test 10 gnbs attach to core: 
+  - Load-test with gnbs. You can use the command to test 10 gnbs attach to core: 
                 ```./app gnb -g 10 ```            
     - You can change all configurations in config/config.yml as your interest.
     
-  5- Test ue and gnb. You can use command to test: 
+  - Test ue and gnb. You can use command to test: 
                   ```./app ue ```
      - You can change all configurations in config/config.yml and test with an ue and a gnb.
    
