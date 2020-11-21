@@ -58,7 +58,7 @@ My5g-RANTester is a GNB/UE simulator for testing 3GPP standard and stress in 5G 
               
   - Load-test with gnbs 
     - You can use the command to test 10 gnbs attached to core: 
-              ``` ./app gnb -g <number of ues>  ```            
+              ``` ./app gnb -g <number of gnbs>  ```            
     - Configurations in config/config.yml.
     
   - Test with an ue and a gnb. 
