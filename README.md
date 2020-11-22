@@ -30,7 +30,7 @@ go build app.go
 Edit configuration file in config/config.yml:
 
 Change amfif with AMF ip, port and core name that you are testing. In the moment we have two options: free5gcore or open5gs
-<p align="center">
+<p align="">
     <img src="images/amfif.png"/> 
 </p>
 Change upif with UPF ip and port(N3).
