@@ -94,7 +94,7 @@ We have now different types of test for testing some kinds of behaviors from Cor
 
 ## Additional comments
    
-For tests with * imsi UEs was automatized and you have to include them in web UI of test core as show below.
+For tests with * imsi UEs was automatized and you have to include them in web UI of test core as show below. 
 
 Example: if you want to test 10 UEs you have to included imsi UE range to 2089300000001 from 2089300000010 in web UI. You can change other values in config/config.yml for example opc,k as you interest and used them in testing but imsi and hplmn will follow the range above.
   <p align="">

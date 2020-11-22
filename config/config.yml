@@ -14,7 +14,7 @@ gnodeb:
     st: "01"
     sst: "010203"
 ue:
-  imsi: "imsi-2089300000223"
+  imsi: "imsi-2089300000001"
   key: "70d49a71dd1a2b806a25abe0ef749f1e"
   opc: "6f1bf53d624b3a43af6592854e2444c7"
   amf: "8000"
