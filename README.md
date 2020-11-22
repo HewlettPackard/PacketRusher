@@ -34,11 +34,11 @@ Change amfif with AMF ip, port and core name that you are testing. In the moment
     <img src="images/amfif.png"/> 
 </p>
 Change upif with UPF ip and port(N3).
-<p align="center">
+<p align="">
     <img src="images/upfif.png"/>
 </p>
 Check the values in UE(opc,key,amf). This values must be registered by webconsole core and my5gRANTester will use them in all tests.
-<p align="center">
+<p align="">
     <img src="images/ue_config.png"/>
 </p>
 Keep attention about imsi because some tests was automatized(load-tests) and will not permit change. Read more below.
