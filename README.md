@@ -6,7 +6,8 @@ my5G-RANTester is a GNB/UE tool for testing the 3GPP standard and stress any 5G 
 
 **Requirements**
 
-Go 1.14.4.
+The software requirement:
+* Go 1.14.4
 
 **Steps**
 
