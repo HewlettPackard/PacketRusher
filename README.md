@@ -9,6 +9,11 @@ my5G-RANTester is a tool that simulates User Equipment (UE) and Next Generation-
 The software requirement:
 * Go 1.14.4
 
+The installation can be done directly over the host operating system (OS) or inside a virtual machine (VM). System requirements:
+* CPU type: x86-64 (specific model and number of cores only affect performance)
+* RAM: 1 GB
+* Ubuntu 18.04/20.04 LTS.
+
 **Steps**
 
 Downloading source code:
