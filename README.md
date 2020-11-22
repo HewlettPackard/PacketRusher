@@ -1,6 +1,6 @@
-# my5G-RANTester: NGAP/NAS Test tool.
+# my5G-RANTester
 
-my5G-RANTester is a GNB/UE tool for testing the 3GPP standard and stress any 5G cores. This tool provides tests for the control plane and data plane. Moreover, the tests can be played individually for analyzing only one User Equipment or in scale for analyzing hundreds of User Equipment simultaneously.
+my5G-RANTester is a tool that simulates User Equipment (UE) and Next Generation-Radio Access Networks (NG-RANs) for testing any 5G cores on the 3GPP standard. This tool provides stress tests for the control plane and data plane. Moreover, the tests can be played individually for analyzing only one UE or in scale for analyzing hundreds of UE simultaneously.
 
 ## Installation
 
