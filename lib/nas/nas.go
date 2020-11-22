@@ -4,8 +4,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/lib/nas/nasMessage"
+	"os"
 )
+
+var NasLogFile *os.File
 
 // Message TODO：description
 type Message struct {
@@ -195,6 +200,9 @@ func (a *Message) GmmMessageDecode(byteArray *[]byte) error {
 	buffer := bytes.NewBuffer(*byteArray)
 	a.GmmMessage = NewGmmMessage()
 	binary.Read(buffer, binary.BigEndian, &a.GmmMessage.GmmHeader)
+
+	log.Debug(spew.Sdump(a))
+
 	switch a.GmmMessage.GmmHeader.GetMessageType() {
 	case MsgTypeRegistrationRequest:
 		a.GmmMessage.RegistrationRequest = nasMessage.NewRegistrationRequest(MsgTypeRegistrationRequest)
@@ -287,6 +295,9 @@ func (a *Message) GmmMessageDecode(byteArray *[]byte) error {
 }
 
 func (a *Message) GmmMessageEncode(buffer *bytes.Buffer) error {
+
+	log.Debug(spew.Sdump(a))
+
 	switch a.GmmMessage.GmmHeader.GetMessageType() {
 	case MsgTypeRegistrationRequest:
 		a.GmmMessage.EncodeRegistrationRequest(buffer)
@@ -347,6 +358,7 @@ func (a *Message) GmmMessageEncode(buffer *bytes.Buffer) error {
 	default:
 		return fmt.Errorf("NAS Encode Fail: MsgType[%d] doesn't exist in GMM Message", a.GmmMessage.GmmHeader.GetMessageType())
 	}
+
 	return nil
 }
 
@@ -393,6 +405,8 @@ func (a *Message) GsmMessageDecode(byteArray *[]byte) error {
 	buffer := bytes.NewBuffer(*byteArray)
 	a.GsmMessage = NewGsmMessage()
 	binary.Read(buffer, binary.BigEndian, &a.GsmMessage.GsmHeader)
+	log.Debug(spew.Sdump(a))
+
 	switch a.GsmMessage.GsmHeader.GetMessageType() {
 	case MsgTypePDUSessionEstablishmentRequest:
 		a.GsmMessage.PDUSessionEstablishmentRequest = nasMessage.NewPDUSessionEstablishmentRequest(MsgTypePDUSessionEstablishmentRequest)
@@ -449,6 +463,9 @@ func (a *Message) GsmMessageDecode(byteArray *[]byte) error {
 }
 
 func (a *Message) GsmMessageEncode(buffer *bytes.Buffer) error {
+
+	log.Debug(spew.Sdump(a))
+
 	switch a.GsmMessage.GsmHeader.GetMessageType() {
 	case MsgTypePDUSessionEstablishmentRequest:
 		a.GsmMessage.EncodePDUSessionEstablishmentRequest(buffer)

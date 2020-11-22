@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/ishidawataru/sctp"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap"
@@ -153,6 +154,13 @@ func InitialUEMessage(connN2 *sctp.SCTPConn, registrationRequest []byte, ue *con
 	if err != nil {
 		return fmt.Errorf("Error sending %s ue initial message", ue.Supi)
 	}
+
+	log.WithFields(log.Fields{
+		"protocol":    "ngap",
+		"source":      "gNodeB",
+		"destination": "AMF",
+		"message":     "InitialUEMessage",
+	}).Info("Sending message")
 
 	return nil
 }

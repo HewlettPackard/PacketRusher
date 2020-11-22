@@ -81,7 +81,7 @@ func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipherin
 
 	// added snn.
 	ue.Snn = ue.deriveSNN()
-	fmt.Println(ue.Snn)
+	//fmt.Println(ue.Snn)
 }
 
 func (ue *RanUeContext) SetIp(ip [12]uint8) {

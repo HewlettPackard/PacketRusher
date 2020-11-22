@@ -2,6 +2,7 @@ package templates
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	control_test_engine "my5G-RANTester/internal/control_test_engine"
 	"my5G-RANTester/internal/data_test_engine"
@@ -50,6 +51,7 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 	}
 
 	// authentication and ping to some concurrent UEs.
+	log.Info(fmt.Sprintf("Testing attach with %d ues in TNLAs", numberUesConcurrency))
 	fmt.Println("mytest: ", cfg.GNodeB.ControlIF.Ip, cfg.GNodeB.ControlIF.Port)
 	ranPort := cfg.GNodeB.ControlIF.Port
 

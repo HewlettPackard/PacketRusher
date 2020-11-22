@@ -3,6 +3,7 @@ package nas_transport
 import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap"
@@ -103,6 +104,13 @@ func UplinkNasTransport(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUeNgapID in
 	if err != nil {
 		return fmt.Errorf("Error sending ueId %d NAS Authentication Response", ranUeNgapID)
 	}
+
+	log.WithFields(log.Fields{
+		"protocol":    "ngap",
+		"source":      "gNodeB",
+		"destination": "AMF",
+		"message":     "UplinkNasTransport",
+	}).Info("Sending message")
 
 	return nil
 }

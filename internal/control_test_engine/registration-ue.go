@@ -1,8 +1,8 @@
 package control_test_engine
 
 import (
-	"fmt"
 	"github.com/ishidawataru/sctp"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/internal/control_test_engine/nas_control/mm_5gs"
@@ -16,6 +16,10 @@ import (
 	"time"
 )
 
+func messageLog(prot string, src string, dst string, message string) {
+	log.Info("[", prot, "]\t\t", src, "\t\t", dst, "\t\t", message)
+}
+
 func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf config.Config, gnb *context.RanGnbContext, mcc, mnc string) (string, error, string) {
 
 	// instance new ue.
@@ -26,6 +30,13 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 
 	// make initial UE message.
 	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ue)
+	log.WithFields(log.Fields{
+		"protocol":    "nas",
+		"source":      "UE",
+		"destination": "gNodeB",
+		"message":     "RegistrationRequest",
+	}).Info("Sending RegistrationRequest message")
+
 	err := nas_transport.InitialUEMessage(connN2, registrationRequest, ue, gnb)
 	if logging.Check_error(err, "send Initial Ue Message") {
 		return ue.Supi, err, ""
@@ -42,6 +53,12 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 	if logging.Check_error(err, "Authentication response worked fine") {
 		return ue.Supi, err, ""
 	}
+	log.WithFields(log.Fields{
+		"protocol":    "nas",
+		"source":      "UE",
+		"destination": "gNodeB",
+		"message":     "AuthenticationResponse",
+	}).Info("Sending AuthenticationResponse message")
 
 	// get UeAmfNgapId from DownlinkNasTransport message.
 	ue.SetAmfNgapId(ngapMsg.InitiatingMessage.Value.DownlinkNASTransport.ProtocolIEs.List[0].Value.AMFUENGAPID.Value)
@@ -63,6 +80,14 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 	if logging.Check_error(err, "Security Mode Complete worked fine!") {
 		return ue.Supi, err, ""
 	}
+
+	log.WithFields(log.Fields{
+		"protocol":    "nas",
+		"source":      "UE",
+		"destination": "gNodeB",
+		"message":     "SecurityModeComplete",
+	}).Info("Sending message")
+
 	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu, gnb)
 	if logging.Check_error(err, "send UplinkNasTransport/Security Mode Complete Msg!") {
 		return ue.Supi, err, ""
@@ -80,11 +105,26 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 		return ue.Supi, err, ""
 	}
 
+	log.WithFields(log.Fields{
+		"protocol":    "ngap",
+		"source":      "gNodeB",
+		"destination": "AMF",
+		"message":     "InitialContextSetupResponse",
+	}).Info("Sending message")
+
 	// send NAS Registration Complete Msg
 	pdu, err = mm_5gs.RegistrationComplete(ue)
 	if logging.Check_error(err, "NAS registration complete worked fine") {
 		return ue.Supi, err, ""
 	}
+
+	log.WithFields(log.Fields{
+		"protocol":    "nas",
+		"source":      "UE",
+		"destination": "gNodeB",
+		"message":     "RegistrationComplete",
+	}).Info("Sending message")
+
 	err = nas_transport.UplinkNasTransport(connN2, ue.AmfUeNgapId, ue.RanUeNgapId, pdu, gnb)
 	if logging.Check_error(err, "send UplinkNasTransport/registration complete") {
 		return ue.Supi, err, ""
@@ -96,7 +136,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 		return ue.Supi, err, ""
 	}
 	if logging.Check_Ngap(confUpdate, "receive DownlinkNasTransport/ConfigurationUpdateCommand") {
-		fmt.Println("does not receive receive DownlinkNasTransport/ConfigurationUpdateCommand")
+		log.Warning("does not receive receive DownlinkNasTransport/ConfigurationUpdateCommand")
 	}
 	//time.Sleep(100 * time.Millisecond)
 

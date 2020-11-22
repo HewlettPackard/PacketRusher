@@ -2,6 +2,7 @@ package templates
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine"
 	"sync"
@@ -16,6 +17,7 @@ func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 		return nil
 	}
 
+	log.Info(fmt.Sprintf("Testing attach with %d gnbs", numberGnbs))
 	ranPort := cfg.GNodeB.ControlIF.Port
 
 	// multiple concurrent GNBs authentication using goroutines.

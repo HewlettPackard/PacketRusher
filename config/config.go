@@ -1,13 +1,16 @@
 package config
 
 import (
-	"fmt"
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"path"
 	"path/filepath"
 	"runtime"
 )
+
+// Conf: Used for access to configuration
+var Data = getConfig()
 
 type Config struct {
 	GNodeB struct {
@@ -55,17 +58,34 @@ type Config struct {
 	} `yaml:"upfif"`
 }
 
-func rootDir() string {
+func RootDir() string {
 	_, b, _, _ := runtime.Caller(0)
 	d := path.Join(path.Dir(b))
 	return filepath.Dir(d)
 }
 
+func getConfig() Config {
+	var cfg = Config{}
+	Ddir := RootDir()
+	configPath, err := filepath.Abs(Ddir + "/config/config.yml")
+	log.Debug(configPath)
+	if err != nil {
+		log.Fatal("Could not find config in: ", configPath)
+	}
+	file, err := ioutil.ReadFile(configPath)
+	err = yaml.Unmarshal([]byte(file), &cfg)
+	if err != nil {
+		log.Fatal("Could not read file in: ", configPath)
+	}
+
+	return cfg
+}
+
 func GetConfig() (Config, error) {
 	var cfg = Config{}
-	Ddir := rootDir()
+	Ddir := RootDir()
 	configPath, err := filepath.Abs(Ddir + "/config/config.yml")
-	fmt.Println(configPath)
+	log.Debug(configPath)
 	if err != nil {
 		return Config{}, nil
 	}

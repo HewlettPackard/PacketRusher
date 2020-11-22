@@ -3,6 +3,7 @@ package nas_transport
 import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapType"
 	"time"
@@ -31,6 +32,12 @@ func DownlinkNasTransport(connN2 *sctp.SCTPConn, supi string) (*ngapType.NGAPPDU
 
 		// worked fine.
 		c2 <- ngapMsg
+		log.WithFields(log.Fields{
+			"protocol":    "ngap",
+			"source":      "AMF",
+			"destination": "gNodeB",
+			"message":     "DownlinkNasTransport",
+		}).Info("Receiving message")
 	}()
 
 	// monitoring thread
