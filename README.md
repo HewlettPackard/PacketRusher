@@ -29,11 +29,19 @@ go build app.go
   
 Edit configuration file in config/config.yml:
 
-  - Change amfif with AMF ip and port(N2).
-  - Change amif with core name that you are testing. In the moment we have two options: free5gcore or open5gs.
-  - Change upif with UPF ip and port(N3).
-  - Check the values in UE(opc,key,amf). This values must be registered by webconsole core and my5gRANTester will use them in all tests.
-  - Keep attention about imsi because some tests was automatized(load-tests) and will not permit change. Read more below.
+Change amfif with AMF ip, port and core name that you are testing. In the moment we have two options: free5gcore or open5gs
+<p align="center">
+    <img src="images/amfif.png"/> 
+</p>
+Change upif with UPF ip and port(N3).
+<p align="center">
+    <img src="images/upfif.png"/>
+</p>
+Check the values in UE(opc,key,amf). This values must be registered by webconsole core and my5gRANTester will use them in all tests.
+<p align="center">
+    <img src="images/ue_config.png"/>
+</p>
+Keep attention about imsi because some tests was automatized(load-tests) and will not permit change. Read more below.
   
 
 ## Tests
