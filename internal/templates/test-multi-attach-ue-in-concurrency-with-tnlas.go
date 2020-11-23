@@ -16,10 +16,12 @@ func attachUeWithTnla(imsi string, conf config.Config, ranUeId int64, wg *sync.W
 	defer wg.Done()
 
 	// make N2(RAN connect to AMF)
+	log.Info("Conecting to AMF...")
 	conn, err := control_test_engine.ConnectToAmf(conf.AMF.Ip, conf.GNodeB.ControlIF.Ip, conf.AMF.Port, ranPort)
 	if err != nil {
 		fmt.Println("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
 	}
+	log.Info("OK")
 
 	// authentication to a GNB.
 	gnbContext, err := control_test_engine.RegistrationGNB(conn, "000102", "free5gc", conf)
@@ -51,16 +53,18 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 	}
 
 	// authentication and ping to some concurrent UEs.
-	log.Info(fmt.Sprintf("Testing attach with %d ues in TNLAs", numberUesConcurrency))
+	log.Info(fmt.Sprintf("Testing attached with %d ues using TNLAs", numberUesConcurrency))
 	fmt.Println("mytest: ", cfg.GNodeB.ControlIF.Ip, cfg.GNodeB.ControlIF.Port)
 	fmt.Printf("[CORE]%s Core in Testing\n", cfg.AMF.Name)
 	ranPort := cfg.GNodeB.ControlIF.Port
 
 	// make n3(RAN connect to UPF)
+	log.Info("Conecting to UPF...")
 	upfConn, err := data_test_engine.ConnectToUpf(cfg.GNodeB.DataIF.Ip, cfg.UPF.Ip, cfg.GNodeB.DataIF.Port, cfg.UPF.Port)
 	if err != nil {
 		return fmt.Errorf("The test failed when udp socket tried to connect to UPF! Error:%s", err)
 	}
+	log.Info("OK")
 
 	// Launch several goroutines and increment the WaitGroup counter for each.
 	for i := 1; i <= numberUesConcurrency; i++ {

@@ -11,8 +11,6 @@ import (
 func TestMultiAttachUesInQueue(numberUes int) error {
 	var cfg = config.Data
 	// gNodeB Info
-	var gnbID = "000102"
-	var gnbName = "free5gc"
 	// UEs info
 	var mcc = "208"
 	var mnc = "93"
@@ -36,7 +34,7 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 	**/
 
 	// authentication to a GNB.
-	contextGnb, err := control_test_engine.RegistrationGNB(conn, gnbID, gnbName, cfg)
+	contextGnb, err := control_test_engine.RegistrationGNB(conn, cfg.GNodeB.PlmnList.GnbId, "my5GRANTester", cfg)
 	if err != nil {
 		log.Fatal("The test failed when GNB tried to attach! Error: ", err)
 	}

@@ -23,12 +23,6 @@ func DownlinkNasTransport(connN2 *sctp.SCTPConn, supi string) (*ngapType.NGAPPDU
 	if err != nil {
 		return nil, fmt.Errorf("Error decoding %s ue NGAP message in downlinkNasTransport", supi)
 	}
-	log.WithFields(log.Fields{
-		"protocol":    "ngap",
-		"source":      "AMF",
-		"destination": "gNodeB",
-		"message":     "DownlinkNasTransport",
-	}).Info("Receiving message")
 
 	return ngapMsg, nil
 }

@@ -1,6 +1,7 @@
 package control_test_engine
 
 import (
+	"fmt"
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
@@ -19,10 +20,10 @@ func RegistrationGNB(connN2 *sctp.SCTPConn, gnbId string, nameGNB string, conf c
 	// send NGSetup request msg.
 	// gnbIdInBytes := gnb.GetGnbIdInBytes()
 	log.WithFields(log.Fields{
-		"protocol":    "ngap",
-		"source":      "gNodeB",
+		"protocol":    "NGAP",
+		"source":      fmt.Sprintf("GNB[%s]", gnb.GetGnbId()),
 		"destination": "AMF",
-		"message":     "NGSetupRequest",
+		"message":     "NG SETUP REQUEST",
 	}).Info("Sending message")
 	err := interface_management.NgSetupRequest(connN2, gnb, 24, nameGNB)
 	if err != nil {
@@ -31,11 +32,11 @@ func RegistrationGNB(connN2 *sctp.SCTPConn, gnbId string, nameGNB string, conf c
 	}
 
 	log.WithFields(log.Fields{
-		"protocol":    "ngap",
+		"protocol":    "NGAP",
 		"source":      "AMF",
-		"destination": "tgNodeB",
-		"message":     "NgSetupResponse",
-	}).Info("Sending message")
+		"destination": fmt.Sprintf("GNB[%s]", gnb.GetGnbId()),
+		"message":     "NG SETUP RESPONSE",
+	}).Info("Receive message")
 	// receive NGSetupResponse Msg
 	_, err = interface_management.NgSetupResponse(connN2)
 	if err != nil {

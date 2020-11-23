@@ -106,10 +106,10 @@ func UplinkNasTransport(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUeNgapID in
 	}
 
 	log.WithFields(log.Fields{
-		"protocol":    "ngap",
-		"source":      "gNodeB",
+		"protocol":    "NGAP",
+		"source":      fmt.Sprintf("GNB[ID:%s]", gnb.GetGnbId()),
 		"destination": "AMF",
-		"message":     "UplinkNasTransport",
+		"message":     "UPLINK NAS TRANSPORT",
 	}).Info("Sending message")
 
 	return nil

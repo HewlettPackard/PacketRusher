@@ -26,7 +26,7 @@ func (gnb *RanGnbContext) NewRanGnbContext(gnbId, mcc, mnc, tac, st, sst string)
 	gnb.slice.sst = sst
 }
 
-func (gnb *RanGnbContext) getGnbId() string {
+func (gnb *RanGnbContext) GetGnbId() string {
 	return gnb.gnbId
 }
 
