@@ -47,15 +47,15 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 		// generating some IMSIs to each UE.
 		imsi := control_test_engine.ImsiGenerator(i)
 
-		imsi, err, ueIP := control_test_engine.RegistrationUE(conn, imsi, int64(i), cfg, contextGnb, mcc, mnc)
+		ue, err := control_test_engine.RegistrationUE(conn, imsi, int64(i), cfg, contextGnb, mcc, mnc)
 		if err != nil {
 			log.Error("The test failed when UE ", imsi, " tried to attach! Error: ", err)
 		}
 
 		// data plane UE
-		gtpHeader := data_test_engine.GenerateGtpHeader(i)
+		gtpHeader := data_test_engine.GenerateGtpHeader(int(ue.GetUeTeid()))
 
-		err = data_test_engine.PingUE(upfConn, gtpHeader, ueIP, cfg.Ue.Ping)
+		err = data_test_engine.PingUE(upfConn, gtpHeader, ue.GetIp(), cfg.Ue.Ping)
 		if err != nil {
 			log.Error("The test failed when UE tried to use ping! Error: ", err)
 		}

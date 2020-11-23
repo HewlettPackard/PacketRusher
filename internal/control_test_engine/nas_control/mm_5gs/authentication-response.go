@@ -62,7 +62,6 @@ func AuthenticationResponse(ue *context.RanUeContext, ngapMsg *ngapType.NGAPPDU)
 	// TODO snn is hardcode here.
 	// resStat := ue.DeriveRESstarAndSetKey(ue.AuthenticationSubs, rand[:], "5G:mnc093.mcc208.3gppnetwork.org", autn[:])
 	resStat := ue.DeriveRESstarAndSetKey(ue.AuthenticationSubs, rand[:], ue.Snn, autn[:])
-	fmt.Println(ue.Snn)
 
 	// send NAS Authentication Response.
 	pdu := getAuthenticationResponse(resStat, "")

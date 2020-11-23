@@ -27,16 +27,16 @@ func attachUeWithTnla(imsi string, conf config.Config, ranUeId int64, wg *sync.W
 		fmt.Println("The test failed when GNB tried to attach! Error:%s", err)
 	}
 
-	suci, err, ueIp := control_test_engine.RegistrationUE(conn, imsi, ranUeId, conf, gnbContext, "208", "93")
+	ue, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, conf, gnbContext, "208", "93")
 	if err != nil {
-		fmt.Println("The test failed when UE %s tried to attach! Error:%s", suci, err)
+		fmt.Println("The test failed when UE %s tried to attach! Error:%s", ue.Suci, err)
 	}
 
 	// end sctp socket.
 	conn.Close()
 
 	if err == nil {
-		fmt.Println("Thread with imsi:%s and IP:%s worked fine", imsi, ueIp)
+		fmt.Println("Thread with imsi:%s and IP:%s worked fine", imsi, ue.UeIp)
 	}
 }
 
@@ -53,6 +53,7 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 	// authentication and ping to some concurrent UEs.
 	log.Info(fmt.Sprintf("Testing attach with %d ues in TNLAs", numberUesConcurrency))
 	fmt.Println("mytest: ", cfg.GNodeB.ControlIF.Ip, cfg.GNodeB.ControlIF.Port)
+	fmt.Printf("[CORE]%s Core in Testing\n", cfg.AMF.Name)
 	ranPort := cfg.GNodeB.ControlIF.Port
 
 	// make n3(RAN connect to UPF)
@@ -67,7 +68,7 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 		wg.Add(1)
 		go attachUeWithTnla(imsi, cfg, int64(i), &wg, ranPort)
 		ranPort++
-		time.Sleep(10 * time.Millisecond)
+		// time.Sleep(10 * time.Millisecond)
 	}
 
 	// wait for multiple goroutines.

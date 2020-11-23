@@ -15,6 +15,7 @@ func TestAttachUeWithConfiguration() error {
 	}
 
 	fmt.Println("mytest: ", cfg.GNodeB.ControlIF.Ip, cfg.GNodeB.ControlIF.Port)
+	fmt.Printf("[CORE]%s Core in Testing\n", cfg.AMF.Name)
 
 	// make N2(RAN connect to AMF)
 	conn, err := control_test_engine.ConnectToAmf(cfg.AMF.Ip, cfg.GNodeB.ControlIF.Ip, cfg.AMF.Port, cfg.GNodeB.ControlIF.Port)
@@ -35,16 +36,16 @@ func TestAttachUeWithConfiguration() error {
 	}
 
 	// authentication to a UE.
-	imsi, err, ueIp := control_test_engine.RegistrationUE(conn, cfg.Ue.Imsi, int64(1), cfg, contextGnb, cfg.Ue.Hplmn.Mcc, cfg.Ue.Hplmn.Mnc)
+	ue, err := control_test_engine.RegistrationUE(conn, cfg.Ue.Imsi, int64(1), cfg, contextGnb, cfg.Ue.Hplmn.Mcc, cfg.Ue.Hplmn.Mnc)
 	if err != nil {
-		return fmt.Errorf("The test failed when UE %s tried to attach! Error:%s", imsi, err)
+		return fmt.Errorf("The test failed when UE %s tried to attach! Error:%s", ue.Suci, err)
 	}
 
 	// data plane UE
-	gtpHeader := data_test_engine.GenerateGtpHeader(1)
+	gtpHeader := data_test_engine.GenerateGtpHeader(int(ue.GetUeTeid()))
 
 	// ping
-	err = data_test_engine.PingUE(upfConn, gtpHeader, ueIp, cfg.Ue.Ping)
+	err = data_test_engine.PingUE(upfConn, gtpHeader, ue.GetIp(), cfg.Ue.Ping)
 	if err != nil {
 		return fmt.Errorf("The test failed when UE tried to use ping! Error:%s", err)
 	}

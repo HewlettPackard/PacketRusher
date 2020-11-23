@@ -2,13 +2,12 @@ package sm_5gs
 
 import (
 	"fmt"
-	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/internal/control_test_engine/nas_control"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/ngap/ngapType"
 )
 
-func DecodeNasPduAccept(ue *context.RanUeContext, ngapMsg *ngapType.NGAPPDU) (*nas.Message, error) {
+func DecodeNasPduAccept(ngapMsg *ngapType.NGAPPDU) (*nas.Message, error) {
 
 	// get NasPdu from DlNas.
 	nasPdu := nas_control.GetNasPduFromDlNas(ngapMsg.InitiatingMessage.Value.PDUSessionResourceSetupRequest)

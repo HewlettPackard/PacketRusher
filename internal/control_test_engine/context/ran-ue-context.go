@@ -30,6 +30,7 @@ type RanUeContext struct {
 	Suci               nasType.MobileIdentity5GS
 	Snssai             models.Snssai
 	UeIp               string
+	ueTeid             uint8
 }
 
 func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipheringAlg, integrityAlg uint8, k, opc, op, amf, mcc, mnc string, sst int32, sd string) {
@@ -81,12 +82,18 @@ func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipherin
 
 	// added snn.
 	ue.Snn = ue.deriveSNN()
-	//fmt.Println(ue.Snn)
+}
+
+func (ue *RanUeContext) GetUeTeid() uint8 {
+	return ue.ueTeid
+}
+
+func (ue *RanUeContext) SetUeTeid(teid uint8) {
+	ue.ueTeid = teid
 }
 
 func (ue *RanUeContext) SetIp(ip [12]uint8) {
-	ue.UeIp = fmt.Sprintf("%d", ip[0]) + "." + fmt.Sprintf("%d", ip[1]) + "." + fmt.Sprintf("%d", ip[2]) + "." + fmt.Sprintf("%d", ip[3])
-	fmt.Println(ue.UeIp)
+	ue.UeIp = fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
 }
 
 func (ue *RanUeContext) GetIp() string {
