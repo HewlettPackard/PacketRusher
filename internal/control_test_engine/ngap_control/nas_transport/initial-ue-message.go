@@ -157,7 +157,7 @@ func InitialUEMessage(connN2 *sctp.SCTPConn, registrationRequest []byte, ue *con
 
 	log.WithFields(log.Fields{
 		"protocol":    "NGAP",
-		"source":      "gNodeB",
+		"source":      fmt.Sprintf("GNB[ID:%s]", gnb.GetGnbId()),
 		"destination": "AMF",
 		"message":     "INITIAL UE MESSAGE",
 	}).Info("Sending message")

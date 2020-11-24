@@ -8,13 +8,13 @@ import (
 )
 
 // testing attach and ping for multiple queued UEs.
-func TestMultiAttachUesInQueue(numberUes int) error {
+func TestMultiAttachUesInQueue(numberUes int) {
 	var cfg = config.Data
-	// gNodeB Info
 	// UEs info
 	var mcc = "208"
 	var mnc = "93"
 
+	log.Info("[CORE]", cfg.AMF.Name, " Core in Testing")
 	log.Info("Conecting to AMF...")
 	conn, err := control_test_engine.ConnectToAmf(cfg.AMF.Ip, cfg.GNodeB.ControlIF.Ip, cfg.AMF.Port, cfg.GNodeB.ControlIF.Port)
 	if err != nil {
@@ -63,5 +63,4 @@ func TestMultiAttachUesInQueue(numberUes int) error {
 	conn.Close()
 	upfConn.Close()
 
-	return nil
 }

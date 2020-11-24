@@ -27,11 +27,11 @@ func init() {
 func execLoadTest(name string, numberUes int) {
 	switch name {
 	case "tnla":
-		log.Debug(templates.TestMultiAttachUesInConcurrencyWithTNLAs(numberUes))
+		templates.TestMultiAttachUesInConcurrencyWithTNLAs(numberUes)
 	case "gnb":
-		log.Debug(templates.TestMultiAttachUesInConcurrencyWithGNBs(numberUes))
+		templates.TestMultiAttachUesInConcurrencyWithGNBs(numberUes)
 	default:
-		log.Debug(templates.TestMultiAttachUesInQueue(numberUes))
+		templates.TestMultiAttachUesInQueue(numberUes)
 	}
 }
 
@@ -59,7 +59,7 @@ func main() {
 
 					if c.IsSet("number-of-ues") {
 						execName = "queue"
-						name = "Multi attach UEs in queue"
+						name = "Testing multiple UEs attached in queue"
 						numUes = c.Int("number-of-ues")
 					} else {
 						log.Info(c.Command.Usage)
@@ -68,10 +68,10 @@ func main() {
 
 					if c.Bool("tnla") {
 						execName = "tnla"
-						name = "Multi attach UEs in concurrency with TNLAs"
+						name = "Testing multiple UEs attached in concurrency with TNLAs"
 					} else if c.Bool("gnb") {
 						execName = "gnb"
-						name = "Multi attach UEs in concurrency with GNBs"
+						name = "Testing multiple UEs attached in concurrency with different GNBs"
 					}
 					log.Info("---------------------------------------")
 					log.Info("Starting test function: ", name)
@@ -89,24 +89,53 @@ func main() {
 			{
 				Name:    "ue",
 				Aliases: []string{"ue"},
-				Usage:   "test attach for ue with configuration",
+				Usage:   "Testing an ue attached with configuration",
 				Action: func(c *cli.Context) error {
-					log.Info(templates.TestAttachUeWithConfiguration())
+					name := "Testing an ue attached with configuration"
+					cfg := config.Data
+
+					log.Info("---------------------------------------")
+					log.Info("Starting test function: ", name)
+					log.Info("Number of UEs: ", 1)
+					log.Info("gNodeB control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
+					log.Info("gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
+					log.Info("AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					log.Info("UPF IP/Port: ", cfg.UPF.Ip, "/", cfg.UPF.Port)
+					log.Info("---------------------------------------")
+					templates.TestAttachUeWithConfiguration()
 					return nil
 				},
 			},
 			{
 				Name:    "gnb",
 				Aliases: []string{"gnb"},
-				Usage: "test attach with some gnbs with configuration.\n" +
+				Usage: "Testing multiple GNBs attached.\n" +
 					"Example for testing attached gnbs: gnb -n 5",
 				Flags: []cli.Flag{
 					&cli.IntFlag{Name: "number-of-gnbs", Value: 1, Aliases: []string{"n"}},
 				},
 				Action: func(c *cli.Context) error {
-					numGnbs := c.Int("number-of-gnbs")
+					var numGnbs int
 
-					log.Debug(templates.TestMultiAttachGnbInConcurrency(numGnbs))
+					if c.IsSet("number-of-gnbs") {
+						numGnbs = c.Int("number-of-gnbs")
+					} else {
+						log.Info(c.Command.Usage)
+						return nil
+					}
+
+					name := "Testing multiple GNBs attached"
+					cfg := config.Data
+
+					log.Info("---------------------------------------")
+					log.Info("Starting test function: ", name)
+					log.Info("Number of GNBs: ", numGnbs)
+					log.Info("gNodeB control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
+					log.Info("gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
+					log.Info("AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					log.Info("UPF IP/Port: ", cfg.UPF.Ip, "/", cfg.UPF.Port)
+					log.Info("---------------------------------------")
+					templates.TestMultiAttachGnbInConcurrency(numGnbs)
 					return nil
 				},
 			},

@@ -1,7 +1,6 @@
 package templates
 
 import (
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	control_test_engine "my5G-RANTester/internal/control_test_engine"
@@ -19,50 +18,48 @@ func attachUeWithTnla(imsi string, conf config.Config, ranUeId int64, wg *sync.W
 	log.Info("Conecting to AMF...")
 	conn, err := control_test_engine.ConnectToAmf(conf.AMF.Ip, conf.GNodeB.ControlIF.Ip, conf.AMF.Port, ranPort)
 	if err != nil {
-		fmt.Println("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
+		log.Fatal("The test failed when sctp socket tried to connect to AMF! Error:", err)
 	}
 	log.Info("OK")
 
 	// authentication to a GNB.
-	gnbContext, err := control_test_engine.RegistrationGNB(conn, "000102", "free5gc", conf)
+	gnbContext, err := control_test_engine.RegistrationGNB(conn, conf.GNodeB.PlmnList.GnbId, "my5GRANTester", conf)
 	if err != nil {
-		fmt.Println("The test failed when GNB tried to attach! Error:%s", err)
+		log.Fatal("The test failed when GNB tried to attach! Error:", err)
 	}
 
 	ue, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, conf, gnbContext, "208", "93")
 	if err != nil {
-		fmt.Println("The test failed when UE %s tried to attach! Error:%s", ue.Suci, err)
+		log.Error("The test failed when UE", ue.Suci, "tried to attach! Error:", err)
 	}
 
 	// end sctp socket.
 	conn.Close()
 
-	if err == nil {
-		fmt.Println("Thread with imsi:%s and IP:%s worked fine", imsi, ue.UeIp)
-	}
 }
 
 // testing attach and ping for multiple concurrent UEs using TNLAs.
-func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
+func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) {
 
 	var wg sync.WaitGroup
 
 	cfg, err := config.GetConfig()
 	if err != nil {
-		return nil
+		//return nil
+		log.Fatal("Error in get configuration")
 	}
 
 	// authentication and ping to some concurrent UEs.
-	log.Info(fmt.Sprintf("Testing attached with %d ues using TNLAs", numberUesConcurrency))
-	fmt.Println("mytest: ", cfg.GNodeB.ControlIF.Ip, cfg.GNodeB.ControlIF.Port)
-	fmt.Printf("[CORE]%s Core in Testing\n", cfg.AMF.Name)
+	log.Info("Testing attached with ", numberUesConcurrency, " ues using TNLAs")
+	log.Info("[CORE]", cfg.AMF.Name, " Core in Testing")
+
 	ranPort := cfg.GNodeB.ControlIF.Port
 
 	// make n3(RAN connect to UPF)
 	log.Info("Conecting to UPF...")
 	upfConn, err := data_test_engine.ConnectToUpf(cfg.GNodeB.DataIF.Ip, cfg.UPF.Ip, cfg.GNodeB.DataIF.Port, cfg.UPF.Port)
 	if err != nil {
-		return fmt.Errorf("The test failed when udp socket tried to connect to UPF! Error:%s", err)
+		log.Fatal("The test failed when udp socket tried to connect to UPF! Error:", err)
 	}
 	log.Info("OK")
 
@@ -86,11 +83,9 @@ func TestMultiAttachUesInConcurrencyWithTNLAs(numberUesConcurrency int) error {
 		// ping test.
 		err = data_test_engine.PingUE(upfConn, gtpHeader, data_test_engine.GetSrcPing(i), cfg.Ue.Ping)
 		if err != nil {
-			fmt.Println("The test failed when UE tried to use ping! Error:%s", err)
+			log.Error("The test failed when UE tried to use ping! Error:", err)
 		}
 		time.Sleep(1 * time.Second)
 	}
 
-	// function worked fine.
-	return nil
 }

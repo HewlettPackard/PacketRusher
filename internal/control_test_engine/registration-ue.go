@@ -145,7 +145,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 
 	log.WithFields(log.Fields{
 		"protocol":    "NAS",
-		"source":      "gNodeB",
+		"source":      fmt.Sprintf("GNB[ID:%s]", gnb.GetGnbId()),
 		"destination": fmt.Sprintf("UE[%d]", ranUeId),
 		"message":     "REGISTRATION ACCEPT",
 	}).Info("Sending message")

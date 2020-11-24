@@ -8,17 +8,18 @@ import (
 	"sync"
 )
 
-func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
+func TestMultiAttachGnbInConcurrency(numberGnbs int) {
 
 	var wg sync.WaitGroup
 
 	cfg, err := config.GetConfig()
 	if err != nil {
-		return nil
+		log.Fatal("Error in get configuration")
 	}
-	fmt.Printf("[CORE]%s Core in Testing\n", cfg.AMF.Name)
+	// fmt.Printf("[CORE]%s Core in Testing\n", cfg.AMF.Name)
 
-	log.Info(fmt.Sprintf("Testing attach with %d gnbs", numberGnbs))
+	log.Info("Testing attached with ", numberGnbs, " gnbs")
+	log.Info("[CORE]", cfg.AMF.Name, " Core in Testing")
 	ranPort := cfg.GNodeB.ControlIF.Port
 
 	// multiple concurrent GNBs authentication using goroutines.
@@ -32,7 +33,7 @@ func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 			// make N2(RAN connect to AMF)
 			conn, err := control_test_engine.ConnectToAmf(cfg.AMF.Ip, cfg.GNodeB.ControlIF.Ip, cfg.AMF.Port, ranPort)
 			if err != nil {
-				fmt.Printf("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
+				log.Fatal("The test failed when sctp socket tried to connect to AMF! Error:", err)
 			}
 
 			// multiple names for GNBs.
@@ -52,7 +53,7 @@ func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 			// authentication to a GNB.
 			contextgnb, err := control_test_engine.RegistrationGNB(conn, aux, nameGNB, cfg)
 			if err != nil || contextgnb == nil {
-				fmt.Printf("The test failed when GNB tried to attach! Error:%s", err)
+				log.Error("The test failed when GNB", aux, "tried to attach! Error:", err)
 			}
 
 			//fmt.Println(contextgnb)
@@ -66,5 +67,5 @@ func TestMultiAttachGnbInConcurrency(numberGnbs int) error {
 	// wait threads.
 	wg.Wait()
 
-	return nil
+	// return nil
 }

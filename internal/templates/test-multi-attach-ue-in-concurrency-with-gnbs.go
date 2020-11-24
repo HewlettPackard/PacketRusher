@@ -15,7 +15,7 @@ func attachUeWithGNB(imsi string, conf config.Config, ranUeId int64, wg *sync.Wa
 	// make N2(RAN connect to AMF)
 	conn, err := control_test_engine.ConnectToAmf(conf.AMF.Ip, conf.GNodeB.ControlIF.Ip, conf.AMF.Port, ranPort)
 	if err != nil {
-		fmt.Println("The test failed when sctp socket tried to connect to AMF! Error:%s", err)
+		log.Fatal("The test failed when sctp socket tried to connect to AMF! Error:", err)
 	}
 
 	// multiple names for GNBs.
@@ -34,35 +34,34 @@ func attachUeWithGNB(imsi string, conf config.Config, ranUeId int64, wg *sync.Wa
 	// authentication to a GNB.
 	gnbContext, err := control_test_engine.RegistrationGNB(conn, aux, nameGNB, conf)
 	if err != nil {
-		fmt.Println("The test failed when GNB tried to attach! Error:%s", err)
+		log.Fatal("The test failed when GNB tried to attach! Error:", err)
 	}
 
 	ue, err := control_test_engine.RegistrationUE(conn, imsi, ranUeId, conf, gnbContext, "208", "93")
 	if err != nil {
-		fmt.Println("The test failed when UE %s tried to attach! Error:%s", ue.Supi, err)
+		log.Error("The test failed when UE", ue.Suci, "tried to attach! Error:", err)
 	}
 
 	// end sockets.
 	conn.Close()
 
-	if err == nil {
-		fmt.Println("Thread with imsi:%s and Ip: %s worked fine", imsi, ue.GetIp())
-	}
+	//if err == nil {
+	//fmt.Println("Thread with imsi:%s and Ip: %s worked fine", imsi, ue.GetIp())
+	//}
 }
 
 // testing attach for multiple concurrent UEs using an UE per GNB.
-func TestMultiAttachUesInConcurrencyWithGNBs(numberGNBs int) error {
+func TestMultiAttachUesInConcurrencyWithGNBs(numberGNBs int) {
 
 	var wg sync.WaitGroup
 
 	cfg, err := config.GetConfig()
 	if err != nil {
-		return nil
+		log.Fatal("Error in get configuration")
 	}
 
-	log.Info(fmt.Sprintf("Testing attach with %d ues in different GNBs", numberGNBs))
-	fmt.Println("mytest: ", cfg.GNodeB.ControlIF.Ip, cfg.GNodeB.ControlIF.Port)
-	fmt.Printf("[CORE]%s Core in Testing\n", cfg.AMF.Name)
+	log.Info("Testing attached with ", numberGNBs, " ues in different GNBs")
+	log.Info("[CORE]", cfg.AMF.Name, " Core in Testing")
 
 	ranPort := cfg.GNodeB.ControlIF.Port
 
@@ -79,5 +78,5 @@ func TestMultiAttachUesInConcurrencyWithGNBs(numberGNBs int) error {
 	wg.Wait()
 
 	// function worked fine.
-	return nil
+	//return nil
 }
