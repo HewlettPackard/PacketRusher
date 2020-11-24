@@ -47,7 +47,12 @@ Check the values in UE(opc,key,amf). This values must be registered by webconsol
 <p align="">
     <img src="images/ue_config.png"/>
 </p>
-Keep attention about imsi because some tests was automatized(load-tests) and will not permit change. Read more below.
+
+Keep attention about imsi because some tests was automatized(load-tests) and will not permit change. If you are using free5gcore you can using script in /dev/includes_ues.sh to added imsi and other information by webconsole. As show below:
+``` 
+   ./included_ues.sh -n <number of UEs that you want to test>  
+```
+
   
 
 ## Tests
@@ -90,7 +95,7 @@ We have now different types of test for testing some kinds of behaviors from Cor
               
 - Load-test with GNBs 
     - You can use the command to test 10 GNBs attached to core: 
-              ``` ./app gnb -g 10  ```            
+              ``` ./app gnb -n 10  ```            
     - Configurations in config/config.yml.
     
 - Test with an UE and a GNB. 
