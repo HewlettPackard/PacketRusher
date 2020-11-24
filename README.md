@@ -50,7 +50,7 @@ Check the values in UE(opc,key,amf). This values must be registered by webconsol
 
 Keep attention about imsi because some tests was automatized(load-tests) and will not permit change. If you are using free5gcore you can using script in /dev/includes_ues.sh to added imsi and other information by webconsole. As show below:
 ``` 
-   ./included_ues.sh -n <number of UEs that you want to test>  
+   ./included_ues.sh -n <number of UEs that you want to test in load tests>  
 ```
 
   
