@@ -43,7 +43,7 @@ func main() {
 				Name:    "load-test",
 				Aliases: []string{"load-test"},
 				Usage: "\nLoad endurance stress tests.\n" +
-					"Example: load-test -n 5 \n" +
+					"Example for ues in queue: load-test -n 5 \n" +
 					"Example for concurrency testing with different GNBs: load-test -g -n 10\n" +
 					"Example for concurrency testing with some TNLAs: load-test -t -n 10\n",
 				Flags: []cli.Flag{
@@ -52,13 +52,18 @@ func main() {
 					&cli.BoolFlag{Name: "tnla", Aliases: []string{"t"}},
 				},
 				Action: func(c *cli.Context) error {
-					numUes := 1
-					execName := "queue"
-					name := "Multi attach UEs in queue"
+					var execName string
+					var name string
+					var numUes int
 					cfg := config.Data
 
 					if c.IsSet("number-of-ues") {
+						execName = "queue"
+						name = "Multi attach UEs in queue"
 						numUes = c.Int("number-of-ues")
+					} else {
+						log.Info(c.Command.Usage)
+						return nil
 					}
 
 					if c.Bool("tnla") {

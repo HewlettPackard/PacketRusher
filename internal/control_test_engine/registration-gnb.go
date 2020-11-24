@@ -21,7 +21,7 @@ func RegistrationGNB(connN2 *sctp.SCTPConn, gnbId string, nameGNB string, conf c
 	// gnbIdInBytes := gnb.GetGnbIdInBytes()
 	log.WithFields(log.Fields{
 		"protocol":    "NGAP",
-		"source":      fmt.Sprintf("GNB[%s]", gnb.GetGnbId()),
+		"source":      fmt.Sprintf("GNB[ID:%s]", gnb.GetGnbId()),
 		"destination": "AMF",
 		"message":     "NG SETUP REQUEST",
 	}).Info("Sending message")
@@ -34,7 +34,7 @@ func RegistrationGNB(connN2 *sctp.SCTPConn, gnbId string, nameGNB string, conf c
 	log.WithFields(log.Fields{
 		"protocol":    "NGAP",
 		"source":      "AMF",
-		"destination": fmt.Sprintf("GNB[%s]", gnb.GetGnbId()),
+		"destination": fmt.Sprintf("GNB[ID:%s]", gnb.GetGnbId()),
 		"message":     "NG SETUP RESPONSE",
 	}).Info("Receive message")
 	// receive NGSetupResponse Msg

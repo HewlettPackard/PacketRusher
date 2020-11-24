@@ -65,7 +65,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 	log.WithFields(log.Fields{
 		"protocol":    "NAS",
 		"source":      fmt.Sprintf("GNB[ID:%s]", gnb.GetGnbId()),
-		"destination": "UE",
+		"destination": fmt.Sprintf("UE[%d]", ranUeId),
 		"message":     "AUTHENTICATION REQUEST",
 	}).Info("Sending message")
 
@@ -77,7 +77,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf conf
 
 	log.WithFields(log.Fields{
 		"protocol":    "NAS",
-		"source":      "UE",
+		"source":      fmt.Sprintf("UE[%d]", ranUeId),
 		"destination": fmt.Sprintf("GNB[ID:%s]", gnb.GetGnbId()),
 		"message":     "AUTHENTICATION RESPONSE",
 	}).Info("Sending message")
