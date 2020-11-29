@@ -51,7 +51,7 @@ func attachUeWithGNB(imsi string, conf config.Config, ranUeId int64, wg *sync.Wa
 }
 
 // testing attach for multiple concurrent UEs using an UE per GNB.
-func TestMultiAttachUesInConcurrencyWithGNBs(numberGNBs int) {
+func TestMultiAttachUesInConcurrencyWithGNBs(numberUEs int) {
 
 	var wg sync.WaitGroup
 
@@ -60,13 +60,13 @@ func TestMultiAttachUesInConcurrencyWithGNBs(numberGNBs int) {
 		log.Fatal("Error in get configuration")
 	}
 
-	log.Info("Testing attached with ", numberGNBs, " ues in different GNBs")
+	log.Info("Testing attached with ", numberUEs, " ues in different GNBs")
 	log.Info("[CORE]", cfg.AMF.Name, " Core in Testing")
 
 	ranPort := cfg.GNodeB.ControlIF.Port
 
 	// Launch several goroutines and increment the WaitGroup counter for each.
-	for i := 1; i <= numberGNBs; i++ {
+	for i := 1; i <= numberUEs; i++ {
 		imsi := control_test_engine.ImsiGenerator(i)
 		wg.Add(1)
 		go attachUeWithGNB(imsi, cfg, int64(i), &wg, ranPort)

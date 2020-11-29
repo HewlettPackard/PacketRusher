@@ -26,7 +26,7 @@ unsigned int randomNumberFromExponential(double mu, long seed){
 import "C"
 
 // calculate some random numbers from the Exponential distribution
-func exponentialDistribution(mean float64, length int, const_seed int) (distExpo []uint) {
+func ExponentialDistribution(mean float64, length int, const_seed int) (distExpo []uint) {
 	distExpo = make([]uint, length)
 
 	for i := 1; i <= length; i++ {
