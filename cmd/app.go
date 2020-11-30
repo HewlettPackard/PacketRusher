@@ -147,14 +147,17 @@ func main() {
 				Flags: []cli.Flag{
 					&cli.IntFlag{Name: "number-of-samples", Value: 1, Aliases: []string{"s"}},
 					&cli.IntFlag{Name: "mean", Value: 1, Aliases: []string{"mu"}},
+					&cli.IntFlag{Name: "seed", Value: 1, Aliases: []string{"se"}},
 				},
 				Action: func(c *cli.Context) error {
 					var numSamples int
 					var mean float64
+					var seed int
 
-					if c.IsSet("number-of-samples") && c.IsSet("mean") {
+					if c.IsSet("number-of-samples") && c.IsSet("mean") && c.IsSet("seed") {
 						numSamples = c.Int("number-of-samples")
 						mean = c.Float64("mean")
+						seed = c.Int("seed")
 					} else {
 						log.Info(c.Command.Usage)
 						return nil
@@ -166,13 +169,14 @@ func main() {
 					log.Info("---------------------------------------")
 					log.Info("Starting test function: ", name)
 					log.Info("Number of Samples: ", numSamples)
-					log.Info("Poisson distribution with mean: ", mean)
+					log.Info("Poisson and Exponential distribution with mean: ", mean)
+					log.Info("Poisson and Exponential distribution with seed: ", seed)
 					log.Info("gNodeB control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
 					log.Info("gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
 					log.Info("AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
 					log.Info("UPF IP/Port: ", cfg.UPF.Ip, "/", cfg.UPF.Port)
 					log.Info("---------------------------------------")
-					templates.TestMultiAttachUesInConcurrencyWithGNBsUsingPoissonAndExponential(numSamples, mean)
+					templates.TestMultiAttachUesInConcurrencyWithGNBsUsingPoissonAndExponential(numSamples, mean, seed)
 					return nil
 				},
 			},

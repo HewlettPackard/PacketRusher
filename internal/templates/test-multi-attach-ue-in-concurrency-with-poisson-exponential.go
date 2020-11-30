@@ -11,7 +11,7 @@ import (
 
 // testing attach for multiple concurrent UEs using an UE per GNB and using poisson and exponential
 // distribution.
-func TestMultiAttachUesInConcurrencyWithGNBsUsingPoissonAndExponential(samples int, mean float64) {
+func TestMultiAttachUesInConcurrencyWithGNBsUsingPoissonAndExponential(samples int, mean float64, seed int) {
 
 	var wg sync.WaitGroup
 
@@ -31,10 +31,10 @@ func TestMultiAttachUesInConcurrencyWithGNBsUsingPoissonAndExponential(samples i
 	ranPort := cfg.GNodeB.ControlIF.Port
 
 	// generated samples of UE by Poisson Distribution.
-	workLoad := work_load_model.PoissonDistribution(mean, samples, 100)
+	workLoad := work_load_model.PoissonDistribution(mean, samples, seed)
 
 	// generated interval between each sample of UEs .
-	interval := work_load_model.ExponentialDistribution(mean, samples, 122)
+	interval := work_load_model.ExponentialDistribution(mean, samples, seed)
 
 	for j := 0; j < samples; j++ {
 
@@ -57,8 +57,11 @@ func TestMultiAttachUesInConcurrencyWithGNBsUsingPoissonAndExponential(samples i
 		numberOfUes += int(workLoad[j])
 
 		// set time duration between each sample of ues.
-		number := time.Duration(interval[j]) * time.Second
-		time.Sleep(number)
+		if j+1 == samples {
+			time.Sleep(0 * time.Second)
+		} else {
+			time.Sleep(time.Duration(interval[j]) * time.Second)
+		}
 	}
 
 	// function worked fine.
