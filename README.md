@@ -20,6 +20,7 @@ my5G-RANTester is a tool that simulates User Equipment (UE) and Next Generation-
 The software requirement:
 * Go 1.14.4
 * GSL 2.6
+* GCC
 
 The installation can be done directly over the host operating system (OS) or inside a virtual machine (VM). System requirements:
 * CPU type: x86-64 (specific model and number of cores only affect performance)
@@ -28,10 +29,11 @@ The installation can be done directly over the host operating system (OS) or ins
 
 **Steps**
 
-Install GSL-2.6
+Install GSL-2.6 and GCC
 ```
 sudo apt update
-sudo apt install gsl-bin
+sudo apt install build-essential
+sudo apt install install libgsl-dev
 ```
 
 Downloading source code:
