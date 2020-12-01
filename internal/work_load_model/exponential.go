@@ -1,8 +1,8 @@
 package work_load_model
 
 /*
-#cgo CFLAGS: -I /home/lucas-baleeiro/gsl/include
-#cgo LDFLAGS: -L /home/lucas-baleeiro/gsl/lib -lgsl -lgslcblas -lm
+#cgo CFLAGS: -I /usr/local/include
+#cgo LDFLAGS: -L /usr/local/lib -lgsl -lgslcblas -lm
 #include<gsl/gsl_rng.h>
 #include<gsl/gsl_randist.h>
 
@@ -26,7 +26,7 @@ unsigned int randomNumberFromExponential(double mu, long seed){
 import "C"
 
 // calculate some random numbers from the Exponential distribution
-func exponentialDistribution(mean float64, length int, const_seed int) (distExpo []uint) {
+func ExponentialDistribution(mean float64, length int, const_seed int) (distExpo []uint) {
 	distExpo = make([]uint, length)
 
 	for i := 1; i <= length; i++ {
