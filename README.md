@@ -33,7 +33,7 @@ Install GSL-2.6 and GCC
 ```
 sudo apt update
 sudo apt install build-essential
-sudo apt install install libgsl-dev
+sudo apt install libgsl-dev
 ```
 
 Downloading source code:
@@ -131,7 +131,7 @@ We have now different types of test for testing some kinds of behaviors from Cor
     - You can use the command to test with 3 GNBs, each one with an UE:
              ``` ./app load-test -g -n 3 ```
 
-- Load test with UEs attached at the same time based a poisson and exponential distribution*
+- Nonlinear load test with UEs attached at the same time based a poisson and exponential distribution*
    - You can use the command to test:
          ``` 
          ./app nlinear-tests -s <samples> -mu <mean> -se <seed>  
