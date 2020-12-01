@@ -19,6 +19,7 @@ my5G-RANTester is a tool that simulates User Equipment (UE) and Next Generation-
 
 The software requirement:
 * Go 1.14.4
+* GSL 2.6
 
 The installation can be done directly over the host operating system (OS) or inside a virtual machine (VM). System requirements:
 * CPU type: x86-64 (specific model and number of cores only affect performance)
@@ -26,6 +27,12 @@ The installation can be done directly over the host operating system (OS) or ins
 * Ubuntu 18.04/20.04 LTS.
 
 **Steps**
+
+Install GSL-2.6
+```
+sudo apt update
+sudo apt install gsl-bin
+```
 
 Downloading source code:
 ```
@@ -35,7 +42,7 @@ git clone https://github.com/LABORA-INF-UFG/my5G-RANTester.git
 Install dependencies:
 ```
 cd my5g-RANTester
-go mod download 
+go mod download
 ```
   
 Build binary:
@@ -82,6 +89,18 @@ cd cmd
 ./app <with flag that identify type of test>
 ```
 
+If you get this error:
+```
+./app: error while loading shared libraries: libgsl.so.25: cannot open shared object file: No such file or directory
+```
+
+Please check the path of the GSL dynamic library:
+```
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/gsl/
+export LD_LIBRARY_PATH
+./app
+```
+
 We have now different types of test for testing some kinds of behaviors from Core, that are show below.
 
 - Load-test with UEs in queue*
@@ -111,7 +130,13 @@ We have now different types of test for testing some kinds of behaviors from Cor
              ``` ./app load-test -g -n 3 ```
 
 - Load test with UEs attached at the same time based a poisson and exponential distribution*
-              
+   - You can use the command to test:
+         ``` 
+         ./app nlinear-tests -s <samples> -mu <mean> -se <seed>  
+         ```
+   - Each samples is a random number generate by poisson distribution and means number of UEs attached to Core at the same time.
+   - Between each sample has a time duration in seconds defined by Exponential Distribution 
+   - Mean and seed is used by Poisson and exponential distribution for generate random numbers.           
 - Load-test with GNBs 
     - You can use the command to test 10 GNBs attached to core: 
               ``` ./app gnb -n 10  ```            
