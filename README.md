@@ -166,3 +166,7 @@ Example: if you want to test 2 UEs you have to include imsi 2089300000001 and 20
  
 For questions and support please send a e-mail message to [my5G team](mailto:my5G.initiative@gmail.com). 
 
+# Acknowledgments
+
+This project uses libraries and data structures of free5gc but it is not part of the official free5gc project. The free5gc code and My5GRANTester is offered under the Apache 2.0 license.
+
