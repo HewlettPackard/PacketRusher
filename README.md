@@ -34,28 +34,35 @@ If you want to cite this tool, please use the following information:
 ```
 If you have questions or comments, please email us: [my5G team](mailto:my5G.initiative@gmail.com). 
 
+my5G-RANTester borrows libraries and data structures from the [free5gc project](https://github.com/free5gc/free5gc).
+
 ----
 # Installation
 
 ## Recommended environment
 
-The software requirement:
-* Go 1.14.4
-* GSL 2.6
-* GCC
-
-The installation can be done directly over the host operating system (OS) or inside a virtual machine (VM). System requirements:
 * CPU type: x86-64 (specific model and number of cores only affect performance)
 * RAM: 1 GB
-* Ubuntu 18.04/20.04 LTS.
+* Operating System (OS): Linux Ubuntu 18.04 or 20.04 LTS.
+
+The installation can be done directly in the host OS or inside a virtual machine (VM).
+
 
 ## Requirements
 
-Install GSL-2.6 and GCC
+Install GCC:
 ```
-sudo apt update
-sudo apt install build-essential
-sudo apt install libgsl-dev
+sudo apt update && apt -y install build-essential
+```
+
+Install GSL:
+```
+sudo apt -y install libgsl-dev
+```
+
+Install Go:
+```
+???
 ```
 
 ## RAN Tester
@@ -76,10 +83,10 @@ Build the binary:
 cd cmd 
 go build app.go
 ```
-  
-Edit configuration file in config/config.yml:
 
-Change amfif with AMF ip, port and core name that you are testing. In the moment we have two options: free5gcore or open5gs
+Edit configuration file **config/config.yml** and make the following procedures.
+
+1. Configure **amfif** with the AMF IP address, port and core name that you are testing. Currrently, there are three options for **name**: my5g-core, free5gc or open5gs.
 ```yaml
 amfif:
   ip: "127.0.0.1"
@@ -87,12 +94,13 @@ amfif:
   name: "free5gc"
 ```
 
-Change upif with UPF ip and port(N3).
+2. Change upif with UPF ip and port(N3).
 ```yaml
 upfif:
   ip: "10.200.200.102"
   port: 2152
 ```
+
 Check the values in UE(opc,key,amf). This values must be registered by webconsole core and my5gRANTester will use them in all tests.
 ```yaml
   key: "70d49a71dd1a2b806a25abe0ef749f1e"
@@ -185,11 +193,3 @@ Example: if you want to test 2 UEs you have to include imsi 2089300000001 and 20
  <p align="">
      <img src="docs/media/img/ue_configuration.png"/>
  </p>
-
-# Questions
- 
-
-# Acknowledgments
-
-This project uses libraries and data structures of free5gc but it is not part of the official free5gc project. The free5gc code and My5GRANTester is offered under the Apache 2.0 license.
-
