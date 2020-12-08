@@ -94,14 +94,14 @@ amfif:
   name: "free5gc"
 ```
 
-2. Change upif with UPF ip and port(N3).
+2. Change **upif** with UPF IP address and port (N3).
 ```yaml
 upfif:
   ip: "10.200.200.102"
   port: 2152
 ```
 
-Check the values in UE(opc,key,amf). This values must be registered by webconsole core and my5gRANTester will use them in all tests.
+3. Check the values in UE(key,opc,amf). This values must be registered by webconsole core and my5gRANTester will use them in all tests.
 ```yaml
   key: "70d49a71dd1a2b806a25abe0ef749f1e"
   opc: "6f1bf53d624b3a43af6592854e2444c7"
