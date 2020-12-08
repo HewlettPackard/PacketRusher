@@ -8,14 +8,36 @@
 
 <img width="20%" src="docs/media/img/my5g-logo.png" alt="my5g-core"/>
 
+- [Description](#description)
+- [Installation](#installation)
+    - [Recommended environment](#recommended-environment)
+    - [Requirements](#requirements)
+    - [RAN Tester](#ran-tester)
+- [Check](#check)
+- [More information](#more-information)
+
 ----
+# Description
 
 my5G-RANTester is a tool for emulating control and data planes of the UE (user equipment) and gNB (5G base station). my5G-RANTester follows the 3GPP Release 15 standard for NG-RAN (Next Generation-Radio Access Network). Using my5G-RANTester, it is possible to generate different workloads and test several functionalities of a 5G core, including its complaince to the 3GPP standards. Scalability is also a relevant feature of the my5G-RANTester, which is able mimic the behaviour of a large number of UEs and gNBs accessing simultaneously a 5G core. Currently, the wireless channel is not implemented in the tool.
 
-----
-## Installation
+If you want to cite this tool, please use the following information:
+```
+@misc{???,
+    title={???},
+    author={???},
+    year={2020},
+    eprint={???},
+    archivePrefix={arXiv},
+    primaryClass={cs.NI}
+}
+```
+If you have questions or comments, please email us: [my5G team](mailto:my5G.initiative@gmail.com). 
 
-**Requirements**
+----
+# Installation
+
+## Recommended environment
 
 The software requirement:
 * Go 1.14.4
@@ -27,7 +49,7 @@ The installation can be done directly over the host operating system (OS) or ins
 * RAM: 1 GB
 * Ubuntu 18.04/20.04 LTS.
 
-**Steps**
+## Requirements
 
 Install GSL-2.6 and GCC
 ```
@@ -36,18 +58,20 @@ sudo apt install build-essential
 sudo apt install libgsl-dev
 ```
 
-Downloading source code:
+## RAN Tester
+
+Download the source code:
 ```
 git clone https://github.com/LABORA-INF-UFG/my5G-RANTester.git
 ```
 
-Install dependencies:
+Install the dependencies:
 ```
-cd my5g-RANTester
+cd my5G-RANTester
 go mod download
 ```
   
-Build binary:
+Build the binary:
 ```
 cd cmd 
 go build app.go
@@ -82,8 +106,8 @@ Keep attention about imsi because some tests was automatized(load-tests) and wil
 ```
 
   
-
-## Tests
+----
+# Check
 
 **Running with template:**
 ```
@@ -164,7 +188,6 @@ Example: if you want to test 2 UEs you have to include imsi 2089300000001 and 20
 
 # Questions
  
-For questions and support please send a e-mail message to [my5G team](mailto:my5G.initiative@gmail.com). 
 
 # Acknowledgments
 
