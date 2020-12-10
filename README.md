@@ -133,6 +133,8 @@ The result should be similar to the following:
    
 If my5G-RANTester was successfuly installed, you may find useful take a look in the USAGE manual that also presents several examples.
 
+Please review the CONTRIBUTION guide for information on how to get started contributing to the project.
+
 If you found problems during the installation or during the checking, you may find a solution in the TROUBLESHOOTING document.
 
 If you do not have a 5G core for testing, you can easily deploy and run the [my5G-core](https://github.com/my5G/my5G-core).
