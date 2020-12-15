@@ -61,8 +61,28 @@ sudo apt -y install libgsl-dev
 ```
 
 Install Go:
+
+If another version of Go is installed
 ```
-???
+# Please remove the previous Go version
+sudo rm -rf /usr/local/go
+```
+```
+# Install Go 1.14.4
+wget https://dl.google.com/go/go1.14.4.linux-amd64.tar.gz
+sudo tar -C /usr/local -zxvf go1.14.4.linux-amd64.tar.gz
+```
+
+Clean installation
+```
+# Install Go 1.14.4
+wget https://dl.google.com/go/go1.14.4.linux-amd64.tar.gz
+sudo tar -C /usr/local -zxvf go1.14.4.linux-amd64.tar.gz
+mkdir -p ~/go/{bin,pkg,src}
+echo 'export GOPATH=$HOME/go' >> ~/.bashrc
+echo 'export GOROOT=/usr/local/go' >> ~/.bashrc
+echo 'export PATH=$PATH:$GOPATH/bin:$GOROOT/bin' >> ~/.bashrc
+source ~/.bashrc
 ```
 
 ## RAN Tester
@@ -125,9 +145,9 @@ Make also sure that you are in directory **my5G-RANTester/cmd**, then run the mo
 ```
 
 The result should be similar to the following:
-```
-???
-```
+<p align="">
+     <img src="docs/media/img/my5gRANTesterOk.png"/>
+</p>
 
 # More information
    
