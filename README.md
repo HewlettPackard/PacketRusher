@@ -145,3 +145,7 @@ Please review the [CONTRIBUTION](https://github.com/my5G/template/blob/main/CONT
 If you found problems during the installation or during the checking, you may find a solution in the [TROUBLESHOOTING](https://github.com/my5G/my5G-RANTester/blob/develop/TROUBLESHOOTING.md) document.
 
 
+If you do not have a 5G core for testing, you can easily deploy and run the [my5G-core](https://github.com/my5G/my5G-core).
+
+
+
