@@ -144,12 +144,4 @@ Please review the [CONTRIBUTION](https://github.com/my5G/template/blob/main/CONT
 
 If you found problems during the installation or during the checking, you may find a solution in the [TROUBLESHOOTING](https://github.com/my5G/my5G-RANTester/blob/develop/TROUBLESHOOTING.md) document.
 
-# Questions
- 
-For questions and support please send a e-mail message to [my5G team](mailto:my5G.initiative@gmail.com).
 
-# Acknowledgments
-
-This project uses libraries and data structures of free5gc but it is not part of the official free5gc project. The free5gc code and My5GRANTester is offered under the Apache 2.0 license.
-
-If you do not have a 5G core for testing, you can easily deploy and run the [my5G-core](https://github.com/my5G/my5G-core).
