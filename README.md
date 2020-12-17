@@ -60,22 +60,8 @@ Install GSL:
 sudo apt -y install libgsl-dev
 ```
 
-Install Go:
-
-If another version of Go is installed
+Install Go (assuming there is no previous version installed):
 ```
-# Please remove the previous Go version
-sudo rm -rf /usr/local/go
-```
-```
-# Install Go 1.14.4
-wget https://dl.google.com/go/go1.14.4.linux-amd64.tar.gz
-sudo tar -C /usr/local -zxvf go1.14.4.linux-amd64.tar.gz
-```
-
-Clean installation
-```
-# Install Go 1.14.4
 wget https://dl.google.com/go/go1.14.4.linux-amd64.tar.gz
 sudo tar -C /usr/local -zxvf go1.14.4.linux-amd64.tar.gz
 mkdir -p ~/go/{bin,pkg,src}
