@@ -1,8 +1,8 @@
 package work_load_model
 
 /*
-#cgo CFLAGS: -I /home/lucas-baleeiro/gsl/include
-#cgo LDFLAGS: -L /home/lucas-baleeiro/gsl/lib -lgsl -lgslcblas -lm
+#cgo CFLAGS: -I /usr/local/include
+#cgo LDFLAGS: -L /usr/local/lib -lgsl -lgslcblas -lm
 #include<gsl/gsl_rng.h>
 #include<gsl/gsl_randist.h>
 
@@ -26,11 +26,12 @@ unsigned int randomNumberFromPoisson( double mu, long seed) {
 import "C"
 
 // calculate some random numbers from the Poisson distribution
-func poissonDistribution(mean float64, length int) (distPoisson []uint) {
+func PoissonDistribution(mean float64, length int, const_seed int) (distPoisson []uint) {
 	distPoisson = make([]uint, length)
 
 	for i := 1; i <= length; i++ {
-		aux := C.randomIntengerFromPoisson(C.double(mean), C.long(i))
+		seed := const_seed + i
+		aux := C.randomNumberFromPoisson(C.double(mean), C.long(seed))
 		distPoisson[i-1] = uint(aux)
 	}
 	return
