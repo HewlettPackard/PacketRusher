@@ -3,6 +3,7 @@ package context
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/ishidawataru/sctp"
 	"my5G-RANTester/lib/UeauCommon"
 	"my5G-RANTester/lib/milenage"
 	"my5G-RANTester/lib/nas/nasMessage"
@@ -12,10 +13,27 @@ import (
 	"regexp"
 )
 
-type RanUeContext struct {
+type UEContext struct {
+	ueSecurity           SECURITY
+	RanUeNgapId          int64
+	AmfUeNgapId          int64
+	Snssai               models.Snssai
+	PduSession           PDUSession
+	AmfId                int64
+	State                int64
+	sctpConnection       sctp.SCTPConn
+	unixSocketConnection string // TODO implement type for unix socket
+}
+
+type PDUSession struct {
+	PduSessionId int64
+	UeIp         string
+	UplinkTeid   uint8
+	DownlinkTeid uint8
+}
+
+type SECURITY struct {
 	Supi               string
-	RanUeNgapId        int64
-	AmfUeNgapId        int64
 	mcc                string
 	mnc                string
 	ULCount            security.Count
@@ -28,27 +46,28 @@ type RanUeContext struct {
 	Kamf               []uint8
 	AuthenticationSubs models.AuthenticationSubscription
 	Suci               nasType.MobileIdentity5GS
-	Snssai             models.Snssai
-	UeIp               string
-	ueTeid             uint8
 }
 
-func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipheringAlg, integrityAlg uint8, k, opc, op, amf, mcc, mnc string, sst int32, sd string) {
+func (ue *UEContext) NewRanUeContext(imsi string,
+	ranUeNgapId int64,
+	cipheringAlg, integrityAlg uint8,
+	k, opc, op, amf, mcc, mnc string,
+	sst int32, sd string) {
 
 	// added Ran UE NGAP ID.
 	ue.RanUeNgapId = ranUeNgapId
 
 	// added SUPI.
-	ue.Supi = imsi
+	ue.ueSecurity.Supi = imsi
 
 	// TODO ue.amfUENgap is received by AMF in authentication request.(? changed this).
 	// ue.AmfUeNgapId = ranUeNgapId
 
 	// added ciphering algorithm.
-	ue.CipheringAlg = cipheringAlg
+	ue.ueSecurity.CipheringAlg = cipheringAlg
 
 	// added integrity algorithm.
-	ue.IntegrityAlg = integrityAlg
+	ue.ueSecurity.IntegrityAlg = integrityAlg
 
 	// added key, AuthenticationManagementField and opc or op.
 	ue.SetAuthSubscription(k, opc, op, amf)
@@ -57,8 +76,8 @@ func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipherin
 	suciV1, suciV2, suciV3 := ue.EncodeUeSuci()
 
 	// added mcc and mnc
-	ue.mcc = mcc
-	ue.mnc = mnc
+	ue.ueSecurity.mcc = mcc
+	ue.ueSecurity.mnc = mnc
 
 	// added network slice
 	ue.Snssai.Sd = sd
@@ -68,66 +87,66 @@ func (ue *RanUeContext) NewRanUeContext(imsi string, ranUeNgapId int64, cipherin
 	resu := ue.GetMccAndMncInOctets()
 
 	// added suci to mobileIdentity5GS
-	if len(ue.Supi) == 18 {
-		ue.Suci = nasType.MobileIdentity5GS{
+	if len(ue.ueSecurity.Supi) == 18 {
+		ue.ueSecurity.Suci = nasType.MobileIdentity5GS{
 			Len:    12, // suci
 			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, 0x00, suciV3, suciV2, suciV1},
 		}
 	} else {
-		ue.Suci = nasType.MobileIdentity5GS{
+		ue.ueSecurity.Suci = nasType.MobileIdentity5GS{
 			Len:    13, // suci
 			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV3, suciV2, suciV1},
 		}
 	}
 
 	// added snn.
-	ue.Snn = ue.deriveSNN()
+	ue.ueSecurity.Snn = ue.deriveSNN()
 }
 
-func (ue *RanUeContext) GetUeTeid() uint8 {
-	return ue.ueTeid
+func (ue *UEContext) GetUeTeid() uint8 {
+	return ue.PduSession.UplinkTeid
 }
 
-func (ue *RanUeContext) SetUeTeid(teid uint8) {
-	ue.ueTeid = teid
+func (ue *UEContext) SetUeTeid(teid uint8) {
+	ue.PduSession.UplinkTeid = teid
 }
 
-func (ue *RanUeContext) SetIp(ip [12]uint8) {
-	ue.UeIp = fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
+func (ue *UEContext) SetIp(ip [12]uint8) {
+	ue.PduSession.UeIp = fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
 }
 
-func (ue *RanUeContext) GetIp() string {
-	return ue.UeIp
+func (ue *UEContext) GetIp() string {
+	return ue.PduSession.UeIp
 }
 
-func (ue *RanUeContext) SetAmfNgapId(amfUeId int64) {
+func (ue *UEContext) SetAmfNgapId(amfUeId int64) {
 	// fmt.Println(amfUeId)
 	ue.AmfUeNgapId = amfUeId
 }
 
-func (ue *RanUeContext) deriveSNN() string {
+func (ue *UEContext) deriveSNN() string {
 	// 5G:mnc093.mcc208.3gppnetwork.org
 	var resu string
-	if len(ue.mnc) == 2 {
-		resu = "5G:mnc0" + ue.mnc + ".mcc" + ue.mcc + ".3gppnetwork.org"
+	if len(ue.ueSecurity.mnc) == 2 {
+		resu = "5G:mnc0" + ue.ueSecurity.mnc + ".mcc" + ue.ueSecurity.mcc + ".3gppnetwork.org"
 	} else {
-		resu = "5G:mnc" + ue.mnc + ".mcc" + ue.mcc + ".3gppnetwork.org"
+		resu = "5G:mnc" + ue.ueSecurity.mnc + ".mcc" + ue.ueSecurity.mcc + ".3gppnetwork.org"
 	}
 
 	return resu
 }
 
-func (ue *RanUeContext) GetMccAndMncInOctets() []byte {
+func (ue *UEContext) GetMccAndMncInOctets() []byte {
 
 	// reverse mcc and mnc
-	mcc := reverse(ue.mcc)
-	mnc := reverse(ue.mnc)
+	mcc := reverse(ue.ueSecurity.mcc)
+	mnc := reverse(ue.ueSecurity.mnc)
 
 	// include mcc and mnc in octets
 	oct5 := mcc[1:3]
 	var oct6 string
 	var oct7 string
-	if len(ue.mnc) == 2 {
+	if len(ue.ueSecurity.mnc) == 2 {
 		oct6 = "f" + string(mcc[0])
 		oct7 = mnc
 	} else {
@@ -144,10 +163,10 @@ func (ue *RanUeContext) GetMccAndMncInOctets() []byte {
 	return resu
 }
 
-func (ue *RanUeContext) EncodeUeSuci() (uint8, uint8, uint8) {
+func (ue *UEContext) EncodeUeSuci() (uint8, uint8, uint8) {
 
 	// reverse imsi string.
-	aux := reverse(ue.Supi)
+	aux := reverse(ue.ueSecurity.Supi)
 
 	// calculate decimal value.
 	suci, error := hex.DecodeString(aux[:6])
@@ -160,7 +179,7 @@ func (ue *RanUeContext) EncodeUeSuci() (uint8, uint8, uint8) {
 	return uint8(suci[0]), uint8(suci[1]), uint8(suci[2])
 }
 
-func (ue *RanUeContext) deriveSQN(autn []byte, ak []uint8) []byte {
+func (ue *UEContext) deriveSQN(autn []byte, ak []uint8) []byte {
 	sqn := make([]byte, 6)
 
 	// get SQNxorAK
@@ -175,7 +194,7 @@ func (ue *RanUeContext) deriveSQN(autn []byte, ak []uint8) []byte {
 	return sqn
 }
 
-func (ue *RanUeContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription, RAND []byte, snNmae string, AUTN []byte) []byte {
+func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription, RAND []byte, snNmae string, AUTN []byte) []byte {
 
 	// SQN, _ := hex.DecodeString(authSubs.SequenceNumber)
 
@@ -219,7 +238,7 @@ func (ue *RanUeContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSub
 
 }
 
-func (ue *RanUeContext) DerivateKamf(key []byte, snName string, SQN, AK []byte) {
+func (ue *UEContext) DerivateKamf(key []byte, snName string, SQN, AK []byte) {
 
 	FC := UeauCommon.FC_FOR_KAUSF_DERIVATION
 	P0 := []byte(snName)
@@ -233,62 +252,62 @@ func (ue *RanUeContext) DerivateKamf(key []byte, snName string, SQN, AK []byte) 
 	Kseaf := UeauCommon.GetKDFValue(Kausf, UeauCommon.FC_FOR_KSEAF_DERIVATION, P0, UeauCommon.KDFLen(P0))
 
 	supiRegexp, _ := regexp.Compile("(?:imsi|supi)-([0-9]{5,15})")
-	groups := supiRegexp.FindStringSubmatch(ue.Supi)
+	groups := supiRegexp.FindStringSubmatch(ue.ueSecurity.Supi)
 
 	P0 = []byte(groups[1])
 	L0 := UeauCommon.KDFLen(P0)
 	P1 = []byte{0x00, 0x00}
 	L1 := UeauCommon.KDFLen(P1)
 
-	ue.Kamf = UeauCommon.GetKDFValue(Kseaf, UeauCommon.FC_FOR_KAMF_DERIVATION, P0, L0, P1, L1)
+	ue.ueSecurity.Kamf = UeauCommon.GetKDFValue(Kseaf, UeauCommon.FC_FOR_KAMF_DERIVATION, P0, L0, P1, L1)
 }
 
 // Algorithm key Derivation function defined in TS 33.501 Annex A.9
-func (ue *RanUeContext) DerivateAlgKey() {
+func (ue *UEContext) DerivateAlgKey() {
 	// Security Key
 	P0 := []byte{security.NNASEncAlg}
 	L0 := UeauCommon.KDFLen(P0)
-	P1 := []byte{ue.CipheringAlg}
+	P1 := []byte{ue.ueSecurity.CipheringAlg}
 	L1 := UeauCommon.KDFLen(P1)
 
-	kenc := UeauCommon.GetKDFValue(ue.Kamf, UeauCommon.FC_FOR_ALGORITHM_KEY_DERIVATION, P0, L0, P1, L1)
-	copy(ue.KnasEnc[:], kenc[16:32])
+	kenc := UeauCommon.GetKDFValue(ue.ueSecurity.Kamf, UeauCommon.FC_FOR_ALGORITHM_KEY_DERIVATION, P0, L0, P1, L1)
+	copy(ue.ueSecurity.KnasEnc[:], kenc[16:32])
 
 	// Integrity Key
 	P0 = []byte{security.NNASIntAlg}
 	L0 = UeauCommon.KDFLen(P0)
-	P1 = []byte{ue.IntegrityAlg}
+	P1 = []byte{ue.ueSecurity.IntegrityAlg}
 	L1 = UeauCommon.KDFLen(P1)
 
-	kint := UeauCommon.GetKDFValue(ue.Kamf, UeauCommon.FC_FOR_ALGORITHM_KEY_DERIVATION, P0, L0, P1, L1)
-	copy(ue.KnasInt[:], kint[16:32])
+	kint := UeauCommon.GetKDFValue(ue.ueSecurity.Kamf, UeauCommon.FC_FOR_ALGORITHM_KEY_DERIVATION, P0, L0, P1, L1)
+	copy(ue.ueSecurity.KnasInt[:], kint[16:32])
 }
 
-func (ue *RanUeContext) SetAuthSubscription(k, opc, op, amf string) {
-	ue.AuthenticationSubs.PermanentKey = &models.PermanentKey{
+func (ue *UEContext) SetAuthSubscription(k, opc, op, amf string) {
+	ue.ueSecurity.AuthenticationSubs.PermanentKey = &models.PermanentKey{
 		PermanentKeyValue: k,
 	}
-	ue.AuthenticationSubs.Opc = &models.Opc{
+	ue.ueSecurity.AuthenticationSubs.Opc = &models.Opc{
 		OpcValue: opc,
 	}
-	ue.AuthenticationSubs.Milenage = &models.Milenage{
+	ue.ueSecurity.AuthenticationSubs.Milenage = &models.Milenage{
 		Op: &models.Op{
 			OpValue: op,
 		},
 	}
-	ue.AuthenticationSubs.AuthenticationManagementField = amf
+	ue.ueSecurity.AuthenticationSubs.AuthenticationManagementField = amf
 
-	//ue.AuthenticationSubs.SequenceNumber = TestGenAuthData.MilenageTestSet19.SQN
-	ue.AuthenticationSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
+	//ue.ueSecurity.AuthenticationSubs.SequenceNumber = TestGenAuthData.MilenageTestSet19.SQN
+	ue.ueSecurity.AuthenticationSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
 }
 
-func SetUESecurityCapability(ue *RanUeContext) (UESecurityCapability *nasType.UESecurityCapability) {
+func SetUESecurityCapability(ue *UEContext) (UESecurityCapability *nasType.UESecurityCapability) {
 	UESecurityCapability = &nasType.UESecurityCapability{
 		Iei:    nasMessage.RegistrationRequestUESecurityCapabilityType,
 		Len:    8,
 		Buffer: []uint8{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 	}
-	switch ue.CipheringAlg {
+	switch ue.ueSecurity.CipheringAlg {
 	case security.AlgCiphering128NEA0:
 		UESecurityCapability.SetEA0_5G(1)
 	case security.AlgCiphering128NEA1:
@@ -299,7 +318,7 @@ func SetUESecurityCapability(ue *RanUeContext) (UESecurityCapability *nasType.UE
 		UESecurityCapability.SetEA3_128_5G(1)
 	}
 
-	switch ue.IntegrityAlg {
+	switch ue.ueSecurity.IntegrityAlg {
 	case security.AlgIntegrity128NIA0:
 		UESecurityCapability.SetIA0_5G(1)
 	case security.AlgIntegrity128NIA1:

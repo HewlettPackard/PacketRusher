@@ -17,10 +17,15 @@ import (
 	"time"
 )
 
-func RegistrationUE(connN2 *sctp.SCTPConn, imsi string, ranUeId int64, conf config.Config, gnb *context.RanGnbContext, mcc, mnc string) (*context.RanUeContext, error) {
+func RegistrationUE(connN2 *sctp.SCTPConn,
+	imsi string,
+	ranUeId int64,
+	conf config.Config,
+	gnb *context.GNBContext,
+	mcc, mnc string) (*context.UEContext, error) {
 
 	// instance new ue.
-	ue := &context.RanUeContext{}
+	ue := &context.UEContext{}
 
 	// new UE Context
 	ue.NewRanUeContext(imsi, ranUeId, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2, conf.Ue.Key, conf.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, mcc, mnc, int32(conf.Ue.Snssai.Sd), conf.Ue.Snssai.Sst)
