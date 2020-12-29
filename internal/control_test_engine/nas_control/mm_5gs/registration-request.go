@@ -3,13 +3,13 @@ package mm_5gs
 import (
 	"bytes"
 	"fmt"
-	"my5G-RANTester/internal/control_test_engine/context"
+	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"my5G-RANTester/lib/nas/nasType"
 )
 
-func GetRegistrationRequestWith5GMM(registrationType uint8, mobileIdentity nasType.MobileIdentity5GS, requestedNSSAI *nasType.RequestedNSSAI, uplinkDataStatus *nasType.UplinkDataStatus, ue *context.RanUeContext) (nasPdu []byte) {
+func GetRegistrationRequestWith5GMM(registrationType uint8, requestedNSSAI *nasType.RequestedNSSAI, uplinkDataStatus *nasType.UplinkDataStatus, ue *context.UEContext) (nasPdu []byte) {
 
 	ueSecurityCapability := context.SetUESecurityCapability(ue)
 
@@ -25,7 +25,7 @@ func GetRegistrationRequestWith5GMM(registrationType uint8, mobileIdentity nasTy
 	registrationRequest.NgksiAndRegistrationType5GS.SetTSC(nasMessage.TypeOfSecurityContextFlagNative)
 	registrationRequest.NgksiAndRegistrationType5GS.SetNasKeySetIdentifiler(0x01)
 	registrationRequest.NgksiAndRegistrationType5GS.SetRegistrationType5GS(registrationType)
-	registrationRequest.MobileIdentity5GS = mobileIdentity
+	registrationRequest.MobileIdentity5GS = ue.GetSuci()
 	registrationRequest.Capability5GMM = &nasType.Capability5GMM{
 		Iei:   nasMessage.RegistrationRequestCapability5GMMType,
 		Len:   1,
