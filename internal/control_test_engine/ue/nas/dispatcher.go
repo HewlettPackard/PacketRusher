@@ -45,21 +45,27 @@ func Dispatch(ue *context.UEContext, message []byte) {
 
 	case nas.MsgTypeAuthenticationRequest:
 		// handler authentication request.
+		HandlerAuthenticationRequest(ue, m)
 
 	case nas.MsgTypeIdentityRequest:
 		// handler identity request.
 
 	case nas.MsgTypeSecurityModeCommand:
 		// handler security mode command.
+		HandlerSecurityModeCommand(ue, m)
 
 	case nas.MsgTypeRegistrationAccept:
 		// handler registration accept.
+		HandlerRegistrationAccept(ue, m)
 
 	case nas.MsgTypeConfigurationUpdateCommand:
 		// handler Configuration Update Command.
 
 	case nas.MsgTypeDLNASTransport:
-		// handler Configuration Update Command.
+		// handler DL NAS Transport.
+		HandlerDlNasTransportPduaccept(ue, m)
+
+		// UE is ready for testting data-plane.
 	}
 
 }

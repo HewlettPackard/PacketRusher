@@ -2,7 +2,7 @@ package sm_5gs
 
 import (
 	"fmt"
-	"my5G-RANTester/internal/control_test_engine/nas_control"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/ngap/ngapType"
 )

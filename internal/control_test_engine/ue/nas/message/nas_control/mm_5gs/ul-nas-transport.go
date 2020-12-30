@@ -4,24 +4,24 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"my5G-RANTester/internal/control_test_engine/context"
-	"my5G-RANTester/internal/control_test_engine/nas_control"
-	"my5G-RANTester/internal/control_test_engine/nas_control/sm_5gs"
+	"my5G-RANTester/internal/control_test_engine/ue/context"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/sm_5gs"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"my5G-RANTester/lib/nas/nasType"
 	"my5G-RANTester/lib/openapi/models"
 )
 
-func UlNasTransport(ue *context.RanUeContext, pduSessionId uint8, requestType uint8, dnnString string, sNssai *models.Snssai) ([]byte, error) {
+func UlNasTransport(ue *context.UEContext, requestType uint8) ([]byte, error) {
 
-	pdu := getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId, requestType, dnnString, sNssai)
+	pdu := getUlNasTransport_PduSessionEstablishmentRequest(ue.PduSession.Id, requestType, ue.PduSession.Dnn, &ue.PduSession.Snssai)
 	if pdu == nil {
-		return nil, fmt.Errorf("Error encoding %s ue PduSession Establishment Request Msg", ue.Supi)
+		return nil, fmt.Errorf("Error encoding %s IMSI UE PduSession Establishment Request Msg", ue.UeSecurity.Supi)
 	}
 	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)
 	if err != nil {
-		return nil, fmt.Errorf("Error encoding %s ue PduSession Establishment Request Msg", ue.Supi)
+		return nil, fmt.Errorf("Error encoding %s IMSI UE PduSession Establishment Request Msg", ue.UeSecurity.Supi)
 	}
 
 	return pdu, nil

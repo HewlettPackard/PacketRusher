@@ -1,19 +1,16 @@
 package ue
 
 import (
-	"log"
 	"my5G-RANTester/config"
-	"my5G-RANTester/internal/control_test_engine/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
-	"my5G-RANTester/internal/control_test_engine/ue/unix_sockets"
-	"my5G-RANTester/lib/nas/nasMessage"
+	"my5G-RANTester/internal/control_test_engine/ue/nas"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/service"
 	"my5G-RANTester/lib/nas/security"
-	"net"
 )
 
 // init RegistrationUE(conn, imsi, int64(i), cfg, contextGnb, mcc, mnc)
 // generate an ue data  and execute initial message registration.
-func registrationUe(imsi string, conf config.Config) {
+func RegistrationUe(imsi string, conf config.Config, id uint8) {
 
 	// new UE instance.
 	ue := &context.UEContext{}
@@ -30,27 +27,18 @@ func registrationUe(imsi string, conf config.Config) {
 		conf.Ue.Hplmn.Mcc,
 		conf.Ue.Hplmn.Mnc,
 		int32(conf.Ue.Snssai.Sd),
-		conf.Ue.Snssai.Sst)
+		conf.Ue.Snssai.Sst,
+		id)
 
-	// initiated communication with GNB(unix sockets).
-	conn, err := net.Dial("unix", "/tmp/gnb.sock")
-	if err != nil {
-		log.Fatal("Dial error", err)
-	}
+	// starting communication with GNB.
+	service.InitConn(ue)
 
-	// stored unix socket connection in the UE.
-	ue.SetUnixConn(conn)
+	// TODO when unix sockets is closed.
+	// defer conn.Close()
 
 	// registration procedure started.
-	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(
-		nasMessage.RegistrationType5GSInitialRegistration,
-		nil,
-		nil,
-		ue)
-
-	// send to GNB.
-	unix_sockets.SendToGnb(ue, registrationRequest)
+	nas.InitRegistration(ue)
 
 	// listen GNB.
-	unix_sockets.UeListen(ue)
+	service.UeListen(ue)
 }

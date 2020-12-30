@@ -6,11 +6,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/context"
-	"my5G-RANTester/internal/control_test_engine/nas_control/mm_5gs"
-	"my5G-RANTester/internal/control_test_engine/nas_control/sm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ngap_control/nas_transport"
 	"my5G-RANTester/internal/control_test_engine/ngap_control/pdu_session_management"
 	"my5G-RANTester/internal/control_test_engine/ngap_control/ue_context_management"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/sm_5gs"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"my5G-RANTester/lib/nas/security"
 	"strings"
@@ -117,7 +117,7 @@ func RegistrationUE(connN2 *sctp.SCTPConn,
 		"message":     "SECURITY MODE COMMAND",
 	}).Info("Sending message")
 
-	// send NAS Security Mode Complete from UplinkNasTransport
+	// send NAS Security Mode Complete to UplinkNasTransport
 	pdu, err = mm_5gs.SecurityModeComplete(ue)
 	if err != nil {
 		log.Fatal("Error sending Security Mode Complete: ", err)

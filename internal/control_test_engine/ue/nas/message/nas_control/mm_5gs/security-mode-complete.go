@@ -3,8 +3,8 @@ package mm_5gs
 import (
 	"bytes"
 	"fmt"
-	"my5G-RANTester/internal/control_test_engine/context"
-	"my5G-RANTester/internal/control_test_engine/nas_control"
+	"my5G-RANTester/internal/control_test_engine/ue/context"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"my5G-RANTester/lib/nas/nasType"
@@ -50,15 +50,15 @@ func getSecurityModeComplete(nasMessageContainer []uint8) (nasPdu []byte) {
 	return
 }
 
-func SecurityModeComplete(ue *context.RanUeContext) ([]byte, error) {
+func SecurityModeComplete(ue *context.UEContext) ([]byte, error) {
 
 	// ueSecurityCapability := context.SetUESecurityCapability(ue)
-	registrationRequest := GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, ue.Suci, nil, nil, ue)
+	registrationRequest := GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, nil, nil, ue)
 
 	pdu := getSecurityModeComplete(registrationRequest)
 	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCipheredWithNew5gNasSecurityContext, true, true)
 	if err != nil {
-		return nil, fmt.Errorf("Error encoding ueID %d NAS Security Mode Complete Message", ue.RanUeNgapId)
+		return nil, fmt.Errorf("Error encoding %s IMSI UE  NAS Security Mode Complete message", ue.UeSecurity.Supi)
 	}
 	return pdu, nil
 }

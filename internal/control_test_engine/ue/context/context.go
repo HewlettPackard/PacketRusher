@@ -13,19 +13,18 @@ import (
 	"regexp"
 )
 
-// 5GMM main states in the UE
-const MM5G_DEREGISTERED = 0x00
-const MM5G_REGISTERED_INITIATED = 0x01
-const MM5G_REGISTERED = 0x02
-const MM5G_SERVICE_REQ_INIT = 0x03
-const MM5G_DEREGISTERED_INIT = 0x04
-
 type UEContext struct {
-	ueSecurity SECURITY
-	Snssai     models.Snssai
+	UeSecurity SECURITY
 	State      int
 	UnixConn   net.Conn
-	ueIP       string
+	PduSession PDUSession
+}
+
+type PDUSession struct {
+	Id     uint8
+	ueIP   string
+	Dnn    string
+	Snssai models.Snssai
 }
 
 type SECURITY struct {
@@ -47,19 +46,16 @@ type SECURITY struct {
 func (ue *UEContext) NewRanUeContext(imsi string,
 	cipheringAlg, integrityAlg uint8,
 	k, opc, op, amf, mcc, mnc string,
-	sst int32, sd string) {
+	sst int32, sd string, id uint8) {
 
 	// added SUPI.
-	ue.ueSecurity.Supi = imsi
-
-	// TODO ue.amfUENgap is received by AMF in authentication request.(? changed this).
-	// ue.AmfUeNgapId = ranUeNgapId
+	ue.UeSecurity.Supi = imsi
 
 	// added ciphering algorithm.
-	ue.ueSecurity.CipheringAlg = cipheringAlg
+	ue.UeSecurity.CipheringAlg = cipheringAlg
 
 	// added integrity algorithm.
-	ue.ueSecurity.IntegrityAlg = integrityAlg
+	ue.UeSecurity.IntegrityAlg = integrityAlg
 
 	// added key, AuthenticationManagementField and opc or op.
 	ue.SetAuthSubscription(k, opc, op, amf)
@@ -68,38 +64,44 @@ func (ue *UEContext) NewRanUeContext(imsi string,
 	suciV1, suciV2, suciV3 := ue.EncodeUeSuci()
 
 	// added mcc and mnc
-	ue.ueSecurity.mcc = mcc
-	ue.ueSecurity.mnc = mnc
+	ue.UeSecurity.mcc = mcc
+	ue.UeSecurity.mnc = mnc
+
+	// added PDU Session id
+	ue.PduSession.Id = id
 
 	// added network slice
-	ue.Snssai.Sd = sd
-	ue.Snssai.Sst = sst
+	ue.PduSession.Snssai.Sd = sd
+	ue.PduSession.Snssai.Sst = sst
+
+	// added Domain Network Name.
+	ue.PduSession.Dnn = "internet"
 
 	// encode mcc and mnc for mobileIdentity5Gs.
 	resu := ue.GetMccAndMncInOctets()
 
 	// added suci to mobileIdentity5GS
-	if len(ue.ueSecurity.Supi) == 18 {
-		ue.ueSecurity.Suci = nasType.MobileIdentity5GS{
+	if len(ue.UeSecurity.Supi) == 18 {
+		ue.UeSecurity.Suci = nasType.MobileIdentity5GS{
 			Len:    12, // suci
 			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, 0x00, suciV3, suciV2, suciV1},
 		}
 	} else {
-		ue.ueSecurity.Suci = nasType.MobileIdentity5GS{
+		ue.UeSecurity.Suci = nasType.MobileIdentity5GS{
 			Len:    13, // suci
 			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV3, suciV2, suciV1},
 		}
 	}
 
 	// added snn.
-	ue.ueSecurity.Snn = ue.deriveSNN()
+	ue.UeSecurity.Snn = ue.deriveSNN()
 
-	// added initial state(DEREGISTERED)
+	// added initial state(NULL)
 	ue.SetState(0x00)
 }
 
 func (ue *UEContext) GetSuci() nasType.MobileIdentity5GS {
-	return ue.ueSecurity.Suci
+	return ue.UeSecurity.Suci
 }
 
 func (ue *UEContext) SetState(state int) {
@@ -119,20 +121,20 @@ func (ue *UEContext) GetUnixConn() net.Conn {
 }
 
 func (ue *UEContext) SetIp(ip [12]uint8) {
-	ue.ueIP = fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
+	ue.PduSession.ueIP = fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
 }
 
 func (ue *UEContext) GetIp() string {
-	return ue.ueIP
+	return ue.PduSession.ueIP
 }
 
 func (ue *UEContext) deriveSNN() string {
 	// 5G:mnc093.mcc208.3gppnetwork.org
 	var resu string
-	if len(ue.ueSecurity.mnc) == 2 {
-		resu = "5G:mnc0" + ue.ueSecurity.mnc + ".mcc" + ue.ueSecurity.mcc + ".3gppnetwork.org"
+	if len(ue.UeSecurity.mnc) == 2 {
+		resu = "5G:mnc0" + ue.UeSecurity.mnc + ".mcc" + ue.UeSecurity.mcc + ".3gppnetwork.org"
 	} else {
-		resu = "5G:mnc" + ue.ueSecurity.mnc + ".mcc" + ue.ueSecurity.mcc + ".3gppnetwork.org"
+		resu = "5G:mnc" + ue.UeSecurity.mnc + ".mcc" + ue.UeSecurity.mcc + ".3gppnetwork.org"
 	}
 
 	return resu
@@ -141,14 +143,14 @@ func (ue *UEContext) deriveSNN() string {
 func (ue *UEContext) GetMccAndMncInOctets() []byte {
 
 	// reverse mcc and mnc
-	mcc := reverse(ue.ueSecurity.mcc)
-	mnc := reverse(ue.ueSecurity.mnc)
+	mcc := reverse(ue.UeSecurity.mcc)
+	mnc := reverse(ue.UeSecurity.mnc)
 
 	// include mcc and mnc in octets
 	oct5 := mcc[1:3]
 	var oct6 string
 	var oct7 string
-	if len(ue.ueSecurity.mnc) == 2 {
+	if len(ue.UeSecurity.mnc) == 2 {
 		oct6 = "f" + string(mcc[0])
 		oct7 = mnc
 	} else {
@@ -168,7 +170,7 @@ func (ue *UEContext) GetMccAndMncInOctets() []byte {
 func (ue *UEContext) EncodeUeSuci() (uint8, uint8, uint8) {
 
 	// reverse imsi string.
-	aux := reverse(ue.ueSecurity.Supi)
+	aux := reverse(ue.UeSecurity.Supi)
 
 	// calculate decimal value.
 	suci, error := hex.DecodeString(aux[:6])
@@ -254,14 +256,14 @@ func (ue *UEContext) DerivateKamf(key []byte, snName string, SQN, AK []byte) {
 	Kseaf := UeauCommon.GetKDFValue(Kausf, UeauCommon.FC_FOR_KSEAF_DERIVATION, P0, UeauCommon.KDFLen(P0))
 
 	supiRegexp, _ := regexp.Compile("(?:imsi|supi)-([0-9]{5,15})")
-	groups := supiRegexp.FindStringSubmatch(ue.ueSecurity.Supi)
+	groups := supiRegexp.FindStringSubmatch(ue.UeSecurity.Supi)
 
 	P0 = []byte(groups[1])
 	L0 := UeauCommon.KDFLen(P0)
 	P1 = []byte{0x00, 0x00}
 	L1 := UeauCommon.KDFLen(P1)
 
-	ue.ueSecurity.Kamf = UeauCommon.GetKDFValue(Kseaf, UeauCommon.FC_FOR_KAMF_DERIVATION, P0, L0, P1, L1)
+	ue.UeSecurity.Kamf = UeauCommon.GetKDFValue(Kseaf, UeauCommon.FC_FOR_KAMF_DERIVATION, P0, L0, P1, L1)
 }
 
 // Algorithm key Derivation function defined in TS 33.501 Annex A.9
@@ -269,38 +271,38 @@ func (ue *UEContext) DerivateAlgKey() {
 	// Security Key
 	P0 := []byte{security.NNASEncAlg}
 	L0 := UeauCommon.KDFLen(P0)
-	P1 := []byte{ue.ueSecurity.CipheringAlg}
+	P1 := []byte{ue.UeSecurity.CipheringAlg}
 	L1 := UeauCommon.KDFLen(P1)
 
-	kenc := UeauCommon.GetKDFValue(ue.ueSecurity.Kamf, UeauCommon.FC_FOR_ALGORITHM_KEY_DERIVATION, P0, L0, P1, L1)
-	copy(ue.ueSecurity.KnasEnc[:], kenc[16:32])
+	kenc := UeauCommon.GetKDFValue(ue.UeSecurity.Kamf, UeauCommon.FC_FOR_ALGORITHM_KEY_DERIVATION, P0, L0, P1, L1)
+	copy(ue.UeSecurity.KnasEnc[:], kenc[16:32])
 
 	// Integrity Key
 	P0 = []byte{security.NNASIntAlg}
 	L0 = UeauCommon.KDFLen(P0)
-	P1 = []byte{ue.ueSecurity.IntegrityAlg}
+	P1 = []byte{ue.UeSecurity.IntegrityAlg}
 	L1 = UeauCommon.KDFLen(P1)
 
-	kint := UeauCommon.GetKDFValue(ue.ueSecurity.Kamf, UeauCommon.FC_FOR_ALGORITHM_KEY_DERIVATION, P0, L0, P1, L1)
-	copy(ue.ueSecurity.KnasInt[:], kint[16:32])
+	kint := UeauCommon.GetKDFValue(ue.UeSecurity.Kamf, UeauCommon.FC_FOR_ALGORITHM_KEY_DERIVATION, P0, L0, P1, L1)
+	copy(ue.UeSecurity.KnasInt[:], kint[16:32])
 }
 
 func (ue *UEContext) SetAuthSubscription(k, opc, op, amf string) {
-	ue.ueSecurity.AuthenticationSubs.PermanentKey = &models.PermanentKey{
+	ue.UeSecurity.AuthenticationSubs.PermanentKey = &models.PermanentKey{
 		PermanentKeyValue: k,
 	}
-	ue.ueSecurity.AuthenticationSubs.Opc = &models.Opc{
+	ue.UeSecurity.AuthenticationSubs.Opc = &models.Opc{
 		OpcValue: opc,
 	}
-	ue.ueSecurity.AuthenticationSubs.Milenage = &models.Milenage{
+	ue.UeSecurity.AuthenticationSubs.Milenage = &models.Milenage{
 		Op: &models.Op{
 			OpValue: op,
 		},
 	}
-	ue.ueSecurity.AuthenticationSubs.AuthenticationManagementField = amf
+	ue.UeSecurity.AuthenticationSubs.AuthenticationManagementField = amf
 
-	//ue.ueSecurity.AuthenticationSubs.SequenceNumber = TestGenAuthData.MilenageTestSet19.SQN
-	ue.ueSecurity.AuthenticationSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
+	//ue.UeSecurity.AuthenticationSubs.SequenceNumber = TestGenAuthData.MilenageTestSet19.SQN
+	ue.UeSecurity.AuthenticationSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
 }
 
 func SetUESecurityCapability(ue *UEContext) (UESecurityCapability *nasType.UESecurityCapability) {
@@ -309,7 +311,7 @@ func SetUESecurityCapability(ue *UEContext) (UESecurityCapability *nasType.UESec
 		Len:    8,
 		Buffer: []uint8{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 	}
-	switch ue.ueSecurity.CipheringAlg {
+	switch ue.UeSecurity.CipheringAlg {
 	case security.AlgCiphering128NEA0:
 		UESecurityCapability.SetEA0_5G(1)
 	case security.AlgCiphering128NEA1:
@@ -320,7 +322,7 @@ func SetUESecurityCapability(ue *UEContext) (UESecurityCapability *nasType.UESec
 		UESecurityCapability.SetEA3_128_5G(1)
 	}
 
-	switch ue.ueSecurity.IntegrityAlg {
+	switch ue.UeSecurity.IntegrityAlg {
 	case security.AlgIntegrity128NIA0:
 		UESecurityCapability.SetIA0_5G(1)
 	case security.AlgIntegrity128NIA1:
