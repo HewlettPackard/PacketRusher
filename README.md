@@ -52,7 +52,7 @@ The installation can be done directly in the host OS or inside a virtual machine
 
 Install GCC:
 ```
-sudo apt update && apt -y install build-essential
+sudo apt update && sudo apt -y install build-essential
 ```
 
 Install GSL:
@@ -118,12 +118,6 @@ Done! The software is successfully installed.
 
 ----
 # Check
-
-Make sure that the path to GSL dynamic library is part of environment variable LD_LIBRARY_PATH:
-```
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/gsl/
-export LD_LIBRARY_PATH
-```
 
 Make also sure that you are in directory **my5G-RANTester/cmd**, then run the most basic test:
 ```
