@@ -74,7 +74,7 @@ source ~/.bashrc
 
 Download the source code:
 ```
-git clone https://github.com/LABORA-INF-UFG/my5G-RANTester.git
+git clone https://github.com/my5G/my5G-RANTester.git
 ```
 
 Install the dependencies:
