@@ -1,10 +1,10 @@
 # my5G-RANTester
 
 
-![GitHub](https://img.shields.io/github/license/LABORA-INF-UFG/my5G-RANTester?color=blue) 
-![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/LABORA-INF-UFG/my5G-RANTester) ![GitHub commit activity](https://img.shields.io/github/commit-activity/y/LABORA-INF-UFG/my5G-RANTester) 
-![GitHub last commit](https://img.shields.io/github/last-commit/LABORA-INF-UFG/my5G-RANTester)
-![GitHub contributors](https://img.shields.io/github/contributors/LABORA-INF-UFG/my5G-RANTester)
+![GitHub](https://img.shields.io/github/license/my5G/my5G-RANTester?color=blue) 
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/my5G/my5G-RANTester) ![GitHub commit activity](https://img.shields.io/github/commit-activity/y/my5G/my5G-RANTester) 
+![GitHub last commit](https://img.shields.io/github/last-commit/my5G/my5G-RANTester)
+![GitHub contributors](https://img.shields.io/github/contributors/my5G/my5G-RANTester)
 
 <img width="20%" src="docs/media/img/my5g-logo.png" alt="my5g-core"/>
 
@@ -46,7 +46,6 @@ my5G-RANTester borrows libraries and data structures from the [free5gc project](
 * Operating System (OS): Linux Ubuntu 18.04 or 20.04 LTS.
 
 The installation can be done directly in the host OS or inside a virtual machine (VM).
-
 
 ## Requirements
 
