@@ -12,7 +12,7 @@ import (
 	"my5G-RANTester/lib/ngap/ngapType"
 )
 
-func GetAuthenticationResponse(authenticationResponseParam []uint8, eapMsg string) (nasPdu []byte) {
+func AuthenticationResponse(authenticationResponseParam []uint8, eapMsg string) (nasPdu []byte) {
 
 	m := nas.NewMessage()
 	m.GmmMessage = nas.NewGmmMessage()
@@ -47,7 +47,7 @@ func GetAuthenticationResponse(authenticationResponseParam []uint8, eapMsg strin
 	return
 }
 
-func AuthenticationResponse(ue *context.UEContext, ngapMsg *ngapType.NGAPPDU) ([]byte, error) {
+func authenticationResponse(ue *context.UEContext, ngapMsg *ngapType.NGAPPDU) ([]byte, error) {
 
 	// Calculate for RES*
 	nasPdu := nas_control.GetNasPduFromDownlink(ngapMsg.InitiatingMessage.Value.DownlinkNASTransport)

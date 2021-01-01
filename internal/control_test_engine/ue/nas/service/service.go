@@ -22,8 +22,6 @@ func InitConn(ue *context.UEContext) {
 	// store unix socket connection in the UE.
 	ue.SetUnixConn(conn)
 
-	// change the state of ue for deregistered
-	ue.SetState(0x01)
 }
 
 // ue listen unix sockets.

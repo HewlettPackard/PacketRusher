@@ -32,7 +32,7 @@ func HandlerAuthenticationRequest(ue *context.UEContext, message *nas.Message) {
 
 	// getting NAS Authentication Response.
 	// TODO change name of this function and clean.
-	authenticationResponse := mm_5gs.GetAuthenticationResponse(resStar, "")
+	authenticationResponse := mm_5gs.AuthenticationResponse(resStar, "")
 
 	// change state of ue for registered-initiated
 	ue.SetState(MM5G_REGISTERED_INITIATED)
@@ -92,8 +92,5 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message)
 		// get UE ip
 		UeIp := sm_5gs.GetPduAdress(payloadContainer)
 		ue.SetIp(UeIp)
-
-		// change the state of ue for registered
-		ue.SetState(MM5G_REGISTERED)
 	}
 }
