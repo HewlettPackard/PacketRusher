@@ -1,13 +1,13 @@
-package nas
+package handler
 
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
-	NasForwarded "my5G-RANTester/internal/control_test_engine/ue/nas/message"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/sm_5gs"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"time"
@@ -38,7 +38,7 @@ func HandlerAuthenticationRequest(ue *context.UEContext, message *nas.Message) {
 	ue.SetState(MM5G_REGISTERED_INITIATED)
 
 	// sending to GNB
-	NasForwarded.SendToGnb(ue, authenticationResponse)
+	sender.SendToGnb(ue, authenticationResponse)
 }
 
 func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) {
@@ -50,10 +50,13 @@ func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) {
 	}
 
 	// sending to GNB
-	NasForwarded.SendToGnb(ue, securityModeComplete)
+	sender.SendToGnb(ue, securityModeComplete)
 }
 
 func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
+
+	// change the state of ue for registered
+	ue.SetState(MM5G_REGISTERED)
 
 	// getting NAS registration complete.
 	registrationComplete, err := mm_5gs.RegistrationComplete(ue)
@@ -62,9 +65,9 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 	}
 
 	// sending to GNB
-	NasForwarded.SendToGnb(ue, registrationComplete)
+	sender.SendToGnb(ue, registrationComplete)
 
-	// waiting receive or not Configuration Update Command.
+	// waiting receive Configuration Update Command.
 	time.Sleep(20 * time.Millisecond)
 
 	// getting ul nas transport and pduSession establishment request.
@@ -74,7 +77,7 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 	}
 
 	// sending to GNB
-	NasForwarded.SendToGnb(ue, ulNasTransport)
+	sender.SendToGnb(ue, ulNasTransport)
 }
 
 func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message) {

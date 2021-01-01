@@ -3,6 +3,7 @@ package nas
 import (
 	"fmt"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/handler"
 	"my5G-RANTester/lib/nas"
 )
 
@@ -45,27 +46,27 @@ func Dispatch(ue *context.UEContext, message []byte) {
 
 	case nas.MsgTypeAuthenticationRequest:
 		// handler authentication request.
-		HandlerAuthenticationRequest(ue, m)
+		handler.HandlerAuthenticationRequest(ue, m)
 
 	case nas.MsgTypeIdentityRequest:
 		// handler identity request.
 
 	case nas.MsgTypeSecurityModeCommand:
 		// handler security mode command.
-		HandlerSecurityModeCommand(ue, m)
+		handler.HandlerSecurityModeCommand(ue, m)
 
 	case nas.MsgTypeRegistrationAccept:
 		// handler registration accept.
-		HandlerRegistrationAccept(ue, m)
+		handler.HandlerRegistrationAccept(ue, m)
 
 	case nas.MsgTypeConfigurationUpdateCommand:
 		// handler Configuration Update Command.
 
 	case nas.MsgTypeDLNASTransport:
 		// handler DL NAS Transport.
-		HandlerDlNasTransportPduaccept(ue, m)
+		handler.HandlerDlNasTransportPduaccept(ue, m)
 
-		// UE is ready for testting data-plane.
+		// UE is ready for testing data-plane.
 	}
 
 }

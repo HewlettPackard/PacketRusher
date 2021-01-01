@@ -3,8 +3,8 @@ package ue
 import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
-	"my5G-RANTester/internal/control_test_engine/ue/nas"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/service"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
 	"my5G-RANTester/lib/nas/security"
 )
 
@@ -33,12 +33,12 @@ func RegistrationUe(imsi string, conf config.Config, id uint8) {
 	// starting communication with GNB.
 	service.InitConn(ue)
 
-	// TODO when unix sockets is closed.
-	// defer conn.Close()
+	// closing communication with GNB.
+	defer service.CloseConn(ue)
 
 	// registration procedure started.
-	nas.InitRegistration(ue)
+	trigger.InitRegistration(ue)
 
-	// listen GNB.
+	// listen NAS.
 	service.UeListen(ue)
 }

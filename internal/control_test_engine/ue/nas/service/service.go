@@ -6,7 +6,7 @@ import (
 	"net"
 )
 
-func closeConn(ue *context.UEContext) {
+func CloseConn(ue *context.UEContext) {
 	conn := ue.GetUnixConn()
 	conn.Close()
 }
