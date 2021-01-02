@@ -104,6 +104,10 @@ func (ue *UEContext) GetSuci() nasType.MobileIdentity5GS {
 	return ue.UeSecurity.Suci
 }
 
+func (ue *UEContext) GetSupi() string {
+	return ue.UeSecurity.Supi
+}
+
 func (ue *UEContext) SetState(state int) {
 	ue.State = state
 }

@@ -62,6 +62,6 @@ func authenticationResponse(ue *context.UEContext, ngapMsg *ngapType.NGAPPDU) ([
 	resStat := ue.DeriveRESstarAndSetKey(ue.UeSecurity.AuthenticationSubs, rand[:], ue.UeSecurity.Snn, autn[:])
 
 	// send NAS Authentication Response.
-	pdu := GetAuthenticationResponse(resStat, "")
+	pdu := AuthenticationResponse(resStat, "")
 	return pdu, nil
 }

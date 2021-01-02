@@ -1,16 +1,21 @@
 package ue
 
 import (
+	"fmt"
+	"log"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/service"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
 	"my5G-RANTester/lib/nas/security"
+	"sync"
 )
 
 // init RegistrationUE(conn, imsi, int64(i), cfg, contextGnb, mcc, mnc)
 // generate an ue data  and execute initial message registration.
 func RegistrationUe(imsi string, conf config.Config, id uint8) {
+
+	wg := sync.WaitGroup{}
 
 	// new UE instance.
 	ue := &context.UEContext{}
@@ -30,15 +35,23 @@ func RegistrationUe(imsi string, conf config.Config, id uint8) {
 		conf.Ue.Snssai.Sst,
 		id)
 
-	// starting communication with GNB.
-	service.InitConn(ue)
+	// starting communication with GNB and listen.
+	err := service.InitConn(ue)
+	if err != nil {
+		log.Fatal("Error in", err)
+	} else {
+		fmt.Println("Unix sockets service is running")
+		wg.Add(1)
+	}
 
 	// closing communication with GNB.
-	defer service.CloseConn(ue)
+	//defer service.CloseConn(ue)
 
 	// registration procedure started.
-	trigger.InitRegistration(ue)
+	go trigger.InitRegistration(ue)
 
-	// listen NAS.
-	service.UeListen(ue)
+	wg.Add(1)
+
+	wg.Wait()
+
 }

@@ -27,6 +27,7 @@ type GNBContext struct {
 	sliceInfo      Slice
 	idUeGenerator  int64
 	idAmfGenerator int64
+	unixlistener   net.Listener
 }
 
 type DataPlane struct {
@@ -83,6 +84,15 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 
 	// return UE Context
 	return ue
+
+}
+
+func (gnb *GNBContext) SetListener(conn net.Listener) {
+	gnb.unixlistener = conn
+}
+
+func (gnb *GNBContext) GetListener() net.Listener {
+	return gnb.unixlistener
 }
 
 func (gnb *GNBContext) DeleteGnBUe(ranUeId int64) {
