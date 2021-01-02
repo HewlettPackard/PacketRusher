@@ -2,9 +2,7 @@ package nas_transport
 
 import (
 	"fmt"
-	"github.com/ishidawataru/sctp"
-	log "github.com/sirupsen/logrus"
-	"my5G-RANTester/internal/control_test_engine/context"
+	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapType"
@@ -93,6 +91,17 @@ func buildUplinkNasTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte, plmn
 	return
 }
 
+func SendUplinkNasTransport(message []byte, ue *context.GNBUe, gnb *context.GNBContext) ([]byte, error) {
+
+	sendMsg, err := getUplinkNASTransport(ue.GetAmfUeId(), ue.GetRanUeId(), message, gnb.GetMccAndMncInOctets(), gnb.GetTacInBytes())
+	if err != nil {
+		return nil, fmt.Errorf("Error getting UE Id %d NAS Authentication Response", ue.GetRanUeId())
+	}
+
+	return sendMsg, nil
+}
+
+/*
 func UplinkNasTransport(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUeNgapID int64, nasPdu []byte, gnb *context.RanGnbContext) error {
 
 	sendMsg, err := getUplinkNASTransport(amfUeNgapID, ranUeNgapID, nasPdu, gnb.GetMccAndMncInOctets(), gnb.GetTacInBytes())
@@ -114,3 +123,4 @@ func UplinkNasTransport(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUeNgapID in
 
 	return nil
 }
+*/

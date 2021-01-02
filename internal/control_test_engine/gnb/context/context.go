@@ -5,19 +5,20 @@ import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
 	gtpv1 "github.com/wmnsk/go-gtp/v1"
+	"log"
 	"net"
 	"sync"
 )
 
 // UE main states in the GNB Context.
-const initialized = 0x00
-const ongoing = 0x01
-const ready = 0x02
+const Initialized = 0x00
+const Ongoing = 0x01
+const Ready = 0x02
 
 // AMF main states in the GNB Context.
-const inactive = 0x00
-const active = 0x01
-const overload = 0x02
+const Inactive = 0x00
+const Active = 0x01
+const Overload = 0x02
 
 type GNBContext struct {
 	dataInfo       DataPlane
@@ -77,10 +78,20 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	ue.SetUnixSocket(conn)
 
 	// set state to UE.
-	ue.SetState(initialized)
+	ue.SetState(Initialized)
 
 	// store UE in the UE Pool of GNB.
 	gnb.uePool.Store(ranId, ue)
+
+	// select AMF with Capacity is more than 0.
+	amf := gnb.selectAmFByCapacity()
+	if amf != nil {
+		log.Fatal("No AMF available for this UE")
+	}
+
+	// set amfId and sctp association for UE.
+	ue.SetAmfId(amf.getAmfId())
+	ue.SetSCTP(amf.getSCTPConn())
 
 	// return UE Context
 	return ue
@@ -107,7 +118,7 @@ func (gnb *GNBContext) getGnbUe(ranUeId int64) (*GNBUe, error) {
 	return ue.(*GNBUe), nil
 }
 
-func (gnb *GNBContext) NewGnBAmf(conn sctp.SCTPConn) *GNBAmf {
+func (gnb *GNBContext) NewGnBAmf(conn *sctp.SCTPConn) *GNBAmf {
 
 	// TODO if necessary add more information for AMF.
 	// TODO implement mutex
@@ -122,7 +133,7 @@ func (gnb *GNBContext) NewGnBAmf(conn sctp.SCTPConn) *GNBAmf {
 	amf.setSCTPConn(conn)
 
 	// set state to AMF.
-	amf.setState(active)
+	amf.setState(Active)
 
 	// store AMF in the AMF Pool of GNB.
 	gnb.amfPool.Store(amfId, amf)
@@ -133,6 +144,23 @@ func (gnb *GNBContext) NewGnBAmf(conn sctp.SCTPConn) *GNBAmf {
 
 func (gnb *GNBContext) deleteGnBAmf(amfId int64) {
 	gnb.amfPool.Delete(amfId)
+}
+
+func (gnb *GNBContext) selectAmFByCapacity() *GNBAmf {
+	var amfSelect *GNBAmf
+	gnb.amfPool.Range(func(key, value interface{}) bool {
+		amf := value.(*GNBAmf)
+		if amf.relativeAmfCapacity > 0 {
+			amfSelect = amf
+			// select AMF and decrement capacity.
+			amfSelect.relativeAmfCapacity--
+			return false
+		} else {
+			return true
+		}
+	})
+
+	return amfSelect
 }
 
 func (gnb *GNBContext) getGnbAmf(amfId int64) (*GNBAmf, error) {

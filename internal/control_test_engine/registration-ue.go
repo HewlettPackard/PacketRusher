@@ -1,22 +1,6 @@
 package control_test_engine
 
-import (
-	"fmt"
-	"github.com/ishidawataru/sctp"
-	log "github.com/sirupsen/logrus"
-	"my5G-RANTester/config"
-	"my5G-RANTester/internal/control_test_engine/context"
-	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/nas_transport"
-	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/pdu_session_management"
-	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_context_management"
-	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
-	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/sm_5gs"
-	"my5G-RANTester/lib/nas/nasMessage"
-	"my5G-RANTester/lib/nas/security"
-	"strings"
-	"time"
-)
-
+/*
 func RegistrationUE(connN2 *sctp.SCTPConn,
 	imsi string,
 	ranUeId int64,
@@ -284,3 +268,4 @@ func RegistrationUE(connN2 *sctp.SCTPConn,
 	// function worked fine.
 	return ue, nil
 }
+*/

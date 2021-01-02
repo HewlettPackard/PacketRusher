@@ -15,7 +15,7 @@ type GNBAmf struct {
 }
 
 type TNLAssociation struct {
-	sctpConn         sctp.SCTPConn
+	sctpConn         *sctp.SCTPConn
 	tnlaWeightFactor int64
 	usage            bool
 	streams          int64
@@ -33,7 +33,11 @@ func (amf *GNBAmf) getState() int {
 	return amf.state
 }
 
-func (amf *GNBAmf) setSCTPConn(conn sctp.SCTPConn) {
+func (amf *GNBAmf) getSCTPConn() *sctp.SCTPConn {
+	return amf.tnla.sctpConn
+}
+
+func (amf *GNBAmf) setSCTPConn(conn *sctp.SCTPConn) {
 	amf.tnla.sctpConn = conn
 }
 

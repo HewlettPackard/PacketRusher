@@ -97,12 +97,12 @@ func (ue *GNBUe) GetIp() string {
 
 }
 
-func (ue *GNBUe) getAmfNgapId() int64 {
+func (ue *GNBUe) GetAmfUeId() int64 {
 	// fmt.Println(amfUeId)
 	return ue.amfUeNgapId
 }
 
-func (ue *GNBUe) SetAmfNgapId(amfUeId int64) {
+func (ue *GNBUe) SetAmfUeId(amfUeId int64) {
 	// fmt.Println(amfUeId)
 	ue.amfUeNgapId = amfUeId
 }
