@@ -11,7 +11,7 @@ import (
 	"syscall"
 )
 
-func initServer(gnb *context.GNBContext) error {
+func InitServer(gnb *context.GNBContext) error {
 
 	// initiated GNB server with unix sockets.
 	log.Println("Starting Unix server")
@@ -39,6 +39,13 @@ func initServer(gnb *context.GNBContext) error {
 func gnbListen(gnb *context.GNBContext) {
 
 	ln := gnb.GetListener()
+
+	defer func() {
+		err := ln.Close()
+		if err != nil {
+			fmt.Printf("Error in closing unix sockets for %d GNB\n", gnb.GetGnbId())
+		}
+	}()
 
 	for {
 

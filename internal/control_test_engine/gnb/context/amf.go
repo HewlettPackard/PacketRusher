@@ -18,7 +18,7 @@ type TNLAssociation struct {
 	sctpConn         *sctp.SCTPConn
 	tnlaWeightFactor int64
 	usage            bool
-	streams          int64
+	streams          uint16
 }
 
 func (amf *GNBAmf) getTNLAs() TNLAssociation {
@@ -33,11 +33,11 @@ func (amf *GNBAmf) getState() int {
 	return amf.state
 }
 
-func (amf *GNBAmf) getSCTPConn() *sctp.SCTPConn {
+func (amf *GNBAmf) GetSCTPConn() *sctp.SCTPConn {
 	return amf.tnla.sctpConn
 }
 
-func (amf *GNBAmf) setSCTPConn(conn *sctp.SCTPConn) {
+func (amf *GNBAmf) SetSCTPConn(conn *sctp.SCTPConn) {
 	amf.tnla.sctpConn = conn
 }
 
@@ -49,19 +49,23 @@ func (amf *GNBAmf) setTNLAUsage(usage bool) {
 	amf.tnla.usage = usage
 }
 
-func (amf *GNBAmf) setTNLAStreams(streams int64) {
+func (amf *GNBAmf) SetTNLAStreams(streams uint16) {
 	amf.tnla.streams = streams
 }
 
-func (amf *GNBAmf) getAmfIp() string {
+func (amf *GNBAmf) GetTNLAStreams() uint16 {
+	return amf.tnla.streams
+}
+
+func (amf *GNBAmf) GetAmfIp() string {
 	return amf.amfIp
 }
 
-func (amf *GNBAmf) setAmfIp(ip string) {
+func (amf *GNBAmf) SetAmfIp(ip string) {
 	amf.amfIp = ip
 }
 
-func (amf *GNBAmf) getAmfPort() string {
+func (amf *GNBAmf) GetAmfPort() string {
 	return amf.amfPort
 }
 
@@ -69,7 +73,7 @@ func (amf *GNBAmf) setAmfPort(port string) {
 	amf.amfIp = port
 }
 
-func (amf *GNBAmf) getAmfId() int64 {
+func (amf *GNBAmf) GetAmfId() int64 {
 	return amf.amfId
 }
 

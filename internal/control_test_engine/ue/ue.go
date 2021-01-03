@@ -40,7 +40,7 @@ func RegistrationUe(imsi string, conf config.Config, id uint8) {
 	if err != nil {
 		log.Fatal("Error in", err)
 	} else {
-		fmt.Println("Unix sockets service is running")
+		fmt.Println("[UE]Unix sockets service is running")
 		wg.Add(1)
 	}
 

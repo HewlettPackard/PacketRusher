@@ -90,8 +90,8 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	}
 
 	// set amfId and sctp association for UE.
-	ue.SetAmfId(amf.getAmfId())
-	ue.SetSCTP(amf.getSCTPConn())
+	ue.SetAmfId(amf.GetAmfId())
+	ue.SetSCTP(amf.GetSCTPConn())
 
 	// return UE Context
 	return ue
@@ -130,7 +130,7 @@ func (gnb *GNBContext) NewGnBAmf(conn *sctp.SCTPConn) *GNBAmf {
 	amf.setAmfId(amfId)
 
 	// set SCTP association for AMF
-	amf.setSCTPConn(conn)
+	amf.SetSCTPConn(conn)
 
 	// set state to AMF.
 	amf.setState(Active)
@@ -147,7 +147,7 @@ func (gnb *GNBContext) deleteGnBAmf(amfId int64) {
 }
 
 func (gnb *GNBContext) selectAmFByCapacity() *GNBAmf {
-	var amfSelect *GNBAmf
+	var amfSelect *GNBAmf = nil
 	gnb.amfPool.Range(func(key, value interface{}) bool {
 		amf := value.(*GNBAmf)
 		if amf.relativeAmfCapacity > 0 {

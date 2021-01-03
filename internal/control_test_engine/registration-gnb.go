@@ -5,7 +5,6 @@ import (
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
-	"my5G-RANTester/internal/control_test_engine/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/interface_management"
 )
 
