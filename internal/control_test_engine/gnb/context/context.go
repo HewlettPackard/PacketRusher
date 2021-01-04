@@ -74,6 +74,8 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	ranId := gnb.getRanUeId()
 	ue.SetRanUeId(ranId)
 
+	ue.SetAmfUeId(0)
+
 	// set unix connection for UE.
 	ue.SetUnixSocket(conn)
 
@@ -110,7 +112,7 @@ func (gnb *GNBContext) DeleteGnBUe(ranUeId int64) {
 	gnb.uePool.Delete(ranUeId)
 }
 
-func (gnb *GNBContext) getGnbUe(ranUeId int64) (*GNBUe, error) {
+func (gnb *GNBContext) GetGnbUe(ranUeId int64) (*GNBUe, error) {
 	ue, err := gnb.uePool.Load(ranUeId)
 	if !err {
 		return nil, fmt.Errorf("UE is not find in GNB UE POOL ")

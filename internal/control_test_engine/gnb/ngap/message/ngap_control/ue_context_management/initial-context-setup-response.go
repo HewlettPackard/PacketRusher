@@ -1,15 +1,15 @@
 package ue_context_management
 
 import (
-	"fmt"
-	"github.com/ishidawataru/sctp"
+	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapType"
 )
 
-func InitialContextSetupResponse(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUeNgapID int64, supi string) error {
+/*
+func initialContextSetupResponse(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUeNgapID int64, supi string) error {
 
-	sendMsg, err := getInitialContextSetupResponse(amfUeNgapID, ranUeNgapID)
+	sendMsg, err := InitialContextSetupResponse(amfUeNgapID, ranUeNgapID)
 	if err != nil {
 		return fmt.Errorf("Error getting %s ue ngap Initial Context Setup Response Msg", supi)
 	}
@@ -20,9 +20,10 @@ func InitialContextSetupResponse(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUe
 
 	return nil
 }
+*/
 
-func getInitialContextSetupResponse(amfUeNgapID int64, ranUeNgapID int64) ([]byte, error) {
-	message := BuildInitialContextSetupResponseForRegistraionTest(amfUeNgapID, ranUeNgapID)
+func InitialContextSetupResponse(ue *context.GNBUe) ([]byte, error) {
+	message := BuildInitialContextSetupResponseForRegistraionTest(ue.GetAmfUeId(), ue.GetRanUeId())
 
 	return ngap.Encoder(message)
 }

@@ -9,7 +9,7 @@ import (
 type GNBUe struct {
 	ranUeNgapId int64 // Identifier for UE in GNB Context.
 	amfUeNgapId int64 // Identifier for UE in AMF Context.
-	// Snssai            models.Snssai        // slice requested
+	// Snssai            models.Snssai  // slice requested
 	pduSession           PDUSession     // PDU Session.
 	amfId                int64          // Identifier for AMF in UE/GNB Context.
 	state                int            // State of UE in NAS/GNB Context.
@@ -20,8 +20,8 @@ type GNBUe struct {
 type PDUSession struct {
 	pduSessionId int64
 	ueIp         string
-	uplinkTeid   uint8
-	downlinkTeid uint8
+	uplinkTeid   []byte
+	downlinkTeid []byte
 }
 
 func (ue *GNBUe) GetAmfId() int64 {
@@ -48,6 +48,14 @@ func (ue *GNBUe) SetState(state int) {
 	ue.state = state
 }
 
+func (ue *GNBUe) SetStateOngoing() {
+	ue.state = Ongoing
+}
+
+func (ue *GNBUe) SetStateReady() {
+	ue.state = Ready
+}
+
 func (ue *GNBUe) GetUnixSocket() net.Conn {
 	return ue.unixSocketConnection
 }
@@ -64,19 +72,19 @@ func (ue *GNBUe) SetPduSessionId(id int64) {
 	ue.pduSession.pduSessionId = id
 }
 
-func (ue *GNBUe) GetTeidUplink() uint8 {
+func (ue *GNBUe) GetTeidUplink() []byte {
 	return ue.pduSession.uplinkTeid
 }
 
-func (ue *GNBUe) SetTeidUplink(teidUplink uint8) {
+func (ue *GNBUe) SetTeidUplink(teidUplink []byte) {
 	ue.pduSession.uplinkTeid = teidUplink
 }
 
-func (ue *GNBUe) GetTeidDownlink() uint8 {
+func (ue *GNBUe) GetTeidDownlink() []byte {
 	return ue.pduSession.downlinkTeid
 }
 
-func (ue *GNBUe) SetTeidDownlink(teidDownlink uint8) {
+func (ue *GNBUe) SetTeidDownlink(teidDownlink []byte) {
 	ue.pduSession.uplinkTeid = teidDownlink
 }
 
