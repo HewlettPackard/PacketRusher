@@ -6,7 +6,6 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
-	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/sm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
@@ -31,7 +30,6 @@ func HandlerAuthenticationRequest(ue *context.UEContext, message *nas.Message) {
 	resStar := ue.DeriveRESstarAndSetKey(ue.UeSecurity.AuthenticationSubs, rand[:], ue.UeSecurity.Snn, autn[:])
 
 	// getting NAS Authentication Response.
-	// TODO change name of this function and clean.
 	authenticationResponse := mm_5gs.AuthenticationResponse(resStar, "")
 
 	// change state of ue for registered-initiated
@@ -46,7 +44,7 @@ func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) {
 	// getting NAS Security Mode Complete.
 	securityModeComplete, err := mm_5gs.SecurityModeComplete(ue)
 	if err != nil {
-		log.Fatal("Error sending Security Mode Complete: ", err)
+		log.Fatal("[UE][NAS] Error sending Security Mode Complete: ", err)
 	}
 
 	// sending to GNB
@@ -61,7 +59,7 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 	// getting NAS registration complete.
 	registrationComplete, err := mm_5gs.RegistrationComplete(ue)
 	if err != nil {
-		log.Fatal("Error sending Registration Complete: ", err)
+		log.Fatal("[UE][NAS] Error sending Registration Complete: ", err)
 	}
 
 	// sending to GNB
@@ -73,7 +71,7 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 	// getting ul nas transport and pduSession establishment request.
 	ulNasTransport, err := mm_5gs.UlNasTransport(ue, nasMessage.ULNASTransportRequestTypeInitialRequest)
 	if err != nil {
-		log.Fatal("Error sending ul nas transport and pdu session establishment request: ", err)
+		log.Fatal("[UE][NAS] Error sending ul nas transport and pdu session establishment request: ", err)
 	}
 
 	// sending to GNB
@@ -84,13 +82,12 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message)
 
 	//getting PDU Session establishment accept.
 	payloadContainer := nas_control.GetNasPduFromPduAccept(message)
-	if payloadContainer.GmmHeader.GetMessageType() == nas.MsgTypePDUSessionEstablishmentAccept {
-		fmt.Println("Receiving PDU Session Establishment Accept")
-
+	if payloadContainer.GsmHeader.GetMessageType() == nas.MsgTypePDUSessionEstablishmentAccept {
+		fmt.Println("[UE][NAS] Receiving PDU Session Establishment Accept")
 		// update PDU Session information.
-
 		// get UE ip
-		UeIp := sm_5gs.GetPduAdress(payloadContainer)
+		UeIp := payloadContainer.PDUSessionEstablishmentAccept.GetPDUAddressInformation()
 		ue.SetIp(UeIp)
+		fmt.Println(ue.GetIp())
 	}
 }

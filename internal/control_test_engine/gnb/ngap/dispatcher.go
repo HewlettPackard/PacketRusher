@@ -32,14 +32,17 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 
 		case ngapType.ProcedureCodeDownlinkNASTransport:
 			// handler NGAP Downlink NAS Transport.
+			fmt.Println("[NGAP]Receive Downlink NAS Transport")
 			handler.HandlerDownlinkNasTransport(gnb, ngapMsg)
 
 		case ngapType.ProcedureCodeInitialContextSetup:
 			// handler NGAP Initial Context Setup Request.
+			fmt.Println("[NGAP]Receive Initial Context Setup Request")
 			handler.HandlerInitialContextSetupRequest(gnb, ngapMsg)
 
 		case ngapType.ProcedureCodePDUSessionResourceSetup:
 			// handler NGAP PDU Session Resource Setup Request.
+			fmt.Println("[NGAP]Receive PDU Session Resource Setup Request")
 			handler.HandlerPduSessionResourceSetupRequest(gnb, ngapMsg)
 		}
 
@@ -49,6 +52,7 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 
 		case ngapType.ProcedureCodeNGSetup:
 			// handler NGAP Setup Response.
+			fmt.Println("[NGAP]Receive Ng Setup Response")
 			handler.HandlerNgSetupResponse(amf, gnb, ngapMsg)
 
 		}

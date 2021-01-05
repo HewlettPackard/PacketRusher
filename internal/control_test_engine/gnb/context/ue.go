@@ -77,6 +77,7 @@ func (ue *GNBUe) GetTeidUplink() []byte {
 }
 
 func (ue *GNBUe) SetTeidUplink(teidUplink []byte) {
+	ue.pduSession.uplinkTeid = make([]byte, 4)
 	ue.pduSession.uplinkTeid = teidUplink
 }
 
@@ -85,7 +86,8 @@ func (ue *GNBUe) GetTeidDownlink() []byte {
 }
 
 func (ue *GNBUe) SetTeidDownlink(teidDownlink []byte) {
-	ue.pduSession.uplinkTeid = teidDownlink
+	ue.pduSession.downlinkTeid = make([]byte, 4)
+	ue.pduSession.downlinkTeid = teidDownlink
 }
 
 func (ue *GNBUe) GetRanUeId() int64 {

@@ -16,7 +16,7 @@ func SendPduSessionResourceSetupResponse(ue *context.GNBUe, gnb *context.GNBCont
 	gnbIp := gnb.GetGnbIp()
 	ngapMsg, err := pdu_session_management.PDUSessionResourceSetupResponse(ue, gnbIp)
 	if err != nil {
-		fmt.Println("Error sending PDU Session Resource Setup Response.")
+		log.Fatal("Error sending PDU Session Resource Setup Response.")
 	}
 
 	ue.SetStateReady()
@@ -35,7 +35,7 @@ func SendInitialContextSetupResponse(ue *context.GNBUe) {
 	// send Initial Context Setup Response.
 	ngapMsg, err := ue_context_management.InitialContextSetupResponse(ue)
 	if err != nil {
-		fmt.Println("Error sending Initial Context Setup Response")
+		log.Fatal("Error sending Initial Context Setup Response")
 	}
 
 	// Send Initial Context Setup Response.
@@ -48,15 +48,18 @@ func SendInitialContextSetupResponse(ue *context.GNBUe) {
 
 func SendNgSetupRequest(gnb *context.GNBContext, amf *context.GNBAmf) {
 
-	// send ng setup response.
+	// send NG setup response.
 	ngapMsg, err := interface_management.NGSetupRequest(gnb, "my5gRANTester")
 	if err != nil {
-		fmt.Println("Error sending NG Setup Request")
+		log.Fatal("Error sending NG Setup Request")
+
 	}
 
 	conn := amf.GetSCTPConn()
 	err = sender.SendToAmF(ngapMsg, conn)
 	if err != nil {
 		fmt.Println("Error sending NG Setup Request: ", err)
+
 	}
+
 }

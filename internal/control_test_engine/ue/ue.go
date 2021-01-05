@@ -11,9 +11,7 @@ import (
 	"sync"
 )
 
-// init RegistrationUE(conn, imsi, int64(i), cfg, contextGnb, mcc, mnc)
-// generate an ue data  and execute initial message registration.
-func RegistrationUe(imsi string, conf config.Config, id uint8) {
+func RegistrationUe(conf config.Config, id uint8) {
 
 	wg := sync.WaitGroup{}
 
@@ -22,7 +20,7 @@ func RegistrationUe(imsi string, conf config.Config, id uint8) {
 
 	// new UE context
 	ue.NewRanUeContext(
-		imsi,
+		conf.Ue.Imsi,
 		security.AlgCiphering128NEA0,
 		security.AlgIntegrity128NIA2,
 		conf.Ue.Key,
@@ -40,7 +38,7 @@ func RegistrationUe(imsi string, conf config.Config, id uint8) {
 	if err != nil {
 		log.Fatal("Error in", err)
 	} else {
-		fmt.Println("[UE]Unix sockets service is running")
+		fmt.Println("[UE] UNIX/NAS service is running")
 		wg.Add(1)
 	}
 

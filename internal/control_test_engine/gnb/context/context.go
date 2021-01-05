@@ -89,7 +89,7 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 
 	// select AMF with Capacity is more than 0.
 	amf := gnb.selectAmFByActive()
-	if amf != nil {
+	if amf == nil {
 		log.Fatal("No AMF available for this UE")
 	}
 
@@ -97,7 +97,7 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	ue.SetAmfId(amf.GetAmfId())
 	ue.SetSCTP(amf.GetSCTPConn())
 
-	// return UE Context
+	// return UE Context.
 	return ue
 
 }
@@ -172,7 +172,7 @@ func (gnb *GNBContext) selectAmFByActive() *GNBAmf {
 	var amfSelect *GNBAmf
 	gnb.amfPool.Range(func(key, value interface{}) bool {
 		amf := value.(*GNBAmf)
-		if amf.state == Active {
+		if amf.GetState() == Active {
 			amfSelect = amf
 			return false
 		} else {

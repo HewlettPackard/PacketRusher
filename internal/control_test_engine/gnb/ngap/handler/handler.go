@@ -199,6 +199,9 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	// set uplink and downlink teid.
 	ue.SetTeidUplink(ulTeid)
 	ue.SetTeidDownlink(ulTeid)
+	fmt.Println("TEID")
+	fmt.Println(ue.GetTeidDownlink())
+	fmt.Println(ue.GetTeidUplink())
 
 	// send NAS message to UE.
 	sender.SendToUe(ue, messageNas)

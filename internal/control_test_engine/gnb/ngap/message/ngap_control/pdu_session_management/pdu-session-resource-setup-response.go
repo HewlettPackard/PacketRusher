@@ -129,12 +129,12 @@ func buildPDUSessionResourceSetupResponseTransfer(ipv4 string, teid []byte) (dat
 	// generates some GTP-TEIDs for UPF-RAN tunnels(downlink)
 	/*
 		var aux string
-		if amfId < 16 {
-			aux = "0000000" + fmt.Sprintf("%x", amfId)
-		} else if amfId < 256 {
-			aux = "000000" + fmt.Sprintf("%x", amfId)
+		if teid < 16 {
+			aux = "0000000" + fmt.Sprintf("%x", teid)
+		} else if teid < 256 {
+			aux = "000000" + fmt.Sprintf("%x", teid)
 		} else {
-			aux = "00000" + fmt.Sprintf("%x", amfId)
+			aux = "00000" + fmt.Sprintf("%x", teid)
 		}
 		resu, err := hex.DecodeString(aux)
 		if err != nil {
@@ -142,7 +142,6 @@ func buildPDUSessionResourceSetupResponseTransfer(ipv4 string, teid []byte) (dat
 			fmt.Println(err)
 		}
 	*/
-	//upTransportLayerInformation.GTPTunnel.GTPTEID.Value = aper.OctetString(resu)
 	upTransportLayerInformation.GTPTunnel.GTPTEID.Value = teid
 	upTransportLayerInformation.GTPTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(ipv4, "")
 

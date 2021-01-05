@@ -65,7 +65,7 @@ func GnBListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 			return
 		}
 
-		fmt.Printf("Receive message in %d stream", info.Stream)
+		fmt.Printf("Receive message in %d stream\n", info.Stream)
 
 		forwardData := make([]byte, n)
 		copy(forwardData, buf[:n])

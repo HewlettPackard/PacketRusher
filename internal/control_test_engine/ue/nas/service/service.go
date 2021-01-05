@@ -17,7 +17,7 @@ func InitConn(ue *context.UEContext) error {
 	// initiated communication with GNB(unix sockets).
 	conn, err := net.Dial("unix", "/tmp/gnb.sock")
 	if err != nil {
-		return fmt.Errorf("Error on Dial with server", err)
+		return fmt.Errorf("[UE] Error on Dial with server", err)
 	}
 
 	// store unix socket connection in the UE.
