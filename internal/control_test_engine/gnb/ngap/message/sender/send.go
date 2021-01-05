@@ -2,17 +2,23 @@ package sender
 
 import (
 	"fmt"
-	"my5G-RANTester/internal/control_test_engine/gnb/context"
+	"github.com/ishidawataru/sctp"
+	"my5G-RANTester/lib/ngap/ngapSctp"
 )
 
-func SendToAmF(ue *context.GNBUe, message []byte) error {
+func SendToAmF(message []byte, conn *sctp.SCTPConn) error {
 
 	// TODO included information for SCTP association.
-
-	conn := ue.GetSCTP()
-	_, err := conn.Write(message)
-	if err != nil {
-		return fmt.Errorf("Error sending NGAP message")
+	info := &sctp.SndRcvInfo{
+		Stream: uint16(0),
+		PPID:   ngapSctp.NGAP_PPID,
 	}
+
+	_, err := conn.SCTPWrite(message, info)
+	// fmt.Println("Esse erro aqui", err)
+	if err != nil {
+		return fmt.Errorf("Error sending NGAP message ", err)
+	}
+
 	return nil
 }

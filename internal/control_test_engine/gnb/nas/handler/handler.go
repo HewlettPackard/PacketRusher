@@ -19,9 +19,10 @@ func HandlerUeInitialized(ue *context.GNBUe, message []byte, gnb *context.GNBCon
 	ue.SetState(context.Ongoing)
 
 	// Send Initial UE Message
-	err = sender.SendToAmF(ue, ngap)
+	conn := ue.GetSCTP()
+	err = sender.SendToAmF(ngap, conn)
 	if err != nil {
-		log.Fatal("Error making initial UE message: ", err)
+		log.Fatal("Error sending initial UE message: ", err)
 	}
 }
 
@@ -32,11 +33,15 @@ func HandlerUeOngoing(ue *context.GNBUe, message []byte, gnb *context.GNBContext
 		log.Fatal("Error making initial UE message: ", err)
 	}
 
-	// Send Uplink Nas Transport.
-	sender.SendToAmF(ue, ngap)
+	// Send Uplink Nas Transport
+	conn := ue.GetSCTP()
+	err = sender.SendToAmF(ngap, conn)
+	if err != nil {
+		log.Fatal("Error sending Uplink Nas Transport: ", err)
+	}
 }
 
 func HandlerUeReady(ue *context.GNBUe, message []byte, gnb *context.GNBContext) {
 
-	// Send UE ip or other messages.
+	// receive UE ip or other messages.
 }

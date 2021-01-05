@@ -54,7 +54,7 @@ func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAP
 		ue.SetAmfUeId(amfUeId)
 	}
 
-	ue.SetStateOngoing()
+	// ue.SetStateOngoing()
 
 	// send NAS message to UE.
 	sender.SendToUe(ue, messageNas)
@@ -211,5 +211,6 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 
 	// check information about AMF and add in AMF context.
+	amf.SetState(context.Active)
 
 }

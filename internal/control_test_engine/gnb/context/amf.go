@@ -6,7 +6,7 @@ import (
 
 type GNBAmf struct {
 	amfIp               string         // AMF ip
-	amfPort             string         // AMF port
+	amfPort             int            // AMF port
 	amfId               int64          // AMF id
 	tnla                TNLAssociation // AMF sctp associations
 	relativeAmfCapacity int64          // AMF capacity
@@ -25,11 +25,11 @@ func (amf *GNBAmf) getTNLAs() TNLAssociation {
 	return amf.tnla
 }
 
-func (amf *GNBAmf) setState(state int) {
+func (amf *GNBAmf) SetState(state int) {
 	amf.state = state
 }
 
-func (amf *GNBAmf) getState() int {
+func (amf *GNBAmf) GetState() int {
 	return amf.state
 }
 
@@ -65,12 +65,12 @@ func (amf *GNBAmf) SetAmfIp(ip string) {
 	amf.amfIp = ip
 }
 
-func (amf *GNBAmf) GetAmfPort() string {
+func (amf *GNBAmf) GetAmfPort() int {
 	return amf.amfPort
 }
 
-func (amf *GNBAmf) setAmfPort(port string) {
-	amf.amfIp = port
+func (amf *GNBAmf) setAmfPort(port int) {
+	amf.amfPort = port
 }
 
 func (amf *GNBAmf) GetAmfId() int64 {

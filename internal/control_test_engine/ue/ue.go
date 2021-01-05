@@ -48,9 +48,7 @@ func RegistrationUe(imsi string, conf config.Config, id uint8) {
 	//defer service.CloseConn(ue)
 
 	// registration procedure started.
-	go trigger.InitRegistration(ue)
-
-	wg.Add(1)
+	trigger.InitRegistration(ue)
 
 	wg.Wait()
 

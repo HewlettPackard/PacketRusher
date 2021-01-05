@@ -3,7 +3,6 @@ package context
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/ishidawataru/sctp"
 	gtpv1 "github.com/wmnsk/go-gtp/v1"
 	"log"
 	"net"
@@ -48,10 +47,10 @@ type GNBInfo struct {
 	tac     string
 	gnbId   string
 	gnbIp   string
-	gnbPort string
+	gnbPort int
 }
 
-func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, st, sst string) {
+func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, st, sst, ip string, port int) {
 	gnb.gnbInfo.mcc = mcc
 	gnb.gnbInfo.mnc = mnc
 	gnb.gnbInfo.tac = tac
@@ -60,6 +59,9 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, st, sst string) {
 	gnb.sliceInfo.sst = sst
 	gnb.idUeGenerator = 1
 	gnb.idAmfGenerator = 1
+	gnb.gnbInfo.gnbIp = ip
+	gnb.gnbInfo.gnbPort = port
+
 }
 
 func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
@@ -86,7 +88,7 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	gnb.uePool.Store(ranId, ue)
 
 	// select AMF with Capacity is more than 0.
-	amf := gnb.selectAmFByCapacity()
+	amf := gnb.selectAmFByActive()
 	if amf != nil {
 		log.Fatal("No AMF available for this UE")
 	}
@@ -120,7 +122,7 @@ func (gnb *GNBContext) GetGnbUe(ranUeId int64) (*GNBUe, error) {
 	return ue.(*GNBUe), nil
 }
 
-func (gnb *GNBContext) NewGnBAmf(conn *sctp.SCTPConn) *GNBAmf {
+func (gnb *GNBContext) NewGnBAmf(ip string, port int) *GNBAmf {
 
 	// TODO if necessary add more information for AMF.
 	// TODO implement mutex
@@ -131,11 +133,12 @@ func (gnb *GNBContext) NewGnBAmf(conn *sctp.SCTPConn) *GNBAmf {
 	amfId := gnb.getRanAmfId()
 	amf.setAmfId(amfId)
 
-	// set SCTP association for AMF
-	amf.SetSCTPConn(conn)
+	// set AMF ip and AMF port.
+	amf.SetAmfIp(ip)
+	amf.setAmfPort(port)
 
 	// set state to AMF.
-	amf.setState(Active)
+	amf.SetState(Inactive)
 
 	// store AMF in the AMF Pool of GNB.
 	gnb.amfPool.Store(amfId, amf)
@@ -149,13 +152,28 @@ func (gnb *GNBContext) deleteGnBAmf(amfId int64) {
 }
 
 func (gnb *GNBContext) selectAmFByCapacity() *GNBAmf {
-	var amfSelect *GNBAmf = nil
+	var amfSelect *GNBAmf
 	gnb.amfPool.Range(func(key, value interface{}) bool {
 		amf := value.(*GNBAmf)
 		if amf.relativeAmfCapacity > 0 {
 			amfSelect = amf
 			// select AMF and decrement capacity.
 			amfSelect.relativeAmfCapacity--
+			return false
+		} else {
+			return true
+		}
+	})
+
+	return amfSelect
+}
+
+func (gnb *GNBContext) selectAmFByActive() *GNBAmf {
+	var amfSelect *GNBAmf
+	gnb.amfPool.Range(func(key, value interface{}) bool {
+		amf := value.(*GNBAmf)
+		if amf.state == Active {
+			amfSelect = amf
 			return false
 		} else {
 			return true
@@ -221,7 +239,7 @@ func (gnb *GNBContext) getUserPlane() *gtpv1.UPlaneConn {
 	return gnb.dataInfo.userPlane
 }
 
-func (gnb *GNBContext) setGnbPort(port string) {
+func (gnb *GNBContext) setGnbPort(port int) {
 	gnb.gnbInfo.gnbPort = port
 }
 
@@ -253,7 +271,7 @@ func (gnb *GNBContext) GetGnbIp() string {
 	return gnb.gnbInfo.gnbIp
 }
 
-func (gnb *GNBContext) GetGnbPort() string {
+func (gnb *GNBContext) GetGnbPort() int {
 	return gnb.gnbInfo.gnbPort
 }
 

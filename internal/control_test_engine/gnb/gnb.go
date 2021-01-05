@@ -5,7 +5,9 @@ import (
 	"log"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
-	"my5G-RANTester/internal/control_test_engine/gnb/nas/service"
+	serviceNas "my5G-RANTester/internal/control_test_engine/gnb/nas/service"
+	serviceNgap "my5G-RANTester/internal/control_test_engine/gnb/ngap/service"
+	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"sync"
 )
 
@@ -23,17 +25,31 @@ func InitGnb(conf config.Config) {
 		conf.GNodeB.PlmnList.Mnc,
 		conf.GNodeB.PlmnList.Tac,
 		conf.GNodeB.SliceSupportList.St,
-		conf.GNodeB.SliceSupportList.Sst)
+		conf.GNodeB.SliceSupportList.Sst,
+		conf.GNodeB.ControlIF.Ip,
+		conf.GNodeB.ControlIF.Port)
 
 	// start communication with AMF(server SCTP).
 
-	// start communication with UE(server UNIX sockets).
-	if err := service.InitServer(gnb); err != nil {
+	// new AMF context.
+	amf := gnb.NewGnBAmf(conf.AMF.Ip, conf.AMF.Port)
+
+	if err := serviceNgap.InitConn(amf, gnb); err != nil {
 		log.Fatal("Error in", err)
 	} else {
-		fmt.Println("[GNB] Unix sockets service is running")
+		fmt.Println("[GNB] SCTP/NGAP service is running")
 		wg.Add(1)
 	}
+
+	// start communication with UE(server UNIX sockets).
+	if err := serviceNas.InitServer(gnb); err != nil {
+		log.Fatal("Error in", err)
+	} else {
+		fmt.Println("[GNB] UNIX/NAS service is running")
+		wg.Add(1)
+	}
+
+	trigger.SendNgSetupRequest(gnb, amf)
 
 	wg.Wait()
 }

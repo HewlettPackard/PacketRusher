@@ -10,20 +10,25 @@ import (
 func InitConn(amf *context.GNBAmf, gnb *context.GNBContext) error {
 
 	// check AMF IP and AMF port.
-	sctpADDR := fmt.Sprintf("%s:%s", amf.GetAmfIp(), amf.GetAmfPort())
+	remote := fmt.Sprintf("%s:%d", amf.GetAmfIp(), amf.GetAmfPort())
+	local := fmt.Sprintf("%s:%d", gnb.GetGnbIp(), gnb.GetGnbPort())
 
-	addr, err := sctp.ResolveSCTPAddr("sctp", sctpADDR)
+	rem, err := sctp.ResolveSCTPAddr("sctp", remote)
+	if err != nil {
+		return err
+	}
+	loc, err := sctp.ResolveSCTPAddr("sctp", local)
 	if err != nil {
 		return err
 	}
 
-	streams := amf.GetTNLAStreams()
+	// streams := amf.GetTNLAStreams()
 
 	conn, err := sctp.DialSCTPExt(
 		"sctp",
-		nil,
-		addr,
-		sctp.InitMsg{NumOstreams: streams, MaxInstreams: streams})
+		loc,
+		rem,
+		sctp.InitMsg{NumOstreams: 1, MaxInstreams: 1})
 	if err != nil {
 		amf.SetSCTPConn(nil)
 		return err
@@ -31,25 +36,12 @@ func InitConn(amf *context.GNBAmf, gnb *context.GNBContext) error {
 
 	// set streams and other information about TNLA.
 
-	// successful established SCTP
+	// successful established SCTP.
 	amf.SetSCTPConn(conn)
 
 	conn.SubscribeEvents(sctp.SCTP_EVENT_DATA_IO)
 
 	go GnBListen(amf, gnb)
-
-	/*
-		info := &sctp.SndRcvInfo{
-			Stream: uint16(3),
-			PPID:   ngapSctp.NGAP_PPID,
-		}
-
-		conn.SubscribeEvents(sctp.SCTP_EVENT_DATA_IO)
-
-		conn.SCTPWrite([]byte("Oi"), info)
-
-		time.Sleep(40*time.Second)
-	*/
 
 	return nil
 }
@@ -68,10 +60,12 @@ func GnBListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 
 	for {
 
-		n, err := conn.Read(buf[:])
+		n, info, err := conn.SCTPRead(buf[:])
 		if err != nil {
 			return
 		}
+
+		fmt.Printf("Receive message in %d stream", info.Stream)
 
 		forwardData := make([]byte, n)
 		copy(forwardData, buf[:n])

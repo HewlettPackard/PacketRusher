@@ -14,7 +14,6 @@ import (
 func InitServer(gnb *context.GNBContext) error {
 
 	// initiated GNB server with unix sockets.
-	log.Println("Starting Unix server")
 	ln, err := net.Listen("unix", "/tmp/gnb.sock")
 	if err != nil {
 		fmt.Errorf("Listen error: ", err)

@@ -1,15 +1,13 @@
 package interface_management
 
 import (
-	"fmt"
-	"github.com/ishidawataru/sctp"
-	"my5G-RANTester/internal/control_test_engine/context"
+	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapType"
 )
 
-func BuildNGSetupRequest(gnb *context.RanGnbContext) (pdu ngapType.NGAPPDU) {
+func BuildNGSetupRequest(gnb *context.GNBContext) (pdu ngapType.NGAPPDU) {
 
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -113,14 +111,14 @@ func BuildNGSetupRequest(gnb *context.RanGnbContext) (pdu ngapType.NGAPPDU) {
 	return
 }
 
-func getNGSetupRequest(gnb *context.RanGnbContext, bitlength uint64, name string) ([]byte, error) {
+func NGSetupRequest(gnb *context.GNBContext, name string) ([]byte, error) {
 
 	message := BuildNGSetupRequest(gnb)
 	// GlobalRANNodeID
 	ie := message.InitiatingMessage.Value.NGSetupRequest.ProtocolIEs.List[0]
 	gnbID := ie.Value.GlobalRANNodeID.GlobalGNBID.GNBID.GNBID
 	gnbID.Bytes = gnb.GetGnbIdInBytes()
-	gnbID.BitLength = bitlength
+	gnbID.BitLength = 24
 	// RANNodeName
 	ie = message.InitiatingMessage.Value.NGSetupRequest.ProtocolIEs.List[1]
 	ie.Value.RANNodeName.Value = name
@@ -128,10 +126,12 @@ func getNGSetupRequest(gnb *context.RanGnbContext, bitlength uint64, name string
 	return ngap.Encoder(message)
 }
 
-func NgSetupRequest(connN2 *sctp.SCTPConn, gnb *context.RanGnbContext, bitlength uint64, name string) error {
+/*
+
+func ngSetupRequest(connN2 *sctp.SCTPConn, gnb *context.RanGnbContext, bitlength uint64, name string) error {
 	var sendMsg []byte
 
-	sendMsg, err := getNGSetupRequest(gnb, bitlength, name)
+	sendMsg, err := NGSetupRequest(gnb, bitlength, name)
 	if err != nil {
 		return fmt.Errorf("Error getting GNB %s NGSetup Request Msg", name)
 	}
@@ -143,3 +143,4 @@ func NgSetupRequest(connN2 *sctp.SCTPConn, gnb *context.RanGnbContext, bitlength
 
 	return nil
 }
+*/

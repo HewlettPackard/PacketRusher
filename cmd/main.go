@@ -1,8 +1,9 @@
 package main
 
 import (
+	"log"
 	"my5G-RANTester/config"
-	"my5G-RANTester/internal/control_test_engine/gnb/ngap/service"
+	"my5G-RANTester/internal/control_test_engine/gnb"
 )
 
 func main() {
@@ -12,7 +13,7 @@ func main() {
 	cfg, err := config.GetConfig()
 	if err != nil {
 		//return nil
-		//log.Fatal("Error in get configuration")
+		log.Fatal("Error in get configuration")
 	}
 	/*
 		go gnb.InitGnb(cfg)
@@ -25,5 +26,5 @@ func main() {
 
 		wg.Wait()
 	*/
-	service.InitConn(cfg)
+	gnb.InitGnb(cfg)
 }
