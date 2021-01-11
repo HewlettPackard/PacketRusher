@@ -59,6 +59,7 @@ func gnbListen(gnb *context.GNBContext) {
 		// store UE in UE Pool.
 		// store UE connection.
 		// select AMF and get sctp association.
+		// make a tun interface.
 		ue := gnb.NewGnBUe(fd)
 
 		// accept and handle connection.

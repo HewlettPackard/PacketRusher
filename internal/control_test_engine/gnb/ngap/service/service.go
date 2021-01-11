@@ -41,12 +41,12 @@ func InitConn(amf *context.GNBAmf, gnb *context.GNBContext) error {
 
 	conn.SubscribeEvents(sctp.SCTP_EVENT_DATA_IO)
 
-	go GnBListen(amf, gnb)
+	go GnbListen(amf, gnb)
 
 	return nil
 }
 
-func GnBListen(amf *context.GNBAmf, gnb *context.GNBContext) {
+func GnbListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 
 	buf := make([]byte, 65535)
 	conn := amf.GetSCTPConn()

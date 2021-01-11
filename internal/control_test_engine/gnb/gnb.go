@@ -27,13 +27,16 @@ func InitGnb(conf config.Config) {
 		conf.GNodeB.SliceSupportList.St,
 		conf.GNodeB.SliceSupportList.Sst,
 		conf.GNodeB.ControlIF.Ip,
-		conf.GNodeB.ControlIF.Port)
+		conf.GNodeB.DataIF.Ip,
+		conf.GNodeB.ControlIF.Port,
+		conf.GNodeB.DataIF.Port)
 
 	// start communication with AMF(server SCTP).
 
 	// new AMF context.
 	amf := gnb.NewGnBAmf(conf.AMF.Ip, conf.AMF.Port)
 
+	// start communication with AMF(SCTP).
 	if err := serviceNgap.InitConn(amf, gnb); err != nil {
 		log.Fatal("Error in", err)
 	} else {

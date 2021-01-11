@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
+	serviceGTP "my5G-RANTester/internal/control_test_engine/gnb/gtp/service"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"my5G-RANTester/lib/aper"
@@ -119,7 +121,7 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	var ranUeId int64
 	var amfUeId int64
 	var pduSessionId int64
-	var ulTeid []byte
+	var ulTeid uint32
 	var upfAddress []byte
 	var messageNas []byte
 
@@ -165,13 +167,12 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 					if err == nil {
 						for _, ies := range pdu.ProtocolIEs.List {
 							if ies.Id.Value == ngapType.ProtocolIEIDULNGUUPTNLInformation {
-								ulTeid = ies.Value.ULNGUUPTNLInformation.GTPTunnel.GTPTEID.Value
+								ulTeid = binary.BigEndian.Uint32(ies.Value.ULNGUUPTNLInformation.GTPTunnel.GTPTEID.Value)
 								upfAddress = ies.Value.ULNGUUPTNLInformation.GTPTunnel.TransportLayerAddress.Value.Bytes
-								fmt.Println(upfAddress)
 							}
 						}
 					} else {
-						fmt.Println("Error in Pdu Session Resource Setup Request Transfer decode")
+						fmt.Println("Error in decode Pdu Session Resource Setup Request Transfer")
 					}
 				} else {
 					fmt.Println("Pdu Session Resource Setup Request Transfer is nil")
@@ -191,23 +192,37 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	// check if AMF UE id.
 	if ue.GetAmfUeId() != amfUeId {
 		fmt.Println("Problem in receive AMF UE ID from CORE")
+		// TODO SEND ERROR INDICATION
 	}
 
 	// set PDU Session ID for GNB UE Context.
 	ue.SetPduSessionId(pduSessionId)
 
-	// set uplink and downlink teid.
+	// set uplink teid.
+	// downlink is solved when make a GNBue.
 	ue.SetTeidUplink(ulTeid)
-	ue.SetTeidDownlink(ulTeid)
-	fmt.Println("TEID")
-	fmt.Println(ue.GetTeidDownlink())
-	fmt.Println(ue.GetTeidUplink())
+
+	// get UPF ip.
+	if gnb.GetUpfIp() == "" {
+		upfIp := fmt.Sprintf("%d.%d.%d.%d", upfAddress[0], upfAddress[1], upfAddress[2], upfAddress[3])
+		gnb.SetUpfIp(upfIp)
+	}
 
 	// send NAS message to UE.
 	sender.SendToUe(ue, messageNas)
 
 	// send PDU Session Resource Setup Response.
-	trigger.SendPduSessionResourceSetupResponse(ue, gnb)
+	err = trigger.SendPduSessionResourceSetupResponse(ue, gnb)
+	if err != nil {
+		fmt.Println("Error in sending PDU Session Resource Setup Response")
+		return
+	}
+
+	// configure GTP tunnel and listen.
+	if gnb.GetUserPlane() == nil {
+
+		serviceGTP.InitGTPTunnel(gnb)
+	}
 
 }
 

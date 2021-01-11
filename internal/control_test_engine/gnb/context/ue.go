@@ -15,13 +15,14 @@ type GNBUe struct {
 	state                int            // State of UE in NAS/GNB Context.
 	sctpConnection       *sctp.SCTPConn // Sctp association in using by the UE.
 	unixSocketConnection net.Conn       // Unix sockets association in using by the UE.
+	// tunnel interface in using by the UE.
 }
 
 type PDUSession struct {
 	pduSessionId int64
 	ueIp         string
-	uplinkTeid   []byte
-	downlinkTeid []byte
+	uplinkTeid   uint32
+	downlinkTeid uint32
 }
 
 func (ue *GNBUe) GetAmfId() int64 {
@@ -72,21 +73,19 @@ func (ue *GNBUe) SetPduSessionId(id int64) {
 	ue.pduSession.pduSessionId = id
 }
 
-func (ue *GNBUe) GetTeidUplink() []byte {
+func (ue *GNBUe) GetTeidUplink() uint32 {
 	return ue.pduSession.uplinkTeid
 }
 
-func (ue *GNBUe) SetTeidUplink(teidUplink []byte) {
-	ue.pduSession.uplinkTeid = make([]byte, 4)
+func (ue *GNBUe) SetTeidUplink(teidUplink uint32) {
 	ue.pduSession.uplinkTeid = teidUplink
 }
 
-func (ue *GNBUe) GetTeidDownlink() []byte {
+func (ue *GNBUe) GetTeidDownlink() uint32 {
 	return ue.pduSession.downlinkTeid
 }
 
-func (ue *GNBUe) SetTeidDownlink(teidDownlink []byte) {
-	ue.pduSession.downlinkTeid = make([]byte, 4)
+func (ue *GNBUe) SetTeidDownlink(teidDownlink uint32) {
 	ue.pduSession.downlinkTeid = teidDownlink
 }
 
@@ -115,4 +114,12 @@ func (ue *GNBUe) GetAmfUeId() int64 {
 func (ue *GNBUe) SetAmfUeId(amfUeId int64) {
 	// fmt.Println(amfUeId)
 	ue.amfUeNgapId = amfUeId
+}
+
+func (ue *GNBUe) setTun() {
+
+}
+
+func (ue *GNBUe) getTun() {
+
 }

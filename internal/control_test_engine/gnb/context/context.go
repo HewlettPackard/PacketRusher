@@ -24,15 +24,19 @@ type GNBContext struct {
 	gnbInfo        GNBInfo
 	uePool         sync.Map // map[RanUeNgapId]*GNBUe, UeRanNgapId as key
 	amfPool        sync.Map // map[int64]*GNBAmf, AmfId as key
+	teidPool       sync.Map // map[downlinkTeid]*GNBUe, downlinkTeid as key
 	sliceInfo      Slice
 	idUeGenerator  int64
 	idAmfGenerator int64
+	teidGenerator  uint32
 	unixlistener   net.Listener
 }
 
 type DataPlane struct {
+	gnbIp     string            // gnb ip for data plane.
+	gnbPort   int               // gnb port for data plane.
 	upfIp     string            // upf ip
-	upfPort   string            // upf port
+	upfPort   int               // upf port
 	userPlane *gtpv1.UPlaneConn // N3 connection
 }
 
@@ -50,7 +54,7 @@ type GNBInfo struct {
 	gnbPort int
 }
 
-func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, st, sst, ip string, port int) {
+func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, st, sst, ip, ipData string, port, portData int) {
 	gnb.gnbInfo.mcc = mcc
 	gnb.gnbInfo.mnc = mnc
 	gnb.gnbInfo.tac = tac
@@ -60,8 +64,13 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, st, sst, ip string
 	gnb.idUeGenerator = 1
 	gnb.idAmfGenerator = 1
 	gnb.gnbInfo.gnbIp = ip
+	gnb.teidGenerator = 1
 	gnb.gnbInfo.gnbPort = port
-
+	gnb.dataInfo.upfPort = 2152
+	gnb.dataInfo.userPlane = nil
+	gnb.dataInfo.upfIp = ""
+	gnb.dataInfo.gnbIp = ipData
+	gnb.dataInfo.gnbPort = portData
 }
 
 func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
@@ -84,6 +93,13 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	// set state to UE.
 	ue.SetState(Initialized)
 
+	// set downlinkTeid.
+	teidDown := gnb.GetUeTeid()
+	ue.SetTeidDownlink(teidDown)
+
+	// store UE in the TEID Pool of GNB.
+	gnb.teidPool.Store(teidDown, ue)
+
 	// store UE in the UE Pool of GNB.
 	gnb.uePool.Store(ranId, ue)
 
@@ -93,13 +109,12 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 		log.Fatal("No AMF available for this UE")
 	}
 
-	// set amfId and sctp association for UE.
+	// set amfId and SCTP association for UE.
 	ue.SetAmfId(amf.GetAmfId())
 	ue.SetSCTP(amf.GetSCTPConn())
 
 	// return UE Context.
 	return ue
-
 }
 
 func (gnb *GNBContext) SetListener(conn net.Listener) {
@@ -110,6 +125,18 @@ func (gnb *GNBContext) GetListener() net.Listener {
 	return gnb.unixlistener
 }
 
+func (gnb *GNBContext) GetGnbUeByTeid(teid uint32) (*GNBUe, error) {
+	ue, err := gnb.teidPool.Load(teid)
+	if !err {
+		return nil, fmt.Errorf("UE is not find in GNB UE POOL using TEID")
+	}
+	return ue.(*GNBUe), nil
+}
+
+func (gnb *GNBContext) DeleteGnBUeByTeid(teid uint32) {
+	gnb.teidPool.Delete(teid)
+}
+
 func (gnb *GNBContext) DeleteGnBUe(ranUeId int64) {
 	gnb.uePool.Delete(ranUeId)
 }
@@ -117,7 +144,7 @@ func (gnb *GNBContext) DeleteGnBUe(ranUeId int64) {
 func (gnb *GNBContext) GetGnbUe(ranUeId int64) (*GNBUe, error) {
 	ue, err := gnb.uePool.Load(ranUeId)
 	if !err {
-		return nil, fmt.Errorf("UE is not find in GNB UE POOL ")
+		return nil, fmt.Errorf("UE is not find in GNB UE POOL")
 	}
 	return ue.(*GNBUe), nil
 }
@@ -203,6 +230,18 @@ func (gnb *GNBContext) getRanUeId() int64 {
 	return id
 }
 
+func (gnb *GNBContext) GetUeTeid() uint32 {
+
+	// TODO implement mutex
+
+	id := gnb.teidGenerator
+
+	gnb.teidGenerator++
+
+	return id
+}
+
+// for AMFs Pools.
 func (gnb *GNBContext) getRanAmfId() int64 {
 
 	// TODO implement mutex
@@ -215,27 +254,27 @@ func (gnb *GNBContext) getRanAmfId() int64 {
 	return id
 }
 
-func (gnb *GNBContext) setUpfIp(ip string) {
+func (gnb *GNBContext) SetUpfIp(ip string) {
 	gnb.dataInfo.upfIp = ip
 }
 
-func (gnb *GNBContext) setUpfPort(port string) {
+func (gnb *GNBContext) setUpfPort(port int) {
 	gnb.dataInfo.upfPort = port
 }
 
-func (gnb *GNBContext) setUserPlane(n3 *gtpv1.UPlaneConn) {
+func (gnb *GNBContext) SetUserPlane(n3 *gtpv1.UPlaneConn) {
 	gnb.dataInfo.userPlane = n3
 }
 
-func (gnb *GNBContext) getUpfIp() string {
+func (gnb *GNBContext) GetUpfIp() string {
 	return gnb.dataInfo.upfIp
 }
 
-func (gnb *GNBContext) getUpfPort() string {
+func (gnb *GNBContext) GetUpfPort() int {
 	return gnb.dataInfo.upfPort
 }
 
-func (gnb *GNBContext) getUserPlane() *gtpv1.UPlaneConn {
+func (gnb *GNBContext) GetUserPlane() *gtpv1.UPlaneConn {
 	return gnb.dataInfo.userPlane
 }
 
@@ -265,6 +304,14 @@ func (gnb *GNBContext) setMcc(mcc string) {
 
 func (gnb *GNBContext) GetGnbId() string {
 	return gnb.gnbInfo.gnbId
+}
+
+func (gnb *GNBContext) GetGnbIpByData() string {
+	return gnb.dataInfo.gnbIp
+}
+
+func (gnb *GNBContext) GetGnbPortByData() int {
+	return gnb.dataInfo.gnbPort
 }
 
 func (gnb *GNBContext) GetGnbIp() string {

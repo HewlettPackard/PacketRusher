@@ -1,6 +1,7 @@
 package pdu_session_management
 
 import (
+	"encoding/binary"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap"
@@ -28,7 +29,7 @@ func PDUSessionResourceSetupResponse(ue *context.GNBUe, ipv4 string) ([]byte, er
 	return ngap.Encoder(message)
 }
 
-func buildPDUSessionResourceSetupResponseForRegistrationTest(amfUeNgapID, ranUeNgapID int64, ipv4 string, pduId int64, teid []byte) (pdu ngapType.NGAPPDU) {
+func buildPDUSessionResourceSetupResponseForRegistrationTest(amfUeNgapID, ranUeNgapID int64, ipv4 string, pduId int64, teid uint32) (pdu ngapType.NGAPPDU) {
 
 	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
 	pdu.SuccessfulOutcome = new(ngapType.SuccessfulOutcome)
@@ -109,13 +110,13 @@ func buildPDUSessionResourceSetupResponseForRegistrationTest(amfUeNgapID, ranUeN
 	return
 }
 
-func GetPDUSessionResourceSetupResponseTransfer(ipv4 string, teid []byte) []byte {
+func GetPDUSessionResourceSetupResponseTransfer(ipv4 string, teid uint32) []byte {
 	data := buildPDUSessionResourceSetupResponseTransfer(ipv4, teid)
 	encodeData, _ := aper.MarshalWithParams(data, "valueExt")
 	return encodeData
 }
 
-func buildPDUSessionResourceSetupResponseTransfer(ipv4 string, teid []byte) (data ngapType.PDUSessionResourceSetupResponseTransfer) {
+func buildPDUSessionResourceSetupResponseTransfer(ipv4 string, teid uint32) (data ngapType.PDUSessionResourceSetupResponseTransfer) {
 
 	// QoS Flow per TNL Information
 	qosFlowPerTNLInformation := &data.QosFlowPerTNLInformation
@@ -142,7 +143,9 @@ func buildPDUSessionResourceSetupResponseTransfer(ipv4 string, teid []byte) (dat
 			fmt.Println(err)
 		}
 	*/
-	upTransportLayerInformation.GTPTunnel.GTPTEID.Value = teid
+	dowlinkTeid := make([]byte, 4)
+	binary.BigEndian.PutUint32(dowlinkTeid, teid)
+	upTransportLayerInformation.GTPTunnel.GTPTEID.Value = dowlinkTeid
 	upTransportLayerInformation.GTPTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(ipv4, "")
 
 	// Associated QoS Flow List in QoS Flow per TNL Information
