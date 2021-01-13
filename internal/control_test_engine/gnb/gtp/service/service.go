@@ -16,21 +16,21 @@ func InitGTPTunnel(gnb *context.GNBContext) error {
 	remote := fmt.Sprintf("%s:%d", gnb.GetUpfIp(), gnb.GetUpfPort())
 	remoteUdp, err := net.ResolveUDPAddr("udp", remote)
 	if err != nil {
-		return fmt.Errorf("Error in resolving UPF address for GTP/UDP tunnel", err)
+		return fmt.Errorf("[GNB][GTP] Error in resolving UPF address for GTP/UDP tunnel", err)
 	}
 
 	// get GNB Data plane ip and GNB Data plane port.
 	local := fmt.Sprintf("%s:%d", gnb.GetGnbIpByData(), gnb.GetGnbPortByData())
 	localUdp, err := net.ResolveUDPAddr("udp", local)
 	if err != nil {
-		return fmt.Errorf("Error in resolving GNB address for GTP/UDP tunnel", err)
+		return fmt.Errorf("[GNB][GTP] Error in resolving GNB address for GTP/UDP tunnel", err)
 	}
 
 	// make dial for UPF.
 	conte := create.TODO()
 	userPlane, err := gtpv1.DialUPlane(conte, localUdp, remoteUdp)
 	if err != nil {
-		return fmt.Errorf("Error in dial between GNB and UPF", err)
+		return fmt.Errorf("[GNB][GTP] Error in dial between GNB and UPF", err)
 	}
 
 	// successful established GTP/UDP tunnel.
@@ -49,7 +49,7 @@ func gtpListen(gnb *context.GNBContext) {
 	defer func() {
 		err := conn.Close()
 		if err != nil {
-			fmt.Printf("Error in closing GTP/UDP tunnel\n")
+			fmt.Printf("[GNB][GTP] Error in closing GTP/UDP tunnel\n")
 		}
 	}()
 
@@ -57,11 +57,11 @@ func gtpListen(gnb *context.GNBContext) {
 
 		n, addr, teid, err := conn.ReadFromGTP(buf)
 		if err != nil {
-			fmt.Println("Error read in GTP tunnel")
+			fmt.Println("[GNB][GTP] Error read in GTP tunnel")
 			return
 		}
 
-		fmt.Println("Address read in GTP Listen is", addr)
+		fmt.Println("[GNB][GTP] Address read in GTP Listen is", addr)
 
 		forwardData := make([]byte, n)
 		copy(forwardData, buf[:n])
@@ -69,7 +69,7 @@ func gtpListen(gnb *context.GNBContext) {
 		// find owner of  the Data Plane.
 		ue, err := gnb.GetGnbUeByTeid(teid)
 		if err != nil || ue == nil {
-			fmt.Println("Invalid Downlink Teid. UE is not found in UE Pool")
+			fmt.Println("[GNB][GTP] Invalid Downlink Teid. UE is not found in UE Pool")
 			return
 		}
 
@@ -105,9 +105,9 @@ func processingData(ue *context.GNBUe, gnb *context.GNBContext, packet []byte) {
 
 	// send data plane to ue.
 	if err := ueRawn.WriteTo(ipHeader, packet, nil); err != nil {
-		fmt.Println("Error in sending data plane to UE")
+		fmt.Println("[GNB][GTP] Error in sending data plane to UE")
 		return
 	}
 
-	fmt.Printf("send %d bytes in GNB/UE tunnel\n", packetLenght)
+	fmt.Printf("[GNB][DATA] Send %d bytes in GNB->UE tunnel\n", packetLenght)
 }
