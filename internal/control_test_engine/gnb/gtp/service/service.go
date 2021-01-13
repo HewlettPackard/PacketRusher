@@ -4,8 +4,10 @@ import (
 	create "context"
 	"fmt"
 	gtpv1 "github.com/wmnsk/go-gtp/v1"
+	"golang.org/x/net/ipv4"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"net"
+	"syscall"
 )
 
 func InitGTPTunnel(gnb *context.GNBContext) error {
@@ -32,7 +34,7 @@ func InitGTPTunnel(gnb *context.GNBContext) error {
 	}
 
 	// successful established GTP/UDP tunnel.
-	gnb.SetUserPlane(userPlane)
+	gnb.SetN3Plane(userPlane)
 
 	go gtpListen(gnb)
 
@@ -42,7 +44,7 @@ func InitGTPTunnel(gnb *context.GNBContext) error {
 func gtpListen(gnb *context.GNBContext) {
 
 	buf := make([]byte, 65535)
-	conn := gnb.GetUserPlane()
+	conn := gnb.GetN3Plane()
 
 	defer func() {
 		err := conn.Close()
@@ -59,7 +61,7 @@ func gtpListen(gnb *context.GNBContext) {
 			return
 		}
 
-		fmt.Println("Address read is", addr)
+		fmt.Println("Address read in GTP Listen is", addr)
 
 		forwardData := make([]byte, n)
 		copy(forwardData, buf[:n])
@@ -72,12 +74,40 @@ func gtpListen(gnb *context.GNBContext) {
 		}
 
 		// handling data plane.
-		go processingData(ue, forwardData)
+		go processingData(ue, gnb, forwardData)
 	}
 
 }
 
-func processingData(ue *context.GNBUe, packet []byte) {
+func processingData(ue *context.GNBUe, gnb *context.GNBContext, packet []byte) {
 
-	// send data plane to UE.
+	// get connection UE with GNB.
+	ueRawn := gnb.GetUePlane()
+
+	// make ipv4 header.
+	ipHeader := &ipv4.Header{
+		Version:  4,
+		Len:      20,
+		TOS:      0,
+		Flags:    ipv4.DontFragment,
+		FragOff:  0,
+		TTL:      64,
+		Protocol: syscall.IPPROTO_IPIP,
+	}
+
+	ueIp := ue.GetIp()
+
+	ipHeader.Dst = ueIp
+
+	// len = ipv4 + packet.
+	packetLenght := 20 + len(packet)
+	ipHeader.TotalLen = packetLenght
+
+	// send data plane to ue.
+	if err := ueRawn.WriteTo(ipHeader, packet, nil); err != nil {
+		fmt.Println("Error in sending data plane to UE")
+		return
+	}
+
+	fmt.Printf("send %d bytes in GNB/UE tunnel\n", packetLenght)
 }

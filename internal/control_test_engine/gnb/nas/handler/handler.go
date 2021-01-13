@@ -45,5 +45,4 @@ func HandlerUeReady(ue *context.GNBUe, message []byte, gnb *context.GNBContext) 
 
 	// receive UE ip or other messages.
 
-	// make tun interface.
 }

@@ -1,7 +1,6 @@
 package context
 
 import (
-	"fmt"
 	"github.com/ishidawataru/sctp"
 	"net"
 )
@@ -15,12 +14,11 @@ type GNBUe struct {
 	state                int            // State of UE in NAS/GNB Context.
 	sctpConnection       *sctp.SCTPConn // Sctp association in using by the UE.
 	unixSocketConnection net.Conn       // Unix sockets association in using by the UE.
-	// tunnel interface in using by the UE.
 }
 
 type PDUSession struct {
 	pduSessionId int64
-	ueIp         string
+	ranUeIP      net.IP
 	uplinkTeid   uint32
 	downlinkTeid uint32
 }
@@ -97,12 +95,12 @@ func (ue *GNBUe) SetRanUeId(id int64) {
 	ue.ranUeNgapId = id
 }
 
-func (ue *GNBUe) SetIp(ip [12]uint8) {
-	ue.pduSession.ueIp = fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
+func (ue *GNBUe) SetIp(ueIp uint8) {
+	ue.pduSession.ranUeIP = net.IPv4(127, 0, 0, ueIp)
 }
 
-func (ue *GNBUe) GetIp() string {
-	return ue.pduSession.ueIp
+func (ue *GNBUe) GetIp() net.IP {
+	return ue.pduSession.ranUeIP
 
 }
 
@@ -114,12 +112,4 @@ func (ue *GNBUe) GetAmfUeId() int64 {
 func (ue *GNBUe) SetAmfUeId(amfUeId int64) {
 	// fmt.Println(amfUeId)
 	ue.amfUeNgapId = amfUeId
-}
-
-func (ue *GNBUe) setTun() {
-
-}
-
-func (ue *GNBUe) getTun() {
-
 }

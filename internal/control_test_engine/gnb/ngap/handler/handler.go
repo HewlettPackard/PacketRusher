@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
-	serviceGTP "my5G-RANTester/internal/control_test_engine/gnb/gtp/service"
+	serviceGateway "my5G-RANTester/internal/control_test_engine/gnb/data/service"
+	serviceGtp "my5G-RANTester/internal/control_test_engine/gnb/gtp/service"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap/ngapType"
+	"time"
 )
 
 func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
@@ -219,10 +221,18 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	}
 
 	// configure GTP tunnel and listen.
-	if gnb.GetUserPlane() == nil {
+	if gnb.GetN3Plane() == nil {
 
-		serviceGTP.InitGTPTunnel(gnb)
+		serviceGtp.InitGTPTunnel(gnb)
+		serviceGateway.InitGatewayGnb(gnb)
 	}
+
+	time.Sleep(20 * time.Millisecond)
+
+	// ue is ready for data plane.
+	// send GNB UE IP message to UE.
+	UeGnBIp := ue.GetIp()
+	sender.SendToUe(ue, UeGnBIp)
 
 }
 

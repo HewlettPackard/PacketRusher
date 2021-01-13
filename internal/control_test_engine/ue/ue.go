@@ -42,9 +42,6 @@ func RegistrationUe(conf config.Config, id uint8) {
 		wg.Add(1)
 	}
 
-	// closing communication with GNB.
-	//defer service.CloseConn(ue)
-
 	// registration procedure started.
 	trigger.InitRegistration(ue)
 

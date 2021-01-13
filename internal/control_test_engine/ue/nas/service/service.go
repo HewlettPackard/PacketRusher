@@ -3,7 +3,7 @@ package service
 import (
 	"fmt"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
-	"my5G-RANTester/internal/control_test_engine/ue/nas"
+	"my5G-RANTester/internal/control_test_engine/ue/state"
 	"net"
 )
 
@@ -54,8 +54,7 @@ func UeListen(ue *context.UEContext) {
 		copy(forwardData, buf[:n])
 
 		// handling NAS message.
-		go nas.Dispatch(ue, forwardData)
+		go state.DispatchState(ue, forwardData)
 
-		//fmt.Println( fmt.Sprintf("Client : %s received: %s", s, string(buf[0:n]) ) )
 	}
 }

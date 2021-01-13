@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	gtpv1 "github.com/wmnsk/go-gtp/v1"
+	"golang.org/x/net/ipv4"
 	"log"
 	"net"
 	"sync"
@@ -20,24 +21,27 @@ const Active = 0x01
 const Overload = 0x02
 
 type GNBContext struct {
-	dataInfo       DataPlane
-	gnbInfo        GNBInfo
-	uePool         sync.Map // map[RanUeNgapId]*GNBUe, UeRanNgapId as key
-	amfPool        sync.Map // map[int64]*GNBAmf, AmfId as key
-	teidPool       sync.Map // map[downlinkTeid]*GNBUe, downlinkTeid as key
+	dataInfo       DataInfo    // gnb data plane information
+	controlInfo    ControlInfo // gnb control plane information
+	uePool         sync.Map    // map[in64]*GNBUe, UeRanNgapId as key
+	amfPool        sync.Map    // map[int64]*GNBAmf, AmfId as key
+	teidPool       sync.Map    // map[uint32]*GNBUe, downlinkTeid as key
+	ueIpPool       sync.Map    // map[string]*GNBUe, ueGnbIp as key
 	sliceInfo      Slice
-	idUeGenerator  int64
-	idAmfGenerator int64
-	teidGenerator  uint32
-	unixlistener   net.Listener
+	idUeGenerator  int64  // ran UE id.
+	idAmfGenerator int64  // ran amf id
+	teidGenerator  uint32 // ran UE downlink Teid
+	ueIpGenerator  uint8  // ran ue ip.
 }
 
-type DataPlane struct {
-	gnbIp     string            // gnb ip for data plane.
-	gnbPort   int               // gnb port for data plane.
-	upfIp     string            // upf ip
-	upfPort   int               // upf port
-	userPlane *gtpv1.UPlaneConn // N3 connection
+type DataInfo struct {
+	gnbIp        string            // gnb ip for data plane.
+	gnbPort      int               // gnb port for data plane.
+	upfIp        string            // upf ip
+	upfPort      int               // upf port
+	gtpPlane     *gtpv1.UPlaneConn // N3 connection
+	gatewayGnbIp string            // IP gateway that communicates with UE data plane.
+	uePlane      *ipv4.RawConn     // listen UE data plane
 }
 
 type Slice struct {
@@ -45,29 +49,32 @@ type Slice struct {
 	sst string
 }
 
-type GNBInfo struct {
-	mcc     string
-	mnc     string
-	tac     string
-	gnbId   string
-	gnbIp   string
-	gnbPort int
+type ControlInfo struct {
+	mcc          string
+	mnc          string
+	tac          string
+	gnbId        string
+	gnbIp        string
+	gnbPort      int
+	unixlistener net.Listener
 }
 
 func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, st, sst, ip, ipData string, port, portData int) {
-	gnb.gnbInfo.mcc = mcc
-	gnb.gnbInfo.mnc = mnc
-	gnb.gnbInfo.tac = tac
-	gnb.gnbInfo.gnbId = gnbId
+	gnb.controlInfo.mcc = mcc
+	gnb.controlInfo.mnc = mnc
+	gnb.controlInfo.tac = tac
+	gnb.controlInfo.gnbId = gnbId
 	gnb.sliceInfo.st = st
 	gnb.sliceInfo.sst = sst
 	gnb.idUeGenerator = 1
 	gnb.idAmfGenerator = 1
-	gnb.gnbInfo.gnbIp = ip
+	gnb.controlInfo.gnbIp = ip
 	gnb.teidGenerator = 1
-	gnb.gnbInfo.gnbPort = port
+	gnb.ueIpGenerator = 3
+	gnb.controlInfo.gnbPort = port
 	gnb.dataInfo.upfPort = 2152
-	gnb.dataInfo.userPlane = nil
+	gnb.dataInfo.gtpPlane = nil
+	gnb.dataInfo.gatewayGnbIp = "127.0.0.2"
 	gnb.dataInfo.upfIp = ""
 	gnb.dataInfo.gnbIp = ipData
 	gnb.dataInfo.gnbPort = portData
@@ -81,7 +88,7 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	// new instance of ue.
 	ue := &GNBUe{}
 
-	// set ranUeNgapId for UE.
+	// set ran UE Ngap Id.
 	ranId := gnb.getRanUeId()
 	ue.SetRanUeId(ranId)
 
@@ -103,6 +110,13 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	// store UE in the UE Pool of GNB.
 	gnb.uePool.Store(ranId, ue)
 
+	// set ran UE IP
+	ueIp := gnb.getRanUeIp()
+	ue.SetIp(ueIp)
+
+	// store UE in the GNB UE IP Pool.
+	gnb.ueIpPool.Store(ue.GetIp().String(), ue)
+
 	// select AMF with Capacity is more than 0.
 	amf := gnb.selectAmFByActive()
 	if amf == nil {
@@ -118,19 +132,15 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 }
 
 func (gnb *GNBContext) SetListener(conn net.Listener) {
-	gnb.unixlistener = conn
+	gnb.controlInfo.unixlistener = conn
 }
 
 func (gnb *GNBContext) GetListener() net.Listener {
-	return gnb.unixlistener
+	return gnb.controlInfo.unixlistener
 }
 
-func (gnb *GNBContext) GetGnbUeByTeid(teid uint32) (*GNBUe, error) {
-	ue, err := gnb.teidPool.Load(teid)
-	if !err {
-		return nil, fmt.Errorf("UE is not find in GNB UE POOL using TEID")
-	}
-	return ue.(*GNBUe), nil
+func (gnb *GNBContext) GetGatewayGnbIp() string {
+	return gnb.dataInfo.gatewayGnbIp
 }
 
 func (gnb *GNBContext) DeleteGnBUeByTeid(teid uint32) {
@@ -141,10 +151,30 @@ func (gnb *GNBContext) DeleteGnBUe(ranUeId int64) {
 	gnb.uePool.Delete(ranUeId)
 }
 
+func (gnb *GNBContext) DeleteGnBUeByIp(ip string) {
+	gnb.ueIpPool.Delete(ip)
+}
+
 func (gnb *GNBContext) GetGnbUe(ranUeId int64) (*GNBUe, error) {
 	ue, err := gnb.uePool.Load(ranUeId)
 	if !err {
 		return nil, fmt.Errorf("UE is not find in GNB UE POOL")
+	}
+	return ue.(*GNBUe), nil
+}
+
+func (gnb *GNBContext) GetGnbUeByIp(ip string) (*GNBUe, error) {
+	ue, err := gnb.ueIpPool.Load(ip)
+	if !err {
+		return nil, fmt.Errorf("UE is not find in GNB UE POOL using IP")
+	}
+	return ue.(*GNBUe), nil
+}
+
+func (gnb *GNBContext) GetGnbUeByTeid(teid uint32) (*GNBUe, error) {
+	ue, err := gnb.teidPool.Load(teid)
+	if !err {
+		return nil, fmt.Errorf("UE is not find in GNB UE POOL using TEID")
 	}
 	return ue.(*GNBUe), nil
 }
@@ -218,6 +248,18 @@ func (gnb *GNBContext) getGnbAmf(amfId int64) (*GNBAmf, error) {
 	return amf.(*GNBAmf), nil
 }
 
+func (gnb *GNBContext) getRanUeIp() uint8 {
+
+	// TODO implement mutex
+
+	id := gnb.ueIpGenerator
+
+	// increment Ue Ip Generator.
+	gnb.ueIpGenerator++
+
+	return id
+}
+
 func (gnb *GNBContext) getRanUeId() int64 {
 
 	// TODO implement mutex
@@ -236,6 +278,7 @@ func (gnb *GNBContext) GetUeTeid() uint32 {
 
 	id := gnb.teidGenerator
 
+	// increment UE teid.
 	gnb.teidGenerator++
 
 	return id
@@ -262,8 +305,8 @@ func (gnb *GNBContext) setUpfPort(port int) {
 	gnb.dataInfo.upfPort = port
 }
 
-func (gnb *GNBContext) SetUserPlane(n3 *gtpv1.UPlaneConn) {
-	gnb.dataInfo.userPlane = n3
+func (gnb *GNBContext) SetN3Plane(n3 *gtpv1.UPlaneConn) {
+	gnb.dataInfo.gtpPlane = n3
 }
 
 func (gnb *GNBContext) GetUpfIp() string {
@@ -274,36 +317,44 @@ func (gnb *GNBContext) GetUpfPort() int {
 	return gnb.dataInfo.upfPort
 }
 
-func (gnb *GNBContext) GetUserPlane() *gtpv1.UPlaneConn {
-	return gnb.dataInfo.userPlane
+func (gnb *GNBContext) GetN3Plane() *gtpv1.UPlaneConn {
+	return gnb.dataInfo.gtpPlane
+}
+
+func (gnb *GNBContext) GetUePlane() *ipv4.RawConn {
+	return gnb.dataInfo.uePlane
+}
+
+func (gnb *GNBContext) SetUePlane(uePlane *ipv4.RawConn) {
+	gnb.dataInfo.uePlane = uePlane
 }
 
 func (gnb *GNBContext) setGnbPort(port int) {
-	gnb.gnbInfo.gnbPort = port
+	gnb.controlInfo.gnbPort = port
 }
 
 func (gnb *GNBContext) setGnbIp(ip string) {
-	gnb.gnbInfo.gnbIp = ip
+	gnb.controlInfo.gnbIp = ip
 }
 
 func (gnb *GNBContext) setGnbId(id string) {
-	gnb.gnbInfo.gnbId = id
+	gnb.controlInfo.gnbId = id
 }
 
 func (gnb *GNBContext) setTac(tac string) {
-	gnb.gnbInfo.tac = tac
+	gnb.controlInfo.tac = tac
 }
 
 func (gnb *GNBContext) setMnc(mnc string) {
-	gnb.gnbInfo.mnc = mnc
+	gnb.controlInfo.mnc = mnc
 }
 
 func (gnb *GNBContext) setMcc(mcc string) {
-	gnb.gnbInfo.mcc = mcc
+	gnb.controlInfo.mcc = mcc
 }
 
 func (gnb *GNBContext) GetGnbId() string {
-	return gnb.gnbInfo.gnbId
+	return gnb.controlInfo.gnbId
 }
 
 func (gnb *GNBContext) GetGnbIpByData() string {
@@ -315,16 +366,16 @@ func (gnb *GNBContext) GetGnbPortByData() int {
 }
 
 func (gnb *GNBContext) GetGnbIp() string {
-	return gnb.gnbInfo.gnbIp
+	return gnb.controlInfo.gnbIp
 }
 
 func (gnb *GNBContext) GetGnbPort() int {
-	return gnb.gnbInfo.gnbPort
+	return gnb.controlInfo.gnbPort
 }
 
 func (gnb *GNBContext) GetGnbIdInBytes() []byte {
 	// changed for bytes.
-	resu, err := hex.DecodeString(gnb.gnbInfo.gnbId)
+	resu, err := hex.DecodeString(gnb.controlInfo.gnbId)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -332,12 +383,12 @@ func (gnb *GNBContext) GetGnbIdInBytes() []byte {
 }
 
 func (gnb *GNBContext) getTac() string {
-	return gnb.gnbInfo.tac
+	return gnb.controlInfo.tac
 }
 
 func (gnb *GNBContext) GetTacInBytes() []byte {
 	// changed for bytes.
-	resu, err := hex.DecodeString(gnb.gnbInfo.tac)
+	resu, err := hex.DecodeString(gnb.controlInfo.tac)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -362,20 +413,20 @@ func (gnb *GNBContext) GetSliceInBytes() ([]byte, []byte) {
 }
 
 func (gnb *GNBContext) getMccAndMnc() (string, string) {
-	return gnb.gnbInfo.mcc, gnb.gnbInfo.mnc
+	return gnb.controlInfo.mcc, gnb.controlInfo.mnc
 }
 
 func (gnb *GNBContext) GetMccAndMncInOctets() []byte {
 
 	// reverse mcc and mnc
-	mcc := reverse(gnb.gnbInfo.mcc)
-	mnc := reverse(gnb.gnbInfo.mnc)
+	mcc := reverse(gnb.controlInfo.mcc)
+	mnc := reverse(gnb.controlInfo.mnc)
 
 	// include mcc and mnc in octets
 	oct5 := mcc[1:3]
 	var oct6 string
 	var oct7 string
-	if len(gnb.gnbInfo.mnc) == 2 {
+	if len(gnb.controlInfo.mnc) == 2 {
 		oct6 = "f" + string(mcc[0])
 		oct7 = mnc
 	} else {

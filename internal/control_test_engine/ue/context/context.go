@@ -13,18 +13,34 @@ import (
 	"regexp"
 )
 
+// 5GMM main states in the UE.
+const MM5G_NULL = 0x00
+const MM5G_DEREGISTERED = 0x01
+const MM5G_REGISTERED_INITIATED = 0x02
+const MM5G_REGISTERED = 0x03
+const MM5G_SERVICE_REQ_INIT = 0x04
+const MM5G_DEREGISTERED_INIT = 0x05
+
+// 5GSM main states in the UE.
+const SM5G_PDU_SESSION_INACTIVE = 0x06
+const SM5G_PDU_SESSION_ACTIVE_PENDING = 0x07
+const SM5G_PDU_SESSION_ACTIVE = 0x08
+
 type UEContext struct {
 	UeSecurity SECURITY
-	State      int
+	StateMM    int
+	StateSM    int
 	UnixConn   net.Conn
 	PduSession PDUSession
 }
 
 type PDUSession struct {
-	Id     uint8
-	ueIP   string
-	Dnn    string
-	Snssai models.Snssai
+	Id        uint8
+	ueIP      string
+	ueGnbIP   net.IP
+	Dnn       string
+	Snssai    models.Snssai
+	gatewayIP net.IP
 }
 
 type SECURITY struct {
@@ -77,6 +93,9 @@ func (ue *UEContext) NewRanUeContext(imsi string,
 	// added Domain Network Name.
 	ue.PduSession.Dnn = "internet"
 
+	// added gateway ip.
+	ue.PduSession.gatewayIP = net.ParseIP("127.0.0.2").To4()
+
 	// encode mcc and mnc for mobileIdentity5Gs.
 	resu := ue.GetMccAndMncInOctets()
 
@@ -96,8 +115,12 @@ func (ue *UEContext) NewRanUeContext(imsi string,
 	// added snn.
 	ue.UeSecurity.Snn = ue.deriveSNN()
 
-	// added initial state(NULL)
-	ue.SetState(0x00)
+	// added initial state for MM(NULL)
+	ue.SetStateMM_NULL()
+
+	// added initial state for SM(INACTIVE)
+	ue.SetStateSM_PDU_SESSION_INACTIVE()
+
 }
 
 func (ue *UEContext) GetSuci() nasType.MobileIdentity5GS {
@@ -108,12 +131,48 @@ func (ue *UEContext) GetSupi() string {
 	return ue.UeSecurity.Supi
 }
 
-func (ue *UEContext) SetState(state int) {
-	ue.State = state
+func (ue *UEContext) SetStateSM_PDU_SESSION_INACTIVE() {
+	ue.StateSM = SM5G_PDU_SESSION_INACTIVE
 }
 
-func (ue *UEContext) GetState() int {
-	return ue.State
+func (ue *UEContext) SetStateSM_PDU_SESSION_ACTIVE() {
+	ue.StateSM = SM5G_PDU_SESSION_ACTIVE
+}
+
+func (ue *UEContext) SetStateSM_PDU_SESSION_PENDING() {
+	ue.StateSM = SM5G_PDU_SESSION_ACTIVE_PENDING
+}
+
+func (ue *UEContext) SetStateMM_DEREGISTERED_INITIATED() {
+	ue.StateMM = MM5G_DEREGISTERED_INIT
+}
+
+func (ue *UEContext) SetStateMM_MM5G_SERVICE_REQ_INIT() {
+	ue.StateMM = MM5G_SERVICE_REQ_INIT
+}
+
+func (ue *UEContext) SetStateMM_REGISTERED_INITIATED() {
+	ue.StateMM = MM5G_REGISTERED_INITIATED
+}
+
+func (ue *UEContext) SetStateMM_REGISTERED() {
+	ue.StateMM = MM5G_REGISTERED
+}
+
+func (ue *UEContext) SetStateMM_NULL() {
+	ue.StateMM = MM5G_NULL
+}
+
+func (ue *UEContext) SetStateMM_DEREGISTERED() {
+	ue.StateMM = MM5G_DEREGISTERED
+}
+
+func (ue *UEContext) GetStateSM() int {
+	return ue.StateSM
+}
+
+func (ue *UEContext) GetStateMM() int {
+	return ue.StateMM
 }
 
 func (ue *UEContext) SetUnixConn(conn net.Conn) {
@@ -130,6 +189,22 @@ func (ue *UEContext) SetIp(ip [12]uint8) {
 
 func (ue *UEContext) GetIp() string {
 	return ue.PduSession.ueIP
+}
+
+func (ue *UEContext) GetGatewayIp() net.IP {
+	return ue.PduSession.gatewayIP
+}
+
+func (ue *UEContext) SetGnbIp(ip net.IP) {
+	ue.PduSession.ueGnbIP = ip
+}
+
+func (ue *UEContext) GetGnbIp() net.IP {
+	return ue.PduSession.ueGnbIP
+}
+
+func (ue *UEContext) GetPduSesssionId() uint8 {
+	return ue.PduSession.Id
 }
 
 func (ue *UEContext) deriveSNN() string {

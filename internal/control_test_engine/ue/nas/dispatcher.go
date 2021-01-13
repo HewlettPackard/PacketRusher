@@ -8,7 +8,7 @@ import (
 	"my5G-RANTester/lib/nas"
 )
 
-func Dispatch(ue *context.UEContext, message []byte) {
+func DispatchNas(ue *context.UEContext, message []byte) {
 
 	// check if message is null.
 	if message == nil {

@@ -9,7 +9,8 @@ require (
 	github.com/ishidawataru/sctp v0.0.0-20191218070446-00ab2ac2db07
 	github.com/sirupsen/logrus v1.7.0
 	github.com/urfave/cli/v2 v2.3.0
+	github.com/vishvananda/netlink v1.1.0
+	github.com/wmnsk/go-gtp v0.7.4
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
 	gopkg.in/yaml.v2 v2.3.0
-	github.com/wmnsk/go-gtp v0.7.4
 )

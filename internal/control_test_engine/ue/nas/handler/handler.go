@@ -12,14 +12,6 @@ import (
 	"time"
 )
 
-// 5GMM main states in the UE
-const MM5G_NULL = 0x00
-const MM5G_DEREGISTERED = 0x01
-const MM5G_REGISTERED_INITIATED = 0x02
-const MM5G_REGISTERED = 0x03
-const MM5G_SERVICE_REQ_INIT = 0x04
-const MM5G_DEREGISTERED_INIT = 0x05
-
 func HandlerAuthenticationRequest(ue *context.UEContext, message *nas.Message) {
 
 	// getting RAND and AUTN from the message.
@@ -33,13 +25,16 @@ func HandlerAuthenticationRequest(ue *context.UEContext, message *nas.Message) {
 	authenticationResponse := mm_5gs.AuthenticationResponse(resStar, "")
 
 	// change state of ue for registered-initiated
-	ue.SetState(MM5G_REGISTERED_INITIATED)
+	ue.SetStateMM_REGISTERED_INITIATED()
 
 	// sending to GNB
 	sender.SendToGnb(ue, authenticationResponse)
 }
 
 func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) {
+
+	// TODO checking BIT RINMR that triggered registration request in security mode complete
+	// message.SecurityModeCommand.Additional5GSecurityInformation.GetRINMR()
 
 	// getting NAS Security Mode Complete.
 	securityModeComplete, err := mm_5gs.SecurityModeComplete(ue)
@@ -54,7 +49,7 @@ func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) {
 func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 
 	// change the state of ue for registered
-	ue.SetState(MM5G_REGISTERED)
+	ue.SetStateMM_REGISTERED()
 
 	// getting NAS registration complete.
 	registrationComplete, err := mm_5gs.RegistrationComplete(ue)
@@ -74,6 +69,9 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 		log.Fatal("[UE][NAS] Error sending ul nas transport and pdu session establishment request: ", err)
 	}
 
+	// change the sate of ue(SM).
+	ue.SetStateSM_PDU_SESSION_PENDING()
+
 	// sending to GNB
 	sender.SendToGnb(ue, ulNasTransport)
 }
@@ -84,10 +82,14 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message)
 	payloadContainer := nas_control.GetNasPduFromPduAccept(message)
 	if payloadContainer.GsmHeader.GetMessageType() == nas.MsgTypePDUSessionEstablishmentAccept {
 		fmt.Println("[UE][NAS] Receiving PDU Session Establishment Accept")
+
 		// update PDU Session information.
+
+		// change the state of ue(SM)(PDU Session Active).
+		ue.SetStateSM_PDU_SESSION_ACTIVE()
+
 		// get UE ip
 		UeIp := payloadContainer.PDUSessionEstablishmentAccept.GetPDUAddressInformation()
 		ue.SetIp(UeIp)
-		fmt.Println(ue.GetIp())
 	}
 }
