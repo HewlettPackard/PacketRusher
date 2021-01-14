@@ -84,7 +84,7 @@ cd cmd
 ./app ue
 ```
 
-**Check interface uetun1 that will test data plane with ping or other tool.**
+**Check uetun1 interface in your host for test data plane with ping or other tool.**
 
 # Questions
  
