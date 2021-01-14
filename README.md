@@ -8,91 +8,54 @@
 
 <img width="20%" src="docs/media/img/my5g-logo.png" alt="my5g-core"/>
 
-- [Description](#description)
-- [Installation](#installation)
-    - [Recommended environment](#recommended-environment)
-    - [Requirements](#requirements)
-    - [RAN Tester](#ran-tester)
-- [Check](#check)
-- [More information](#more-information)
+----
+
+my5G-RANTester is a tool that simulates User Equipment (UE) and Next Generation-Radio Access Networks (NG-RANs) for testing any 5G cores on the 3GPP standard (i.e., Release 15). This tool provides stress tests for the control plane and data plane. Moreover, the tests can be played individually for analyzing only one UE or in scale for analyzing hundreds of UE simultaneously.
 
 ----
-# Description
+## Installation
 
-my5G-RANTester is a tool for emulating control and data planes of the UE (user equipment) and gNB (5G base station). my5G-RANTester follows the 3GPP Release 15 standard for NG-RAN (Next Generation-Radio Access Network). Using my5G-RANTester, it is possible to generate different workloads and test several functionalities of a 5G core, including its complaince to the 3GPP standards. Scalability is also a relevant feature of the my5G-RANTester, which is able mimic the behaviour of a large number of UEs and gNBs accessing simultaneously a 5G core. Currently, the wireless channel is not implemented in the tool.
+**Requirements**
 
-If you want to cite this tool, please use the following information:
-```
-@misc{???,
-    title={???},
-    author={???},
-    year={2020},
-    eprint={???},
-    archivePrefix={arXiv},
-    primaryClass={cs.NI}
-}
-```
-If you have questions or comments, please email us: [my5G team](mailto:my5G.initiative@gmail.com). 
+The software requirement:
+* Go 1.14.4
+* GSL 2.6
+* GCC
 
-my5G-RANTester borrows libraries and data structures from the [free5gc project](https://github.com/free5gc/free5gc).
-
-----
-# Installation
-
-## Recommended environment
-
+The installation can be done directly over the host operating system (OS) or inside a virtual machine (VM). System requirements:
 * CPU type: x86-64 (specific model and number of cores only affect performance)
 * RAM: 1 GB
-* Operating System (OS): Linux Ubuntu 18.04 or 20.04 LTS.
+* Ubuntu 18.04/20.04 LTS.
 
-The installation can be done directly in the host OS or inside a virtual machine (VM).
+**Steps**
 
-
-## Requirements
-
-Install GCC:
+Install GSL-2.6 and GCC
 ```
-sudo apt update && apt -y install build-essential
-```
-
-Install GSL:
-```
-sudo apt -y install libgsl-dev
+sudo apt update
+sudo apt install build-essential
+sudo apt install install libgsl-dev
 ```
 
-Install Go (assuming there is no previous version installed):
+Downloading source code:
 ```
-wget https://dl.google.com/go/go1.14.4.linux-amd64.tar.gz
-sudo tar -C /usr/local -zxvf go1.14.4.linux-amd64.tar.gz
-mkdir -p ~/go/{bin,pkg,src}
-echo 'export GOPATH=$HOME/go' >> ~/.bashrc
-echo 'export GOROOT=/usr/local/go' >> ~/.bashrc
-echo 'export PATH=$PATH:$GOPATH/bin:$GOROOT/bin' >> ~/.bashrc
-source ~/.bashrc
+git clone https://github.com/my5G/my5G-RANTester.git
 ```
 
-## RAN Tester
-
-Download the source code:
+Install dependencies:
 ```
-git clone https://github.com/LABORA-INF-UFG/my5G-RANTester.git
-```
-
-Install the dependencies:
-```
-cd my5G-RANTester
+cd my5g-RANTester
 go mod download
 ```
   
-Build the binary:
+Build binary:
 ```
 cd cmd 
 go build app.go
 ```
+  
+Edit configuration file in config/config.yml:
 
-Edit configuration file **config/config.yml** and make the following procedures.
-
-1. Configure **amfif** with the AMF IP address, port and core name that you are testing. Currrently, there are three options for **name**: my5g-core, free5gc or open5gs.
+Change amfif with AMF ip, port and core name that you are testing. In the moment we have two options: free5gcore or open5gs
 ```yaml
 amfif:
   ip: "127.0.0.1"
@@ -100,52 +63,30 @@ amfif:
   name: "free5gc"
 ```
 
-2. Change **upif** with UPF IP address and port (N3 reference point).
-```yaml
-upfif:
-  ip: "10.200.200.102"
-  port: 2152
-```
-
-3. Check the values in UE (key,opc,amf), as illustrated below. The same values must be registered in the 5G core under evaluation since they are used by the my5G-RANTester during the tests.
+Check the values in UE(opc,key,amf). This values must be registered by webconsole core and my5gRANTester will use them in all tests.
 ```yaml
   key: "70d49a71dd1a2b806a25abe0ef749f1e"
   opc: "6f1bf53d624b3a43af6592854e2444c7"
   amf: "8000"
 ```
 
-Done! The software is successfully installed.
-
-----
-# Check
-
-Make sure that the path to GSL dynamic library is part of environment variable LD_LIBRARY_PATH:
+Keep attention about imsi because some tests was automatized(load-tests) and will not permit change. If you are using free5gcore you can using script in /dev/includes_ues.sh to added imsi and other information by webconsole. As show below:
 ```
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/gsl/
-export LD_LIBRARY_PATH
+   ./included_ues.sh -n <number of UEs that you want to test in load tests>  
 ```
 
-Make also sure that you are in directory **my5G-RANTester/cmd**, then run the most basic test:
+  
+## Tests
+
+**Running with template:**
 ```
+cd cmd
 ./app ue
 ```
 
-The result should be similar to the following:
-<p align="">
-     <img src="docs/media/img/my5gRANTesterOk.png"/>
-</p>
+**Check interface uetun1 that will test data plane with ping or other tool.**
 
-# More information
-   
-If my5G-RANTester was successfuly installed, you may find useful take a look in the [USAGE](https://github.com/my5G/my5G-RANTester/blob/develop/USAGE.md) manual that also presents several examples.
-
-Please review the [CONTRIBUTION](https://github.com/my5G/template/blob/main/CONTRIBUTING.md) guide for information on how to get started contributing to the project.
-
-
-If you found problems during the installation or during the checking, you may find a solution in the [TROUBLESHOOTING](https://github.com/my5G/my5G-RANTester/blob/develop/TROUBLESHOOTING.md) document.
-
-
-If you do not have a 5G core for testing, you can easily deploy and run the [my5G-core](https://github.com/my5G/my5G-core).
-
-
+# Questions
+ 
+For questions and support please send a e-mail message to [my5G team](mailto:my5G.initiative@gmail.com). 
 
