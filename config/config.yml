@@ -3,7 +3,7 @@ gnodeb:
     ip: "127.0.0.1"
     port: 9487
   dataif:
-    ip: "127.0.0.9"
+    ip: "10.200.200.2"
     port: 2152
   plmnlist:
     mcc: "208"
