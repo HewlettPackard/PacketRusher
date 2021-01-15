@@ -7,6 +7,7 @@ import (
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapConvert"
 	"my5G-RANTester/lib/ngap/ngapType"
+	"net"
 )
 
 /*
@@ -25,7 +26,13 @@ func pDUSessionResourceSetupResponse(connN2 *sctp.SCTPConn, amfUeNgapID int64, r
 */
 
 func PDUSessionResourceSetupResponse(ue *context.GNBUe, ipv4 string) ([]byte, error) {
-	message := buildPDUSessionResourceSetupResponseForRegistrationTest(ue.GetAmfUeId(), ue.GetRanUeId(), ipv4, ue.GetPduSessionId(), ue.GetTeidDownlink())
+
+	// check hostname(Error in docker if using hostname)
+	nameIp, err := net.LookupHost(ipv4)
+	if err != nil {
+		return nil, err
+	}
+	message := buildPDUSessionResourceSetupResponseForRegistrationTest(ue.GetAmfUeId(), ue.GetRanUeId(), nameIp[0], ue.GetPduSessionId(), ue.GetTeidDownlink())
 	return ngap.Encoder(message)
 }
 
