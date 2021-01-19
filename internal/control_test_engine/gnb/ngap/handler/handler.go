@@ -3,7 +3,7 @@ package handler
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	serviceGateway "my5G-RANTester/internal/control_test_engine/gnb/data/service"
 	serviceGtp "my5G-RANTester/internal/control_test_engine/gnb/gtp/service"
@@ -27,20 +27,20 @@ func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAP
 
 		case ngapType.ProtocolIEIDAMFUENGAPID:
 			if ies.Value.AMFUENGAPID == nil {
-				log.Fatal("AMF UE id is nill")
+				log.Fatal("[GNB][NGAP] AMF UE id is nil")
 			}
 			amfUeId = ies.Value.AMFUENGAPID.Value
 
 		case ngapType.ProtocolIEIDRANUENGAPID:
 			if ies.Value.RANUENGAPID == nil {
-				log.Fatal("RAN UE id is nil")
+				log.Fatal("[GNB][NGAP] RAN UE id is nil")
 				// TODO SEND ERROR INDICATION
 			}
 			ranUeId = ies.Value.RANUENGAPID.Value
 
 		case ngapType.ProtocolIEIDNASPDU:
 			if ies.Value.NASPDU == nil {
-				log.Fatal("NAS PDU is nil")
+				log.Fatal("[GNB][NGAP] NAS PDU is nil")
 			}
 			messageNas = ies.Value.NASPDU.Value
 		}
@@ -49,7 +49,7 @@ func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAP
 	// check RanUeId and get UE.
 	ue, err := gnb.GetGnbUe(ranUeId)
 	if err != nil || ue == nil {
-		log.Fatal("UE is not found in GNB POOL")
+		log.Fatal("[GNB][NGAP] UE is not found in GNB POOL")
 		// TODO SEND ERROR INDICATION
 	}
 
@@ -79,20 +79,20 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 
 		case ngapType.ProtocolIEIDAMFUENGAPID:
 			if ies.Value.AMFUENGAPID == nil {
-				log.Fatal("AMF UE id is nill")
+				log.Fatal("[GNB][NGAP] AMF UE id is nil")
 			}
 			amfUeId = ies.Value.AMFUENGAPID.Value
 
 		case ngapType.ProtocolIEIDRANUENGAPID:
 			if ies.Value.RANUENGAPID == nil {
-				log.Fatal("RAN UE id is nil")
+				log.Fatal("[GNB][NGAP] RAN UE id is nil")
 				// TODO SEND ERROR INDICATION
 			}
 			ranUeId = ies.Value.RANUENGAPID.Value
 
 		case ngapType.ProtocolIEIDNASPDU:
 			if ies.Value.NASPDU == nil {
-				log.Fatal("NAS PDU is nil")
+				log.Fatal("[GNB][NGAP] NAS PDU is nil")
 			}
 			messageNas = ies.Value.NASPDU.Value
 		}
@@ -101,13 +101,14 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	// check RanUeId and get UE.
 	ue, err := gnb.GetGnbUe(ranUeId)
 	if err != nil || ue == nil {
-		log.Fatal("UE is not found in GNB POOL")
+		log.Fatal("[GNB][NGAP] UE is not found in GNB POOL")
 		// TODO SEND ERROR INDICATION
 	}
 
 	// check if AMF UE id.
 	if ue.GetAmfUeId() != amfUeId {
-		fmt.Println("Problem in receive AMF UE ID from CORE")
+		log.Fatal("[GNB][NGAP] Problem in receive AMF UE ID from CORE")
+		// TODO SEND ERROR INDICATION
 	}
 
 	// send NAS message to UE.
@@ -137,14 +138,14 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 		case ngapType.ProtocolIEIDAMFUENGAPID:
 
 			if ies.Value.AMFUENGAPID == nil {
-				log.Fatal("AMF UE id is nill")
+				log.Fatal("[GNB][NGAP] AMF UE id is nil")
 			}
 			amfUeId = ies.Value.AMFUENGAPID.Value
 
 		case ngapType.ProtocolIEIDRANUENGAPID:
 
 			if ies.Value.RANUENGAPID == nil {
-				log.Fatal("RAN UE id is nil")
+				log.Fatal("[GNB][NGAP] RAN UE id is nil")
 				// TODO SEND ERROR INDICATION
 			}
 			ranUeId = ies.Value.RANUENGAPID.Value
@@ -152,14 +153,14 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 		case ngapType.ProtocolIEIDPDUSessionResourceSetupListSUReq:
 
 			if ies.Value.PDUSessionResourceSetupListSUReq == nil {
-				log.Fatal("PDUSessionResourceSetupListSUReq is nil")
+				log.Fatal("[GNB][NGAP] PDUSessionResourceSetupListSUReq is nil")
 			}
 			pDUSessionResourceSetupList := ies.Value.PDUSessionResourceSetupListSUReq
 			for _, item := range pDUSessionResourceSetupList.List {
 				if item.PDUSessionNASPDU != nil {
 					messageNas = item.PDUSessionNASPDU.Value
 				} else {
-					fmt.Println("NAS PDU is nil")
+					log.Fatal("[GNB][NGAP] NAS PDU is nil")
 				}
 				pduSessionId = item.PDUSessionID.Value
 				if item.PDUSessionResourceSetupRequestTransfer != nil {
@@ -174,10 +175,10 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 							}
 						}
 					} else {
-						fmt.Println("Error in decode Pdu Session Resource Setup Request Transfer")
+						log.Info("[GNB][NGAP] Error in decode Pdu Session Resource Setup Request Transfer")
 					}
 				} else {
-					fmt.Println("Pdu Session Resource Setup Request Transfer is nil")
+					log.Info("[GNB][NGAP] Pdu Session Resource Setup Request Transfer is nil")
 				}
 
 			}
@@ -187,13 +188,13 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	// check RanUeId and get UE.
 	ue, err := gnb.GetGnbUe(ranUeId)
 	if err != nil || ue == nil {
-		log.Fatal("UE is not found in GNB POOL")
+		log.Fatal("[GNB][NGAP] UE is not found in GNB POOL")
 		// TODO SEND ERROR INDICATION
 	}
 
 	// check if AMF UE id.
 	if ue.GetAmfUeId() != amfUeId {
-		fmt.Println("Problem in receive AMF UE ID from CORE")
+		log.Fatal("[GNB][NGAP] Problem in receive AMF UE ID from CORE")
 		// TODO SEND ERROR INDICATION
 	}
 
@@ -214,15 +215,11 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	sender.SendToUe(ue, messageNas)
 
 	// send PDU Session Resource Setup Response.
-	err = trigger.SendPduSessionResourceSetupResponse(ue, gnb)
-	if err != nil {
-		fmt.Println("Error in sending PDU Session Resource Setup Response")
-		return
-	}
+	trigger.SendPduSessionResourceSetupResponse(ue, gnb)
 
 	// configure GTP tunnel and listen.
 	if gnb.GetN3Plane() == nil {
-
+		// TODO check if GTP tunnel and gateway is ok.
 		serviceGtp.InitGTPTunnel(gnb)
 		serviceGateway.InitGatewayGnb(gnb)
 	}

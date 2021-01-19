@@ -38,11 +38,11 @@ func main() {
 					cfg := config.Data
 
 					log.Info("---------------------------------------")
-					log.Info("[UE][GNB] Starting test function: ", name)
-					log.Info("[UE][GNB] Number of UEs: ", 1)
-					log.Info("[GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
-					log.Info("[GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
-					log.Info("[AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					log.Info("[TESTER] Starting test function: ", name)
+					log.Info("[TESTER][UE] Number of UEs: ", 1)
+					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
+					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
+					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
 					log.Info("---------------------------------------")
 					templates.TestAttachUeWithConfiguration()
 					return nil
@@ -69,13 +69,13 @@ func main() {
 					}
 
 					log.Info("---------------------------------------")
-					log.Info("Starting test function: ", name)
-					log.Info("Number of UEs: ", numUes)
-					log.Info("gNodeB control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
-					log.Info("gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
-					log.Info("AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					log.Info("[TESTER] Starting test function: ", name)
+					log.Info("[TESTER][UE] Number of UEs: ", numUes)
+					log.Info("[TESTER][GNB] gNodeB control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
+					log.Info("[TESTER][GNB] gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
+					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
 					log.Info("---------------------------------------")
-					templates.TestMultiUesInQueue(uint8(numUes))
+					templates.TestMultiUesInQueue(numUes)
 
 					return nil
 				},

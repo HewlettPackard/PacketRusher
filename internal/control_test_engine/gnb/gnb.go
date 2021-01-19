@@ -1,8 +1,7 @@
 package gnb
 
 import (
-	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	serviceNas "my5G-RANTester/internal/control_test_engine/gnb/nas/service"
@@ -40,7 +39,7 @@ func InitGnb(conf config.Config) {
 	if err := serviceNgap.InitConn(amf, gnb); err != nil {
 		log.Fatal("Error in", err)
 	} else {
-		fmt.Println("[GNB] SCTP/NGAP service is running")
+		log.Info("[GNB] SCTP/NGAP service is running")
 		wg.Add(1)
 	}
 
@@ -48,7 +47,7 @@ func InitGnb(conf config.Config) {
 	if err := serviceNas.InitServer(gnb); err != nil {
 		log.Fatal("Error in", err)
 	} else {
-		fmt.Println("[GNB] UNIX/NAS service is running")
+		log.Info("[GNB] UNIX/NAS service is running")
 		wg.Add(1)
 	}
 

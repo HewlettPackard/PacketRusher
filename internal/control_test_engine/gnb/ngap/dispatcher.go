@@ -2,6 +2,7 @@ package ngap
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/handler"
 	"my5G-RANTester/lib/ngap"
@@ -12,13 +13,13 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 
 	if message == nil {
 		// TODO return error
-		fmt.Println("NGAP message is nill")
+		log.Info("[GNB][NGAP] NGAP message is nil")
 	}
 
 	// decode NGAP message.
 	ngapMsg, err := ngap.Decoder(message)
 	if err != nil {
-		fmt.Println("Error decoding NGAP message in %d GNB", gnb.GetGnbId())
+		log.Info("[GNB][NGAP] Error decoding NGAP message in ", gnb.GetGnbId(), " GNB")
 	}
 
 	// check RanUeId and get UE.
@@ -32,17 +33,17 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 
 		case ngapType.ProcedureCodeDownlinkNASTransport:
 			// handler NGAP Downlink NAS Transport.
-			fmt.Println("[NGAP]Receive Downlink NAS Transport")
+			log.Info("[GNB][NGAP] Receive Downlink NAS Transport")
 			handler.HandlerDownlinkNasTransport(gnb, ngapMsg)
 
 		case ngapType.ProcedureCodeInitialContextSetup:
 			// handler NGAP Initial Context Setup Request.
-			fmt.Println("[NGAP]Receive Initial Context Setup Request")
+			log.Info("[GNB][NGAP] Receive Initial Context Setup Request")
 			handler.HandlerInitialContextSetupRequest(gnb, ngapMsg)
 
 		case ngapType.ProcedureCodePDUSessionResourceSetup:
 			// handler NGAP PDU Session Resource Setup Request.
-			fmt.Println("[NGAP]Receive PDU Session Resource Setup Request")
+			log.Info("[GNB][NGAP] Receive PDU Session Resource Setup Request")
 			handler.HandlerPduSessionResourceSetupRequest(gnb, ngapMsg)
 		}
 
@@ -52,7 +53,7 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 
 		case ngapType.ProcedureCodeNGSetup:
 			// handler NGAP Setup Response.
-			fmt.Println("[NGAP]Receive Ng Setup Response")
+			fmt.Println("[GNB][NGAP] Receive Ng Setup Response")
 			handler.HandlerNgSetupResponse(amf, gnb, ngapMsg)
 
 		}

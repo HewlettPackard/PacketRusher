@@ -15,7 +15,6 @@ func SendToAmF(message []byte, conn *sctp.SCTPConn) error {
 	}
 
 	_, err := conn.SCTPWrite(message, info)
-	// fmt.Println("Esse erro aqui", err)
 	if err != nil {
 		return fmt.Errorf("Error sending NGAP message ", err)
 	}

@@ -2,7 +2,7 @@ package service
 
 import (
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas"
 	"net"
@@ -42,7 +42,7 @@ func gnbListen(gnb *context.GNBContext) {
 	defer func() {
 		err := ln.Close()
 		if err != nil {
-			fmt.Printf("Error in closing unix sockets for %d GNB\n", gnb.GetGnbId())
+			log.Info("[GNB][UE] Error in closing unix sockets for %d GNB\n", gnb.GetGnbId())
 		}
 	}()
 
@@ -50,7 +50,7 @@ func gnbListen(gnb *context.GNBContext) {
 
 		fd, err := ln.Accept()
 		if err != nil {
-			log.Fatal("Accept error: ", err)
+			log.Fatal("[GNB][UE] Accept error: ", err)
 		}
 
 		// TODO this region of the code may induces race condition.

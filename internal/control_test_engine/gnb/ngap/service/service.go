@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap"
 )
@@ -54,7 +55,7 @@ func GnbListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 	defer func() {
 		err := conn.Close()
 		if err != nil {
-			fmt.Printf("Error in closing SCTP association for %d AMF\n", amf.GetAmfId())
+			log.Info("[GNB][SCTP] Error in closing SCTP association for %d AMF\n", amf.GetAmfId())
 		}
 	}()
 
@@ -65,7 +66,7 @@ func GnbListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 			return
 		}
 
-		fmt.Printf("Receive message in %d stream\n", info.Stream)
+		log.Info("[GNB][SCTP] Receive message in %d stream\n", info.Stream)
 
 		forwardData := make([]byte, n)
 		copy(forwardData, buf[:n])

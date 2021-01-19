@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestMultiUesInQueue(numUes uint8) {
+func TestMultiUesInQueue(numUes int) {
 
 	wg := sync.WaitGroup{}
 
@@ -26,15 +26,16 @@ func TestMultiUesInQueue(numUes uint8) {
 
 	time.Sleep(60 * time.Millisecond)
 
-	cfg.Ue.Imsi = imsiGenerator(1)
-	go ue.RegistrationUe(cfg, 1)
-	wg.Add(1)
+	for i := 1; i <= numUes; i++ {
 
-	time.Sleep(30 * time.Second)
+		imsi := imsiGenerator(i)
+		log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", imsi, " UE")
+		cfg.Ue.Imsi = imsi
+		go ue.RegistrationUe(cfg, uint8(i))
+		wg.Add(1)
 
-	cfg.Ue.Imsi = imsiGenerator(2)
-	go ue.RegistrationUe(cfg, 2)
-	wg.Add(1)
+		time.Sleep(10 * time.Second)
+	}
 
 	wg.Wait()
 }

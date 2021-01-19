@@ -3,6 +3,7 @@ package service
 import (
 	create "context"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	gtpv1 "github.com/wmnsk/go-gtp/v1"
 	"golang.org/x/net/ipv4"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
@@ -49,7 +50,7 @@ func gtpListen(gnb *context.GNBContext) {
 	defer func() {
 		err := conn.Close()
 		if err != nil {
-			fmt.Printf("[GNB][GTP] Error in closing GTP/UDP tunnel\n")
+			log.Info("[GNB][GTP] Error in closing GTP/UDP tunnel\n")
 		}
 	}()
 
@@ -57,11 +58,11 @@ func gtpListen(gnb *context.GNBContext) {
 
 		n, addr, teid, err := conn.ReadFromGTP(buf)
 		if err != nil {
-			fmt.Println("[GNB][GTP] Error read in GTP tunnel")
+			log.Info("[GNB][GTP] Error read in GTP tunnel")
 			return
 		}
 
-		fmt.Println("[GNB][GTP] Address read in GTP Listen is", addr)
+		log.Info("[GNB][GTP] Address read in GTP Listen is", addr)
 
 		forwardData := make([]byte, n)
 		copy(forwardData, buf[:n])
@@ -69,7 +70,7 @@ func gtpListen(gnb *context.GNBContext) {
 		// find owner of  the Data Plane using downlink Teid.
 		ue, err := gnb.GetGnbUeByTeid(teid)
 		if err != nil || ue == nil {
-			fmt.Println("[GNB][GTP] Invalid Downlink Teid. UE is not found in UE Pool")
+			log.Info("[GNB][GTP] Invalid Downlink Teid. UE is not found in UE Pool")
 			return
 		}
 
@@ -105,9 +106,9 @@ func processingData(ue *context.GNBUe, gnb *context.GNBContext, packet []byte) {
 
 	// send data plane to ue.
 	if err := ueRawn.WriteTo(ipHeader, packet, nil); err != nil {
-		fmt.Println("[GNB][GTP] Error in sending data plane to UE")
+		log.Info("[GNB][GTP] Error in sending data plane to UE")
 		return
 	}
 
-	fmt.Printf("[GNB][DATA] Send %d bytes in GNB->UE tunnel\n", packetLenght)
+	log.Info("[GNB][DATA] Send %d bytes in GNB->UE tunnel\n", packetLenght)
 }
