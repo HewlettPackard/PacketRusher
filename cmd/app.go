@@ -48,6 +48,38 @@ func main() {
 					return nil
 				},
 			},
+			{
+				Name:    "load-test",
+				Aliases: []string{"load-test"},
+				Usage: "\nLoad endurance stress tests.\n" +
+					"Example for testing multiple UEs: load-test -n 5 \n",
+				Flags: []cli.Flag{
+					&cli.IntFlag{Name: "number-of-ues", Value: 1, Aliases: []string{"n"}},
+				},
+				Action: func(c *cli.Context) error {
+					var numUes int
+					name := "Testing registration of multiple UEs"
+					cfg := config.Data
+
+					if c.IsSet("number-of-ues") {
+						numUes = c.Int("number-of-ues")
+					} else {
+						log.Info(c.Command.Usage)
+						return nil
+					}
+
+					log.Info("---------------------------------------")
+					log.Info("Starting test function: ", name)
+					log.Info("Number of UEs: ", numUes)
+					log.Info("gNodeB control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
+					log.Info("gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
+					log.Info("AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					log.Info("---------------------------------------")
+					templates.TestMultiUesInQueue(uint8(numUes))
+
+					return nil
+				},
+			},
 		},
 	}
 	err := app.Run(os.Args)

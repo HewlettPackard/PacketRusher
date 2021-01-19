@@ -66,7 +66,7 @@ func gtpListen(gnb *context.GNBContext) {
 		forwardData := make([]byte, n)
 		copy(forwardData, buf[:n])
 
-		// find owner of  the Data Plane.
+		// find owner of  the Data Plane using downlink Teid.
 		ue, err := gnb.GetGnbUeByTeid(teid)
 		if err != nil || ue == nil {
 			fmt.Println("[GNB][GTP] Invalid Downlink Teid. UE is not found in UE Pool")

@@ -75,7 +75,7 @@ func processingData(ue *context.GNBUe, gnb *context.GNBContext, packet []byte) {
 	}
 
 	// send Data plane with GTP header.
-	teidDownlink := ue.GetTeidDownlink()
+	teidUplink := ue.GetTeidUplink()
 
 	remote := fmt.Sprintf("%s:%d", gnb.GetUpfIp(), gnb.GetUpfPort())
 	upfAddr, err := net.ResolveUDPAddr("udp", remote)
@@ -85,7 +85,7 @@ func processingData(ue *context.GNBUe, gnb *context.GNBContext, packet []byte) {
 	}
 
 	// send Data plane with GTP header.
-	n, err := conn.WriteToGTP(teidDownlink, packet, upfAddr)
+	n, err := conn.WriteToGTP(teidUplink, packet, upfAddr)
 	if err != nil {
 		fmt.Println("[GNB][GTP] Error sending data plane in GTP/UDP tunnel")
 	}
