@@ -24,11 +24,7 @@ ue:
   snssai:
     sd: 1
     sst: "010203"
-  ping: "60.60.0.101"
 amfif:
   ip: "127.0.0.1"
   port: 38412
   name: "free5gc"
-upfif:
-  ip: "10.200.200.102"
-  port: 2152

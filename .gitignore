@@ -5,6 +5,5 @@
 .vscode/
 
 # debug/
-go.sum
 *.log
 *.pcap
