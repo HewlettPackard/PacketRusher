@@ -5,6 +5,11 @@ import (
 	"net"
 )
 
+// UE main states in the GNB Context.
+const Initialized = 0x00
+const Ongoing = 0x01
+const Ready = 0x02
+
 type GNBUe struct {
 	ranUeNgapId int64 // Identifier for UE in GNB Context.
 	amfUeNgapId int64 // Identifier for UE in AMF Context.
@@ -43,8 +48,8 @@ func (ue *GNBUe) GetState() int {
 	return ue.state
 }
 
-func (ue *GNBUe) SetState(state int) {
-	ue.state = state
+func (ue *GNBUe) SetStateInitialized() {
+	ue.state = Initialized
 }
 
 func (ue *GNBUe) SetStateOngoing() {

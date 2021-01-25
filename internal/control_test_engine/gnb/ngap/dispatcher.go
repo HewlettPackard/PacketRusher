@@ -57,5 +57,16 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 			handler.HandlerNgSetupResponse(amf, gnb, ngapMsg)
 
 		}
+
+	case ngapType.NGAPPDUPresentUnsuccessfulOutcome:
+
+		switch ngapMsg.UnsuccessfulOutcome.ProcedureCode.Value {
+
+		case ngapType.ProcedureCodeNGSetup:
+			// handler NGAP Setup Failure.
+			fmt.Println("[GNB][NGAP] Receive Ng Setup Failure")
+			handler.HandlerNgSetupFailure(amf, gnb, ngapMsg)
+
+		}
 	}
 }

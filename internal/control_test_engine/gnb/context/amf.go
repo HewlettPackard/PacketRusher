@@ -4,6 +4,11 @@ import (
 	"github.com/ishidawataru/sctp"
 )
 
+// AMF main states in the GNB Context.
+const Inactive = 0x00
+const Active = 0x01
+const Overload = 0x02
+
 type GNBAmf struct {
 	amfIp               string         // AMF ip
 	amfPort             int            // AMF port
@@ -25,8 +30,16 @@ func (amf *GNBAmf) getTNLAs() TNLAssociation {
 	return amf.tnla
 }
 
-func (amf *GNBAmf) SetState(state int) {
-	amf.state = state
+func (amf *GNBAmf) SetStateInactive() {
+	amf.state = Inactive
+}
+
+func (amf *GNBAmf) SetStateActive() {
+	amf.state = Active
+}
+
+func (amf *GNBAmf) SetStateOverload() {
+	amf.state = Overload
 }
 
 func (amf *GNBAmf) GetState() int {

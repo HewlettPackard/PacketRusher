@@ -236,6 +236,14 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 
 	// check information about AMF and add in AMF context.
-	amf.SetState(context.Active)
+	amf.SetStateActive()
+
+}
+
+func HandlerNgSetupFailure(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+
+	// check information about AMF and add in AMF context.
+	// redundant
+	amf.SetStateInactive()
 
 }
