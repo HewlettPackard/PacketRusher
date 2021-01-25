@@ -243,7 +243,73 @@ func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, messag
 func HandlerNgSetupFailure(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 
 	// check information about AMF and add in AMF context.
-	// redundant
+	valueMessage := message.UnsuccessfulOutcome.Value.NGSetupFailure
+
+	for _, ies := range valueMessage.ProtocolIEs.List {
+
+		switch ies.Id.Value {
+
+		case ngapType.ProtocolIEIDCause:
+
+			switch ies.Value.Cause.Present {
+
+			case ngapType.CausePresentMisc:
+
+				causeMisc := ies.Value.Cause.Misc.Value
+
+				switch causeMisc {
+
+				case ngapType.CauseMiscPresentUnknownPLMN:
+					// Cannot find Served TAI in AMF.
+
+				case ngapType.CauseMiscPresentUnspecified:
+					// No supported TA exist in NG-Setup request.
+
+				}
+
+			case ngapType.CausePresentRadioNetwork:
+				// TODO treatment error
+
+			case ngapType.CausePresentTransport:
+				// TODO treatment error
+
+			case ngapType.CausePresentProtocol:
+				// TODO treatment error
+
+			case ngapType.CausePresentNas:
+				// TODO treatment error
+
+			}
+
+		case ngapType.ProtocolIEIDTimeToWait:
+
+			switch ies.Value.TimeToWait.Value {
+
+			case ngapType.TimeToWaitPresentV1s:
+			case ngapType.TimeToWaitPresentV2s:
+			case ngapType.TimeToWaitPresentV5s:
+			case ngapType.TimeToWaitPresentV10s:
+			case ngapType.TimeToWaitPresentV20s:
+			case ngapType.TimeToWaitPresentV60s:
+
+			}
+
+		case ngapType.ProtocolIEIDCriticalityDiagnostics:
+
+			// TODO treatment error
+
+			// ies.Value.CriticalityDiagnostics
+			// errors.IECriticality.Value
+			// ngapType.CriticalityPresentReject:
+			// ngapType.CriticalityPresentIgnore:
+			// ngapType.CriticalityPresentNotify:
+			// ngapType.TypeOfErrorPresentNotUnderstood:
+			// ngapType.TypeOfErrorPresentMissing:
+
+		}
+	}
+
+	// redundant but useful for information about code.
 	amf.SetStateInactive()
 
 }
