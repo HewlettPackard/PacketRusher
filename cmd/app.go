@@ -49,6 +49,25 @@ func main() {
 				},
 			},
 			{
+				Name:    "gnb",
+				Aliases: []string{"gnb"},
+				Usage:   "Testing an gnb attached with configuration",
+				Action: func(c *cli.Context) error {
+					name := "Testing an gnb attached with configuration"
+					cfg := config.Data
+
+					log.Info("---------------------------------------")
+					log.Info("[TESTER] Starting test function: ", name)
+					log.Info("[TESTER][GNB] Number of GNBs: ", 1)
+					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
+					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
+					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					log.Info("---------------------------------------")
+					templates.TestAttachGnbWithConfiguration()
+					return nil
+				},
+			},
+			{
 				Name:    "load-test",
 				Aliases: []string{"load-test"},
 				Usage: "\nLoad endurance stress tests.\n" +

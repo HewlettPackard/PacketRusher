@@ -1,7 +1,6 @@
 package ngap
 
 import (
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/handler"
@@ -53,7 +52,7 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 
 		case ngapType.ProcedureCodeNGSetup:
 			// handler NGAP Setup Response.
-			fmt.Println("[GNB][NGAP] Receive Ng Setup Response")
+			log.Info("[GNB][NGAP] Receive Ng Setup Response")
 			handler.HandlerNgSetupResponse(amf, gnb, ngapMsg)
 
 		}
@@ -64,7 +63,7 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 
 		case ngapType.ProcedureCodeNGSetup:
 			// handler NGAP Setup Failure.
-			fmt.Println("[GNB][NGAP] Receive Ng Setup Failure")
+			log.Info("[GNB][NGAP] Receive Ng Setup Failure")
 			handler.HandlerNgSetupFailure(amf, gnb, ngapMsg)
 
 		}

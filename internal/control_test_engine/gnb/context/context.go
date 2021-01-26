@@ -190,6 +190,10 @@ func (gnb *GNBContext) NewGnBAmf(ip string, port int) *GNBAmf {
 	// store AMF in the AMF Pool of GNB.
 	gnb.amfPool.Store(amfId, amf)
 
+	// Plmns and slices supported by AMF initialized.
+	amf.SetLenPlmns(0)
+	amf.SetLenSlice(0)
+
 	// return AMF Context
 	return amf
 }

@@ -235,8 +235,109 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 
 func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 
+	err := false
+	var plmn string
+
 	// check information about AMF and add in AMF context.
-	amf.SetStateActive()
+	valueMessage := message.SuccessfulOutcome.Value.NGSetupResponse
+
+	for _, ies := range valueMessage.ProtocolIEs.List {
+
+		switch ies.Id.Value {
+
+		case ngapType.ProtocolIEIDAMFName:
+			if ies.Value.AMFName == nil {
+				// TODO error indication. This field is mandatory critically reject
+				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,AMF Name is missing")
+				log.Info("[GNB][NGAP] AMF is inactive")
+				err = true
+			} else {
+				amfName := ies.Value.AMFName.Value
+				amf.SetAmfName(amfName)
+			}
+
+		case ngapType.ProtocolIEIDServedGUAMIList:
+			if ies.Value.ServedGUAMIList.List == nil {
+				// TODO error indication. This field is mandatory critically reject
+				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,Serverd Guami list is missing")
+				log.Info("[GNB][NGAP] AMF is inactive")
+				err = true
+			}
+			for _, items := range ies.Value.ServedGUAMIList.List {
+				if items.GUAMI.AMFRegionID.Value.Bytes == nil {
+					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,Served Guami list is inappropriate")
+					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, AMFRegionId is missing")
+					log.Info("[GNB][NGAP] AMF is inactive")
+					err = true
+				}
+				if items.GUAMI.AMFPointer.Value.Bytes == nil {
+					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,Served Guami list is inappropriate")
+					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, AMFPointer is missing")
+					log.Info("[GNB][NGAP] AMF is inactive")
+					err = true
+				}
+				if items.GUAMI.AMFSetID.Value.Bytes == nil {
+					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,Served Guami list is inappropriate")
+					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, AMFSetId is missing")
+					log.Info("[GNB][NGAP] AMF is inactive")
+					err = true
+				}
+			}
+
+		case ngapType.ProtocolIEIDRelativeAMFCapacity:
+			if ies.Value.RelativeAMFCapacity != nil {
+				amfCapacity := ies.Value.RelativeAMFCapacity.Value
+				amf.SetAmfCapacity(amfCapacity)
+			}
+
+		case ngapType.ProtocolIEIDPLMNSupportList:
+
+			if ies.Value.PLMNSupportList == nil {
+				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, PLMN Support list is missing")
+				err = true
+			}
+
+			for _, items := range ies.Value.PLMNSupportList.List {
+
+				plmn = fmt.Sprintf("%x", items.PLMNIdentity.Value)
+				amf.AddedPlmn(plmn)
+
+				if items.SliceSupportList.List == nil {
+					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, PLMN Support list is inappropriate")
+					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, Slice Support list is missing")
+					err = true
+				}
+
+				for _, slice := range items.SliceSupportList.List {
+
+					sd := fmt.Sprintf("%x", slice.SNSSAI.SD.Value)
+					sst := fmt.Sprintf("%x", slice.SNSSAI.SST.Value)
+
+					// update amf slice supported
+					amf.AddedSlice(sst, sd)
+				}
+			}
+		}
+
+	}
+
+	if err {
+		log.Info("[GNB][AMF] AMF is inactive")
+		amf.SetStateInactive()
+	} else {
+		amf.SetStateActive()
+		log.Info("[GNB][AMF] AMF NAME: ", amf.GetAmfName())
+		log.Info("[GNB][AMF] State of AMF: ACTIVE")
+		log.Info("[GNB][AMF] Capacity of AMF: ", amf.GetAmfCapacity())
+		for i := 0; i < amf.GetLenPlmns(); i++ {
+			mcc, mnc := amf.GetPlmnSupport(i)
+			log.Info("[GNB][AMF] PLMNs Identities Supported by AMF -- mcc: ", mcc, " mnc:", mnc)
+		}
+		for i := 0; i < amf.GetLenSlice(); i++ {
+			sst, sd := amf.GetSliceSupport(i)
+			log.Info("[GNB][AMF] List of AMF slices Supported by AMF -- sst:", sst, " sd:", sd)
+		}
+	}
 
 }
 
@@ -261,9 +362,11 @@ func HandlerNgSetupFailure(amf *context.GNBAmf, gnb *context.GNBContext, message
 
 				case ngapType.CauseMiscPresentUnknownPLMN:
 					// Cannot find Served TAI in AMF.
+					log.Info("[GNB][AMF][NGAP] Unknown PLMN in Supported TAI")
 
 				case ngapType.CauseMiscPresentUnspecified:
 					// No supported TA exist in NG-Setup request.
+					log.Info("[GNB][AMF][NGAP] Error cause unspecified")
 
 				}
 
@@ -312,4 +415,5 @@ func HandlerNgSetupFailure(amf *context.GNBAmf, gnb *context.GNBContext, message
 	// redundant but useful for information about code.
 	amf.SetStateInactive()
 
+	log.Info("[GNB][NGAP] AMF is inactive")
 }

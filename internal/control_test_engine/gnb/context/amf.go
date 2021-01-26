@@ -16,6 +16,14 @@ type GNBAmf struct {
 	tnla                TNLAssociation // AMF sctp associations
 	relativeAmfCapacity int64          // AMF capacity
 	state               int
+	name                string // amf name.
+	regionId            byte
+	setId               byte
+	pointer             byte
+	plmns               *PlmnSupported
+	slices              *SliceSupported
+	lenSlice            int
+	lenPlmn             int
 	// TODO implement the other fields of the AMF Context
 }
 
@@ -24,6 +32,136 @@ type TNLAssociation struct {
 	tnlaWeightFactor int64
 	usage            bool
 	streams          uint16
+}
+
+type SliceSupported struct {
+	sst  string
+	sd   string
+	next *SliceSupported
+}
+
+type PlmnSupported struct {
+	mcc  string
+	mnc  string
+	next *PlmnSupported
+}
+
+func (amf *GNBAmf) GetSliceSupport(index int) (string, string) {
+
+	mov := amf.slices
+	for i := 0; i < index; i++ {
+		mov = mov.next
+	}
+
+	return mov.sst, mov.sd
+}
+
+func (amf *GNBAmf) GetPlmnSupport(index int) (string, string) {
+
+	mov := amf.plmns
+	for i := 0; i < index; i++ {
+		mov = mov.next
+	}
+
+	return mov.mcc, mov.mnc
+}
+
+func convertMccMnc(plmn string) (mcc string, mnc string) {
+
+	// mcc digit 1 e 2 -- invert 0 1 string
+	mcc12 := string(plmn[0:2])
+
+	// mnc digit 3
+	mnc3 := string(plmn[2])
+
+	// mcc digit 3
+	mcc3 := string(plmn[3])
+
+	// mnc digit 1 2.
+	mnc12 := string(plmn[4:])
+
+	// make mcc and mnc.
+	if mcc3 != "f" {
+		mcc = reverse(mcc12) + mcc3
+	} else {
+		mcc = reverse(mcc12)
+	}
+
+	if mnc3 != "f" {
+		mnc = reverse(mnc12) + mnc3
+	} else {
+		mnc = reverse(mnc12)
+	}
+
+	return mcc, mnc
+}
+
+func (amf *GNBAmf) AddedPlmn(plmn string) {
+
+	if amf.lenPlmn == 0 {
+		newElem := &PlmnSupported{}
+
+		// newElem.info = plmn
+		newElem.next = nil
+		newElem.mcc, newElem.mnc = convertMccMnc(plmn)
+		// update list
+		amf.plmns = newElem
+		amf.lenPlmn++
+		return
+	}
+
+	mov := amf.plmns
+	for i := 0; i < amf.lenPlmn; i++ {
+
+		// end of the list
+		if mov.next == nil {
+
+			newElem := &PlmnSupported{}
+			newElem.mcc, newElem.mnc = convertMccMnc(plmn)
+			newElem.next = nil
+
+			mov.next = newElem
+
+		} else {
+			mov = mov.next
+		}
+	}
+
+	amf.lenPlmn++
+}
+
+func (amf *GNBAmf) AddedSlice(sst string, sd string) {
+
+	if amf.lenSlice == 0 {
+		newElem := &SliceSupported{}
+		newElem.sst = sst
+		newElem.sd = sd
+		newElem.next = nil
+
+		// update list
+		amf.slices = newElem
+		amf.lenSlice++
+		return
+	}
+
+	mov := amf.slices
+	for i := 0; i < amf.lenSlice; i++ {
+
+		// end of the list
+		if mov.next == nil {
+
+			newElem := &SliceSupported{}
+			newElem.sst = sst
+			newElem.sd = sd
+			newElem.next = nil
+
+			mov.next = newElem
+
+		} else {
+			mov = mov.next
+		}
+	}
+	amf.lenSlice++
 }
 
 func (amf *GNBAmf) getTNLAs() TNLAssociation {
@@ -94,10 +232,34 @@ func (amf *GNBAmf) setAmfId(id int64) {
 	amf.amfId = id
 }
 
-func (amf *GNBAmf) getAmfCapacity() int64 {
+func (amf *GNBAmf) GetAmfName() string {
+	return amf.name
+}
+
+func (amf *GNBAmf) SetAmfName(name string) {
+	amf.name = name
+}
+
+func (amf *GNBAmf) GetAmfCapacity() int64 {
 	return amf.relativeAmfCapacity
 }
 
-func (amf *GNBAmf) setAmfCapacity(capacity int64) {
+func (amf *GNBAmf) SetAmfCapacity(capacity int64) {
 	amf.relativeAmfCapacity = capacity
+}
+
+func (amf *GNBAmf) GetLenPlmns() int {
+	return amf.lenPlmn
+}
+
+func (amf *GNBAmf) GetLenSlice() int {
+	return amf.lenSlice
+}
+
+func (amf *GNBAmf) SetLenPlmns(value int) {
+	amf.lenPlmn = value
+}
+
+func (amf *GNBAmf) SetLenSlice(value int) {
+	amf.lenSlice = value
 }
