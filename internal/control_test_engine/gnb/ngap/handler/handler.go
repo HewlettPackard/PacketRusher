@@ -189,23 +189,23 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	ue.CreateUeContext(mobilityRestrict, maskedImeisv, sst, sd)
 
 	// show UE context.
-	log.Info("[GNB][UE] UE CONTEXT CREATE WITH SUCCESSFUL")
-	log.Info("[GNB][UE] UE RAN ID", ue.GetRanUeId())
-	log.Info("[GNB][UE] UE AMF ID", ue.GetAmfUeId())
+	log.Info("[GNB][UE] UE Context Created With Successful")
+	log.Info("[GNB][UE] UE RAN ID ", ue.GetRanUeId())
+	log.Info("[GNB][UE] UE AMF ID ", ue.GetAmfUeId())
 	mcc, mnc := ue.GetUeMobility()
-	log.Info("[GNB][UE] UE MOBILITY RESTRICT --PLMN-- MCC:", mcc, "MNC:", mnc)
-	log.Info("[GNB][UE] UE MASKED IMEISV:", ue.GetUeMaskedImeiSv())
+	log.Info("[GNB][UE] UE Mobility Restrict --Plmn-- Mcc: ", mcc, " Mnc: ", mnc)
+	log.Info("[GNB][UE] UE Masked Imeisv: ", ue.GetUeMaskedImeiSv())
 	for i := 0; i < ue.GetLenSlice(); i++ {
 		sst, sd := ue.GetAllowedNSSAI(i)
-		log.Info("[GNB][UE] ALLOWED NSSAI-- SST:", sst, "SD:", sd)
+		log.Info("[GNB][UE] Allowed Nssai-- Sst: ", sst, " Sd: ", sd)
 	}
 
 	// send NAS message to UE.
-	log.Info("[GNB][NAS][UE] Send Registration Accept:")
+	log.Info("[GNB][NAS][UE] Send Registration Accept.")
 	sender.SendToUe(ue, messageNas)
 
 	// send Initial Context Setup Response.
-	log.Info("[GNB][NGAP][AMF] Send Initial Context Setup Response:")
+	log.Info("[GNB][NGAP][AMF] Send Initial Context Setup Response.")
 	trigger.SendInitialContextSetupResponse(ue)
 
 }
@@ -436,8 +436,8 @@ func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, messag
 		amf.SetStateInactive()
 	} else {
 		amf.SetStateActive()
-		log.Info("[GNB][AMF] AMF NAME: ", amf.GetAmfName())
-		log.Info("[GNB][AMF] State of AMF: ACTIVE")
+		log.Info("[GNB][AMF] AMF Name: ", amf.GetAmfName())
+		log.Info("[GNB][AMF] State of AMF: Active")
 		log.Info("[GNB][AMF] Capacity of AMF: ", amf.GetAmfCapacity())
 		for i := 0; i < amf.GetLenPlmns(); i++ {
 			mcc, mnc := amf.GetPlmnSupport(i)
