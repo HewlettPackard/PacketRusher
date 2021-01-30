@@ -23,24 +23,27 @@ func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAP
 	valueMessage := message.InitiatingMessage.Value.DownlinkNASTransport
 
 	for _, ies := range valueMessage.ProtocolIEs.List {
+
 		switch ies.Id.Value {
 
 		case ngapType.ProtocolIEIDAMFUENGAPID:
 			if ies.Value.AMFUENGAPID == nil {
-				log.Fatal("[GNB][NGAP] AMF UE id is nil")
+				log.Fatal("[GNB][NGAP] AMF UE NGAP ID is missing")
+				// TODO SEND ERROR INDICATION
 			}
 			amfUeId = ies.Value.AMFUENGAPID.Value
 
 		case ngapType.ProtocolIEIDRANUENGAPID:
 			if ies.Value.RANUENGAPID == nil {
-				log.Fatal("[GNB][NGAP] RAN UE id is nil")
+				log.Fatal("[GNB][NGAP] RAN UE NGAP ID is missing")
 				// TODO SEND ERROR INDICATION
 			}
 			ranUeId = ies.Value.RANUENGAPID.Value
 
 		case ngapType.ProtocolIEIDNASPDU:
 			if ies.Value.NASPDU == nil {
-				log.Fatal("[GNB][NGAP] NAS PDU is nil")
+				log.Fatal("[GNB][NGAP] NAS PDU is missing")
+				// TODO SEND ERROR INDICATION
 			}
 			messageNas = ies.Value.NASPDU.Value
 		}
@@ -49,16 +52,18 @@ func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAP
 	// check RanUeId and get UE.
 	ue, err := gnb.GetGnbUe(ranUeId)
 	if err != nil || ue == nil {
-		log.Fatal("[GNB][NGAP] UE is not found in GNB POOL")
+		log.Fatal("[GNB][NGAP] RAN UE NGAP ID is incorrect")
 		// TODO SEND ERROR INDICATION
 	}
 
 	// update AMF UE id.
 	if ue.GetAmfUeId() == 0 {
 		ue.SetAmfUeId(amfUeId)
+	} else {
+		if ue.GetAmfUeId() != amfUeId {
+			log.Fatal("[GNB][NGAP] AMF UE NGAP ID is incorrect")
+		}
 	}
-
-	// ue.SetStateOngoing()
 
 	// send NAS message to UE.
 	sender.SendToUe(ue, messageNas)
@@ -69,6 +74,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	var ranUeId int64
 	var amfUeId int64
 	var messageNas []byte
+	// var securityKey []byte
 
 	valueMessage := message.InitiatingMessage.Value.InitialContextSetupRequest
 
@@ -79,35 +85,75 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 
 		case ngapType.ProtocolIEIDAMFUENGAPID:
 			if ies.Value.AMFUENGAPID == nil {
-				log.Fatal("[GNB][NGAP] AMF UE id is nil")
+				log.Fatal("[GNB][NGAP] AMF UE NGAP ID is missing")
+				// TODO SEND ERROR INDICATION
 			}
 			amfUeId = ies.Value.AMFUENGAPID.Value
 
 		case ngapType.ProtocolIEIDRANUENGAPID:
 			if ies.Value.RANUENGAPID == nil {
-				log.Fatal("[GNB][NGAP] RAN UE id is nil")
+				log.Fatal("[GNB][NGAP] RAN UE NGAP ID is missing")
 				// TODO SEND ERROR INDICATION
 			}
 			ranUeId = ies.Value.RANUENGAPID.Value
 
 		case ngapType.ProtocolIEIDNASPDU:
 			if ies.Value.NASPDU == nil {
-				log.Fatal("[GNB][NGAP] NAS PDU is nil")
+				log.Info("[GNB][NGAP] NAS PDU is missing")
+				// TODO SEND ERROR INDICATION
 			}
 			messageNas = ies.Value.NASPDU.Value
+
+		case ngapType.ProtocolIEIDSecurityKey:
+			// TODO using for create new security context between GNB and UE.
+			if ies.Value.SecurityKey == nil {
+				log.Fatal("[GNB][NGAP] Security-Key is missing")
+			}
+			// securityKey = ies.Value.SecurityKey.Value.Bytes
+
+		case ngapType.ProtocolIEIDGUAMI:
+			if ies.Value.GUAMI == nil {
+				log.Fatal("[GNB][NGAP] GUAMI is missing")
+			}
+
+		case ngapType.ProtocolIEIDAllowedNSSAI:
+			if ies.Value.AllowedNSSAI == nil {
+				log.Fatal("[GNB][NGAP] Allowed NSSAI is missing")
+			}
+
+		case ngapType.ProtocolIEIDMobilityRestrictionList:
+			// that field is not mandatory.
+			if ies.Value.MobilityRestrictionList == nil {
+				log.Info("[GNB][NGAP] Allowed NSSAI is missing")
+			}
+
+		case ngapType.ProtocolIEIDMaskedIMEISV:
+			// that field is not mandatory.
+			// TODO using for mapping UE context
+			if ies.Value.MaskedIMEISV == nil {
+				log.Info("[GNB][NGAP] Masked IMEISV is missing")
+			}
+
+		case ngapType.ProtocolIEIDUESecurityCapabilities:
+			// TODO using for create new security context between UE and GNB.
+			// TODO algorithms for create new security context between UE and GNB.
+			if ies.Value.UESecurityCapabilities == nil {
+				log.Fatal("[GNB][NGAP] UE Security Capabilities is missing")
+			}
 		}
+
 	}
 
 	// check RanUeId and get UE.
 	ue, err := gnb.GetGnbUe(ranUeId)
 	if err != nil || ue == nil {
-		log.Fatal("[GNB][NGAP] UE is not found in GNB POOL")
+		log.Fatal("[GNB][NGAP] RAN UE NGAP ID is incorrect")
 		// TODO SEND ERROR INDICATION
 	}
 
 	// check if AMF UE id.
 	if ue.GetAmfUeId() != amfUeId {
-		log.Fatal("[GNB][NGAP] Problem in receive AMF UE ID from CORE")
+		log.Fatal("[GNB][NGAP] AMF UE NGAP ID is incorrect")
 		// TODO SEND ERROR INDICATION
 	}
 
@@ -162,6 +208,8 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 				} else {
 					log.Fatal("[GNB][NGAP] NAS PDU is nil")
 				}
+
+				// create a PDU session( PDU SESSION ID + NSSAI).
 				pduSessionId = item.PDUSessionID.Value
 				if item.PDUSessionResourceSetupRequestTransfer != nil {
 					// pduSessionResourceSetupRequestTransfer = item.PDUSessionResourceSetupRequestTransfer
@@ -310,8 +358,20 @@ func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, messag
 
 				for _, slice := range items.SliceSupportList.List {
 
-					sd := fmt.Sprintf("%x", slice.SNSSAI.SD.Value)
-					sst := fmt.Sprintf("%x", slice.SNSSAI.SST.Value)
+					var sd string
+					var sst string
+
+					if slice.SNSSAI.SST.Value != nil {
+						sd = fmt.Sprintf("%x", slice.SNSSAI.SD.Value)
+					} else {
+						sd = "was not informed"
+					}
+
+					if slice.SNSSAI.SD.Value != nil {
+						sst = fmt.Sprintf("%x", slice.SNSSAI.SST.Value)
+					} else {
+						sst = "was not informed"
+					}
 
 					// update amf slice supported
 					amf.AddedSlice(sst, sd)
@@ -322,7 +382,7 @@ func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, messag
 	}
 
 	if err {
-		log.Info("[GNB][AMF] AMF is inactive")
+		log.Fatal("[GNB][AMF] AMF is inactive")
 		amf.SetStateInactive()
 	} else {
 		amf.SetStateActive()
@@ -415,5 +475,5 @@ func HandlerNgSetupFailure(amf *context.GNBAmf, gnb *context.GNBContext, message
 	// redundant but useful for information about code.
 	amf.SetStateInactive()
 
-	log.Info("[GNB][NGAP] AMF is inactive")
+	log.Fatal("[GNB][NGAP] AMF is inactive")
 }

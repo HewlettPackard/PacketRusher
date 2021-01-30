@@ -46,7 +46,7 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 
 	case nas.MsgTypeAuthenticationRequest:
 		// handler authentication request.
-		fmt.Println("[UE][NAS] Receive Handler Authentication Request")
+		fmt.Println("[UE][NAS] Receive Authentication Request")
 		handler.HandlerAuthenticationRequest(ue, m)
 
 	case nas.MsgTypeIdentityRequest:
