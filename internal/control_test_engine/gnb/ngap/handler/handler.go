@@ -74,6 +74,10 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	var ranUeId int64
 	var amfUeId int64
 	var messageNas []byte
+	var sst []string
+	var sd []string
+	var mobilityRestrict string
+	var maskedImeisv string
 	// var securityKey []byte
 
 	valueMessage := message.InitiatingMessage.Value.InitialContextSetupRequest
@@ -121,10 +125,32 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 				log.Fatal("[GNB][NGAP] Allowed NSSAI is missing")
 			}
 
+			valor := len(ies.Value.AllowedNSSAI.List)
+			sst = make([]string, valor)
+			sd = make([]string, valor)
+
+			// list S-NSSAI(Single – Network Slice Selection Assistance Information).
+			for i, items := range ies.Value.AllowedNSSAI.List {
+
+				if items.SNSSAI.SD != nil {
+					sst[i] = fmt.Sprintf("%x", items.SNSSAI.SST.Value)
+				} else {
+					sst[i] = "not informed"
+				}
+
+				if items.SNSSAI.SST.Value != nil {
+					sd[i] = fmt.Sprintf("%x", items.SNSSAI.SD.Value)
+				} else {
+					sd[i] = "not informed"
+				}
+			}
+
 		case ngapType.ProtocolIEIDMobilityRestrictionList:
 			// that field is not mandatory.
 			if ies.Value.MobilityRestrictionList == nil {
 				log.Info("[GNB][NGAP] Allowed NSSAI is missing")
+			} else {
+				mobilityRestrict = fmt.Sprintf("%x", ies.Value.MobilityRestrictionList.ServingPLMN.Value)
 			}
 
 		case ngapType.ProtocolIEIDMaskedIMEISV:
@@ -132,6 +158,8 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 			// TODO using for mapping UE context
 			if ies.Value.MaskedIMEISV == nil {
 				log.Info("[GNB][NGAP] Masked IMEISV is missing")
+			} else {
+				maskedImeisv = fmt.Sprintf("%x", ies.Value.MaskedIMEISV.Value.Bytes)
 			}
 
 		case ngapType.ProtocolIEIDUESecurityCapabilities:
@@ -157,10 +185,27 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 		// TODO SEND ERROR INDICATION
 	}
 
+	// create UE context.
+	ue.CreateUeContext(mobilityRestrict, maskedImeisv, sst, sd)
+
+	// show UE context.
+	log.Info("[GNB][UE] UE CONTEXT CREATE WITH SUCCESSFUL")
+	log.Info("[GNB][UE] UE RAN ID", ue.GetRanUeId())
+	log.Info("[GNB][UE] UE AMF ID", ue.GetAmfUeId())
+	mcc, mnc := ue.GetUeMobility()
+	log.Info("[GNB][UE] UE MOBILITY RESTRICT --PLMN-- MCC:", mcc, "MNC:", mnc)
+	log.Info("[GNB][UE] UE MASKED IMEISV:", ue.GetUeMaskedImeiSv())
+	for i := 0; i < ue.GetLenSlice(); i++ {
+		sst, sd := ue.GetAllowedNSSAI(i)
+		log.Info("[GNB][UE] ALLOWED NSSAI-- SST:", sst, "SD:", sd)
+	}
+
 	// send NAS message to UE.
+	log.Info("[GNB][NAS][UE] Send Registration Accept:")
 	sender.SendToUe(ue, messageNas)
 
 	// send Initial Context Setup Response.
+	log.Info("[GNB][NGAP][AMF] Send Initial Context Setup Response:")
 	trigger.SendInitialContextSetupResponse(ue)
 
 }
@@ -184,14 +229,14 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 		case ngapType.ProtocolIEIDAMFUENGAPID:
 
 			if ies.Value.AMFUENGAPID == nil {
-				log.Fatal("[GNB][NGAP] AMF UE id is nil")
+				log.Fatal("[GNB][NGAP] AMF UE ID is missing")
 			}
 			amfUeId = ies.Value.AMFUENGAPID.Value
 
 		case ngapType.ProtocolIEIDRANUENGAPID:
 
 			if ies.Value.RANUENGAPID == nil {
-				log.Fatal("[GNB][NGAP] RAN UE id is nil")
+				log.Fatal("[GNB][NGAP] RAN UE ID is missing")
 				// TODO SEND ERROR INDICATION
 			}
 			ranUeId = ies.Value.RANUENGAPID.Value
@@ -199,18 +244,23 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 		case ngapType.ProtocolIEIDPDUSessionResourceSetupListSUReq:
 
 			if ies.Value.PDUSessionResourceSetupListSUReq == nil {
-				log.Fatal("[GNB][NGAP] PDUSessionResourceSetupListSUReq is nil")
+				log.Fatal("[GNB][NGAP] PDU SESSION RESOURCE SETUP LIST SU REQ is missing")
 			}
 			pDUSessionResourceSetupList := ies.Value.PDUSessionResourceSetupListSUReq
+
 			for _, item := range pDUSessionResourceSetupList.List {
+
 				if item.PDUSessionNASPDU != nil {
 					messageNas = item.PDUSessionNASPDU.Value
 				} else {
-					log.Fatal("[GNB][NGAP] NAS PDU is nil")
+					log.Fatal("[GNB][NGAP] NAS PDU is missing")
 				}
 
 				// create a PDU session( PDU SESSION ID + NSSAI).
 				pduSessionId = item.PDUSessionID.Value
+				// item.SNSSAI.SD.Value
+				// item.SNSSAI.SST.Value
+
 				if item.PDUSessionResourceSetupRequestTransfer != nil {
 					// pduSessionResourceSetupRequestTransfer = item.PDUSessionResourceSetupRequestTransfer
 					pdu := &ngapType.PDUSessionResourceSetupRequestTransfer{}

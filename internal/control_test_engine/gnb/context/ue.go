@@ -11,14 +11,19 @@ const Ongoing = 0x01
 const Ready = 0x02
 
 type GNBUe struct {
-	ranUeNgapId int64 // Identifier for UE in GNB Context.
-	amfUeNgapId int64 // Identifier for UE in AMF Context.
-	// Snssai            models.Snssai  // slice requested
-	pduSession           PDUSession     // PDU Session.
+	ranUeNgapId          int64          // Identifier for UE in GNB Context.
+	amfUeNgapId          int64          // Identifier for UE in AMF Context.
 	amfId                int64          // Identifier for AMF in UE/GNB Context.
 	state                int            // State of UE in NAS/GNB Context.
 	sctpConnection       *sctp.SCTPConn // Sctp association in using by the UE.
 	unixSocketConnection net.Conn       // Unix sockets association in using by the UE.
+	context              Context
+}
+
+type Context struct {
+	mobilityInfo mobility
+	maskedIMEISV string
+	pduSession   PDUSession // PDU Session.
 }
 
 type PDUSession struct {
@@ -26,6 +31,80 @@ type PDUSession struct {
 	ranUeIP      net.IP
 	uplinkTeid   uint32
 	downlinkTeid uint32
+	slices       *SliceSupported
+	lenSlice     int
+}
+
+type mobility struct {
+	mcc string
+	mnc string
+}
+
+func (ue *GNBUe) CreateUeContext(plmn string, imeisv string, sst []string, sd []string) {
+
+	ue.context.pduSession.lenSlice = 0
+	ue.context.mobilityInfo.mcc, ue.context.mobilityInfo.mnc = convertMccMnc(plmn)
+	ue.context.maskedIMEISV = imeisv
+
+	for i := 0; i < len(sst); i++ {
+		ue.addedSlice(sst[i], sd[i])
+	}
+}
+
+func (ue *GNBUe) GetUeMobility() (string, string) {
+	return ue.context.mobilityInfo.mcc, ue.context.mobilityInfo.mnc
+}
+
+func (ue *GNBUe) GetUeMaskedImeiSv() string {
+	return ue.context.maskedIMEISV
+}
+
+func (ue *GNBUe) GetLenSlice() int {
+	return ue.context.pduSession.lenSlice
+}
+
+func (ue *GNBUe) addedSlice(sst string, sd string) {
+
+	if ue.context.pduSession.lenSlice == 0 {
+		newElem := &SliceSupported{}
+		newElem.sst = sst
+		newElem.sd = sd
+		newElem.next = nil
+
+		// update list
+		ue.context.pduSession.slices = newElem
+		ue.context.pduSession.lenSlice++
+		return
+	}
+
+	mov := ue.context.pduSession.slices
+	for i := 0; i < ue.context.pduSession.lenSlice; i++ {
+
+		// end of the list
+		if mov.next == nil {
+
+			newElem := &SliceSupported{}
+			newElem.sst = sst
+			newElem.sd = sd
+			newElem.next = nil
+
+			mov.next = newElem
+
+		} else {
+			mov = mov.next
+		}
+	}
+	ue.context.pduSession.lenSlice++
+}
+
+func (ue *GNBUe) GetAllowedNSSAI(index int) (string, string) {
+
+	mov := ue.context.pduSession.slices
+	for i := 0; i < index; i++ {
+		mov = mov.next
+	}
+
+	return mov.sst, mov.sd
 }
 
 func (ue *GNBUe) GetAmfId() int64 {
@@ -69,27 +148,27 @@ func (ue *GNBUe) SetUnixSocket(conn net.Conn) {
 }
 
 func (ue *GNBUe) GetPduSessionId() int64 {
-	return ue.pduSession.pduSessionId
+	return ue.context.pduSession.pduSessionId
 }
 
 func (ue *GNBUe) SetPduSessionId(id int64) {
-	ue.pduSession.pduSessionId = id
+	ue.context.pduSession.pduSessionId = id
 }
 
 func (ue *GNBUe) GetTeidUplink() uint32 {
-	return ue.pduSession.uplinkTeid
+	return ue.context.pduSession.uplinkTeid
 }
 
 func (ue *GNBUe) SetTeidUplink(teidUplink uint32) {
-	ue.pduSession.uplinkTeid = teidUplink
+	ue.context.pduSession.uplinkTeid = teidUplink
 }
 
 func (ue *GNBUe) GetTeidDownlink() uint32 {
-	return ue.pduSession.downlinkTeid
+	return ue.context.pduSession.downlinkTeid
 }
 
 func (ue *GNBUe) SetTeidDownlink(teidDownlink uint32) {
-	ue.pduSession.downlinkTeid = teidDownlink
+	ue.context.pduSession.downlinkTeid = teidDownlink
 }
 
 func (ue *GNBUe) GetRanUeId() int64 {
@@ -101,11 +180,11 @@ func (ue *GNBUe) SetRanUeId(id int64) {
 }
 
 func (ue *GNBUe) SetIp(ueIp uint8) {
-	ue.pduSession.ranUeIP = net.IPv4(127, 0, 0, ueIp)
+	ue.context.pduSession.ranUeIP = net.IPv4(127, 0, 0, ueIp)
 }
 
 func (ue *GNBUe) GetIp() net.IP {
-	return ue.pduSession.ranUeIP
+	return ue.context.pduSession.ranUeIP
 
 }
 
