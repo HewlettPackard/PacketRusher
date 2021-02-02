@@ -33,6 +33,10 @@ type PDUSession struct {
 	downlinkTeid uint32
 	slices       *SliceSupported
 	lenSlice     int
+	pduType      uint64
+	qosId        int64
+	fiveQi       int64
+	priArp       int64
 }
 
 type mobility struct {
@@ -47,8 +51,53 @@ func (ue *GNBUe) CreateUeContext(plmn string, imeisv string, sst []string, sd []
 	ue.context.maskedIMEISV = imeisv
 
 	for i := 0; i < len(sst); i++ {
-		ue.addedSlice(sst[i], sd[i])
+		ue.addedSlice(sst[i], sd[i], "inactive")
 	}
+}
+
+func (ue *GNBUe) CreatePduSession(pduSessionId int64, sst string, sd string, pduType uint64,
+	qosId int64, priArp int64, fiveQi int64, ulTeid uint32) string {
+
+	ue.context.pduSession.pduSessionId = pduSessionId
+
+	if !ue.updatedNSSAI(sst, sd) {
+		return "Slices was not found"
+	}
+	ue.context.pduSession.pduType = pduType
+	ue.context.pduSession.qosId = qosId
+	ue.context.pduSession.priArp = priArp
+	ue.context.pduSession.fiveQi = fiveQi
+	ue.context.pduSession.uplinkTeid = ulTeid
+
+	return ""
+}
+
+func (ue *GNBUe) GetQosId() int64 {
+	return ue.context.pduSession.qosId
+}
+
+func (ue *GNBUe) GetFiveQI() int64 {
+	return ue.context.pduSession.fiveQi
+}
+
+func (ue *GNBUe) GetPriorityARP() int64 {
+	return ue.context.pduSession.priArp
+}
+
+func (ue *GNBUe) GetPduType() (valor string) {
+
+	switch ue.context.pduSession.pduType {
+	case 0:
+		valor = "ipv4"
+	case 1:
+		valor = "ipv6"
+	case 2:
+		valor = "Ipv4Ipv6"
+	case 3:
+		valor = "ethernet"
+
+	}
+	return
 }
 
 func (ue *GNBUe) GetUeMobility() (string, string) {
@@ -63,12 +112,13 @@ func (ue *GNBUe) GetLenSlice() int {
 	return ue.context.pduSession.lenSlice
 }
 
-func (ue *GNBUe) addedSlice(sst string, sd string) {
+func (ue *GNBUe) addedSlice(sst string, sd string, status string) {
 
 	if ue.context.pduSession.lenSlice == 0 {
 		newElem := &SliceSupported{}
 		newElem.sst = sst
 		newElem.sd = sd
+		newElem.status = status
 		newElem.next = nil
 
 		// update list
@@ -86,6 +136,7 @@ func (ue *GNBUe) addedSlice(sst string, sd string) {
 			newElem := &SliceSupported{}
 			newElem.sst = sst
 			newElem.sd = sd
+			newElem.status = status
 			newElem.next = nil
 
 			mov.next = newElem
@@ -105,6 +156,33 @@ func (ue *GNBUe) GetAllowedNSSAI(index int) (string, string) {
 	}
 
 	return mov.sst, mov.sd
+}
+
+func (ue *GNBUe) GetSelectedNSSAI() (string, string) {
+
+	mov := ue.context.pduSession.slices
+	for i := 0; i < ue.context.pduSession.lenSlice; i++ {
+		if mov.status == "active" {
+			return mov.sst, mov.sd
+		}
+		mov = mov.next
+	}
+
+	return "NSSAI was not selected", "NSSAI was not selected"
+}
+
+func (ue *GNBUe) updatedNSSAI(sst string, sd string) bool {
+
+	mov := ue.context.pduSession.slices
+	for i := 0; i < ue.context.pduSession.lenSlice; i++ {
+		if mov.sst == sst && mov.sd == sd {
+			mov.status = "active"
+			return true
+		}
+		mov = mov.next
+	}
+
+	return false
 }
 
 func (ue *GNBUe) GetAmfId() int64 {

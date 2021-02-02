@@ -35,9 +35,10 @@ type TNLAssociation struct {
 }
 
 type SliceSupported struct {
-	sst  string
-	sd   string
-	next *SliceSupported
+	sst    string
+	sd     string
+	status string
+	next   *SliceSupported
 }
 
 type PlmnSupported struct {
