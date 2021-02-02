@@ -287,7 +287,7 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 							case ngapType.ProtocolIEIDQosFlowToReleaseList:
 								for _, itemsQos := range ies.Value.QosFlowSetupRequestList.List {
 									qosId = itemsQos.QosFlowIdentifier.Value
-									fiveQi = itemsQos.QosFlowLevelQosParameters.QosCharacteristics.Dynamic5QI.FiveQI.Value
+									fiveQi = itemsQos.QosFlowLevelQosParameters.QosCharacteristics.NonDynamic5QI.FiveQI.Value
 									priArp = itemsQos.QosFlowLevelQosParameters.AllocationAndRetentionPriority.PriorityLevelARP.Value
 								}
 
@@ -333,7 +333,7 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 		log.Info("[GNB][NGAP][UE] PDU Session was created with successful.")
 		log.Info("[GNB][NGAP][UE] PDU Session Id: ", ue.GetPduSessionId())
 		sst, sd := ue.GetSelectedNSSAI()
-		log.Info("[GNB][NGAP][UE] NSSAI Selected --- sst: ", sst, "sd: ", sd)
+		log.Info("[GNB][NGAP][UE] NSSAI Selected --- sst: ", sst, " sd: ", sd)
 		log.Info("[GNB][NGAP][UE] PDU Session Type: ", ue.GetPduType())
 		log.Info("[GNB][NGAP][UE] QOS Flow Identifier: ", ue.GetQosId())
 		log.Info("[GNB][NGAP][UE] Uplink Teid: ", ue.GetTeidUplink())

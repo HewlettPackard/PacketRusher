@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
@@ -81,7 +80,7 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message)
 	//getting PDU Session establishment accept.
 	payloadContainer := nas_control.GetNasPduFromPduAccept(message)
 	if payloadContainer.GsmHeader.GetMessageType() == nas.MsgTypePDUSessionEstablishmentAccept {
-		fmt.Println("[UE][NAS] Receiving PDU Session Establishment Accept")
+		log.Info("[UE][NAS] Receiving PDU Session Establishment Accept")
 
 		// update PDU Session information.
 

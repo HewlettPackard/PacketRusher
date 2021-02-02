@@ -2,7 +2,7 @@ package nas
 
 import (
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/handler"
 	"my5G-RANTester/lib/nas"
@@ -25,37 +25,37 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 	// check if NAS is security protected
 	if m.SecurityHeaderType != nas.SecurityHeaderTypePlainNas {
 
-		fmt.Println("[UE][NAS] Message with security header")
+		log.Info("[UE][NAS] Message with security header")
 
 		// remove security header.
 		payload = payload[7:]
 
 		// TODO check security header
 	} else {
-		fmt.Println("[UE][NAS] Message without security header")
+		log.Info("[UE][NAS] Message without security header")
 	}
 
 	// decode NAS message.
 	err := m.PlainNasDecode(&payload)
 	if err != nil {
 		// TODO return error
-		fmt.Println("[UE][NAS] Decode NAS error", err)
+		log.Info("[UE][NAS] Decode NAS error", err)
 	}
 
 	switch m.GmmHeader.GetMessageType() {
 
 	case nas.MsgTypeAuthenticationRequest:
 		// handler authentication request.
-		fmt.Println("[UE][NAS] Receive Authentication Request")
+		log.Info("[UE][NAS] Receive Authentication Request")
 		handler.HandlerAuthenticationRequest(ue, m)
 
 	case nas.MsgTypeIdentityRequest:
-		fmt.Println("[UE][NAS] Receive Identify Request")
+		log.Info("[UE][NAS] Receive Identify Request")
 		// handler identity request.
 
 	case nas.MsgTypeSecurityModeCommand:
 		// handler security mode command.
-		fmt.Println("[UE][NAS] Receive Security Mode Command")
+		log.Info("[UE][NAS] Receive Security Mode Command")
 		handler.HandlerSecurityModeCommand(ue, m)
 
 	case nas.MsgTypeRegistrationAccept:
@@ -64,12 +64,12 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 		handler.HandlerRegistrationAccept(ue, m)
 
 	case nas.MsgTypeConfigurationUpdateCommand:
-		fmt.Println("[UE][NAS] Receive Configuration Update Command")
+		log.Info("[UE][NAS] Receive Configuration Update Command")
 		// handler Configuration Update Command.
 
 	case nas.MsgTypeDLNASTransport:
 		// handler DL NAS Transport.
-		fmt.Println("[UE][NAS] Receive DL NAS Transport")
+		log.Info("[UE][NAS] Receive DL NAS Transport")
 		handler.HandlerDlNasTransportPduaccept(ue, m)
 
 		// UE is ready for testing data-plane.

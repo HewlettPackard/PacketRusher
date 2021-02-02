@@ -1,8 +1,7 @@
 package ue
 
 import (
-	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/service"
@@ -38,7 +37,7 @@ func RegistrationUe(conf config.Config, id uint8) {
 	if err != nil {
 		log.Fatal("Error in", err)
 	} else {
-		fmt.Println("[UE] UNIX/NAS service is running")
+		log.Info("[UE] UNIX/NAS service is running")
 		wg.Add(1)
 	}
 
