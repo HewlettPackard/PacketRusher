@@ -284,7 +284,7 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 								ulTeid = binary.BigEndian.Uint32(ies.Value.ULNGUUPTNLInformation.GTPTunnel.GTPTEID.Value)
 								upfAddress = ies.Value.ULNGUUPTNLInformation.GTPTunnel.TransportLayerAddress.Value.Bytes
 
-							case ngapType.ProtocolIEIDQosFlowToReleaseList:
+							case ngapType.ProtocolIEIDQosFlowSetupRequestList:
 								for _, itemsQos := range ies.Value.QosFlowSetupRequestList.List {
 									qosId = itemsQos.QosFlowIdentifier.Value
 									fiveQi = itemsQos.QosFlowLevelQosParameters.QosCharacteristics.NonDynamic5QI.FiveQI.Value
