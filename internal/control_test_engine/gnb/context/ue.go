@@ -23,7 +23,7 @@ type GNBUe struct {
 type Context struct {
 	mobilityInfo mobility
 	maskedIMEISV string
-	pduSession   PDUSession // PDU Session.
+	pduSession   PDUSession // Slice was selectedactive for PDU Session.
 }
 
 type PDUSession struct {
@@ -31,7 +31,7 @@ type PDUSession struct {
 	ranUeIP      net.IP
 	uplinkTeid   uint32
 	downlinkTeid uint32
-	slices       *SliceSupported
+	slices       *SliceSupported // Slice for PDU Session was marked with string active.
 	lenSlice     int
 	pduType      uint64
 	qosId        int64
@@ -60,8 +60,8 @@ func (ue *GNBUe) CreatePduSession(pduSessionId int64, sst string, sd string, pdu
 
 	ue.context.pduSession.pduSessionId = pduSessionId
 
-	if !ue.updatedNSSAI(sst, sd) {
-		return "Slices was not found"
+	if !ue.pduSessionNssai(sst, sd) {
+		return "Slice was not found"
 	}
 	ue.context.pduSession.pduType = pduType
 	ue.context.pduSession.qosId = qosId
@@ -148,7 +148,7 @@ func (ue *GNBUe) addedSlice(sst string, sd string, status string) {
 	ue.context.pduSession.lenSlice++
 }
 
-func (ue *GNBUe) GetAllowedNSSAI(index int) (string, string) {
+func (ue *GNBUe) GetAllowedNssai(index int) (string, string) {
 
 	mov := ue.context.pduSession.slices
 	for i := 0; i < index; i++ {
@@ -158,7 +158,7 @@ func (ue *GNBUe) GetAllowedNSSAI(index int) (string, string) {
 	return mov.sst, mov.sd
 }
 
-func (ue *GNBUe) GetSelectedNSSAI() (string, string) {
+func (ue *GNBUe) GetSelectedNssai() (string, string) {
 
 	mov := ue.context.pduSession.slices
 	for i := 0; i < ue.context.pduSession.lenSlice; i++ {
@@ -171,8 +171,9 @@ func (ue *GNBUe) GetSelectedNSSAI() (string, string) {
 	return "NSSAI was not selected", "NSSAI was not selected"
 }
 
-func (ue *GNBUe) updatedNSSAI(sst string, sd string) bool {
+func (ue *GNBUe) pduSessionNssai(sst string, sd string) bool {
 
+	// Slice for PDU Session was marked with string active.
 	mov := ue.context.pduSession.slices
 	for i := 0; i < ue.context.pduSession.lenSlice; i++ {
 		if mov.sst == sst && mov.sd == sd {

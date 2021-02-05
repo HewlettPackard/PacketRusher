@@ -196,7 +196,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	log.Info("[GNB][UE] UE Mobility Restrict --Plmn-- Mcc: ", mcc, " Mnc: ", mnc)
 	log.Info("[GNB][UE] UE Masked Imeisv: ", ue.GetUeMaskedImeiSv())
 	for i := 0; i < ue.GetLenSlice(); i++ {
-		sst, sd := ue.GetAllowedNSSAI(i)
+		sst, sd := ue.GetAllowedNssai(i)
 		log.Info("[GNB][UE] Allowed Nssai-- Sst: ", sst, " Sd: ", sd)
 	}
 
@@ -332,7 +332,7 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 
 		log.Info("[GNB][NGAP][UE] PDU Session was created with successful.")
 		log.Info("[GNB][NGAP][UE] PDU Session Id: ", ue.GetPduSessionId())
-		sst, sd := ue.GetSelectedNSSAI()
+		sst, sd := ue.GetSelectedNssai()
 		log.Info("[GNB][NGAP][UE] NSSAI Selected --- sst: ", sst, " sd: ", sd)
 		log.Info("[GNB][NGAP][UE] PDU Session Type: ", ue.GetPduType())
 		log.Info("[GNB][NGAP][UE] QOS Flow Identifier: ", ue.GetQosId())
