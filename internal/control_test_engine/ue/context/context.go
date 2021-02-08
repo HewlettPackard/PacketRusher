@@ -10,6 +10,7 @@ import (
 	"my5G-RANTester/lib/nas/security"
 	"my5G-RANTester/lib/openapi/models"
 	"net"
+	"reflect"
 	"regexp"
 )
 
@@ -62,7 +63,7 @@ type SECURITY struct {
 
 func (ue *UEContext) NewRanUeContext(imsi string,
 	cipheringAlg, integrityAlg uint8,
-	k, opc, op, amf, mcc, mnc string,
+	k, opc, op, amf, sqn, mcc, mnc string,
 	sst int32, sd string, id uint8) {
 
 	// added SUPI.
@@ -75,7 +76,7 @@ func (ue *UEContext) NewRanUeContext(imsi string,
 	ue.UeSecurity.IntegrityAlg = integrityAlg
 
 	// added key, AuthenticationManagementField and opc or op.
-	ue.SetAuthSubscription(k, opc, op, amf)
+	ue.SetAuthSubscription(k, opc, op, amf, sqn)
 
 	// added suci
 	suciV1, suciV2, suciV3 := ue.EncodeUeSuci()
@@ -270,49 +271,69 @@ func (ue *UEContext) EncodeUeSuci() (uint8, uint8, uint8) {
 	return uint8(suci[0]), uint8(suci[1]), uint8(suci[2])
 }
 
-func (ue *UEContext) deriveSQN(autn []byte, ak []uint8) []byte {
+func (ue *UEContext) deriveAUTN(autn []byte, ak []uint8) ([]byte, []byte, []byte) {
+
 	sqn := make([]byte, 6)
 
 	// get SQNxorAK
 	SQNxorAK := autn[0:6]
-	// amf := autn[6:8]
-	// mac-a := autn[8:]
+	amf := autn[6:8]
+	mac_a := autn[8:]
 
-	// get sqn
+	// get SQN
 	for i := 0; i < len(SQNxorAK); i++ {
 		sqn[i] = SQNxorAK[i] ^ ak[i]
 	}
 
-	// return sqn
-	return sqn
+	// return SQN, amf, mac_a
+	return sqn, amf, mac_a
 }
 
-func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription, RAND []byte, snNmae string, AUTN []byte) []byte {
-
-	// SQN, _ := hex.DecodeString(authSubs.SequenceNumber)
-
-	// get management field.
-	AMF, _ := hex.DecodeString(authSubs.AuthenticationManagementField)
+func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription,
+	RAND []byte,
+	snNmae string,
+	AUTN []byte) ([]byte, string) {
 
 	// Run milenage
-	// TODO: verify MAC
-	MAC_A, MAC_S := make([]byte, 8), make([]byte, 8)
+	mac_a, mac_s := make([]byte, 8), make([]byte, 8)
 	CK, IK := make([]byte, 16), make([]byte, 16)
 	RES := make([]byte, 8)
 	AK, AKstar := make([]byte, 6), make([]byte, 6)
 
-	// generate OPC, K.
+	// Get OPC, K, SQN, AMF from UE.
 	OPC, _ := hex.DecodeString(authSubs.Opc.OpcValue)
 	K, _ := hex.DecodeString(authSubs.PermanentKey.PermanentKeyValue)
+	sqn, _ := hex.DecodeString(authSubs.SequenceNumber)
+	AMF, _ := hex.DecodeString(authSubs.AuthenticationManagementField)
 
 	// Generate RES, CK, IK, AK, AKstar
 	milenage.F2345_Test(OPC, K, RAND, RES, CK, IK, AK, AKstar)
 
-	// Generate SQN.
-	SQN := ue.deriveSQN(AUTN, AK)
+	// Get SQN, MAC_A, AMF from AUTN
+	sqnHn, amfHn, mac_aHn := ue.deriveAUTN(AUTN, AK)
+
+	fmt.Println("SQN HN %x", sqnHn)
+	fmt.Println("MAC_A HN %x", mac_aHn)
+	fmt.Println("AMF HN %x", amfHn)
 
 	// Generate MAC_A, MAC_S
-	milenage.F1_Test(OPC, K, RAND, SQN, AMF, MAC_A, MAC_S)
+	milenage.F1_Test(OPC, K, RAND, sqnHn, AMF, mac_a, mac_s)
+
+	fmt.Println("MAC_A UE %x", mac_a)
+	fmt.Println("SQN UE %x", sqn)
+	fmt.Println("AMF UE %x", AMF)
+
+	// MAC verification.
+	if !reflect.DeepEqual(mac_a, mac_aHn) {
+		return nil, "MAC failure"
+	}
+
+	// SQN verification.
+	/*
+		if bytes.Compare(sqn, sqnHn) > 0 {
+			return nil, "SQN failure"
+		}
+	*/
 
 	// Generate RES, CK, IK, AK, AKstar
 	milenage.F2345_Test(OPC, K, RAND, RES, CK, IK, AK, AKstar)
@@ -324,11 +345,11 @@ func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscr
 	P1 := RAND
 	P2 := RES
 
-	ue.DerivateKamf(key, snNmae, SQN, AK)
+	ue.DerivateKamf(key, snNmae, sqnHn, AK)
 	ue.DerivateAlgKey()
 	kdfVal_for_resStar := UeauCommon.GetKDFValue(key, FC, P0, UeauCommon.KDFLen(P0), P1, UeauCommon.KDFLen(P1), P2, UeauCommon.KDFLen(P2))
-	return kdfVal_for_resStar[len(kdfVal_for_resStar)/2:]
-
+	return kdfVal_for_resStar[len(kdfVal_for_resStar)/2:],
+		"successful"
 }
 
 func (ue *UEContext) DerivateKamf(key []byte, snName string, SQN, AK []byte) {
@@ -376,7 +397,7 @@ func (ue *UEContext) DerivateAlgKey() {
 	copy(ue.UeSecurity.KnasInt[:], kint[16:32])
 }
 
-func (ue *UEContext) SetAuthSubscription(k, opc, op, amf string) {
+func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
 	ue.UeSecurity.AuthenticationSubs.PermanentKey = &models.PermanentKey{
 		PermanentKeyValue: k,
 	}
@@ -390,7 +411,7 @@ func (ue *UEContext) SetAuthSubscription(k, opc, op, amf string) {
 	}
 	ue.UeSecurity.AuthenticationSubs.AuthenticationManagementField = amf
 
-	//ue.UeSecurity.AuthenticationSubs.SequenceNumber = TestGenAuthData.MilenageTestSet19.SQN
+	ue.UeSecurity.AuthenticationSubs.SequenceNumber = sqn
 	ue.UeSecurity.AuthenticationSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
 }
 

@@ -26,6 +26,7 @@ func RegistrationUe(conf config.Config, id uint8) {
 		conf.Ue.Opc,
 		"c9e8763286b5b9ffbdf56e1297d0887b",
 		conf.Ue.Amf,
+		conf.Ue.Sqn,
 		conf.Ue.Hplmn.Mcc,
 		conf.Ue.Hplmn.Mnc,
 		int32(conf.Ue.Snssai.Sd),

@@ -12,19 +12,41 @@ import (
 )
 
 func HandlerAuthenticationRequest(ue *context.UEContext, message *nas.Message) {
+	var authenticationResponse []byte
 
 	// getting RAND and AUTN from the message.
 	rand := message.AuthenticationRequest.GetRANDValue()
 	autn := message.AuthenticationRequest.GetAUTN()
 
 	// getting resStar
-	resStar := ue.DeriveRESstarAndSetKey(ue.UeSecurity.AuthenticationSubs, rand[:], ue.UeSecurity.Snn, autn[:])
+	resStar, check := ue.DeriveRESstarAndSetKey(ue.UeSecurity.AuthenticationSubs, rand[:], ue.UeSecurity.Snn, autn[:])
+	switch check {
 
-	// getting NAS Authentication Response.
-	authenticationResponse := mm_5gs.AuthenticationResponse(resStar, "")
+	case "MAC failure":
+		authenticationResponse = mm_5gs.AuthenticationFailure("")
+		log.Info("[UE][NAS][MAC] Authenticity of the authentication request message: FAILED")
+		log.Info("[UE][NAS] Send authentication failure with MAC failure")
+		// not change the state of UE.
+		break
 
-	// change state of ue for registered-initiated
-	ue.SetStateMM_REGISTERED_INITIATED()
+	case "SQN failure":
+		log.Info("[UE][NAS][MAC] Authenticity of the authentication request message: OK")
+		log.Info("[UE][NAS][SQN] SQN of the authentication request message range: FAILED")
+		log.Info("[UE][NAS] Send authentication failure with Synch failure")
+		// not change the state of UE.
+		break
+
+	case "successful":
+		// getting NAS Authentication Response.
+		authenticationResponse = mm_5gs.AuthenticationResponse(resStar, "")
+		log.Info("[UE][NAS][MAC] Authenticity of the authentication request message: OK")
+		log.Info("[UE][NAS][SQN] SQN of the authentication request message range: OK")
+		log.Info("[UE][NAS] Send authentication response")
+
+		// change state of UE for registered-initiated
+		ue.SetStateMM_REGISTERED_INITIATED()
+		break
+	}
 
 	// sending to GNB
 	sender.SendToGnb(ue, authenticationResponse)
