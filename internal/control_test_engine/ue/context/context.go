@@ -27,6 +27,7 @@ const SM5G_PDU_SESSION_ACTIVE_PENDING = 0x07
 const SM5G_PDU_SESSION_ACTIVE = 0x08
 
 type UEContext struct {
+	id         uint8
 	UeSecurity SECURITY
 	StateMM    int
 	StateSM    int
@@ -86,6 +87,9 @@ func (ue *UEContext) NewRanUeContext(imsi string,
 	// added PDU Session id
 	ue.PduSession.Id = id
 
+	// added UE id.
+	ue.id = id
+
 	// added network slice
 	ue.PduSession.Snssai.Sd = sd
 	ue.PduSession.Snssai.Sst = sst
@@ -121,6 +125,10 @@ func (ue *UEContext) NewRanUeContext(imsi string,
 	// added initial state for SM(INACTIVE)
 	ue.SetStateSM_PDU_SESSION_INACTIVE()
 
+}
+
+func (ue *UEContext) GetUeId() uint8 {
+	return ue.id
 }
 
 func (ue *UEContext) GetSuci() nasType.MobileIdentity5GS {
@@ -267,6 +275,8 @@ func (ue *UEContext) deriveSQN(autn []byte, ak []uint8) []byte {
 
 	// get SQNxorAK
 	SQNxorAK := autn[0:6]
+	// amf := autn[6:8]
+	// mac-a := autn[8:]
 
 	// get sqn
 	for i := 0; i < len(SQNxorAK); i++ {
