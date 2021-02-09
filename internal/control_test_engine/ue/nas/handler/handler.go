@@ -11,6 +11,13 @@ import (
 	"time"
 )
 
+func HandlerAuthenticationReject(ue *context.UEContext, message *nas.Message) {
+
+	log.Info("[UE][NAS] Authentication of UE ", ue.GetUeId(), " failed")
+
+	ue.SetStateMM_DEREGISTERED()
+}
+
 func HandlerAuthenticationRequest(ue *context.UEContext, message *nas.Message) {
 	var authenticationResponse []byte
 
@@ -19,33 +26,32 @@ func HandlerAuthenticationRequest(ue *context.UEContext, message *nas.Message) {
 	autn := message.AuthenticationRequest.GetAUTN()
 
 	// getting resStar
-	resStar, check := ue.DeriveRESstarAndSetKey(ue.UeSecurity.AuthenticationSubs, rand[:], ue.UeSecurity.Snn, autn[:])
+	paramAutn, check := ue.DeriveRESstarAndSetKey(ue.UeSecurity.AuthenticationSubs, rand[:], ue.UeSecurity.Snn, autn[:])
+
 	switch check {
 
 	case "MAC failure":
-		authenticationResponse = mm_5gs.AuthenticationFailure("")
 		log.Info("[UE][NAS][MAC] Authenticity of the authentication request message: FAILED")
 		log.Info("[UE][NAS] Send authentication failure with MAC failure")
+		authenticationResponse = mm_5gs.AuthenticationFailure("MAC failure", "", paramAutn)
 		// not change the state of UE.
-		break
 
 	case "SQN failure":
 		log.Info("[UE][NAS][MAC] Authenticity of the authentication request message: OK")
-		log.Info("[UE][NAS][SQN] SQN of the authentication request message range: FAILED")
+		log.Info("[UE][NAS][SQN] SQN of the authentication request message: INVALID")
 		log.Info("[UE][NAS] Send authentication failure with Synch failure")
+		authenticationResponse = mm_5gs.AuthenticationFailure("SQN failure", "", paramAutn)
 		// not change the state of UE.
-		break
 
 	case "successful":
 		// getting NAS Authentication Response.
-		authenticationResponse = mm_5gs.AuthenticationResponse(resStar, "")
 		log.Info("[UE][NAS][MAC] Authenticity of the authentication request message: OK")
-		log.Info("[UE][NAS][SQN] SQN of the authentication request message range: OK")
+		log.Info("[UE][NAS][SQN] SQN of the authentication request message: VALID")
 		log.Info("[UE][NAS] Send authentication response")
+		authenticationResponse = mm_5gs.AuthenticationResponse(paramAutn, "")
 
 		// change state of UE for registered-initiated
 		ue.SetStateMM_REGISTERED_INITIATED()
-		break
 	}
 
 	// sending to GNB

@@ -2,8 +2,8 @@ package service
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
-	"log"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"net"
 	"time"
@@ -49,7 +49,7 @@ func InitDataPlane(ue *context.UEContext, message []byte) {
 		log.Fatal("[UE][DATA] Error in adding IP for virtual interface", err)
 	}
 
-	fmt.Println("[UE][DATA] UE is ready for using data plane")
+	log.Info("[UE][DATA] UE is ready for using data plane")
 
 	defer func() {
 		_ = netlink.LinkSetDown(newInterface)

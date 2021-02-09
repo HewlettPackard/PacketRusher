@@ -1,6 +1,7 @@
 package context
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"my5G-RANTester/lib/UeauCommon"
@@ -294,49 +295,56 @@ func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscr
 	snNmae string,
 	AUTN []byte) ([]byte, string) {
 
-	// Run milenage
+	// parameters for authentication challenge.
 	mac_a, mac_s := make([]byte, 8), make([]byte, 8)
 	CK, IK := make([]byte, 16), make([]byte, 16)
 	RES := make([]byte, 8)
 	AK, AKstar := make([]byte, 6), make([]byte, 6)
 
-	// Get OPC, K, SQN, AMF from UE.
+	// Get OPC, K, SQN, AMF from USIM.
 	OPC, _ := hex.DecodeString(authSubs.Opc.OpcValue)
 	K, _ := hex.DecodeString(authSubs.PermanentKey.PermanentKeyValue)
-	sqn, _ := hex.DecodeString(authSubs.SequenceNumber)
+	sqnUe, _ := hex.DecodeString(authSubs.SequenceNumber)
 	AMF, _ := hex.DecodeString(authSubs.AuthenticationManagementField)
 
 	// Generate RES, CK, IK, AK, AKstar
 	milenage.F2345_Test(OPC, K, RAND, RES, CK, IK, AK, AKstar)
 
 	// Get SQN, MAC_A, AMF from AUTN
-	sqnHn, amfHn, mac_aHn := ue.deriveAUTN(AUTN, AK)
-
-	fmt.Println("SQN HN %x", sqnHn)
-	fmt.Println("MAC_A HN %x", mac_aHn)
-	fmt.Println("AMF HN %x", amfHn)
+	sqnHn, _, mac_aHn := ue.deriveAUTN(AUTN, AK)
 
 	// Generate MAC_A, MAC_S
 	milenage.F1_Test(OPC, K, RAND, sqnHn, AMF, mac_a, mac_s)
-
-	fmt.Println("MAC_A UE %x", mac_a)
-	fmt.Println("SQN UE %x", sqn)
-	fmt.Println("AMF UE %x", AMF)
 
 	// MAC verification.
 	if !reflect.DeepEqual(mac_a, mac_aHn) {
 		return nil, "MAC failure"
 	}
 
-	// SQN verification.
-	/*
-		if bytes.Compare(sqn, sqnHn) > 0 {
-			return nil, "SQN failure"
-		}
-	*/
+	// Verification of sequence number freshness.
+	if bytes.Compare(sqnUe, sqnHn) > 0 {
 
-	// Generate RES, CK, IK, AK, AKstar
-	milenage.F2345_Test(OPC, K, RAND, RES, CK, IK, AK, AKstar)
+		// get AK*
+		milenage.F2345_Test(OPC, K, RAND, RES, CK, IK, AK, AKstar)
+
+		// From the standard, AMF(0x0000) should be used in the synch failure.
+		amfSynch, _ := hex.DecodeString("0000")
+
+		// get mac_s using sqn ue.
+		milenage.F1_Test(OPC, K, RAND, sqnUe, amfSynch, mac_a, mac_s)
+
+		sqnUeXorAK := make([]byte, 6)
+		for i := 0; i < len(sqnUe); i++ {
+			sqnUeXorAK[i] = sqnUe[i] ^ AKstar[i]
+		}
+
+		failureParam := append(sqnUeXorAK, mac_s...)
+
+		return failureParam, "SQN failure"
+	}
+
+	// updated sqn value.
+	authSubs.SequenceNumber = fmt.Sprintf("%x", sqnHn)
 
 	// derive RES*
 	key := append(CK, IK...)
@@ -348,8 +356,7 @@ func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscr
 	ue.DerivateKamf(key, snNmae, sqnHn, AK)
 	ue.DerivateAlgKey()
 	kdfVal_for_resStar := UeauCommon.GetKDFValue(key, FC, P0, UeauCommon.KDFLen(P0), P1, UeauCommon.KDFLen(P1), P2, UeauCommon.KDFLen(P2))
-	return kdfVal_for_resStar[len(kdfVal_for_resStar)/2:],
-		"successful"
+	return kdfVal_for_resStar[len(kdfVal_for_resStar)/2:], "successful"
 }
 
 func (ue *UEContext) DerivateKamf(key []byte, snName string, SQN, AK []byte) {

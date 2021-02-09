@@ -1,7 +1,6 @@
 package nas
 
 import (
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/handler"
@@ -49,6 +48,11 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 		log.Info("[UE][NAS] Receive Authentication Request")
 		handler.HandlerAuthenticationRequest(ue, m)
 
+	case nas.MsgTypeAuthenticationReject:
+		// handler authentication reject.
+		log.Info("[UE][NAS] Receive Authentication Reject")
+		handler.HandlerAuthenticationReject(ue, m)
+
 	case nas.MsgTypeIdentityRequest:
 		log.Info("[UE][NAS] Receive Identify Request")
 		// handler identity request.
@@ -60,7 +64,7 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 
 	case nas.MsgTypeRegistrationAccept:
 		// handler registration accept.
-		fmt.Println("[UE][NAS] Receive Registration Accept")
+		log.Info("[UE][NAS] Receive Registration Accept")
 		handler.HandlerRegistrationAccept(ue, m)
 
 	case nas.MsgTypeConfigurationUpdateCommand:
