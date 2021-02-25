@@ -38,6 +38,9 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 		// mac verification.
 		macReceived := payload[2:6]
 
+		// remove security Header except for sequence Number
+		payload := payload[6:]
+
 		// check security header type.
 		cph = false
 		switch m.SecurityHeaderType {
@@ -49,8 +52,12 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 			log.Info("[UE][NAS] Message with integrity and ciphered")
 			cph = true
 
+		case nas.SecurityHeaderTypeIntegrityProtectedWithNew5gNasSecurityContext:
+			log.Info("[UE][NAS] Message with integrity and with NEW 5G NAS SECURITY CONTEXT")
+			ue.UeSecurity.DLCount.Set(0, 0)
+
 		case nas.SecurityHeaderTypeIntegrityProtectedAndCipheredWithNew5gNasSecurityContext:
-			log.Info("[UE][NAS] Message with integrity, ciphered and with 5G NAS SECURITY CONTEXT")
+			log.Info("[UE][NAS] Message with integrity, ciphered and with NEW 5G NAS SECURITY CONTEXT")
 			cph = true
 			ue.UeSecurity.DLCount.Set(0, 0)
 
@@ -66,7 +73,7 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 			ue.UeSecurity.KnasInt,
 			ue.UeSecurity.DLCount.Get(),
 			security.Bearer3GPP,
-			security.DirectionUplink, payload)
+			security.DirectionDownlink, payload)
 		if err != nil {
 			log.Info("NAS MAC calculate error")
 			return
@@ -74,21 +81,25 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 
 		// check integrity
 		if !reflect.DeepEqual(mac32, macReceived) {
-			log.Info("NAS MAC verification failed(received: 0x%08x, expected: 0x%08x)", macReceived, mac32)
+			log.Info("[UE][NAS] NAS MAC verification failed(received:", macReceived, "expected:", mac32)
 			return
+		} else {
+			log.Info("[UE][NAS] successful NAS MAC verification")
 		}
 
 		// check ciphering.
 		if cph {
 			if err = security.NASEncrypt(ue.UeSecurity.CipheringAlg, ue.UeSecurity.KnasEnc, ue.UeSecurity.DLCount.Get(), security.Bearer3GPP,
-				security.DirectionUplink, payload[1:]); err != nil {
+				security.DirectionDownlink, payload[1:]); err != nil {
 				log.Info("error in encrypt algorithm")
 				return
+			} else {
+				log.Info("[UE][NAS] successful NAS CIPHERING")
 			}
 		}
 
 		// remove security header.
-		payload = payload[7:]
+		payload = message[7:]
 
 	} else {
 		log.Info("[UE][NAS] Message without security header")
