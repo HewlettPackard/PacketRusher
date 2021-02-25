@@ -5,9 +5,13 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/handler"
 	"my5G-RANTester/lib/nas"
+	"my5G-RANTester/lib/nas/security"
+	"reflect"
 )
 
 func DispatchNas(ue *context.UEContext, message []byte) {
+
+	var cph bool
 
 	// check if message is null.
 	if message == nil {
@@ -26,10 +30,66 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 
 		log.Info("[UE][NAS] Message with security header")
 
+		// information to check integrity and ciphered.
+
+		// sequence number.
+		sequenceNumber := payload[6]
+
+		// mac verification.
+		macReceived := payload[2:6]
+
+		// check security header type.
+		cph = false
+		switch m.SecurityHeaderType {
+
+		case nas.SecurityHeaderTypeIntegrityProtected:
+			log.Info("[UE][NAS] Message with integrity")
+
+		case nas.SecurityHeaderTypeIntegrityProtectedAndCiphered:
+			log.Info("[UE][NAS] Message with integrity and ciphered")
+			cph = true
+
+		case nas.SecurityHeaderTypeIntegrityProtectedAndCipheredWithNew5gNasSecurityContext:
+			log.Info("[UE][NAS] Message with integrity, ciphered and with 5G NAS SECURITY CONTEXT")
+			cph = true
+			ue.UeSecurity.DLCount.Set(0, 0)
+
+		}
+
+		// check security header(Downlink data).
+		if ue.UeSecurity.DLCount.SQN() > sequenceNumber {
+			ue.UeSecurity.DLCount.SetOverflow(ue.UeSecurity.DLCount.Overflow() + 1)
+		}
+		ue.UeSecurity.DLCount.SetSQN(sequenceNumber)
+
+		mac32, err := security.NASMacCalculate(ue.UeSecurity.IntegrityAlg,
+			ue.UeSecurity.KnasInt,
+			ue.UeSecurity.DLCount.Get(),
+			security.Bearer3GPP,
+			security.DirectionUplink, payload)
+		if err != nil {
+			log.Info("NAS MAC calculate error")
+			return
+		}
+
+		// check integrity
+		if !reflect.DeepEqual(mac32, macReceived) {
+			log.Info("NAS MAC verification failed(received: 0x%08x, expected: 0x%08x)", macReceived, mac32)
+			return
+		}
+
+		// check ciphering.
+		if cph {
+			if err = security.NASEncrypt(ue.UeSecurity.CipheringAlg, ue.UeSecurity.KnasEnc, ue.UeSecurity.DLCount.Get(), security.Bearer3GPP,
+				security.DirectionUplink, payload[1:]); err != nil {
+				log.Info("error in encrypt algorithm")
+				return
+			}
+		}
+
 		// remove security header.
 		payload = payload[7:]
 
-		// TODO check security header
 	} else {
 		log.Info("[UE][NAS] Message without security header")
 	}
