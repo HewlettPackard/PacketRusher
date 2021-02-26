@@ -101,15 +101,23 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 		// remove security header.
 		payload = message[7:]
 
-	} else {
-		log.Info("[UE][NAS] Message without security header")
-	}
+		// decode NAS message.
+		err = m.PlainNasDecode(&payload)
+		if err != nil {
+			// TODO return error
+			log.Info("[UE][NAS] Decode NAS error", err)
+		}
 
-	// decode NAS message.
-	err := m.PlainNasDecode(&payload)
-	if err != nil {
-		// TODO return error
-		log.Info("[UE][NAS] Decode NAS error", err)
+	} else {
+
+		log.Info("[UE][NAS] Message without security header")
+
+		// decode NAS message.
+		err := m.PlainNasDecode(&payload)
+		if err != nil {
+			// TODO return error
+			log.Info("[UE][NAS] Decode NAS error", err)
+		}
 	}
 
 	switch m.GmmHeader.GetMessageType() {
