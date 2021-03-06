@@ -60,11 +60,29 @@ func HandlerAuthenticationRequest(ue *context.UEContext, message *nas.Message) {
 
 func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) {
 
-	// TODO checking BIT RINMR that triggered registration request in security mode complete
-	// message.SecurityModeCommand.Additional5GSecurityInformation.GetRINMR()
+	switch message.SecurityModeCommand.SelectedNASSecurityAlgorithms.GetTypeOfCipheringAlgorithm() {
+	case 0:
+		log.Info("[UE][NAS] Type of ciphering algorithm is 5G-EA0")
+	case 1:
+		log.Info("[UE][NAS] Type of ciphering algorithm is 128-5G-EA1")
+	case 2:
+		log.Info("[UE][NAS] Type of ciphering algorithm is 128-5G-EA2")
+	}
+
+	switch message.SecurityModeCommand.SelectedNASSecurityAlgorithms.GetTypeOfIntegrityProtectionAlgorithm() {
+	case 0:
+		log.Info("[UE][NAS] Type of integrity protection algorithm is 5G-IA0")
+	case 1:
+		log.Info("[UE][NAS] Type of integrity protection algorithm is 128-5G-IA1")
+	case 2:
+		log.Info("[UE][NAS] Type of integrity protection algorithm is 128-5G-IA2")
+	}
+
+	// checking BIT RINMR that triggered registration request in security mode complete.
+	rinmr := message.SecurityModeCommand.Additional5GSecurityInformation.GetRINMR()
 
 	// getting NAS Security Mode Complete.
-	securityModeComplete, err := mm_5gs.SecurityModeComplete(ue)
+	securityModeComplete, err := mm_5gs.SecurityModeComplete(ue, rinmr)
 	if err != nil {
 		log.Fatal("[UE][NAS] Error sending Security Mode Complete: ", err)
 	}
