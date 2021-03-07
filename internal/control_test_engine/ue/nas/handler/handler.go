@@ -96,6 +96,14 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 	// change the state of ue for registered
 	ue.SetStateMM_REGISTERED()
 
+	// saved 5g GUTI and others information.
+	ue.SetAmfRegionId(message.RegistrationAccept.GetAMFRegionID())
+	ue.SetAmfPointer(message.RegistrationAccept.GetAMFPointer())
+	ue.SetAmfSetId(message.RegistrationAccept.GetAMFSetID())
+	ue.Set5gGuti(message.RegistrationAccept.GetTMSI5G())
+
+	log.Info("[UE][NAS] UE 5G GUTI: ", ue.Get5gGuti())
+
 	// getting NAS registration complete.
 	registrationComplete, err := mm_5gs.RegistrationComplete(ue)
 	if err != nil {

@@ -35,6 +35,13 @@ type UEContext struct {
 	StateSM    int
 	UnixConn   net.Conn
 	PduSession PDUSession
+	amfInfo    Amf
+}
+
+type Amf struct {
+	amfRegionId uint8
+	amfSetId    uint16
+	amfPointer  uint8
 }
 
 type PDUSession struct {
@@ -60,6 +67,7 @@ type SECURITY struct {
 	Kamf               []uint8
 	AuthenticationSubs models.AuthenticationSubscription
 	Suci               nasType.MobileIdentity5GS
+	Guti               [4]byte
 }
 
 func (ue *UEContext) NewRanUeContext(imsi string,
@@ -270,6 +278,38 @@ func (ue *UEContext) EncodeUeSuci() (uint8, uint8, uint8) {
 	// return decimal value
 	// Function worked fine.
 	return uint8(suci[0]), uint8(suci[1]), uint8(suci[2])
+}
+
+func (ue *UEContext) SetAmfRegionId(amfRegionId uint8) {
+	ue.amfInfo.amfRegionId = amfRegionId
+}
+
+func (ue *UEContext) GetAmfRegionId() uint8 {
+	return ue.amfInfo.amfRegionId
+}
+
+func (ue *UEContext) SetAmfPointer(amfPointer uint8) {
+	ue.amfInfo.amfPointer = amfPointer
+}
+
+func (ue *UEContext) GetAmfPointer() uint8 {
+	return ue.amfInfo.amfPointer
+}
+
+func (ue *UEContext) SetAmfSetId(amfSetId uint16) {
+	ue.amfInfo.amfSetId = amfSetId
+}
+
+func (ue *UEContext) GetAmfSetId() uint16 {
+	return ue.amfInfo.amfSetId
+}
+
+func (ue *UEContext) Get5gGuti() [4]uint8 {
+	return ue.UeSecurity.Guti
+}
+
+func (ue *UEContext) Set5gGuti(guti [4]uint8) {
+	ue.UeSecurity.Guti = guti
 }
 
 func (ue *UEContext) deriveAUTN(autn []byte, ak []uint8) ([]byte, []byte, []byte) {
