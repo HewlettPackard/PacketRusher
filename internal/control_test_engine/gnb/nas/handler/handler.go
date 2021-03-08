@@ -16,7 +16,7 @@ func HandlerUeInitialized(ue *context.GNBUe, message []byte, gnb *context.GNBCon
 	}
 
 	// change state of UE.
-	ue.SetState(context.Ongoing)
+	ue.SetStateOngoing()
 
 	// Send Initial UE Message
 	conn := ue.GetSCTP()

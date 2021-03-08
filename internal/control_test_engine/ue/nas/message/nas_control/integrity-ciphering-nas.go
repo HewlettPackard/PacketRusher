@@ -47,10 +47,12 @@ func NASEncode(ue *context.UEContext, msg *nas.Message, securityContextAvailable
 		}
 
 		// TODO: Support for ue has nas connection in both accessType
+		// make ciphering of NAS message.
 		if err = security.NASEncrypt(ue.UeSecurity.CipheringAlg, ue.UeSecurity.KnasEnc, ue.UeSecurity.ULCount.Get(), security.Bearer3GPP,
 			security.DirectionUplink, payload); err != nil {
 			return
 		}
+
 		// add sequence number
 		payload = append([]byte{sequenceNumber}, payload[:]...)
 		mac32 := make([]byte, 4)

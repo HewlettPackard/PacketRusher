@@ -4,12 +4,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
-	"my5G-RANTester/internal/control_test_engine/ue"
 	"sync"
-	"time"
 )
 
-func TestAttachUeWithConfiguration() {
+func TestAttachGnbWithConfiguration() {
 
 	wg := sync.WaitGroup{}
 
@@ -19,13 +17,14 @@ func TestAttachUeWithConfiguration() {
 		log.Fatal("Error in get configuration")
 	}
 
+	// wrong messages:
+	// cfg.GNodeB.PlmnList.Mcc = "891"
+	// cfg.GNodeB.PlmnList.Mnc = "23"
+	// cfg.GNodeB.PlmnList.Tac = "000002"
+	// cfg.GNodeB.SliceSupportList.St = "10"
+	// cfg.GNodeB.SliceSupportList.Sst = "010239"
+
 	go gnb.InitGnb(cfg)
-
-	wg.Add(1)
-
-	time.Sleep(1 * time.Second)
-
-	go ue.RegistrationUe(cfg, 1)
 
 	wg.Add(1)
 
