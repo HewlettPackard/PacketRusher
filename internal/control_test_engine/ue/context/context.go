@@ -1,6 +1,7 @@
 package context
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"my5G-RANTester/lib/UeauCommon"
@@ -10,6 +11,7 @@ import (
 	"my5G-RANTester/lib/nas/security"
 	"my5G-RANTester/lib/openapi/models"
 	"net"
+	"reflect"
 	"regexp"
 )
 
@@ -27,11 +29,19 @@ const SM5G_PDU_SESSION_ACTIVE_PENDING = 0x07
 const SM5G_PDU_SESSION_ACTIVE = 0x08
 
 type UEContext struct {
+	id         uint8
 	UeSecurity SECURITY
 	StateMM    int
 	StateSM    int
 	UnixConn   net.Conn
 	PduSession PDUSession
+	amfInfo    Amf
+}
+
+type Amf struct {
+	amfRegionId uint8
+	amfSetId    uint16
+	amfPointer  uint8
 }
 
 type PDUSession struct {
@@ -57,11 +67,12 @@ type SECURITY struct {
 	Kamf               []uint8
 	AuthenticationSubs models.AuthenticationSubscription
 	Suci               nasType.MobileIdentity5GS
+	Guti               [4]byte
 }
 
 func (ue *UEContext) NewRanUeContext(imsi string,
 	cipheringAlg, integrityAlg uint8,
-	k, opc, op, amf, mcc, mnc string,
+	k, opc, op, amf, sqn, mcc, mnc string,
 	sst int32, sd string, id uint8) {
 
 	// added SUPI.
@@ -74,7 +85,7 @@ func (ue *UEContext) NewRanUeContext(imsi string,
 	ue.UeSecurity.IntegrityAlg = integrityAlg
 
 	// added key, AuthenticationManagementField and opc or op.
-	ue.SetAuthSubscription(k, opc, op, amf)
+	ue.SetAuthSubscription(k, opc, op, amf, sqn)
 
 	// added suci
 	suciV1, suciV2, suciV3 := ue.EncodeUeSuci()
@@ -85,6 +96,9 @@ func (ue *UEContext) NewRanUeContext(imsi string,
 
 	// added PDU Session id
 	ue.PduSession.Id = id
+
+	// added UE id.
+	ue.id = id
 
 	// added network slice
 	ue.PduSession.Snssai.Sd = sd
@@ -121,6 +135,10 @@ func (ue *UEContext) NewRanUeContext(imsi string,
 	// added initial state for SM(INACTIVE)
 	ue.SetStateSM_PDU_SESSION_INACTIVE()
 
+}
+
+func (ue *UEContext) GetUeId() uint8 {
+	return ue.id
 }
 
 func (ue *UEContext) GetSuci() nasType.MobileIdentity5GS {
@@ -262,50 +280,111 @@ func (ue *UEContext) EncodeUeSuci() (uint8, uint8, uint8) {
 	return uint8(suci[0]), uint8(suci[1]), uint8(suci[2])
 }
 
-func (ue *UEContext) deriveSQN(autn []byte, ak []uint8) []byte {
+func (ue *UEContext) SetAmfRegionId(amfRegionId uint8) {
+	ue.amfInfo.amfRegionId = amfRegionId
+}
+
+func (ue *UEContext) GetAmfRegionId() uint8 {
+	return ue.amfInfo.amfRegionId
+}
+
+func (ue *UEContext) SetAmfPointer(amfPointer uint8) {
+	ue.amfInfo.amfPointer = amfPointer
+}
+
+func (ue *UEContext) GetAmfPointer() uint8 {
+	return ue.amfInfo.amfPointer
+}
+
+func (ue *UEContext) SetAmfSetId(amfSetId uint16) {
+	ue.amfInfo.amfSetId = amfSetId
+}
+
+func (ue *UEContext) GetAmfSetId() uint16 {
+	return ue.amfInfo.amfSetId
+}
+
+func (ue *UEContext) Get5gGuti() [4]uint8 {
+	return ue.UeSecurity.Guti
+}
+
+func (ue *UEContext) Set5gGuti(guti [4]uint8) {
+	ue.UeSecurity.Guti = guti
+}
+
+func (ue *UEContext) deriveAUTN(autn []byte, ak []uint8) ([]byte, []byte, []byte) {
+
 	sqn := make([]byte, 6)
 
 	// get SQNxorAK
 	SQNxorAK := autn[0:6]
+	amf := autn[6:8]
+	mac_a := autn[8:]
 
-	// get sqn
+	// get SQN
 	for i := 0; i < len(SQNxorAK); i++ {
 		sqn[i] = SQNxorAK[i] ^ ak[i]
 	}
 
-	// return sqn
-	return sqn
+	// return SQN, amf, mac_a
+	return sqn, amf, mac_a
 }
 
-func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription, RAND []byte, snNmae string, AUTN []byte) []byte {
+func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription,
+	RAND []byte,
+	snNmae string,
+	AUTN []byte) ([]byte, string) {
 
-	// SQN, _ := hex.DecodeString(authSubs.SequenceNumber)
-
-	// get management field.
-	AMF, _ := hex.DecodeString(authSubs.AuthenticationManagementField)
-
-	// Run milenage
-	// TODO: verify MAC
-	MAC_A, MAC_S := make([]byte, 8), make([]byte, 8)
+	// parameters for authentication challenge.
+	mac_a, mac_s := make([]byte, 8), make([]byte, 8)
 	CK, IK := make([]byte, 16), make([]byte, 16)
 	RES := make([]byte, 8)
 	AK, AKstar := make([]byte, 6), make([]byte, 6)
 
-	// generate OPC, K.
+	// Get OPC, K, SQN, AMF from USIM.
 	OPC, _ := hex.DecodeString(authSubs.Opc.OpcValue)
 	K, _ := hex.DecodeString(authSubs.PermanentKey.PermanentKeyValue)
+	sqnUe, _ := hex.DecodeString(authSubs.SequenceNumber)
+	AMF, _ := hex.DecodeString(authSubs.AuthenticationManagementField)
 
 	// Generate RES, CK, IK, AK, AKstar
 	milenage.F2345_Test(OPC, K, RAND, RES, CK, IK, AK, AKstar)
 
-	// Generate SQN.
-	SQN := ue.deriveSQN(AUTN, AK)
+	// Get SQN, MAC_A, AMF from AUTN
+	sqnHn, _, mac_aHn := ue.deriveAUTN(AUTN, AK)
 
 	// Generate MAC_A, MAC_S
-	milenage.F1_Test(OPC, K, RAND, SQN, AMF, MAC_A, MAC_S)
+	milenage.F1_Test(OPC, K, RAND, sqnHn, AMF, mac_a, mac_s)
 
-	// Generate RES, CK, IK, AK, AKstar
-	milenage.F2345_Test(OPC, K, RAND, RES, CK, IK, AK, AKstar)
+	// MAC verification.
+	if !reflect.DeepEqual(mac_a, mac_aHn) {
+		return nil, "MAC failure"
+	}
+
+	// Verification of sequence number freshness.
+	if bytes.Compare(sqnUe, sqnHn) > 0 {
+
+		// get AK*
+		milenage.F2345_Test(OPC, K, RAND, RES, CK, IK, AK, AKstar)
+
+		// From the standard, AMF(0x0000) should be used in the synch failure.
+		amfSynch, _ := hex.DecodeString("0000")
+
+		// get mac_s using sqn ue.
+		milenage.F1_Test(OPC, K, RAND, sqnUe, amfSynch, mac_a, mac_s)
+
+		sqnUeXorAK := make([]byte, 6)
+		for i := 0; i < len(sqnUe); i++ {
+			sqnUeXorAK[i] = sqnUe[i] ^ AKstar[i]
+		}
+
+		failureParam := append(sqnUeXorAK, mac_s...)
+
+		return failureParam, "SQN failure"
+	}
+
+	// updated sqn value.
+	authSubs.SequenceNumber = fmt.Sprintf("%x", sqnHn)
 
 	// derive RES*
 	key := append(CK, IK...)
@@ -314,11 +393,10 @@ func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscr
 	P1 := RAND
 	P2 := RES
 
-	ue.DerivateKamf(key, snNmae, SQN, AK)
+	ue.DerivateKamf(key, snNmae, sqnHn, AK)
 	ue.DerivateAlgKey()
 	kdfVal_for_resStar := UeauCommon.GetKDFValue(key, FC, P0, UeauCommon.KDFLen(P0), P1, UeauCommon.KDFLen(P1), P2, UeauCommon.KDFLen(P2))
-	return kdfVal_for_resStar[len(kdfVal_for_resStar)/2:]
-
+	return kdfVal_for_resStar[len(kdfVal_for_resStar)/2:], "successful"
 }
 
 func (ue *UEContext) DerivateKamf(key []byte, snName string, SQN, AK []byte) {
@@ -366,7 +444,7 @@ func (ue *UEContext) DerivateAlgKey() {
 	copy(ue.UeSecurity.KnasInt[:], kint[16:32])
 }
 
-func (ue *UEContext) SetAuthSubscription(k, opc, op, amf string) {
+func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
 	ue.UeSecurity.AuthenticationSubs.PermanentKey = &models.PermanentKey{
 		PermanentKeyValue: k,
 	}
@@ -380,7 +458,7 @@ func (ue *UEContext) SetAuthSubscription(k, opc, op, amf string) {
 	}
 	ue.UeSecurity.AuthenticationSubs.AuthenticationManagementField = amf
 
-	//ue.UeSecurity.AuthenticationSubs.SequenceNumber = TestGenAuthData.MilenageTestSet19.SQN
+	ue.UeSecurity.AuthenticationSubs.SequenceNumber = sqn
 	ue.UeSecurity.AuthenticationSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
 }
 

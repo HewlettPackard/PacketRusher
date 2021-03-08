@@ -10,16 +10,6 @@ import (
 	"sync"
 )
 
-// UE main states in the GNB Context.
-const Initialized = 0x00
-const Ongoing = 0x01
-const Ready = 0x02
-
-// AMF main states in the GNB Context.
-const Inactive = 0x00
-const Active = 0x01
-const Overload = 0x02
-
 type GNBContext struct {
 	dataInfo       DataInfo    // gnb data plane information
 	controlInfo    ControlInfo // gnb control plane information
@@ -98,7 +88,7 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	ue.SetUnixSocket(conn)
 
 	// set state to UE.
-	ue.SetState(Initialized)
+	ue.SetStateInitialized()
 
 	// set downlinkTeid.
 	teidDown := gnb.GetUeTeid()
@@ -195,10 +185,14 @@ func (gnb *GNBContext) NewGnBAmf(ip string, port int) *GNBAmf {
 	amf.setAmfPort(port)
 
 	// set state to AMF.
-	amf.SetState(Inactive)
+	amf.SetStateInactive()
 
 	// store AMF in the AMF Pool of GNB.
 	gnb.amfPool.Store(amfId, amf)
+
+	// Plmns and slices supported by AMF initialized.
+	amf.SetLenPlmns(0)
+	amf.SetLenSlice(0)
 
 	// return AMF Context
 	return amf

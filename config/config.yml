@@ -18,6 +18,7 @@ ue:
   key: "70d49a71dd1a2b806a25abe0ef749f1e"
   opc: "6f1bf53d624b3a43af6592854e2444c7"
   amf: "8000"
+  sqn: "0000000"
   hplmn:
     mcc: "208"
     mnc: "93"

@@ -24,7 +24,7 @@ func TestMultiUesInQueue(numUes int) {
 
 	wg.Add(1)
 
-	time.Sleep(60 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	for i := 1; i <= numUes; i++ {
 
