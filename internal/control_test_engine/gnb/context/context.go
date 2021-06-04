@@ -399,11 +399,14 @@ func (gnb *GNBContext) GetSliceInBytes() ([]byte, []byte) {
 		fmt.Println(err)
 	}
 
-	sdBytes, err := hex.DecodeString(gnb.sliceInfo.sd)
-	if err != nil {
-		fmt.Println(err)
+	if gnb.sliceInfo.sd != "" {
+		sdBytes, err := hex.DecodeString(gnb.sliceInfo.sd)
+		if err != nil {
+			fmt.Println(err)
+		}
+		return sstBytes, sdBytes
 	}
-	return sstBytes, sdBytes
+	return sstBytes, nil
 }
 
 func (gnb *GNBContext) getMccAndMnc() (string, string) {

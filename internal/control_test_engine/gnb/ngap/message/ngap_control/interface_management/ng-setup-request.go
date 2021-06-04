@@ -85,10 +85,12 @@ func BuildNGSetupRequest(gnb *context.GNBContext) (pdu ngapType.NGAPPDU) {
 
 	// sliceSupportItem.SNSSAI.SST.Value = aper.OctetString("\x01")
 	sliceSupportItem.SNSSAI.SST.Value = sst
-	// optional
-	sliceSupportItem.SNSSAI.SD = new(ngapType.SD)
+
 	// sliceSupportItem.SNSSAI.SD.Value = aper.OctetString("\x01\x02\x03")
-	sliceSupportItem.SNSSAI.SD.Value = sd
+	if sd != nil {
+		sliceSupportItem.SNSSAI.SD = new(ngapType.SD)
+		sliceSupportItem.SNSSAI.SD.Value = sd
+	}
 
 	sliceSupportList.List = append(sliceSupportList.List, sliceSupportItem)
 

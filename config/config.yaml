@@ -6,26 +6,26 @@ gnodeb:
     ip: "10.200.200.2"
     port: 2152
   plmnlist:
-    mcc: "208"
-    mnc: "93"
+    mcc: "901"
+    mnc: "70"
     tac: "000001"
     gnbid: "000002"
   slicesupportlist:
     sst: "01"
-    sd: "010203"
+    sd: ""
 ue:
-  msin: "00000001"
+  msin: "0000000001"
   key: "465B5CE8B199B49FAA5F0A2EE238A6BC"
   opc: "E8ED289DEBA952E4283B54E88E6183CA"
   amf: "8000"
   sqn: "0000000"
   hplmn:
-    mcc: "208"
-    mnc: "93"
+    mcc: "901"
+    mnc: "70"
   snssai:
     sst: 1
-    sd: "010203"
+    sd: ""
 amfif:
   ip: "127.0.0.1"
   port: 38412
-  name: "free5gc"
+  name: "open5gs"
