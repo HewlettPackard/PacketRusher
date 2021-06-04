@@ -454,15 +454,15 @@ func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, messag
 					var sst string
 
 					if slice.SNSSAI.SST.Value != nil {
-						sd = fmt.Sprintf("%x", slice.SNSSAI.SD.Value)
-					} else {
-						sd = "was not informed"
-					}
-
-					if slice.SNSSAI.SD.Value != nil {
 						sst = fmt.Sprintf("%x", slice.SNSSAI.SST.Value)
 					} else {
 						sst = "was not informed"
+					}
+
+					if slice.SNSSAI.SD != nil {
+						sd = fmt.Sprintf("%x", slice.SNSSAI.SD.Value)
+					} else {
+						sd = "was not informed"
 					}
 
 					// update amf slice supported
