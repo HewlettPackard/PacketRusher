@@ -29,12 +29,12 @@ type Config struct {
 			GnbId string `yaml: "gnbid"`
 		} `yaml: "plmnlist"`
 		SliceSupportList struct {
-			St  string `yaml: "st"`
 			Sst string `yaml: "sst"`
+			Sd  string `yaml: "sd"`
 		} `yaml: "slicesupportlist"`
 	} `yaml:"gnodeb"`
 	Ue struct {
-		Imsi  string `yaml: "imsi"`
+		Msin  string `yaml: "msin"`
 		Key   string `yaml: "key"`
 		Opc   string `yaml: "opc"`
 		Amf   string `yaml: "amf"`
@@ -44,8 +44,8 @@ type Config struct {
 			Mnc string `yaml: "mnc"`
 		} `yaml: "hplmn"`
 		Snssai struct {
-			Sd  int    `yaml: "sd"`
-			Sst string `yaml: "sst"`
+			Sst int    `yaml: "sst"`
+			Sd  string `yaml: "sd"`
 		} `yaml: "snssai"`
 	} `yaml:"ue"`
 	AMF struct {
@@ -64,7 +64,7 @@ func RootDir() string {
 func getConfig() Config {
 	var cfg = Config{}
 	Ddir := RootDir()
-	configPath, err := filepath.Abs(Ddir + "/config/config.yml")
+	configPath, err := filepath.Abs(Ddir + "/config/config.yaml")
 	log.Debug(configPath)
 	if err != nil {
 		log.Fatal("Could not find config in: ", configPath)
@@ -81,7 +81,7 @@ func getConfig() Config {
 func GetConfig() (Config, error) {
 	var cfg = Config{}
 	Ddir := RootDir()
-	configPath, err := filepath.Abs(Ddir + "/config/config.yml")
+	configPath, err := filepath.Abs(Ddir + "/config/config.yaml")
 	log.Debug(configPath)
 	if err != nil {
 		return Config{}, nil
