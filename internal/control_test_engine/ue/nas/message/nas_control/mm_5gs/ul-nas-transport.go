@@ -54,14 +54,18 @@ func getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, reques
 		ulNasTransport.DNN.SetDNN(dnn)
 	}
 
-	if sNssai != nil && sNssai.Sd != "" {
-		var sdTemp [3]uint8
-		sd, _ := hex.DecodeString(sNssai.Sd)
-		copy(sdTemp[:], sd)
+	if sNssai != nil {
 		ulNasTransport.SNSSAI = nasType.NewSNSSAI(nasMessage.ULNASTransportSNSSAIType)
-		ulNasTransport.SNSSAI.SetLen(4)
+		if sNssai.Sd == "" {
+			ulNasTransport.SNSSAI.SetLen(1)
+		} else {
+			ulNasTransport.SNSSAI.SetLen(4)
+			var sdTemp [3]uint8
+			sd, _ := hex.DecodeString(sNssai.Sd)
+			copy(sdTemp[:], sd)
+			ulNasTransport.SNSSAI.SetSD(sdTemp)
+		}
 		ulNasTransport.SNSSAI.SetSST(uint8(sNssai.Sst))
-		ulNasTransport.SNSSAI.SetSD(sdTemp)
 	}
 
 	ulNasTransport.SpareHalfOctetAndPayloadContainerType.SetPayloadContainerType(nasMessage.PayloadContainerTypeN1SMInfo)
