@@ -9,7 +9,7 @@ import (
 	"my5G-RANTester/lib/nas/nasType"
 )
 
-func GetRegistrationRequestWith5GMM(registrationType uint8, requestedNSSAI *nasType.RequestedNSSAI, uplinkDataStatus *nasType.UplinkDataStatus, ue *context.UEContext) (nasPdu []byte) {
+func GetRegistrationRequest(registrationType uint8, requestedNSSAI *nasType.RequestedNSSAI, uplinkDataStatus *nasType.UplinkDataStatus, capability bool, ue *context.UEContext) (nasPdu []byte) {
 
 	ueSecurityCapability := context.SetUESecurityCapability(ue)
 
@@ -26,10 +26,14 @@ func GetRegistrationRequestWith5GMM(registrationType uint8, requestedNSSAI *nasT
 	registrationRequest.NgksiAndRegistrationType5GS.SetNasKeySetIdentifiler(ue.GetUeId())
 	registrationRequest.NgksiAndRegistrationType5GS.SetRegistrationType5GS(registrationType)
 	registrationRequest.MobileIdentity5GS = ue.GetSuci()
-	registrationRequest.Capability5GMM = &nasType.Capability5GMM{
-		Iei:   nasMessage.RegistrationRequestCapability5GMMType,
-		Len:   1,
-		Octet: [13]uint8{0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	if capability {
+		registrationRequest.Capability5GMM = &nasType.Capability5GMM{
+			Iei:   nasMessage.RegistrationRequestCapability5GMMType,
+			Len:   1,
+			Octet: [13]uint8{0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		}
+	} else {
+		registrationRequest.Capability5GMM = nil
 	}
 	registrationRequest.UESecurityCapability = ueSecurityCapability
 	registrationRequest.RequestedNSSAI = requestedNSSAI

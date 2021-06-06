@@ -45,6 +45,7 @@ func getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, reques
 	ulNasTransport.RequestType = new(nasType.RequestType)
 	ulNasTransport.RequestType.SetIei(nasMessage.ULNASTransportRequestTypeType)
 	ulNasTransport.RequestType.SetRequestTypeValue(requestType)
+
 	if dnnString != "" {
 		dnn := []byte(dnnString)
 		ulNasTransport.DNN = new(nasType.DNN)
@@ -52,7 +53,8 @@ func getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, reques
 		ulNasTransport.DNN.SetLen(uint8(len(dnn)))
 		ulNasTransport.DNN.SetDNN(dnn)
 	}
-	if sNssai != nil {
+
+	if sNssai != nil && sNssai.Sd != "" {
 		var sdTemp [3]uint8
 		sd, _ := hex.DecodeString(sNssai.Sd)
 		copy(sdTemp[:], sd)

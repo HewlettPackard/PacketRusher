@@ -55,7 +55,7 @@ func SecurityModeComplete(ue *context.UEContext, rinmr uint8) ([]byte, error) {
 
 	// ueSecurityCapability := context.SetUESecurityCapability(ue)
 	if rinmr == 1 {
-		registrationRequest = GetRegistrationRequestWith5GMM(nasMessage.RegistrationType5GSInitialRegistration, nil, nil, ue)
+		registrationRequest = GetRegistrationRequest(nasMessage.RegistrationType5GSInitialRegistration, nil, nil, true, ue)
 	} else {
 		registrationRequest = nil
 	}
