@@ -149,6 +149,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 			// that field is not mandatory.
 			if ies.Value.MobilityRestrictionList == nil {
 				log.Info("[GNB][NGAP] Mobility Restriction is missing")
+				mobilityRestrict = "not informed"
 			} else {
 				mobilityRestrict = fmt.Sprintf("%x", ies.Value.MobilityRestrictionList.ServingPLMN.Value)
 			}
@@ -158,6 +159,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 			// TODO using for mapping UE context
 			if ies.Value.MaskedIMEISV == nil {
 				log.Info("[GNB][NGAP] Masked IMEISV is missing")
+				maskedImeisv = "not informed"
 			} else {
 				maskedImeisv = fmt.Sprintf("%x", ies.Value.MaskedIMEISV.Value.Bytes)
 			}
@@ -267,8 +269,17 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 				// create a PDU session(PDU SESSION ID + NSSAI).
 				pduSessionId = item.PDUSessionID.Value
 
-				sd = fmt.Sprintf("%x", item.SNSSAI.SD.Value)
-				sst = fmt.Sprintf("%x", item.SNSSAI.SST.Value)
+				if item.SNSSAI.SD != nil {
+					sd = fmt.Sprintf("%x", item.SNSSAI.SD.Value)
+				} else {
+					sd = "not informed"
+				}
+
+				if item.SNSSAI.SST.Value != nil {
+					sst = fmt.Sprintf("%x", item.SNSSAI.SST.Value)
+				} else {
+					sst = "not informed"
+				}
 
 				if item.PDUSessionResourceSetupRequestTransfer != nil {
 

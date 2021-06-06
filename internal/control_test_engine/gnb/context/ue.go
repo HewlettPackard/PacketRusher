@@ -47,7 +47,14 @@ type mobility struct {
 func (ue *GNBUe) CreateUeContext(plmn string, imeisv string, sst []string, sd []string) {
 
 	ue.context.pduSession.lenSlice = 0
-	ue.context.mobilityInfo.mcc, ue.context.mobilityInfo.mnc = convertMccMnc(plmn)
+
+	if plmn != "not informed" {
+		ue.context.mobilityInfo.mcc, ue.context.mobilityInfo.mnc = convertMccMnc(plmn)
+	} else {
+		ue.context.mobilityInfo.mcc = plmn
+		ue.context.mobilityInfo.mnc = plmn
+	}
+
 	ue.context.maskedIMEISV = imeisv
 
 	for i := 0; i < len(sst); i++ {
