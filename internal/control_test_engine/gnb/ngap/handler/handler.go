@@ -132,13 +132,13 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 			// list S-NSSAI(Single – Network Slice Selection Assistance Information).
 			for i, items := range ies.Value.AllowedNSSAI.List {
 
-				if items.SNSSAI.SD != nil {
+				if items.SNSSAI.SST.Value != nil {
 					sst[i] = fmt.Sprintf("%x", items.SNSSAI.SST.Value)
 				} else {
 					sst[i] = "not informed"
 				}
 
-				if items.SNSSAI.SST.Value != nil {
+				if items.SNSSAI.SD != nil {
 					sd[i] = fmt.Sprintf("%x", items.SNSSAI.SD.Value)
 				} else {
 					sd[i] = "not informed"
@@ -148,7 +148,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 		case ngapType.ProtocolIEIDMobilityRestrictionList:
 			// that field is not mandatory.
 			if ies.Value.MobilityRestrictionList == nil {
-				log.Info("[GNB][NGAP] Allowed NSSAI is missing")
+				log.Info("[GNB][NGAP] Mobility Restriction is missing")
 			} else {
 				mobilityRestrict = fmt.Sprintf("%x", ies.Value.MobilityRestrictionList.ServingPLMN.Value)
 			}
