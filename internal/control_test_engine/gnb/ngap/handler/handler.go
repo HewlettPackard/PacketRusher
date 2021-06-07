@@ -76,7 +76,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	var messageNas []byte
 	var sst []string
 	var sd []string
-	var mobilityRestrict string
+	var mobilityRestrict = "not informed"
 	var maskedImeisv string
 	// var securityKey []byte
 
