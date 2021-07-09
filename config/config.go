@@ -64,7 +64,7 @@ func RootDir() string {
 func getConfig() Config {
 	var cfg = Config{}
 	Ddir := RootDir()
-	configPath, err := filepath.Abs(Ddir + "/config/config.yaml")
+	configPath, err := filepath.Abs(Ddir + "/config/config.yml")
 	log.Debug(configPath)
 	if err != nil {
 		log.Fatal("Could not find config in: ", configPath)
@@ -81,7 +81,7 @@ func getConfig() Config {
 func GetConfig() (Config, error) {
 	var cfg = Config{}
 	Ddir := RootDir()
-	configPath, err := filepath.Abs(Ddir + "/config/config.yaml")
+	configPath, err := filepath.Abs(Ddir + "/config/config.yml")
 	log.Debug(configPath)
 	if err != nil {
 		return Config{}, nil

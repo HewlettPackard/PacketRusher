@@ -56,23 +56,29 @@ func gtpListen(gnb *context.GNBContext) {
 
 	for {
 
-		n, addr, teid, err := conn.ReadFromGTP(buf)
+		n, _, teid, err := conn.ReadFromGTP(buf)
 		if err != nil {
 			log.Info("[GNB][GTP] Error read in GTP tunnel")
 			return
 		}
 
-		log.Info("[GNB][GTP] Address read in GTP Listen is", addr)
-
 		forwardData := make([]byte, n)
-		copy(forwardData, buf[:n])
 
-		// find owner of  the Data Plane using downlink Teid.
+		// check gtp header to see if has extension or not.
+		if buf[3] == 133 {
+			copy(forwardData, buf[8:n])
+		} else {
+			copy(forwardData, buf[:n])
+		}
+
+		// find owner of the Data Plane using downlink Teid.
 		ue, err := gnb.GetGnbUeByTeid(teid)
 		if err != nil || ue == nil {
 			log.Info("[GNB][GTP] Invalid Downlink Teid. UE is not found in UE Pool")
 			return
 		}
+
+		// log.Info("[GNB][GTP] Read ", n," bytes for UE ", ue.GetRanUeId()," in GTP tunnel\n")
 
 		// handling data plane.
 		go processingData(ue, gnb, forwardData)
@@ -109,6 +115,4 @@ func processingData(ue *context.GNBUe, gnb *context.GNBContext, packet []byte) {
 		log.Info("[GNB][GTP] Error in sending data plane to UE")
 		return
 	}
-
-	log.Info("[GNB][DATA] Send %d bytes in GNB->UE tunnel\n", packetLenght)
 }
