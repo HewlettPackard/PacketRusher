@@ -155,7 +155,9 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 		log.Info("[UE][NAS] Receive DL NAS Transport")
 		handler.HandlerDlNasTransportPduaccept(ue, m)
 
-		// UE is ready for testing data-plane.
+	case nas.MsgTypeRegistrationReject:
+		// handler registration reject
+		log.Info("[UE][NAS] Receive Registration Reject")
 	}
 
 }

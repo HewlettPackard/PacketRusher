@@ -46,7 +46,7 @@ func gatewayListen(gnb *context.GNBContext) {
 	for {
 
 		ipHeader, payload, _, err := conn.ReadFrom(buffer)
-		log.Info(" [GNB][DATA] Read %d bytes in GNB/UE tunnel", len(payload))
+		// log.Info(" [GNB][DATA] Read %d bytes in GNB/UE tunnel", len(payload))
 		if err != nil {
 			log.Info("[GNB][DATA] Error in reading from GNB/UE tunnel: %+v", err)
 			return
@@ -86,10 +86,10 @@ func processingData(ue *context.GNBUe, gnb *context.GNBContext, packet []byte) {
 	}
 
 	// send Data plane with GTP header.
-	n, err := conn.WriteToGTP(teidUplink, packet, upfAddr)
+	_, err = conn.WriteToGTP(teidUplink, packet, upfAddr)
 	if err != nil {
 		log.Info("[GNB][GTP] Error sending data plane in GTP/UDP tunnel")
 	}
 
-	log.Info("[GNB][GTP] Send %d bytes in GNB->UPF tunnel\n", n)
+	//log.Info("[GNB][GTP] Send %d bytes in GNB->UPF tunnel\n", n)
 }

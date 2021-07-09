@@ -55,6 +55,7 @@ type PDUSession struct {
 
 type SECURITY struct {
 	Supi               string
+	Msin               string
 	mcc                string
 	mnc                string
 	ULCount            security.Count
@@ -70,13 +71,13 @@ type SECURITY struct {
 	Guti               [4]byte
 }
 
-func (ue *UEContext) NewRanUeContext(imsi string,
+func (ue *UEContext) NewRanUeContext(msin string,
 	cipheringAlg, integrityAlg uint8,
 	k, opc, op, amf, sqn, mcc, mnc string,
 	sst int32, sd string, id uint8) {
 
 	// added SUPI.
-	ue.UeSecurity.Supi = imsi
+	ue.UeSecurity.Msin = msin
 
 	// added ciphering algorithm.
 	ue.UeSecurity.CipheringAlg = cipheringAlg
@@ -88,11 +89,14 @@ func (ue *UEContext) NewRanUeContext(imsi string,
 	ue.SetAuthSubscription(k, opc, op, amf, sqn)
 
 	// added suci
-	suciV1, suciV2, suciV3 := ue.EncodeUeSuci()
+	suciV1, suciV2, suciV3, suciV4, suciV5 := ue.EncodeUeSuci()
 
 	// added mcc and mnc
 	ue.UeSecurity.mcc = mcc
 	ue.UeSecurity.mnc = mnc
+
+	// added supi
+	ue.UeSecurity.Supi = fmt.Sprintf("imsi-%s%s%s", mcc, mnc, msin)
 
 	// added PDU Session id
 	ue.PduSession.Id = id
@@ -114,15 +118,15 @@ func (ue *UEContext) NewRanUeContext(imsi string,
 	resu := ue.GetMccAndMncInOctets()
 
 	// added suci to mobileIdentity5GS
-	if len(ue.UeSecurity.Supi) == 18 {
+	if len(ue.UeSecurity.Msin) == 8 {
 		ue.UeSecurity.Suci = nasType.MobileIdentity5GS{
-			Len:    12, // suci
-			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, 0x00, suciV3, suciV2, suciV1},
+			Len:    12,
+			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, suciV4, suciV3, suciV2, suciV1},
 		}
-	} else {
+	} else if len(ue.UeSecurity.Msin) == 10 {
 		ue.UeSecurity.Suci = nasType.MobileIdentity5GS{
-			Len:    13, // suci
-			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, 0x00, 0x00, suciV3, suciV2, suciV1},
+			Len:    13,
+			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, suciV5, suciV4, suciV3, suciV2, suciV1},
 		}
 	}
 
@@ -143,6 +147,10 @@ func (ue *UEContext) GetUeId() uint8 {
 
 func (ue *UEContext) GetSuci() nasType.MobileIdentity5GS {
 	return ue.UeSecurity.Suci
+}
+
+func (ue *UEContext) GetMsin() string {
+	return ue.UeSecurity.Msin
 }
 
 func (ue *UEContext) GetSupi() string {
@@ -264,20 +272,24 @@ func (ue *UEContext) GetMccAndMncInOctets() []byte {
 	return resu
 }
 
-func (ue *UEContext) EncodeUeSuci() (uint8, uint8, uint8) {
+func (ue *UEContext) EncodeUeSuci() (uint8, uint8, uint8, uint8, uint8) {
 
 	// reverse imsi string.
-	aux := reverse(ue.UeSecurity.Supi)
+	aux := reverse(ue.UeSecurity.Msin)
 
 	// calculate decimal value.
-	suci, error := hex.DecodeString(aux[:6])
+	suci, error := hex.DecodeString(aux)
 	if error != nil {
-		return 0, 0, 0
+		return 0, 0, 0, 0, 0
 	}
 
 	// return decimal value
 	// Function worked fine.
-	return uint8(suci[0]), uint8(suci[1]), uint8(suci[2])
+	if len(ue.UeSecurity.Msin) == 8 {
+		return uint8(suci[0]), uint8(suci[1]), uint8(suci[2]), uint8(suci[3]), 0
+	} else {
+		return uint8(suci[0]), uint8(suci[1]), uint8(suci[2]), uint8(suci[3]), uint8(suci[4])
+	}
 }
 
 func (ue *UEContext) SetAmfRegionId(amfRegionId uint8) {

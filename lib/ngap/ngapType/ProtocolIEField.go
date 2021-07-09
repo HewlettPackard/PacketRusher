@@ -395,6 +395,7 @@ const (
 	PDUSessionResourceSetupRequestIEsPresentRANPagingPriority
 	PDUSessionResourceSetupRequestIEsPresentNASPDU
 	PDUSessionResourceSetupRequestIEsPresentPDUSessionResourceSetupListSUReq
+	PDUSessionResourceSetupRequestIEsPresentUEAggregateMaximumBitRate
 )
 
 type PDUSessionResourceSetupRequestIEsValue struct {
@@ -404,6 +405,7 @@ type PDUSessionResourceSetupRequestIEsValue struct {
 	RANPagingPriority                *RANPagingPriority                `aper:"referenceFieldValue:83"`
 	NASPDU                           *NASPDU                           `aper:"referenceFieldValue:38"`
 	PDUSessionResourceSetupListSUReq *PDUSessionResourceSetupListSUReq `aper:"referenceFieldValue:74"`
+	UEAggregateMaximumBitRate        *UEAggregateMaximumBitRate        `aper:"valueExt,referenceFieldValue:110"`
 }
 
 type PDUSessionResourceSetupResponseIEs struct {

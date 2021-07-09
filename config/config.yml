@@ -11,20 +11,20 @@ gnodeb:
     tac: "000001"
     gnbid: "000002"
   slicesupportlist:
-    st: "01"
-    sst: "010203"
+    sst: "01"
+    sd: "010203"
 ue:
-  imsi: "imsi-2089300000001"
-  key: "70d49a71dd1a2b806a25abe0ef749f1e"
-  opc: "6f1bf53d624b3a43af6592854e2444c7"
+  msin: "00000001"
+  key: "465B5CE8B199B49FAA5F0A2EE238A6BC"
+  opc: "E8ED289DEBA952E4283B54E88E6183CA"
   amf: "8000"
   sqn: "0000000"
   hplmn:
     mcc: "208"
     mnc: "93"
   snssai:
-    sd: 1
-    sst: "010203"
+    sst: 1
+    sd: "010203"
 amfif:
   ip: "127.0.0.1"
   port: 38412
