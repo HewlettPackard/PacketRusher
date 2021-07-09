@@ -10,10 +10,11 @@ import (
 func InitRegistration(ue *context.UEContext) {
 
 	// registration procedure started.
-	registrationRequest := mm_5gs.GetRegistrationRequestWith5GMM(
+	registrationRequest := mm_5gs.GetRegistrationRequest(
 		nasMessage.RegistrationType5GSInitialRegistration,
 		nil,
 		nil,
+		false,
 		ue)
 
 	// send to GNB.

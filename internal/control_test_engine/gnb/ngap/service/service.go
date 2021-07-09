@@ -29,7 +29,7 @@ func InitConn(amf *context.GNBAmf, gnb *context.GNBContext) error {
 		"sctp",
 		loc,
 		rem,
-		sctp.InitMsg{NumOstreams: 1, MaxInstreams: 1})
+		sctp.InitMsg{NumOstreams: 2, MaxInstreams: 2})
 	if err != nil {
 		amf.SetSCTPConn(nil)
 		return err

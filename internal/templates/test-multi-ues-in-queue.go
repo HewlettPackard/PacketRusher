@@ -30,7 +30,7 @@ func TestMultiUesInQueue(numUes int) {
 
 		imsi := imsiGenerator(i)
 		log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", imsi, " UE")
-		cfg.Ue.Imsi = imsi
+		cfg.Ue.Msin = imsi
 		go ue.RegistrationUe(cfg, uint8(i))
 		wg.Add(1)
 
@@ -45,11 +45,11 @@ func imsiGenerator(i int) string {
 	var base string
 	switch true {
 	case i < 10:
-		base = "imsi-208930000000"
+		base = "0000000"
 	case i < 100:
-		base = "imsi-20893000000"
+		base = "000000"
 	case i >= 100:
-		base = "imsi-2089300000"
+		base = "00000"
 	}
 
 	imsi := base + strconv.Itoa(i)

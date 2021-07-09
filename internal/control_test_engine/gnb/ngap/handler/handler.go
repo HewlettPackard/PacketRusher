@@ -76,7 +76,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	var messageNas []byte
 	var sst []string
 	var sd []string
-	var mobilityRestrict string
+	var mobilityRestrict = "not informed"
 	var maskedImeisv string
 	// var securityKey []byte
 
@@ -132,13 +132,13 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 			// list S-NSSAI(Single – Network Slice Selection Assistance Information).
 			for i, items := range ies.Value.AllowedNSSAI.List {
 
-				if items.SNSSAI.SD != nil {
+				if items.SNSSAI.SST.Value != nil {
 					sst[i] = fmt.Sprintf("%x", items.SNSSAI.SST.Value)
 				} else {
 					sst[i] = "not informed"
 				}
 
-				if items.SNSSAI.SST.Value != nil {
+				if items.SNSSAI.SD != nil {
 					sd[i] = fmt.Sprintf("%x", items.SNSSAI.SD.Value)
 				} else {
 					sd[i] = "not informed"
@@ -148,7 +148,8 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 		case ngapType.ProtocolIEIDMobilityRestrictionList:
 			// that field is not mandatory.
 			if ies.Value.MobilityRestrictionList == nil {
-				log.Info("[GNB][NGAP] Allowed NSSAI is missing")
+				log.Info("[GNB][NGAP] Mobility Restriction is missing")
+				mobilityRestrict = "not informed"
 			} else {
 				mobilityRestrict = fmt.Sprintf("%x", ies.Value.MobilityRestrictionList.ServingPLMN.Value)
 			}
@@ -158,6 +159,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 			// TODO using for mapping UE context
 			if ies.Value.MaskedIMEISV == nil {
 				log.Info("[GNB][NGAP] Masked IMEISV is missing")
+				maskedImeisv = "not informed"
 			} else {
 				maskedImeisv = fmt.Sprintf("%x", ies.Value.MaskedIMEISV.Value.Bytes)
 			}
@@ -267,8 +269,17 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 				// create a PDU session(PDU SESSION ID + NSSAI).
 				pduSessionId = item.PDUSessionID.Value
 
-				sd = fmt.Sprintf("%x", item.SNSSAI.SD.Value)
-				sst = fmt.Sprintf("%x", item.SNSSAI.SST.Value)
+				if item.SNSSAI.SD != nil {
+					sd = fmt.Sprintf("%x", item.SNSSAI.SD.Value)
+				} else {
+					sd = "not informed"
+				}
+
+				if item.SNSSAI.SST.Value != nil {
+					sst = fmt.Sprintf("%x", item.SNSSAI.SST.Value)
+				} else {
+					sst = "not informed"
+				}
 
 				if item.PDUSessionResourceSetupRequestTransfer != nil {
 
@@ -454,15 +465,15 @@ func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, messag
 					var sst string
 
 					if slice.SNSSAI.SST.Value != nil {
-						sd = fmt.Sprintf("%x", slice.SNSSAI.SD.Value)
-					} else {
-						sd = "was not informed"
-					}
-
-					if slice.SNSSAI.SD.Value != nil {
 						sst = fmt.Sprintf("%x", slice.SNSSAI.SST.Value)
 					} else {
 						sst = "was not informed"
+					}
+
+					if slice.SNSSAI.SD != nil {
+						sd = fmt.Sprintf("%x", slice.SNSSAI.SD.Value)
+					} else {
+						sd = "was not informed"
 					}
 
 					// update amf slice supported
