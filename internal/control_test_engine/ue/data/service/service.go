@@ -40,13 +40,25 @@ func InitDataPlane(ue *context.UEContext, message []byte) {
 		},
 	}
 
+	if err := netlink.AddrAdd(newInterface, addrTun); err != nil {
+		log.Fatal("[UE][DATA] Error in adding IP for virtual interface", err)
+	}
+
 	// Set IP interface up
 	if err := netlink.LinkSetUp(newInterface); err != nil {
 		log.Fatal("[UE][DATA] Error in setting virtual interface up ", err)
 	}
 
-	if err := netlink.AddrAdd(newInterface, addrTun); err != nil {
-		log.Fatal("[UE][DATA] Error in adding IP for virtual interface", err)
+	ueRoute := &netlink.Route{
+		LinkIndex: newInterface.Attrs().Index,
+		Dst: &net.IPNet{
+			IP:   net.IPv4zero,
+			Mask: net.IPv4Mask(0, 0, 0, 0),
+		},
+	}
+
+	if err := netlink.RouteAdd(ueRoute); err != nil {
+		log.Fatal("[UE][DATA] Error in setting route", err)
 	}
 
 	log.Info("[UE][DATA] UE is ready for using data plane")
@@ -54,6 +66,7 @@ func InitDataPlane(ue *context.UEContext, message []byte) {
 	defer func() {
 		_ = netlink.LinkSetDown(newInterface)
 		_ = netlink.LinkDel(newInterface)
+		_ = netlink.RouteDel(ueRoute)
 	}()
 
 	time.Sleep(60 * time.Minute)
