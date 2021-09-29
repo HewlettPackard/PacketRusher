@@ -49,6 +49,7 @@ func InitDataPlane(ue *context.UEContext, message []byte) {
 		log.Fatal("[UE][DATA] Error in setting virtual interface up ", err)
 	}
 
+	// create route in linux to table 1
 	ueRoute := &netlink.Route{
 		LinkIndex: newInterface.Attrs().Index,
 		Src:       net.ParseIP(ueIp).To4(),
@@ -56,10 +57,24 @@ func InitDataPlane(ue *context.UEContext, message []byte) {
 			IP:   net.IPv4zero,
 			Mask: net.IPv4Mask(0, 0, 0, 0),
 		},
+		Table: 1,
 	}
 
 	if err := netlink.RouteAdd(ueRoute); err != nil {
 		log.Fatal("[UE][DATA] Error in setting route", err)
+	}
+
+	// create rule to mapped traffic
+	ueRule := &netlink.Rule{
+		Table: 1,
+		Dst: &net.IPNet{
+			IP:   net.ParseIP(ueIp).To4(),
+			Mask: net.IPv4Mask(255, 255, 255, 255),
+		},
+	}
+
+	if err := netlink.RuleAdd(ueRule); err != nil {
+		log.Fatal("[UE][DATA] Error in setting rule", err)
 	}
 
 	log.Info("[UE][DATA] UE is ready for using data plane")
