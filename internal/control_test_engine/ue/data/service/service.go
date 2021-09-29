@@ -65,13 +65,14 @@ func InitDataPlane(ue *context.UEContext, message []byte) {
 	}
 
 	// create rule to mapped traffic
-	ueRule := &netlink.Rule{
-		Table: 1,
-		Dst: &net.IPNet{
-			IP:   net.ParseIP(ueIp).To4(),
-			Mask: net.IPv4Mask(255, 255, 255, 255),
-		},
+	ueRule := netlink.NewRule()
+
+	ueRule.Src = &net.IPNet{
+		IP:   net.ParseIP(ueIp).To4(),
+		Mask: net.IPv4Mask(255, 255, 255, 255),
 	}
+
+	ueRule.Table = 1
 
 	if err := netlink.RuleAdd(ueRule); err != nil {
 		log.Fatal("[UE][DATA] Error in setting rule", err)
@@ -83,6 +84,7 @@ func InitDataPlane(ue *context.UEContext, message []byte) {
 		_ = netlink.LinkSetDown(newInterface)
 		_ = netlink.LinkDel(newInterface)
 		_ = netlink.RouteDel(ueRoute)
+		_ = netlink.RuleDel(ueRule)
 	}()
 
 	time.Sleep(60 * time.Minute)
