@@ -55,6 +55,8 @@ func InitDataPlane(ue *context.UEContext, message []byte) {
 			IP:   net.IPv4zero,
 			Mask: net.IPv4Mask(0, 0, 0, 0),
 		},
+		Gw:    net.ParseIP(ueIp).To4(),
+		Table: 1,
 	}
 
 	if err := netlink.RouteAdd(ueRoute); err != nil {
