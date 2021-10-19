@@ -4,12 +4,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
-	"sync"
 )
 
 func TestAttachGnbWithConfiguration() {
 
-	wg := sync.WaitGroup{}
+	// wg := sync.WaitGroup{}
 
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -24,9 +23,9 @@ func TestAttachGnbWithConfiguration() {
 	// cfg.GNodeB.SliceSupportList.St = "10"
 	// cfg.GNodeB.SliceSupportList.Sst = "010239"
 
-	go gnb.InitGnb(cfg)
+	gnb.InitGnb(cfg)
 
-	wg.Add(1)
+	// wg.Add(1)
 
-	wg.Wait()
+	// wg.Wait()
 }

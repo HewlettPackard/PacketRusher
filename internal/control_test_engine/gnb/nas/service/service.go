@@ -6,9 +6,6 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas"
 	"net"
-	"os"
-	"os/signal"
-	"syscall"
 )
 
 func InitServer(gnb *context.GNBContext) error {
@@ -21,14 +18,16 @@ func InitServer(gnb *context.GNBContext) error {
 
 	gnb.SetListener(ln)
 
-	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
-	go func(ln net.Listener, c chan os.Signal) {
-		sig := <-c
-		log.Printf("Caught signal %s: shutting down.", sig)
-		ln.Close()
-		os.Exit(0)
-	}(ln, sigc)
+	/*
+		sigc := make(chan os.Signal, 1)
+		signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
+		go func(ln net.Listener, c chan os.Signal) {
+			sig := <-c
+			log.Printf("Caught signal %s: shutting down.", sig)
+			ln.Close()
+			os.Exit(0)
+		}(ln, sigc)
+	*/
 
 	go gnbListen(gnb)
 
@@ -39,18 +38,21 @@ func gnbListen(gnb *context.GNBContext) {
 
 	ln := gnb.GetListener()
 
-	defer func() {
-		err := ln.Close()
-		if err != nil {
-			log.Info("[GNB][UE] Error in closing unix sockets for %d GNB\n", gnb.GetGnbId())
-		}
-	}()
+	/*
+		defer func() {
+			err := ln.Close()
+			if err != nil {
+				log.Info("[GNB][UE] Error in closing unix sockets for %d GNB\n", gnb.GetGnbId())
+			}
+		}()
+	*/
 
 	for {
 
 		fd, err := ln.Accept()
 		if err != nil {
-			log.Fatal("[GNB][UE] Accept error: ", err)
+			log.Info("[GNB][UE] Accept error: ", err)
+			break
 		}
 
 		// TODO this region of the code may induces race condition.

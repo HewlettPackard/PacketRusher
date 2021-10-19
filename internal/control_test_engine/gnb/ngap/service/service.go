@@ -35,10 +35,11 @@ func InitConn(amf *context.GNBAmf, gnb *context.GNBContext) error {
 		return err
 	}
 
-	// set streams and other information about TNLA.
+	// set streams and other information about TNLA
 
-	// successful established SCTP.
+	// successful established SCTP (TNLA - N2)
 	amf.SetSCTPConn(conn)
+	gnb.SetN2(conn)
 
 	conn.SubscribeEvents(sctp.SCTP_EVENT_DATA_IO)
 
@@ -52,18 +53,20 @@ func GnbListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 	buf := make([]byte, 65535)
 	conn := amf.GetSCTPConn()
 
-	defer func() {
-		err := conn.Close()
-		if err != nil {
-			log.Info("[GNB][SCTP] Error in closing SCTP association for %d AMF\n", amf.GetAmfId())
-		}
-	}()
+	/*
+		defer func() {
+			err := conn.Close()
+			if err != nil {
+				log.Info("[GNB][SCTP] Error in closing SCTP association for %d AMF\n", amf.GetAmfId())
+			}
+		}()
+	*/
 
 	for {
 
 		n, info, err := conn.SCTPRead(buf[:])
 		if err != nil {
-			return
+			break
 		}
 
 		log.Info("[GNB][SCTP] Receive message in ", info.Stream, " stream\n")
