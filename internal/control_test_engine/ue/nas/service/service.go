@@ -35,19 +35,21 @@ func UeListen(ue *context.UEContext) {
 	buf := make([]byte, 65535)
 	conn := ue.GetUnixConn()
 
-	defer func() {
-		err := conn.Close()
-		if err != nil {
-			fmt.Printf("Error in closing unix sockets for %s ue\n", ue.GetSupi())
-		}
-	}()
+	/*
+		defer func() {
+			err := conn.Close()
+			if err != nil {
+				fmt.Printf("Error in closing unix sockets for %s ue\n", ue.GetSupi())
+			}
+		}()
+	*/
 
 	for {
 
 		// read message.
 		n, err := conn.Read(buf[:])
 		if err != nil {
-			return
+			break
 		}
 
 		forwardData := make([]byte, n)

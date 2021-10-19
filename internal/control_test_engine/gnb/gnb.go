@@ -9,9 +9,10 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"os"
 	"os/signal"
+	"sync"
 )
 
-func InitGnb(conf config.Config) {
+func InitGnb(conf config.Config, wg *sync.WaitGroup) {
 
 	// instance new gnb.
 	gnb := &context.GNBContext{}
@@ -52,12 +53,13 @@ func InitGnb(conf config.Config) {
 	trigger.SendNgSetupRequest(gnb, amf)
 
 	// control the signals
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
+	sigGnb := make(chan os.Signal, 1)
+	signal.Notify(sigGnb, os.Interrupt)
 
 	// Block until a signal is received.
-	<-sig
+	<-sigGnb
 	gnb.Terminate()
-	os.Exit(0)
+	wg.Done()
+	// os.Exit(0)
 
 }

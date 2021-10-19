@@ -19,13 +19,13 @@ func TestAttachUeWithConfiguration() {
 		log.Fatal("Error in get configuration")
 	}
 
-	go gnb.InitGnb(cfg)
+	go gnb.InitGnb(cfg, &wg)
 
 	wg.Add(1)
 
 	time.Sleep(1 * time.Second)
 
-	go ue.RegistrationUe(cfg, 1)
+	go ue.RegistrationUe(cfg, 1, &wg)
 
 	wg.Add(1)
 

@@ -113,6 +113,7 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	amf := gnb.selectAmFByActive()
 	if amf == nil {
 		log.Info("No AMF available for this UE")
+		return nil
 	}
 
 	// set amfId and SCTP association for UE.

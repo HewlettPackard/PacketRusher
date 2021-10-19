@@ -6,7 +6,7 @@ gnodeb:
     ip: "192.168.10.108"
     port: 2152
   plmnlist:
-    mcc: "902"
+    mcc: "901"
     mnc: "70"
     tac: "000001"
     gnbid: "000001"

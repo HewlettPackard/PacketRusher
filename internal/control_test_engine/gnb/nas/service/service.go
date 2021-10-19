@@ -63,6 +63,9 @@ func gnbListen(gnb *context.GNBContext) {
 		// select AMF and get sctp association.
 		// make a tun interface.
 		ue := gnb.NewGnBUe(fd)
+		if ue == nil {
+			break
+		}
 
 		// accept and handle connection.
 		go processingConn(ue, gnb)

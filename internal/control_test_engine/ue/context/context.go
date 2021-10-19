@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	log "github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 	"my5G-RANTester/lib/UeauCommon"
 	"my5G-RANTester/lib/milenage"
 	"my5G-RANTester/lib/nas/nasMessage"
@@ -51,6 +53,9 @@ type PDUSession struct {
 	Dnn       string
 	Snssai    models.Snssai
 	gatewayIP net.IP
+	tun       netlink.Link
+	routeTun  *netlink.Route
+	ruleTun   *netlink.Rule
 }
 
 type SECURITY struct {
@@ -503,6 +508,59 @@ func SetUESecurityCapability(ue *UEContext) (UESecurityCapability *nasType.UESec
 	}
 
 	return
+}
+
+func (ue *UEContext) SetTunInterface(tun netlink.Link) {
+	ue.PduSession.tun = tun
+}
+
+func (ue *UEContext) GetTunInterface() netlink.Link {
+	return ue.PduSession.tun
+}
+
+func (ue *UEContext) SetTunRoute(route *netlink.Route) {
+	ue.PduSession.routeTun = route
+}
+
+func (ue *UEContext) GetTunRoute() *netlink.Route {
+	return ue.PduSession.routeTun
+}
+
+func (ue *UEContext) SetTunRule(rule *netlink.Rule) {
+	ue.PduSession.ruleTun = rule
+}
+
+func (ue *UEContext) GetTunRule() *netlink.Rule {
+	return ue.PduSession.ruleTun
+}
+
+func (ue *UEContext) Terminate() {
+
+	// clean all context of tun interface
+	ueTun := ue.GetTunInterface()
+	ueRoute := ue.GetTunRoute()
+	ueRule := ue.GetTunRule()
+	ueUnix := ue.GetUnixConn()
+
+	if ueTun != nil {
+		_ = netlink.LinkSetDown(ueTun)
+		_ = netlink.LinkDel(ueTun)
+	}
+
+	if ueRoute != nil {
+		_ = netlink.RouteDel(ueRoute)
+	}
+
+	if ueRule != nil {
+		_ = netlink.RuleDel(ueRule)
+	}
+
+	if ueUnix != nil {
+		ueUnix.Close()
+	}
+
+	log.Info("[UE] UE Terminated")
+
 }
 
 func reverse(s string) string {
