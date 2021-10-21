@@ -49,14 +49,14 @@ func SendNgSetupRequest(gnb *context.GNBContext, amf *context.GNBAmf) {
 	// send NG setup response.
 	ngapMsg, err := interface_management.NGSetupRequest(gnb, "my5gRANTester")
 	if err != nil {
-		log.Fatal("[GNB][NGAP] Error sending NG Setup Request")
+		log.Info("[GNB][NGAP] Error sending NG Setup Request")
 
 	}
 
 	conn := amf.GetSCTPConn()
 	err = sender.SendToAmF(ngapMsg, conn)
 	if err != nil {
-		log.Fatal("[GNB][AMF] Error sending NG Setup Request: ", err)
+		log.Info("[GNB][AMF] Error sending NG Setup Request: ", err)
 	}
 
 }

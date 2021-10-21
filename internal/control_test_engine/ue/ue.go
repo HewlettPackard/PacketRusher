@@ -7,12 +7,14 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/service"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
 	"my5G-RANTester/lib/nas/security"
+	"os"
+	"os/signal"
 	"sync"
 )
 
-func RegistrationUe(conf config.Config, id uint8) {
+func RegistrationUe(conf config.Config, id uint8, wg *sync.WaitGroup) {
 
-	wg := sync.WaitGroup{}
+	// wg := sync.WaitGroup{}
 
 	// new UE instance.
 	ue := &context.UEContext{}
@@ -39,12 +41,22 @@ func RegistrationUe(conf config.Config, id uint8) {
 		log.Fatal("Error in", err)
 	} else {
 		log.Info("[UE] UNIX/NAS service is running")
-		wg.Add(1)
+		// wg.Add(1)
 	}
 
 	// registration procedure started.
 	trigger.InitRegistration(ue)
 
-	wg.Wait()
+	// wg.Wait()
+
+	// control the signals
+	sigUe := make(chan os.Signal, 1)
+	signal.Notify(sigUe, os.Interrupt)
+
+	// Block until a signal is received.
+	<-sigUe
+	ue.Terminate()
+	wg.Done()
+	// os.Exit(0)
 
 }

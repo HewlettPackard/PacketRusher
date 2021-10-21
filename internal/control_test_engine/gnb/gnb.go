@@ -7,12 +7,12 @@ import (
 	serviceNas "my5G-RANTester/internal/control_test_engine/gnb/nas/service"
 	serviceNgap "my5G-RANTester/internal/control_test_engine/gnb/ngap/service"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
+	"os"
+	"os/signal"
 	"sync"
 )
 
-func InitGnb(conf config.Config) {
-
-	wg := sync.WaitGroup{}
+func InitGnb(conf config.Config, wg *sync.WaitGroup) {
 
 	// instance new gnb.
 	gnb := &context.GNBContext{}
@@ -30,7 +30,7 @@ func InitGnb(conf config.Config) {
 		conf.GNodeB.ControlIF.Port,
 		conf.GNodeB.DataIF.Port)
 
-	// start communication with AMF(server SCTP).
+	// start communication with AMF (server SCTP).
 
 	// new AMF context.
 	amf := gnb.NewGnBAmf(conf.AMF.Ip, conf.AMF.Port)
@@ -40,18 +40,26 @@ func InitGnb(conf config.Config) {
 		log.Fatal("Error in", err)
 	} else {
 		log.Info("[GNB] SCTP/NGAP service is running")
-		wg.Add(1)
+		// wg.Add(1)
 	}
 
-	// start communication with UE(server UNIX sockets).
+	// start communication with UE (server UNIX sockets).
 	if err := serviceNas.InitServer(gnb); err != nil {
 		log.Fatal("Error in", err)
 	} else {
 		log.Info("[GNB] UNIX/NAS service is running")
-		wg.Add(1)
 	}
 
 	trigger.SendNgSetupRequest(gnb, amf)
 
-	wg.Wait()
+	// control the signals
+	sigGnb := make(chan os.Signal, 1)
+	signal.Notify(sigGnb, os.Interrupt)
+
+	// Block until a signal is received.
+	<-sigGnb
+	gnb.Terminate()
+	wg.Done()
+	// os.Exit(0)
+
 }

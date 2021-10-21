@@ -24,7 +24,7 @@ func TestAttachGnbWithConfiguration() {
 	// cfg.GNodeB.SliceSupportList.St = "10"
 	// cfg.GNodeB.SliceSupportList.Sst = "010239"
 
-	go gnb.InitGnb(cfg)
+	go gnb.InitGnb(cfg, &wg)
 
 	wg.Add(1)
 

@@ -20,7 +20,7 @@ func TestMultiUesInQueue(numUes int) {
 		log.Fatal("Error in get configuration")
 	}
 
-	go gnb.InitGnb(cfg)
+	go gnb.InitGnb(cfg, &wg)
 
 	wg.Add(1)
 
@@ -31,7 +31,7 @@ func TestMultiUesInQueue(numUes int) {
 		imsi := imsiGenerator(i)
 		log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", imsi, " UE")
 		cfg.Ue.Msin = imsi
-		go ue.RegistrationUe(cfg, uint8(i))
+		go ue.RegistrationUe(cfg, uint8(i), &wg)
 		wg.Add(1)
 
 		time.Sleep(10 * time.Second)
