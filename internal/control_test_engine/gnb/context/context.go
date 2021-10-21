@@ -3,9 +3,10 @@ package context
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/ishidawataru/sctp"
+	log "github.com/sirupsen/logrus"
 	gtpv1 "github.com/wmnsk/go-gtp/v1"
 	"golang.org/x/net/ipv4"
-	"log"
 	"net"
 	"sync"
 )
@@ -47,6 +48,7 @@ type ControlInfo struct {
 	gnbIp        string
 	gnbPort      int
 	unixlistener net.Listener
+	n2           *sctp.SCTPConn
 }
 
 func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipData string, port, portData int) {
@@ -110,7 +112,8 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	// select AMF with Capacity is more than 0.
 	amf := gnb.selectAmFByActive()
 	if amf == nil {
-		log.Fatal("No AMF available for this UE")
+		log.Info("No AMF available for this UE")
+		return nil
 	}
 
 	// set amfId and SCTP association for UE.
@@ -299,6 +302,14 @@ func (gnb *GNBContext) setUpfPort(port int) {
 	gnb.dataInfo.upfPort = port
 }
 
+func (gnb *GNBContext) SetN2(n2 *sctp.SCTPConn) {
+	gnb.controlInfo.n2 = n2
+}
+
+func (gnb *GNBContext) GetN2() *sctp.SCTPConn {
+	return gnb.controlInfo.n2
+}
+
 func (gnb *GNBContext) SetN3Plane(n3 *gtpv1.UPlaneConn) {
 	gnb.dataInfo.gtpPlane = n3
 }
@@ -438,6 +449,33 @@ func (gnb *GNBContext) GetMccAndMncInOctets() []byte {
 	}
 
 	return resu
+}
+
+func (gnb *GNBContext) Terminate() {
+
+	// close all connections
+	ln := gnb.GetListener()
+	if ln != nil {
+		log.Info("[GNB][UE] UNIX/NAS Terminated")
+		ln.Close()
+	}
+
+	n2 := gnb.GetN2()
+	if n2 != nil {
+		log.Info("[GNB][AMF] N2/TNLA Terminated")
+		n2.Close()
+	}
+
+	// TODO: problem in close de N3 socket in gtp library
+	/*
+		n3 := gnb.GetN3Plane()
+		if n3 != nil {
+			n3.Close()
+			log.Info("[GNB][UPF] N3/NG-U Terminated")
+		}
+	*/
+
+	log.Info("GNB Terminated")
 }
 
 func reverse(s string) string {

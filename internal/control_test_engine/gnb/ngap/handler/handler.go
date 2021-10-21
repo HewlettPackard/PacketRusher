@@ -578,5 +578,5 @@ func HandlerNgSetupFailure(amf *context.GNBAmf, gnb *context.GNBContext, message
 	// redundant but useful for information about code.
 	amf.SetStateInactive()
 
-	log.Fatal("[GNB][NGAP] AMF is inactive")
+	log.Info("[GNB][NGAP] AMF is inactive")
 }
