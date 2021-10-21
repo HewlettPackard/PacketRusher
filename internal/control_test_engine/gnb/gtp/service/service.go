@@ -61,7 +61,7 @@ func gtpListen(gnb *context.GNBContext) {
 		n, _, teid, err := conn.ReadFromGTP(buf)
 		if err != nil {
 			log.Info("[GNB][GTP] Error read in GTP tunnel")
-			return
+			break
 		}
 
 		forwardData := make([]byte, n)
@@ -77,7 +77,7 @@ func gtpListen(gnb *context.GNBContext) {
 		ue, err := gnb.GetGnbUeByTeid(teid)
 		if err != nil || ue == nil {
 			log.Info("[GNB][GTP] Invalid Downlink Teid. UE is not found in UE Pool")
-			return
+			break
 		}
 
 		// log.Info("[GNB][GTP] Read ", n," bytes for UE ", ue.GetRanUeId()," in GTP tunnel\n")

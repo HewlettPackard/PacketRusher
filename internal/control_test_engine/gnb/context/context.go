@@ -466,11 +466,14 @@ func (gnb *GNBContext) Terminate() {
 		n2.Close()
 	}
 
-	n3 := gnb.GetN3Plane()
-	if n3 != nil {
-		log.Info("[GNB][UPF] N3/NG-U Terminated")
-		n3.Close()
-	}
+	// TODO: problem in close de N3 socket in gtp library
+	/*
+		n3 := gnb.GetN3Plane()
+		if n3 != nil {
+			n3.Close()
+			log.Info("[GNB][UPF] N3/NG-U Terminated")
+		}
+	*/
 
 	log.Info("GNB Terminated")
 }
