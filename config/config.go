@@ -39,6 +39,7 @@ type Config struct {
 		Opc   string `yaml: "opc"`
 		Amf   string `yaml: "amf"`
 		Sqn   string `yaml: "sqn"`
+		Dnn   string `yaml: "dnn"`
 		Hplmn struct {
 			Mcc string `yaml: "mcc"`
 			Mnc string `yaml: "mnc"`
