@@ -52,7 +52,6 @@ type Config struct {
 	AMF struct {
 		Ip   string `yaml: "ip"`
 		Port int    `yaml: "port"`
-		Name string `yaml: "name"`
 	} `yaml:"amfif"`
 }
 

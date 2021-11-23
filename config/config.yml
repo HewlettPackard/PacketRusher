@@ -1,34 +1,33 @@
 gnodeb:
   controlif:
-    ip: "192.168.10.108"
+    ip: "127.0.0.1"
     port: 9487
   dataif:
-    ip: "192.168.10.108"
+    ip: "10.200.200.2"
     port: 2152
   plmnlist:
     mcc: "208"
-    mnc: "95"
-    tac: "00a000"
+    mnc: "93"
+    tac: "000001"
     gnbid: "000001"
   slicesupportlist:
     sst: "01"
-    sd: "000012"
+    sd: "010203"
 
 ue:
-  msin: "0000000031"
-  key: "0C0A34601D4F07677303652C0462535B"
-  opc: "63bfa50ee6523365ff14c1f45f88737d"
+  msin: "0000000003"
+  key: "8baf473f2f8fd09487cccbd7097c6862"
+  opc: "8e27b6af0e692e750f32667a3b14605d"
   amf: "8000"
   sqn: "0000000"
-  dnn: "default"
+  dnn: "internet"
   hplmn:
     mcc: "208"
-    mnc: "95"
+    mnc: "93"
   snssai:
-    sst: 222
-    sd: "00007b"
+    sst: 01
+    sd: "010203"
 
 amfif:
-  ip: "192.168.70.132"
+  ip: "127.0.0.1"
   port: 38412
-  name: "open5gs"
