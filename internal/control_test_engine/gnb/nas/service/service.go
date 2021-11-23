@@ -38,15 +38,6 @@ func gnbListen(gnb *context.GNBContext) {
 
 	ln := gnb.GetListener()
 
-	/*
-		defer func() {
-			err := ln.Close()
-			if err != nil {
-				log.Info("[GNB][UE] Error in closing unix sockets for %d GNB\n", gnb.GetGnbId())
-			}
-		}()
-	*/
-
 	for {
 
 		fd, err := ln.Accept()
@@ -58,10 +49,10 @@ func gnbListen(gnb *context.GNBContext) {
 		// TODO this region of the code may induces race condition.
 
 		// new instance GNB UE context
-		// store UE in UE Pool.
-		// store UE connection.
-		// select AMF and get sctp association.
-		// make a tun interface.
+		// store UE in UE Pool
+		// store UE connection
+		// select AMF and get sctp association
+		// make a tun interface
 		ue := gnb.NewGnBUe(fd)
 		if ue == nil {
 			break

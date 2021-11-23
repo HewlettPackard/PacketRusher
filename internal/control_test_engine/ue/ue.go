@@ -31,6 +31,7 @@ func RegistrationUe(conf config.Config, id uint8, wg *sync.WaitGroup) {
 		conf.Ue.Sqn,
 		conf.Ue.Hplmn.Mcc,
 		conf.Ue.Hplmn.Mnc,
+		conf.Ue.Dnn,
 		int32(conf.Ue.Snssai.Sst),
 		conf.Ue.Snssai.Sd,
 		id)

@@ -78,7 +78,7 @@ type SECURITY struct {
 
 func (ue *UEContext) NewRanUeContext(msin string,
 	cipheringAlg, integrityAlg uint8,
-	k, opc, op, amf, sqn, mcc, mnc string,
+	k, opc, op, amf, sqn, mcc, mnc, dnn string,
 	sst int32, sd string, id uint8) {
 
 	// added SUPI.
@@ -114,7 +114,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	ue.PduSession.Snssai.Sst = sst
 
 	// added Domain Network Name.
-	ue.PduSession.Dnn = "internet"
+	ue.PduSession.Dnn = dnn
 
 	// added gateway ip.
 	ue.PduSession.gatewayIP = net.ParseIP("127.0.0.2").To4()

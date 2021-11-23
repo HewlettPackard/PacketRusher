@@ -39,6 +39,7 @@ type Config struct {
 		Opc   string `yaml: "opc"`
 		Amf   string `yaml: "amf"`
 		Sqn   string `yaml: "sqn"`
+		Dnn   string `yaml: "dnn"`
 		Hplmn struct {
 			Mcc string `yaml: "mcc"`
 			Mnc string `yaml: "mnc"`
@@ -51,7 +52,6 @@ type Config struct {
 	AMF struct {
 		Ip   string `yaml: "ip"`
 		Port int    `yaml: "port"`
-		Name string `yaml: "name"`
 	} `yaml:"amfif"`
 }
 
