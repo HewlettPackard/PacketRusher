@@ -13,9 +13,6 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v2
       
-      - name: Checkout Submodules
-        uses: textbook/git-checkout-submodule-action@2.1.1
-      
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
