@@ -14,7 +14,7 @@ my5G-RANTester is a tool for emulating control and data planes of the UE (user e
 
 If you want to cite this tool, please use the following information:
 ```
-@misc{dominato2021tutorial,
+@ARTICLE{dominato2021tutorial,
     title={Tutorial on communication between access
 networks and the 5G core},
     author={Lucas Baleeiro Dominato and Henrique Carvalho de Resende and Cristiano Bonato Both and Johann M. Marquez-Barja and Bruno O. Silvestre and Kleber V. Cardoso},
