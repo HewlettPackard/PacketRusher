@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"fmt"
 )
 
 func TestMultiUesInQueue(numUes int) {
@@ -25,10 +26,10 @@ func TestMultiUesInQueue(numUes int) {
 	wg.Add(1)
 
 	time.Sleep(1 * time.Second)
-
+    msin :=  cfg.Ue.Msin
 	for i := 1; i <= numUes; i++ {
 
-		imsi := imsiGenerator(i)
+		imsi := imsiGenerator(i, msin)
 		log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", imsi, " UE")
 		cfg.Ue.Msin = imsi
 		go ue.RegistrationUe(cfg, uint8(i), &wg)
@@ -40,18 +41,14 @@ func TestMultiUesInQueue(numUes int) {
 	wg.Wait()
 }
 
-func imsiGenerator(i int) string {
+func imsiGenerator(i int, msin string) string {
 
-	var base string
-	switch true {
-	case i < 10:
-		base = "0000000"
-	case i < 100:
-		base = "000000"
-	case i >= 100:
-		base = "00000"
+	msin_int, err := strconv.Atoi(msin)
+	if err != nil {
+		log.Fatal("Error in get configuration")
 	}
+	base := msin_int + (i -1)
 
-	imsi := base + strconv.Itoa(i)
+	imsi := fmt.Sprintf("%010d", base)
 	return imsi
 }
