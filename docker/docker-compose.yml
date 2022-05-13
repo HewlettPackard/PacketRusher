@@ -4,41 +4,37 @@ services:
     image: my5grantester:latest
     container_name: my5grantester
     privileged: true
+    entrypoint: /bin/bash -c "sleep infinity"
     environment:
-      NGAP_LOCAL_ADDR: 192.168.70.143
-      NGAP_REMOTE_ADDR: 192.168.70.132
-      GTPU_LOCAL_ADDR: 192.168.72.143
+      NGAP_LOCAL_ADDR: 10.100.200.200
+      NGAP_REMOTE_ADDR: 10.100.200.201 # AMF IP ADDR
+      GTPU_LOCAL_ADDR: 10.100.200.200
       MCC: 208
-      MNC: 95
-      TAC: 00a000
-      GNBID: "000003"
-      SST_GNB: de
-      SST_UE: 222
-      SD: "00007b"
-      MSIN: "0000000031"
-      OPC: 63bfa50ee6523365ff14c1f45f88737d
-      KEY: 0C0A34601D4F07677303652C0462535B
+      MNC: 93
+      TAC: 000001
+      GNBID: "000001"
+      SST_GNB: 01
+      SST_UE: 01
+      SD: "010203"
+      MSIN: "0000000003"
+      OPC: 8baf473f2f8fd09487cccbd7097c6862
+      KEY: 8e27b6af0e692e750f32667a3b14605d
       AMF: 8000
       SQN: 0000000
-      DNN: default
+      DNN: internet
       NUM_UE: 2
     cap_add:
       - NET_ADMIN
     networks:
-      public_net:
-          ipv4_address: 192.168.70.143
-      public_net_access:
-          ipv4_address: 192.168.72.143
+      privnet:
+          ipv4_address: 10.100.200.200
     healthcheck:
       test: /bin/bash -c "ip addr | grep uetun1"
       interval: 10s
       timeout: 5s
       retries: 5
-networks:
-    public_net:
-        external:
-            name: demo-oai-public-net
-    public_net_access:
-        external:
-            name: oai-public-access
 
+networks:
+    privnet:      # Using existing network of core network 
+        external:
+            name: docker_privnet

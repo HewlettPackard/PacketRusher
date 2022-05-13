@@ -1,7 +1,8 @@
 #---------------------------------------------------------------------
 # BUILDER IMAGE
 #---------------------------------------------------------------------
-FROM ubuntu:bionic as builder
+ARG BASE_IMAGE=ubuntu:focal
+FROM $BASE_IMAGE as builder
 
 RUN apt-get update && apt install wget -y
 
@@ -20,7 +21,8 @@ RUN cd /my5G-RANTester \
 #---------------------------------------------------------------------
 # TARGET IMAGE
 #---------------------------------------------------------------------
-FROM ubuntu:bionic AS my5grantester
+ARG BASE_IMAGE=ubuntu:focal
+FROM $BASE_IMAGE AS my5grantester
 
 RUN apt update && apt install iproute2 iputils-ping iperf3 -y
 
