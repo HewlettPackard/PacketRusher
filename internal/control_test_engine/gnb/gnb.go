@@ -66,6 +66,60 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) {
 
 }
 
+func InitGnbForUeLatency(conf config.Config, sigGnb chan bool, synch chan bool) {
+
+	// instance new gnb.
+	gnb := &context.GNBContext{}
+
+	// new gnb context.
+	gnb.NewRanGnbContext(
+		conf.GNodeB.PlmnList.GnbId,
+		conf.GNodeB.PlmnList.Mcc,
+		conf.GNodeB.PlmnList.Mnc,
+		conf.GNodeB.PlmnList.Tac,
+		conf.GNodeB.SliceSupportList.Sst,
+		conf.GNodeB.SliceSupportList.Sd,
+		conf.GNodeB.ControlIF.Ip,
+		conf.GNodeB.DataIF.Ip,
+		conf.GNodeB.ControlIF.Port,
+		conf.GNodeB.DataIF.Port)
+
+	// start communication with AMF (server SCTP).
+
+	// new AMF context.
+	amf := gnb.NewGnBAmf(conf.AMF.Ip, conf.AMF.Port)
+
+	// start communication with AMF(SCTP).
+	if err := serviceNgap.InitConn(amf, gnb); err != nil {
+		log.Info("Error in", err)
+
+		synch <- false
+
+		return
+	} else {
+		log.Info("[GNB] SCTP/NGAP service is running")
+		// wg.Add(1)
+	}
+
+	// start communication with UE (server UNIX sockets).
+	if err := serviceNas.InitServer(gnb); err != nil {
+		log.Info("Error in", err)
+
+		synch <- false
+	} else {
+		log.Info("[GNB] UNIX/NAS service is running")
+
+	}
+
+	trigger.SendNgSetupRequest(gnb, amf)
+
+	synch <- true
+
+	// Block until a signal is received.
+	<-sigGnb
+	gnb.Terminate()
+}
+
 func InitGnbForLoadSeconds(conf config.Config, wg *sync.WaitGroup,
 	monitor *monitoring.Monitor) {
 
@@ -99,7 +153,6 @@ func InitGnbForLoadSeconds(conf config.Config, wg *sync.WaitGroup,
 		wg.Done()
 
 		return
-
 	} else {
 		log.Info("[GNB] SCTP/NGAP service is running")
 		// wg.Add(1)

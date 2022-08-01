@@ -132,27 +132,27 @@ func main() {
 			{
 				Name:    "ue-latency-interval",
 				Aliases: []string{"ue-latency-interval"},
-				Usage: "\nTesting UE latency in registration for specific interval\n" +
-					"Testing UE latency in 20 seconds: ue-latency-interval -t 20\n",
+				Usage: "\nTesting UE latency in registration\n" +
+					"Testing UE latency for 20 requests: ue-latency-interval -n 20\n",
 				Flags: []cli.Flag{
-					&cli.IntFlag{Name: "time", Value: 1, Aliases: []string{"t"}},
+					&cli.IntFlag{Name: "number-of-requests", Value: 1, Aliases: []string{"n"}},
 				},
 				Action: func(c *cli.Context) error {
-					var time int
+					var requests int
 
-					name := "Testing UE latency in registration for specific interval"
+					name := "Testing UE latency in registration"
 					cfg := config.Data
 
-					time = c.Int("time")
+					requests = c.Int("number-of-requests")
 
 					log.Info("---------------------------------------")
 					log.Info("[TESTER] Starting test function: ", name)
-					log.Info("[TESTER][UE] Interval of the test: ", time)
+					log.Info("[TESTER][UE] Number of requests: ", requests)
 					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
 					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
 					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
 					log.Info("---------------------------------------")
-					log.Warn("[TESTER][UE] Average of the latency in interval: ", templates.TestUesLatencyInInterval(time)/int64(time), "ms")
+					log.Warn("[TESTER][UE] Average of the latency for a queue of requests: ", templates.TestUesLatencyInInterval(requests)/int64(requests), "ms")
 					return nil
 				},
 			},
