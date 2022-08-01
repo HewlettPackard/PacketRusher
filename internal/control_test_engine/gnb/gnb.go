@@ -47,7 +47,7 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) {
 
 	// start communication with UE (server UNIX sockets).
 	if err := serviceNas.InitServer(gnb); err != nil {
-		log.Fatal("Error in", err)
+		log.Fatal("Error in ", err)
 	} else {
 		log.Info("[GNB] UNIX/NAS service is running")
 	}
@@ -92,7 +92,7 @@ func InitGnbForLoadSeconds(conf config.Config, wg *sync.WaitGroup,
 
 	// start communication with AMF(SCTP).
 	if err := serviceNgap.InitConn(amf, gnb); err != nil {
-		log.Info("Error in", err)
+		log.Info("Error in ", err)
 
 		time.Sleep(1000 * time.Millisecond)
 
