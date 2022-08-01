@@ -53,6 +53,8 @@ func TestUesLatencyInInterval(interval int) int64 {
 			log.Warn("[TESTER][UE] UE LATENCY IN REGISTRATION: WITHOUT CONNECTION")
 		}
 
+		time.Sleep(50 * time.Millisecond)
+
 		// seta o sinal e termina a gnb
 		sigGnb <- true
 
