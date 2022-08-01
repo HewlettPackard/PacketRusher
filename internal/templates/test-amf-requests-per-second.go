@@ -50,7 +50,7 @@ func TestRqsLoop(numRqs int, interval int) int64 {
 
 		wg.Wait()
 
-		log.Warn("[TESTER][GNB] AMF Requests per Second:", monitor.GetRqsLocal())
+		log.Warn("[TESTER][GNB] AMF Responses per Second:", monitor.GetRqsLocal())
 		monitor.SetRqsGlobal(monitor.GetRqsLocal())
 	}
 

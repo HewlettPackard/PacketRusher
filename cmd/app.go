@@ -114,8 +114,8 @@ func main() {
 			{
 				Name:    "amf-load-loop",
 				Aliases: []string{"amf-load-loop"},
-				Usage: "\nTesting AMF requests in interval\n" +
-					"Example for testing multiple requests in 20 seconds: amf-load-loop -n 20 -t 20\n",
+				Usage: "\nTest availability of AMF in interval\n" +
+					"Example for generating 20 requests to AMF per second in interval of 20 seconds: amf-load-loop -n 20 -t 20\n",
 				Flags: []cli.Flag{
 					&cli.IntFlag{Name: "number-of-requests", Value: 1, Aliases: []string{"n"}},
 					&cli.IntFlag{Name: "time", Value: 1, Aliases: []string{"t"}},
@@ -124,20 +124,20 @@ func main() {
 					var time int
 					var numRqs int
 
-					name := "Testing AMF requests for the specified time"
+					name := "Test availability of AMF"
 					cfg := config.Data
 
 					numRqs = c.Int("number-of-requests")
 					time = c.Int("time")
 
 					log.Info("---------------------------------------")
-					log.Info("[TESTER] Starting test function: ", name)
-					log.Info("[TESTER][UE] Number of Requests per second: ", numRqs)
+					log.Warn("[TESTER] Starting test function: ", name)
+					log.Warn("[TESTER][UE] Number of Requests per second: ", numRqs)
 					log.Info("[TESTER][GNB] gNodeB control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
 					log.Info("[TESTER][GNB] gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
 					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
 					log.Info("---------------------------------------")
-					log.Warn("[TESTER][GNB] AMF Requests GLOBAL per Time:", templates.TestRqsLoop(numRqs, time))
+					log.Warn("[TESTER][GNB] Total of AMF Responses in the interval:", templates.TestRqsLoop(numRqs, time))
 					return nil
 				},
 			},
@@ -158,8 +158,8 @@ func main() {
 					requests = c.Int("number-of-requests")
 
 					log.Info("---------------------------------------")
-					log.Info("[TESTER] Starting test function: ", name)
-					log.Info("[TESTER][UE] Number of requests: ", requests)
+					log.Warn("[TESTER] Starting test function: ", name)
+					log.Warn("[TESTER][UE] Number of requests: ", requests)
 					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
 					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
 					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
