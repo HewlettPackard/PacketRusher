@@ -129,6 +129,33 @@ func main() {
 					return nil
 				},
 			},
+			{
+				Name:    "ue-latency-interval",
+				Aliases: []string{"ue-latency-interval"},
+				Usage: "\nTesting UE latency in registration for specific interval\n" +
+					"Testing UE latency in 20 seconds: ue-latency-interval -t 20\n",
+				Flags: []cli.Flag{
+					&cli.IntFlag{Name: "time", Value: 1, Aliases: []string{"t"}},
+				},
+				Action: func(c *cli.Context) error {
+					var time int
+
+					name := "Testing UE latency in registration for specific interval"
+					cfg := config.Data
+
+					time = c.Int("time")
+
+					log.Info("---------------------------------------")
+					log.Info("[TESTER] Starting test function: ", name)
+					log.Info("[TESTER][UE] Interval of the test: ", time)
+					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
+					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
+					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					log.Info("---------------------------------------")
+					log.Warn("[TESTER][UE] Average of the latency in interval: ", templates.TestUesLatencyInInterval(time)/int64(time), "ms")
+					return nil
+				},
+			},
 		},
 	}
 	err := app.Run(os.Args)
