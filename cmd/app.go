@@ -14,11 +14,24 @@ import (
 const version = "1.0.1"
 
 func init() {
+
+	cfg, err := config.GetConfig()
+	if err != nil {
+		//return nil
+		log.Fatal("Error in get configuration")
+	}
+
 	// Output to stdout instead of the default stderr
 	// Can be any io.Writer, see below for File example
 	log.SetOutput(os.Stdout)
+
 	// Only log the warning severity or above.
-	log.SetLevel(log.InfoLevel)
+	if cfg.Logs.Level == 0 {
+		log.SetLevel(log.InfoLevel)
+	} else {
+		log.SetLevel(log.Level(cfg.Logs.Level))
+	}
+
 	spew.Config.Indent = "\t"
 
 	log.Info("my5G-RANTester version " + version)
