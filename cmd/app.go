@@ -11,7 +11,7 @@ import (
 	"os"
 )
 
-const version = "0.1"
+const version = "1.0.1"
 
 func init() {
 	// Output to stdout instead of the default stderr
@@ -22,7 +22,6 @@ func init() {
 	spew.Config.Indent = "\t"
 
 	log.Info("my5G-RANTester version " + version)
-
 }
 
 func main() {
