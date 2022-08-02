@@ -114,7 +114,7 @@ func main() {
 			{
 				Name:    "amf-load-loop",
 				Aliases: []string{"amf-load-loop"},
-				Usage: "\nTest availability of AMF in interval\n" +
+				Usage: "\nTest AMF responses in interval\n" +
 					"Example for generating 20 requests to AMF per second in interval of 20 seconds: amf-load-loop -n 20 -t 20\n",
 				Flags: []cli.Flag{
 					&cli.IntFlag{Name: "number-of-requests", Value: 1, Aliases: []string{"n"}},
@@ -124,7 +124,7 @@ func main() {
 					var time int
 					var numRqs int
 
-					name := "Test availability of AMF"
+					name := "Test AMF responses in interval"
 					cfg := config.Data
 
 					numRqs = c.Int("number-of-requests")
@@ -165,6 +165,32 @@ func main() {
 					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
 					log.Info("---------------------------------------")
 					log.Warn("[TESTER][UE] Average of the latency for a queue of requests: ", templates.TestUesLatencyInInterval(requests)/int64(requests), "ms")
+					return nil
+				},
+			},
+			{
+				Name:    "Test availability of AMF",
+				Aliases: []string{"amf-availability"},
+				Usage: "\nTest availability of AMF in interval\n" +
+					"Test availability of AMF in 20 seconds: amf-availability -t 20\n",
+				Flags: []cli.Flag{
+					&cli.IntFlag{Name: "time", Value: 1, Aliases: []string{"t"}},
+				},
+				Action: func(c *cli.Context) error {
+					var time int
+
+					name := "Test availability of AMF"
+					cfg := config.Data
+
+					time = c.Int("time")
+
+					log.Info("---------------------------------------")
+					log.Warn("[TESTER] Starting test function: ", name)
+					log.Warn("[TESTER][UE] Interval of test: ", time)
+					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
+					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
+					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					log.Info("---------------------------------------")
 					return nil
 				},
 			},
