@@ -11,6 +11,7 @@ type Monitor struct {
 	pcktLoss         int64
 	LtRegisterLocal  int64
 	LtRegisterGlobal int64
+	availability     bool
 }
 
 func (m *Monitor) IncRqs() {
@@ -29,6 +30,10 @@ func (m *Monitor) InitRqsLocal() {
 	m.RqsL = 0
 }
 
+func (m *Monitor) InitAvaibility() {
+	m.availability = false
+}
+
 // calcula o número de requests em um intervalo
 func (m *Monitor) SetRqsGlobal(rqs int64) {
 	m.RqsG += rqs
@@ -45,6 +50,12 @@ func (m *Monitor) GetRqsGlobal() int64 {
 // calcula a latência dos UEs para um dado intervalo
 func (m *Monitor) SetLtGlobal(ltLocal int64) {
 	m.LtRegisterGlobal += ltLocal
+}
+
+func (m *Monitor) SetAvaibility() {
+	m.mu.Lock()
+	m.availability = true
+	m.mu.Unlock()
 }
 
 func (m *Monitor) GetLtGlobal() int64 {
