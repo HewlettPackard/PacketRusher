@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestAvailability(interval int) int64 {
+func TestAvailability(interval int) {
 
 	monitor := monitoring.Monitor{}
 
@@ -21,7 +21,7 @@ func TestAvailability(interval int) int64 {
 	ranPort := 1000
 	for y := 1; y <= interval; y++ {
 
-		monitor.InitAvailability()
+		monitor.InitAvaibility()
 
 		for i := 1; i <= 1; i++ {
 
@@ -29,15 +29,21 @@ func TestAvailability(interval int) int64 {
 
 			conf.GNodeB.ControlIF.Port = ranPort
 
-			go gnb.InitGnbForLoadSeconds(conf, &monitor)
+			go gnb.InitGnbForAvaibility(conf, &monitor)
 
 			ranPort++
 		}
 
 		time.Sleep(1020 * time.Millisecond)
 
-		log.Warn("[TESTER][GNB] AMF Availability:", monitor.GetAvailability())
+		if monitor.GetAvailability() {
+			log.Warn("[TESTER][GNB] AMF Availability:", 1)
+
+		} else {
+			log.Warn("[TESTER][GNB] AMF Availability:", 0)
+
+		}
 	}
 
-	return monitor.GetRqsGlobal()
+	return
 }

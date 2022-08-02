@@ -173,3 +173,54 @@ func InitGnbForLoadSeconds(conf config.Config, wg *sync.WaitGroup,
 	wg.Done()
 	// os.Exit(0)
 }
+
+func InitGnbForAvaibility(conf config.Config,
+	monitor *monitoring.Monitor) {
+
+	// instance new gnb.
+	gnb := &context.GNBContext{}
+
+	// new gnb context.
+	gnb.NewRanGnbContext(
+		conf.GNodeB.PlmnList.GnbId,
+		conf.GNodeB.PlmnList.Mcc,
+		conf.GNodeB.PlmnList.Mnc,
+		conf.GNodeB.PlmnList.Tac,
+		conf.GNodeB.SliceSupportList.Sst,
+		conf.GNodeB.SliceSupportList.Sd,
+		conf.GNodeB.ControlIF.Ip,
+		conf.GNodeB.DataIF.Ip,
+		conf.GNodeB.ControlIF.Port,
+		conf.GNodeB.DataIF.Port)
+
+	// start communication with AMF (server SCTP).
+
+	// new AMF context.
+	amf := gnb.NewGnBAmf(conf.AMF.Ip, conf.AMF.Port)
+
+	// start communication with AMF(SCTP).
+	if err := serviceNgap.InitConn(amf, gnb); err != nil {
+		log.Info("Error in ", err)
+
+		return
+
+	} else {
+		log.Info("[GNB] SCTP/NGAP service is running")
+
+	}
+
+	trigger.SendNgSetupRequest(gnb, amf)
+
+	// timeout is 1 second for receive NG Setup Response
+	time.Sleep(1000 * time.Millisecond)
+
+	// AMF responds message sends by Tester
+	// means AMF is available
+	if amf.GetState() == 0x01 {
+		monitor.IncAvaibility()
+
+	}
+
+	gnb.Terminate()
+	// os.Exit(0)
+}
