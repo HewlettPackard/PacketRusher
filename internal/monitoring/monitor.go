@@ -26,6 +26,12 @@ func (m *Monitor) IncPcktLoss() {
 	m.mu.Unlock()
 }
 
+func (m *Monitor) IncAvaibility() {
+	m.mu.Lock()
+	m.availability = true
+	m.mu.Unlock()
+}
+
 func (m *Monitor) InitRqsLocal() {
 	m.RqsL = 0
 }
@@ -47,15 +53,13 @@ func (m *Monitor) GetRqsGlobal() int64 {
 	return m.RqsG
 }
 
+func (m *Monitor) GetAvailability() bool {
+	return m.availability
+}
+
 // calcula a latência dos UEs para um dado intervalo
 func (m *Monitor) SetLtGlobal(ltLocal int64) {
 	m.LtRegisterGlobal += ltLocal
-}
-
-func (m *Monitor) SetAvaibility() {
-	m.mu.Lock()
-	m.availability = true
-	m.mu.Unlock()
 }
 
 func (m *Monitor) GetLtGlobal() int64 {
