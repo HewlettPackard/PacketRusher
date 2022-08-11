@@ -1,9 +1,9 @@
 gnodeb:
   controlif:
-    ip: "10.100.200.1"
+    ip: "127.0.0.1"
     port: 9487
   dataif:
-    ip: "10.100.200.1"
+    ip: "127.0.0.1"
     port: 2152
   plmnlist:
     mcc: "208"
@@ -15,7 +15,7 @@ gnodeb:
     sd: "010203"
 
 ue:
-  msin: "0000000003"
+  msin: "0000000001"
   key: "8baf473f2f8fd09487cccbd7097c6862"
   opc: "8e27b6af0e692e750f32667a3b14605d"
   amf: "8000"
@@ -29,7 +29,7 @@ ue:
     sd: "010203"
 
 amfif:
-  ip: "10.100.200.7"
+  ip: "127.0.0.1"
   port: 38412
 
 logs:
