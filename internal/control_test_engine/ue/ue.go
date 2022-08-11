@@ -65,7 +65,7 @@ func RegistrationUe(conf config.Config, id uint8, wg *sync.WaitGroup) {
 }
 
 func RegistrationUeMonitor(conf config.Config,
-	id uint8, monitor *monitoring.Monitor, wg *sync.WaitGroup) {
+	id uint8, monitor *monitoring.Monitor, wg *sync.WaitGroup, start time.Time) {
 
 	// new UE instance.
 	ue := &context.UEContext{}
@@ -99,10 +99,6 @@ func RegistrationUeMonitor(conf config.Config,
 	// registration procedure started.
 	trigger.InitRegistration(ue)
 
-	// start the time
-	start := time.Now()
-	count := 0
-
 	for {
 
 		// UE is register in network
@@ -114,18 +110,13 @@ func RegistrationUeMonitor(conf config.Config,
 		}
 
 		// timeout is 10 000 ms
-		if count == 1000 {
-			log.Warn("[TESTER][UE] TIME EXPIRED IN UE REGISTRATION 10000 ms")
-			monitor.LtRegisterLocal = 10000
+		if time.Since(start).Milliseconds() >= 10000 {
+			log.Warn("[TESTER][UE] TIME EXPIRED IN UE REGISTRATION 10 000 ms")
 			break
 		}
-
-		// wait and testing again the state of UE
-		time.Sleep(10 * time.Millisecond)
-		count++
 	}
 
 	wg.Done()
-	//ue.Terminate()
+	// ue.Terminate()
 	// os.Exit(0)
 }

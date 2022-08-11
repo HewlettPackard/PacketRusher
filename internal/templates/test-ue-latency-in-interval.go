@@ -32,6 +32,11 @@ func TestUesLatencyInInterval(interval int) int64 {
 		sigGnb := make(chan bool, 1)
 		synch := make(chan bool, 1)
 
+		log.Warn("[TESTER][UE] Test UE REGISTRATION:")
+
+		// start the time
+		start := time.Now()
+
 		// usado para sincronizar se a thread da gnb gerou um erro
 		go gnb.InitGnbForUeLatency(cfg, sigGnb, synch)
 
@@ -40,8 +45,7 @@ func TestUesLatencyInInterval(interval int) int64 {
 
 			time.Sleep(400 * time.Millisecond)
 
-			log.Warn("[TESTER][UE] Test UE REGISTRATION:")
-			go ue.RegistrationUeMonitor(cfg, uint8(i), &monitor, &wg)
+			go ue.RegistrationUeMonitor(cfg, uint8(i), &monitor, &wg, start)
 
 			wg.Add(1)
 
@@ -49,7 +53,9 @@ func TestUesLatencyInInterval(interval int) int64 {
 
 			// increment the latency global for the mean
 			monitor.SetLtGlobal(monitor.LtRegisterLocal)
+
 		} else {
+
 			log.Warn("[TESTER][UE] UE LATENCY IN REGISTRATION: WITHOUT CONNECTION")
 		}
 
