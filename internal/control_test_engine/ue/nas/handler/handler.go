@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
@@ -101,6 +102,20 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 	ue.SetAmfPointer(message.RegistrationAccept.GetAMFPointer())
 	ue.SetAmfSetId(message.RegistrationAccept.GetAMFSetID())
 	ue.Set5gGuti(message.RegistrationAccept.GetTMSI5G())
+
+	// use the slice allowed by the network
+	// in PDU session request
+	if ue.PduSession.Snssai.Sst == 0 {
+
+		// check the allowed NSSAI received from the 5GC
+		snssai := message.RegistrationAccept.AllowedNSSAI.GetSNSSAIValue()
+
+		// update UE slice selected for PDU Session
+		ue.PduSession.Snssai.Sst = int32(snssai[1])
+		ue.PduSession.Snssai.Sd = fmt.Sprintf("0%x0%x0%x", snssai[2], snssai[3], snssai[4])
+
+		log.Warn("[UE][NAS] ALLOWED NSSAI: SST: ", ue.PduSession.Snssai.Sst, " SD: ", ue.PduSession.Snssai.Sd)
+	}
 
 	log.Info("[UE][NAS] UE 5G GUTI: ", ue.Get5gGuti())
 

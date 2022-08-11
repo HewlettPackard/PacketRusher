@@ -1,0 +1,33 @@
+gnodeb:
+  controlif:
+    ip: "@NGAP_LOCAL_ADDR@"
+    port: 9487
+  dataif:
+    ip: "@GTPU_LOCAL_ADDR@"
+    port: 2152
+  plmnlist:
+    mcc: "@MCC@"
+    mnc: "@MNC@"
+    tac: "@TAC@"
+    gnbid: "@GNBID@"
+  slicesupportlist:
+    sst: "@SST_GNB@"
+    sd: "@SD@"
+
+ue:
+  msin: "@MSIN@"
+  key: "@KEY@"
+  opc: "@OPC@"
+  amf: "8000"
+  sqn: "0000000"
+  dnn: "@DNN@"
+  hplmn:
+    mcc: "@MCC@"
+    mnc: "@MNC@"
+  snssai:
+    sst: @SST_UE@
+    sd: "@SD@"
+
+amfif:
+  ip: "@NGAP_REMOTE_ADDR@"
+  port: 38412

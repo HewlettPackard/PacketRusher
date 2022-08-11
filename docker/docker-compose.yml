@@ -1,0 +1,40 @@
+version: '3.8'
+services:
+  my5grantester:
+    image: my5grantester:latest
+    container_name: my5grantester
+    privileged: true
+    entrypoint: /bin/bash -c "sleep infinity"
+    environment:
+      NGAP_LOCAL_ADDR: 10.100.200.200
+      NGAP_REMOTE_ADDR: 10.100.200.201 # AMF IP ADDR
+      GTPU_LOCAL_ADDR: 10.100.200.200
+      MCC: 208
+      MNC: 93
+      TAC: 000001
+      GNBID: "000001"
+      SST_GNB: 01
+      SST_UE: 01
+      SD: "010203"
+      MSIN: "0000000003"
+      OPC: 8baf473f2f8fd09487cccbd7097c6862
+      KEY: 8e27b6af0e692e750f32667a3b14605d
+      AMF: 8000
+      SQN: 0000000
+      DNN: internet
+      NUM_UE: 2
+    cap_add:
+      - NET_ADMIN
+    networks:
+      privnet:
+          ipv4_address: 10.100.200.200
+    healthcheck:
+      test: /bin/bash -c "ip addr | grep uetun1"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+    privnet:      # Using existing network of core network 
+        external:
+            name: docker_privnet
