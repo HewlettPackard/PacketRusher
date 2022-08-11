@@ -186,7 +186,7 @@ func main() {
 
 					log.Info("---------------------------------------")
 					log.Warn("[TESTER] Starting test function: ", name)
-					log.Warn("[TESTER][UE] Interval of test: ", time)
+					log.Warn("[TESTER][UE] Interval of test: ", time, " seconds")
 					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
 					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
 					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
