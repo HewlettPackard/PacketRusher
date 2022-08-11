@@ -53,6 +53,9 @@ type Config struct {
 		Ip   string `yaml: "ip"`
 		Port int    `yaml: "port"`
 	} `yaml:"amfif"`
+	Logs struct {
+		Level int `yaml: "level"`
+	} `yaml:"logs"`
 }
 
 func RootDir() string {
