@@ -15,16 +15,16 @@ my5G-RANTester is a tool for simulating control and data planes of the UE (user 
 If you want to cite this tool, please use the following information:
 ```
 @article{SILVEIRA2022109301,
-title = {Tutorial on communication between access networks and the 5G core},
-journal = {Computer Networks},
-volume = {216},
-pages = {109301},
-year = {2022},
-issn = {1389-1286},
-doi = {https://doi.org/10.1016/j.comnet.2022.109301},
-url = {https://www.sciencedirect.com/science/article/pii/S1389128622003528},
-author = {Lucas B.D. Silveira and Henrique C. {de Resende} and Cristiano B. Both and Johann M. Marquez-Barja and Bruno Silvestre and Kleber V. Cardoso},
-keywords = {NG-RAN, 5G core, NAS, NGAP}
+  title = {Tutorial on communication between access networks and the 5G core},
+  journal = {Computer Networks},
+  volume = {216},
+  pages = {109301},
+  year = {2022},
+  issn = {1389-1286},
+  doi = {https://doi.org/10.1016/j.comnet.2022.109301},
+  url = {https://www.sciencedirect.com/science/article/pii/S1389128622003528},
+  author = {Lucas B.D. Silveira and Henrique C. {de Resende} and Cristiano B. Both and Johann M. Marquez-Barja and Bruno Silvestre and Kleber V. Cardoso},
+  keywords = {NG-RAN, 5G core, NAS, NGAP}
 }
 ```
 If you have questions or comments, please email us: [my5G team](mailto:my5G.initiative@gmail.com). 
