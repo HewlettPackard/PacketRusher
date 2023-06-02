@@ -36,6 +36,7 @@ type UEContext struct {
 	StateMM    int
 	StateSM    int
 	UnixConn   net.Conn
+	SockPath   string
 	PduSession PDUSession
 	amfInfo    Amf
 }
@@ -79,7 +80,7 @@ type SECURITY struct {
 func (ue *UEContext) NewRanUeContext(msin string,
 	cipheringAlg, integrityAlg uint8,
 	k, opc, op, amf, sqn, mcc, mnc, dnn string,
-	sst int32, sd string, id uint8) {
+	sst int32, sd string, id uint8, sockPath string) {
 
 	// added SUPI.
 	ue.UeSecurity.Msin = msin
@@ -108,6 +109,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 	// added UE id.
 	ue.id = id
+    ue.SockPath = sockPath
 
 	// added network slice
 	ue.PduSession.Snssai.Sd = sd
@@ -148,6 +150,9 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 func (ue *UEContext) GetUeId() uint8 {
 	return ue.id
+}
+func (ue *UEContext) GetSockPath() string {
+	return ue.SockPath
 }
 
 func (ue *UEContext) GetSuci() nasType.MobileIdentity5GS {

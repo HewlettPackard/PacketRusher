@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
-	gtpv1 "github.com/wmnsk/go-gtp/v1"
+	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
 	"golang.org/x/net/ipv4"
 	"net"
 	"sync"
@@ -49,13 +49,15 @@ type ControlInfo struct {
 	gnbPort      int
 	unixlistener net.Listener
 	n2           *sctp.SCTPConn
+	sockPath     string
 }
 
-func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipData string, port, portData int) {
+func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipData string, port, portData int, sockPath string) {
 	gnb.controlInfo.mcc = mcc
 	gnb.controlInfo.mnc = mnc
 	gnb.controlInfo.tac = tac
 	gnb.controlInfo.gnbId = gnbId
+	gnb.controlInfo.sockPath = sockPath
 	gnb.sliceInfo.sd = sd
 	gnb.sliceInfo.sst = sst
 	gnb.idUeGenerator = 1
@@ -134,6 +136,10 @@ func (gnb *GNBContext) GetListener() net.Listener {
 
 func (gnb *GNBContext) GetGatewayGnbIp() string {
 	return gnb.dataInfo.gatewayGnbIp
+}
+
+func (gnb *GNBContext) GetN3GnbIp() string {
+	return gnb.dataInfo.gnbIp
 }
 
 func (gnb *GNBContext) DeleteGnBUeByTeid(teid uint32) {
@@ -376,6 +382,10 @@ func (gnb *GNBContext) GetGnbIp() string {
 
 func (gnb *GNBContext) GetGnbPort() int {
 	return gnb.controlInfo.gnbPort
+}
+
+func (gnb *GNBContext) GetSockPath() string {
+	return gnb.controlInfo.sockPath
 }
 
 func (gnb *GNBContext) GetGnbIdInBytes() []byte {

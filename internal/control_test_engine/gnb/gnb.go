@@ -30,7 +30,8 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) {
 		conf.GNodeB.ControlIF.Ip,
 		conf.GNodeB.DataIF.Ip,
 		conf.GNodeB.ControlIF.Port,
-		conf.GNodeB.DataIF.Port)
+		conf.GNodeB.DataIF.Port,
+		conf.GetSockPath())
 
 	// start communication with AMF (server SCTP).
 
@@ -82,7 +83,8 @@ func InitGnbForUeLatency(conf config.Config, sigGnb chan bool, synch chan bool) 
 		conf.GNodeB.ControlIF.Ip,
 		conf.GNodeB.DataIF.Ip,
 		conf.GNodeB.ControlIF.Port,
-		conf.GNodeB.DataIF.Port)
+		conf.GNodeB.DataIF.Port,
+		conf.GetSockPath())
 
 	// start communication with AMF (server SCTP).
 
@@ -137,7 +139,8 @@ func InitGnbForLoadSeconds(conf config.Config, wg *sync.WaitGroup,
 		conf.GNodeB.ControlIF.Ip,
 		conf.GNodeB.DataIF.Ip,
 		conf.GNodeB.ControlIF.Port,
-		conf.GNodeB.DataIF.Port)
+		conf.GNodeB.DataIF.Port,
+		conf.GetSockPath())
 
 	// start communication with AMF (server SCTP).
 
@@ -191,7 +194,8 @@ func InitGnbForAvaibility(conf config.Config,
 		conf.GNodeB.ControlIF.Ip,
 		conf.GNodeB.DataIF.Ip,
 		conf.GNodeB.ControlIF.Port,
-		conf.GNodeB.DataIF.Port)
+		conf.GNodeB.DataIF.Port,
+		conf.GetSockPath())
 
 	// start communication with AMF (server SCTP).
 

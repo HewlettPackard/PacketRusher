@@ -1,0 +1,15 @@
+# Compile output
+*.o
+*.ko
+*.cmd
+*.mod
+*.mod.c
+Module.symvers
+modules.order
+
+# Ctags
+tags
+
+# VSCode
+.vscode
+

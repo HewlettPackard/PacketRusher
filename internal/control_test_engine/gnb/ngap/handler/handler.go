@@ -5,12 +5,12 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
-	serviceGateway "my5G-RANTester/internal/control_test_engine/gnb/data/service"
-	serviceGtp "my5G-RANTester/internal/control_test_engine/gnb/gtp/service"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap/ngapType"
+	_ "github.com/vishvananda/netlink"
+    _ "net"
 	"time"
 )
 
@@ -354,9 +354,6 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 		log.Info("[GNB][NGAP][UE] UPF Address: ", fmt.Sprintf("%d.%d.%d.%d", upfAddress[0], upfAddress[1], upfAddress[2], upfAddress[3]), " :2152")
 	}
 
-	// set uplink teid.
-	// ue.SetTeidUplink(ulTeid)
-
 	// get UPF ip.
 	if gnb.GetUpfIp() == "" {
 		upfIp := fmt.Sprintf("%d.%d.%d.%d", upfAddress[0], upfAddress[1], upfAddress[2], upfAddress[3])
@@ -366,30 +363,13 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	// send NAS message to UE.
 	sender.SendToUe(ue, messageNas)
 
-// 	// configure GTP tunnel and listen.
-// 	if gnb.GetN3Plane() == nil {
-// 		// TODO check if GTP tunnel and gateway is ok.
-// 		serviceGtp.InitGTPTunnel(gnb)
-// 		serviceGateway.InitGatewayGnb(gnb)
-// 	}
-
 	// send PDU Session Resource Setup Response.
 	trigger.SendPduSessionResourceSetupResponse(ue, gnb)
 
 	time.Sleep(20 * time.Millisecond)
 
-	
-	// configure GTP tunnel and listen.
-	if gnb.GetN3Plane() == nil {
-		// TODO check if GTP tunnel and gateway is ok.
-		serviceGtp.InitGTPTunnel(gnb)
-		serviceGateway.InitGatewayGnb(gnb)
-	}
-	
-	// ue is ready for data plane.
-	// send GNB UE IP message to UE.
-	UeGnBIp := ue.GetIp()
-	sender.SendToUe(ue, UeGnBIp)
+
+	sender.SendToUe(ue, []byte(gnb.GetN3GnbIp()))
 }
 
 func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {

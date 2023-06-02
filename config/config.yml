@@ -1,36 +1,43 @@
 gnodeb:
   controlif:
-    ip: "127.0.0.1"
+    ip: "30.103.11.21"
     port: 9487
   dataif:
-    ip: "127.0.0.1"
+    ip: "30.103.11.21"
     port: 2152
   plmnlist:
-    mcc: "208"
-    mnc: "93"
+    mcc: "999"
+    mnc: "27"
     tac: "000001"
     gnbid: "000001"
   slicesupportlist:
     sst: "01"
-    sd: "010203"
+    sd: "000001"
 
 ue:
-  msin: "0000000001"
-  key: "8baf473f2f8fd09487cccbd7097c6862"
-  opc: "8e27b6af0e692e750f32667a3b14605d"
+  msin: "0000000100"
+  key: "00112233445566778899AABBCCDDEEFF"
+  opc: "00112233445566778899AABBCCDDEEFF"
   amf: "8000"
   sqn: "0000000"
-  dnn: "internet"
+  dnn: "data1"
   hplmn:
-    mcc: "208"
-    mnc: "93"
+    mcc: "999"
+    mnc: "27"
   snssai:
     sst: 01
-    sd: "010203"
-
+    sd: "000001"
+  integrity:
+    nia0: true
+    nia1: true
+    nia2: true
+  ciphering:
+    nea0: true
+    nea1: true
+    nea2: true
+  test: "test-5g-guti"
 amfif:
-  ip: "127.0.0.1"
+  ip: "30.103.11.20"
   port: 38412
-
 logs:
     level: 4
