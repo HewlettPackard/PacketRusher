@@ -11,7 +11,8 @@ import (
 	"my5G-RANTester/lib/ngap/ngapType"
 	_ "github.com/vishvananda/netlink"
     _ "net"
-	"time"
+    "time"
+    "encoding/json"
 )
 
 func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
@@ -368,8 +369,14 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 
 	time.Sleep(20 * time.Millisecond)
 
+    msg := &context.UEMessage{}
+    msg.NewUeMessage(gnb.GetN3GnbIp(), gnb.GetUpfIp(), fmt.Sprint(ue.GetTeidUplink()), fmt.Sprint(ue.GetTeidDownlink()))
 
-	sender.SendToUe(ue, []byte(gnb.GetN3GnbIp()))
+    value, jsonErr := json.Marshal(msg)
+    if jsonErr != nil {
+        log.Fatal(jsonErr)
+    }
+	sender.SendToUe(ue, value)
 }
 
 func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {

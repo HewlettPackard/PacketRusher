@@ -1,4 +1,4 @@
-package main
+package tunnel
 
 var CmdTree = CmdNodeList{
 	CmdToken{
