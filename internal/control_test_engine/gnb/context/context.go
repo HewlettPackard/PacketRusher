@@ -94,22 +94,15 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	// set state to UE.
 	ue.SetStateInitialized()
 
-	// set downlinkTeid.
-	teidDown := gnb.GetUeTeid()
-	ue.SetTeidDownlink(teidDown)
-
-	// store UE in the TEID Pool of GNB.
-	gnb.teidPool.Store(teidDown, ue)
-
 	// store UE in the UE Pool of GNB.
 	gnb.uePool.Store(ranId, ue)
 
+	// TODO: Update UE IP Handling
 	// set ran UE IP
-	ueIp := gnb.getRanUeIp()
-	ue.SetIp(ueIp)
-
+	//ueIp := gnb.getRanUeIp()
+	//ue.SetIp(ueIp)
 	// store UE in the GNB UE IP Pool.
-	gnb.ueIpPool.Store(ue.GetIp().String(), ue)
+	//gnb.ueIpPool.Store(ue.GetIp().String(), ue)
 
 	// select AMF with Capacity is more than 0.
 	amf := gnb.selectAmFByActive()
@@ -144,8 +137,12 @@ func (gnb *GNBContext) GetN3GnbIp() string {
 
 func (gnb *GNBContext) DeleteGnBUe(ue *GNBUe) {
 	gnb.uePool.Delete(ue.ranUeNgapId)
-	gnb.ueIpPool.Delete(ue.GetIp().String())
-	gnb.teidPool.Delete(ue.context.pduSession.downlinkTeid)
+	//gnb.ueIpPool.Delete(ue.GetIp().String())
+	for _, pduSession := range ue.context.pduSession {
+		if pduSession != nil {
+			gnb.teidPool.Delete(pduSession.GetTeidDownlink())
+		}
+	}
 }
 
 func (gnb *GNBContext) GetGnbUe(ranUeId int64) (*GNBUe, error) {
@@ -269,11 +266,14 @@ func (gnb *GNBContext) getRanUeId() int64 {
 	return id
 }
 
-func (gnb *GNBContext) GetUeTeid() uint32 {
+func (gnb *GNBContext) GetUeTeid(ue *GNBUe) uint32 {
 
 	// TODO implement mutex
 
 	id := gnb.teidGenerator
+
+	// store UE in the TEID Pool of GNB.
+	gnb.teidPool.Store(id, ue)
 
 	// increment UE teid.
 	gnb.teidGenerator++

@@ -1,6 +1,7 @@
 package context
 
 import (
+	"errors"
 	"github.com/ishidawataru/sctp"
 	"net"
 )
@@ -23,16 +24,19 @@ type GNBUe struct {
 type Context struct {
 	mobilityInfo mobility
 	maskedIMEISV string
-	pduSession   PDUSession // Slice was selectedactive for PDU Session.
+	pduSession   [16]*PDUSession
+	allowedSst   []string
+	allowedSd    []string
+	lenSlice     int
 }
 
 type PDUSession struct {
 	pduSessionId int64
+	sst          string
+	sd           string
 	ranUeIP      net.IP
 	uplinkTeid   uint32
 	downlinkTeid uint32
-	slices       *SliceSupported // Slice for PDU Session was marked with string active.
-	lenSlice     int
 	pduType      uint64
 	qosId        int64
 	fiveQi       int64
@@ -45,9 +49,6 @@ type mobility struct {
 }
 
 func (ue *GNBUe) CreateUeContext(plmn string, imeisv string, sst []string, sd []string) {
-
-	ue.context.pduSession.lenSlice = 0
-
 	if plmn != "not informed" {
 		ue.context.mobilityInfo.mcc, ue.context.mobilityInfo.mnc = convertMccMnc(plmn)
 	} else {
@@ -56,57 +57,48 @@ func (ue *GNBUe) CreateUeContext(plmn string, imeisv string, sst []string, sd []
 	}
 
 	ue.context.maskedIMEISV = imeisv
-
-	for i := 0; i < len(sst); i++ {
-		ue.addedSlice(sst[i], sd[i], "inactive")
-	}
+	ue.context.allowedSst = sst
+	ue.context.allowedSd = sd
 }
 
 func (ue *GNBUe) CreatePduSession(pduSessionId int64, sst string, sd string, pduType uint64,
-	qosId int64, priArp int64, fiveQi int64, ulTeid uint32) string {
+	qosId int64, priArp int64, fiveQi int64, ulTeid uint32, dlTeid uint32)  (*PDUSession, error) {
 
-	ue.context.pduSession.pduSessionId = pduSessionId
-
-	if !ue.pduSessionNssai(sst, sd) {
-		return "Slice was not found"
+	if pduSessionId < 1 && pduSessionId > 16 {
+		return nil, errors.New("PDU Session Id must lies between 0 and 15, id: " + string(pduSessionId))
 	}
-	ue.context.pduSession.pduType = pduType
-	ue.context.pduSession.qosId = qosId
-	ue.context.pduSession.priArp = priArp
-	ue.context.pduSession.fiveQi = fiveQi
-	ue.context.pduSession.uplinkTeid = ulTeid
 
-	return ""
-}
-
-func (ue *GNBUe) GetQosId() int64 {
-	return ue.context.pduSession.qosId
-}
-
-func (ue *GNBUe) GetFiveQI() int64 {
-	return ue.context.pduSession.fiveQi
-}
-
-func (ue *GNBUe) GetPriorityARP() int64 {
-	return ue.context.pduSession.priArp
-}
-
-func (ue *GNBUe) GetPduType() (valor string) {
-
-	switch ue.context.pduSession.pduType {
-	case 0:
-		valor = "ipv4"
-	case 1:
-		valor = "ipv6"
-	case 2:
-		valor = "Ipv4Ipv6"
-	case 3:
-		valor = "ethernet"
-
+	if ue.context.pduSession[pduSessionId-1] != nil {
+		return nil, errors.New("Unable to create PDU Session " + string(pduSessionId) + " as such PDU Session already exists")
 	}
-	return
+
+	var pduSession = new(PDUSession)
+	pduSession.pduSessionId = pduSessionId
+
+	if !ue.isWantedNssai(sst, sd) {
+		return nil, errors.New("Unable to create PDU Session, slice " + string(sst) + string(sd) + " is not selected for current UE")
+	}
+	pduSession.pduType = pduType
+	pduSession.qosId = qosId
+	pduSession.priArp = priArp
+	pduSession.fiveQi = fiveQi
+	pduSession.uplinkTeid = ulTeid
+	pduSession.downlinkTeid = dlTeid
+	pduSession.sst = sst
+	pduSession.sd = sd
+
+	ue.context.pduSession[pduSessionId-1] = pduSession
+
+	return pduSession, nil
 }
 
+func (ue *GNBUe) GetPduSession(pduSessionId int64)  (*PDUSession, error) {
+	if pduSessionId < 1 && pduSessionId > 16 {
+		return nil, errors.New("PDU Session Id must lies between 1 and 16, id: " + string(pduSessionId))
+	}
+
+	return ue.context.pduSession[pduSessionId-1], nil
+}
 func (ue *GNBUe) GetUeMobility() (string, string) {
 	return ue.context.mobilityInfo.mcc, ue.context.mobilityInfo.mnc
 }
@@ -115,79 +107,22 @@ func (ue *GNBUe) GetUeMaskedImeiSv() string {
 	return ue.context.maskedIMEISV
 }
 
-func (ue *GNBUe) GetLenSlice() int {
-	return ue.context.pduSession.lenSlice
-}
-
-func (ue *GNBUe) addedSlice(sst string, sd string, status string) {
-
-	if ue.context.pduSession.lenSlice == 0 {
-		newElem := &SliceSupported{}
-		newElem.sst = sst
-		newElem.sd = sd
-		newElem.status = status
-		newElem.next = nil
-
-		// update list
-		ue.context.pduSession.slices = newElem
-		ue.context.pduSession.lenSlice++
-		return
-	}
-
-	mov := ue.context.pduSession.slices
-	for i := 0; i < ue.context.pduSession.lenSlice; i++ {
-
-		// end of the list
-		if mov.next == nil {
-
-			newElem := &SliceSupported{}
-			newElem.sst = sst
-			newElem.sd = sd
-			newElem.status = status
-			newElem.next = nil
-
-			mov.next = newElem
-
-		} else {
-			mov = mov.next
-		}
-	}
-	ue.context.pduSession.lenSlice++
-}
-
-func (ue *GNBUe) GetAllowedNssai(index int) (string, string) {
-
-	mov := ue.context.pduSession.slices
-	for i := 0; i < index; i++ {
-		mov = mov.next
-	}
-
-	return mov.sst, mov.sd
-}
-
-func (ue *GNBUe) GetSelectedNssai() (string, string) {
-
-	mov := ue.context.pduSession.slices
-	for i := 0; i < ue.context.pduSession.lenSlice; i++ {
-		if mov.status == "active" {
-			return mov.sst, mov.sd
-		}
-		mov = mov.next
+func (ue *GNBUe) GetSelectedNssai(pduSessionId int64) (string, string) {
+	pduSession := ue.context.pduSession[pduSessionId]
+	if pduSession != nil {
+		return pduSession.sst, pduSession.sd
 	}
 
 	return "NSSAI was not selected", "NSSAI was not selected"
 }
 
-func (ue *GNBUe) pduSessionNssai(sst string, sd string) bool {
-
-	// Slice for PDU Session was marked with string active.
-	mov := ue.context.pduSession.slices
-	for i := 0; i < ue.context.pduSession.lenSlice; i++ {
-		if mov.sst == sst && mov.sd == sd {
-			mov.status = "active"
-			return true
+func (ue *GNBUe) isWantedNssai(sst string, sd string) bool {
+	if len(ue.context.allowedSst) == len(ue.context.allowedSd) {
+		for i := range ue.context.allowedSst {
+			if ue.context.allowedSst[i] == sst && ue.context.allowedSd[i] == sd {
+				return true
+			}
 		}
-		mov = mov.next
 	}
 
 	return false
@@ -233,28 +168,60 @@ func (ue *GNBUe) SetUnixSocket(conn net.Conn) {
 	ue.unixSocketConnection = conn
 }
 
-func (ue *GNBUe) GetPduSessionId() int64 {
-	return ue.context.pduSession.pduSessionId
+func (pduSession *PDUSession) GetPduSessionId() int64 {
+	return pduSession.pduSessionId
 }
 
-func (ue *GNBUe) SetPduSessionId(id int64) {
-	ue.context.pduSession.pduSessionId = id
+func (pduSession *PDUSession) GetTeidUplink() uint32 {
+	return pduSession.uplinkTeid
 }
 
-func (ue *GNBUe) GetTeidUplink() uint32 {
-	return ue.context.pduSession.uplinkTeid
+func (pduSession *PDUSession) SetTeidUplink(teidUplink uint32) {
+	pduSession.uplinkTeid = teidUplink
 }
 
-func (ue *GNBUe) SetTeidUplink(teidUplink uint32) {
-	ue.context.pduSession.uplinkTeid = teidUplink
+func (pduSession *PDUSession) GetTeidDownlink() uint32 {
+	return pduSession.downlinkTeid
 }
 
-func (ue *GNBUe) GetTeidDownlink() uint32 {
-	return ue.context.pduSession.downlinkTeid
+func (pduSession *PDUSession) SetTeidDownlink(teidDownlink uint32) {
+	pduSession.downlinkTeid = teidDownlink
 }
 
-func (ue *GNBUe) SetTeidDownlink(teidDownlink uint32) {
-	ue.context.pduSession.downlinkTeid = teidDownlink
+func (pduSession *PDUSession) GetQosId() int64 {
+	return pduSession.qosId
+}
+
+func (pduSession *PDUSession) GetFiveQI() int64 {
+	return pduSession.fiveQi
+}
+
+func (pduSession *PDUSession) GetPriorityARP() int64 {
+	return pduSession.priArp
+}
+
+func (pduSession *PDUSession) GetPduType() (valor string) {
+
+	switch pduSession.pduType {
+	case 0:
+		valor = "ipv4"
+	case 1:
+		valor = "ipv6"
+	case 2:
+		valor = "Ipv4Ipv6"
+	case 3:
+		valor = "ethernet"
+
+	}
+	return
+}
+
+func (pduSession *PDUSession) SetIp(ueIp uint8) {
+	pduSession.ranUeIP = net.IPv4(127, 0, 0, ueIp)
+}
+
+func (pduSession *PDUSession) GetIp() net.IP {
+	return pduSession.ranUeIP
 }
 
 func (ue *GNBUe) GetRanUeId() int64 {
@@ -265,21 +232,10 @@ func (ue *GNBUe) SetRanUeId(id int64) {
 	ue.ranUeNgapId = id
 }
 
-func (ue *GNBUe) SetIp(ueIp uint8) {
-	ue.context.pduSession.ranUeIP = net.IPv4(127, 0, 0, ueIp)
-}
-
-func (ue *GNBUe) GetIp() net.IP {
-	return ue.context.pduSession.ranUeIP
-
-}
-
 func (ue *GNBUe) GetAmfUeId() int64 {
-	// fmt.Println(amfUeId)
 	return ue.amfUeNgapId
 }
 
 func (ue *GNBUe) SetAmfUeId(amfUeId int64) {
-	// fmt.Println(amfUeId)
 	ue.amfUeNgapId = amfUeId
 }

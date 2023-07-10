@@ -9,11 +9,11 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/sender"
 )
 
-func SendPduSessionResourceSetupResponse(ue *context.GNBUe, gnb *context.GNBContext) {
+func SendPduSessionResourceSetupResponse(pduSession *context.PDUSession, ue *context.GNBUe, gnb *context.GNBContext) {
 
 	// send PDU Session Resource Setup Response.
 	gnbIp := gnb.GetGnbIpByData()
-	ngapMsg, err := pdu_session_management.PDUSessionResourceSetupResponse(ue, gnbIp)
+	ngapMsg, err := pdu_session_management.PDUSessionResourceSetupResponse(pduSession, ue, gnbIp)
 	if err != nil {
 		log.Fatal("[GNB][NGAP] Error sending PDU Session Resource Setup Response.")
 	}

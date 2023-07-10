@@ -200,10 +200,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	mcc, mnc := ue.GetUeMobility()
 	log.Info("[GNB][UE] UE Mobility Restrict --Plmn-- Mcc: ", mcc, " Mnc: ", mnc)
 	log.Info("[GNB][UE] UE Masked Imeisv: ", ue.GetUeMaskedImeiSv())
-	for i := 0; i < ue.GetLenSlice(); i++ {
-		sst, sd := ue.GetAllowedNssai(i)
-		log.Info("[GNB][UE] Allowed Nssai-- Sst: ", sst, " Sd: ", sd)
-	}
+	log.Info("[GNB][UE] Allowed Nssai-- Sst: ", sst, " Sd: ", sd)
 
 	// send NAS message to UE.
 	log.Info("[GNB][NAS][UE] Send Registration Accept.")
@@ -339,23 +336,24 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	}
 
 	// create PDU Session for GNB UE.
-	if ue.CreatePduSession(pduSessionId, sst, sd, pduSType, qosId, priArp, fiveQi, ulTeid) != "" {
+	pduSession, err := ue.CreatePduSession(pduSessionId, sst, sd, pduSType, qosId, priArp, fiveQi, ulTeid, gnb.GetUeTeid(ue))
+	if err != nil {
+		log.Error("[GNB][NGAP] Error in Pdu Session Resource Setup Request.")
+		log.Error("[GNB][NGAP] ", err)
 
-		log.Info("[GNB][NGAP] Error in Pdu Session Resource Setup Request. NSSAI informed was not found")
-	} else {
-
-		log.Info("[GNB][NGAP][UE] PDU Session was created with successful.")
-		log.Info("[GNB][NGAP][UE] PDU Session Id: ", ue.GetPduSessionId())
-		sst, sd := ue.GetSelectedNssai()
-		log.Info("[GNB][NGAP][UE] NSSAI Selected --- sst: ", sst, " sd: ", sd)
-		log.Info("[GNB][NGAP][UE] PDU Session Type: ", ue.GetPduType())
-		log.Info("[GNB][NGAP][UE] QOS Flow Identifier: ", ue.GetQosId())
-		log.Info("[GNB][NGAP][UE] Uplink Teid: ", ue.GetTeidUplink())
-		log.Info("[GNB][NGAP][UE] Downlink Teid: ", ue.GetTeidDownlink())
-		log.Info("[GNB][NGAP][UE] Non-Dynamic-5QI: ", ue.GetFiveQI())
-		log.Info("[GNB][NGAP][UE] Priority Level ARP: ", ue.GetPriorityARP())
-		log.Info("[GNB][NGAP][UE] UPF Address: ", fmt.Sprintf("%d.%d.%d.%d", upfAddress[0], upfAddress[1], upfAddress[2], upfAddress[3]), " :2152")
 	}
+	log.Info("[GNB][NGAP][UE] PDU Session was created with successful.")
+	log.Info("[GNB][NGAP][UE] PDU Session Id: ", pduSession.GetPduSessionId())
+	sst, sd = ue.GetSelectedNssai(pduSession.GetPduSessionId())
+	log.Info("[GNB][NGAP][UE] NSSAI Selected --- sst: ", sst, " sd: ", sd)
+	log.Info("[GNB][NGAP][UE] PDU Session Type: ", pduSession.GetPduType())
+	log.Info("[GNB][NGAP][UE] QOS Flow Identifier: ", pduSession.GetQosId())
+	log.Info("[GNB][NGAP][UE] Uplink Teid: ", pduSession.GetTeidUplink())
+	log.Info("[GNB][NGAP][UE] Downlink Teid: ", pduSession.GetTeidDownlink())
+	log.Info("[GNB][NGAP][UE] Non-Dynamic-5QI: ", pduSession.GetFiveQI())
+	log.Info("[GNB][NGAP][UE] Priority Level ARP: ", pduSession.GetPriorityARP())
+	log.Info("[GNB][NGAP][UE] UPF Address: ", fmt.Sprintf("%d.%d.%d.%d", upfAddress[0], upfAddress[1], upfAddress[2], upfAddress[3]), " :2152")
+
 
 	// get UPF ip.
 	if gnb.GetUpfIp() == "" {
@@ -367,12 +365,12 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	sender.SendToUe(ue, messageNas)
 
 	// send PDU Session Resource Setup Response.
-	trigger.SendPduSessionResourceSetupResponse(ue, gnb)
+	trigger.SendPduSessionResourceSetupResponse(pduSession, ue, gnb)
 
 	time.Sleep(20 * time.Millisecond)
 
     msg := &context.UEMessage{}
-    msg.NewUeMessage(gnb.GetN3GnbIp(), gnb.GetUpfIp(), fmt.Sprint(ue.GetTeidUplink()), fmt.Sprint(ue.GetTeidDownlink()))
+    msg.NewUeMessage(pduSessionId, gnb.GetN3GnbIp(), gnb.GetUpfIp(), fmt.Sprint(pduSession.GetTeidUplink()), fmt.Sprint(pduSession.GetTeidDownlink()))
 
     value, jsonErr := json.Marshal(msg)
     if jsonErr != nil {

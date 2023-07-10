@@ -37,22 +37,26 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 		numGnb = 1
 	}
 
-	ip := cfg.GNodeB.ControlIF.Ip
+	n2Ip := cfg.GNodeB.ControlIF.Ip
+	n3Ip := cfg.GNodeB.DataIF.Ip
 	for i := 1; i <= numGnb; i++ {
 		cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(i)
-		cfg.GNodeB.ControlIF.Ip = ip
-		cfg.GNodeB.DataIF.Ip = ip
+		cfg.GNodeB.ControlIF.Ip = n2Ip
+		cfg.GNodeB.DataIF.Ip = n3Ip
 
 		go gnb.InitGnb(cfg, &wg)
 		wg.Add(1)
 
-		ip, _ = incrementIP(ip, "0.0.0.0/0")
+		n2Ip, _ = incrementIP(n2Ip, "0.0.0.0/0")
+		n3Ip, _ = incrementIP(n3Ip, "0.0.0.0/0")
 	}
 
 	time.Sleep(1 * time.Second)
 
 	msin := cfg.Ue.Msin
 	cfg.Ue.TunnelEnabled = tunnelEnabled
+
+	ues := make([]chan string, numUes+1)
 
 	sigStop := make(chan os.Signal, 1)
 	signal.Notify(sigStop, os.Interrupt)
@@ -66,14 +70,21 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 			if dedicatedGnb {
 				cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(i)
 			}
-			go ue.RegistrationUe(cfg, uint8(i), timeBeforeDeregistration, &wg)
+
+			if ues[i] != nil {
+				ues[i] <- "kill"
+			}
+			ues[i] = make(chan string)
+
+			go ue.RegistrationUe(cfg, uint8(i), ues[i], timeBeforeDeregistration, &wg)
+
 			wg.Add(1)
 
 			time.Sleep(time.Duration(timeBetweenRegistration) * time.Millisecond)
 			select {
-				case <-sigStop:
-					stopSignal = false
-				default:
+			case <-sigStop:
+				stopSignal = false
+			default:
 			}
 		}
 		if !loop {

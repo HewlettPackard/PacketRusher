@@ -10,7 +10,7 @@ import (
 	"net"
 )
 
-func PDUSessionResourceSetupResponse(ue *context.GNBUe, ipv4 string) ([]byte, error) {
+func PDUSessionResourceSetupResponse(pduSession *context.PDUSession, ue *context.GNBUe, ipv4 string) ([]byte, error) {
 
 	// check hostname(Error in docker if using hostname)
 	nameIp, err := net.LookupHost(ipv4)
@@ -18,7 +18,7 @@ func PDUSessionResourceSetupResponse(ue *context.GNBUe, ipv4 string) ([]byte, er
 		return nil, err
 	}
 	message := buildPDUSessionResourceSetupResponseForRegistrationTest(ue.GetAmfUeId(), ue.GetRanUeId(),
-		nameIp[0], ue.GetPduSessionId(), ue.GetTeidDownlink(), ue.GetQosId())
+		nameIp[0], pduSession.GetPduSessionId(), pduSession.GetTeidDownlink(), pduSession.GetQosId())
 	return ngap.Encoder(message)
 }
 

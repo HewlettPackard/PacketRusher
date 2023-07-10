@@ -14,10 +14,7 @@ import (
 	"time"
 )
 
-func RegistrationUe(conf config.Config, id uint8, timeBeforeDeregistration int, wg *sync.WaitGroup) {
-
-	// wg := sync.WaitGroup{}
-
+func RegistrationUe(conf config.Config, id uint8, ueMgrChannel chan string, timeBeforeDeregistration int, wg *sync.WaitGroup) {
 	// new UE instance.
 	ue := &context.UEContext{}
 
@@ -38,14 +35,14 @@ func RegistrationUe(conf config.Config, id uint8, timeBeforeDeregistration int, 
 		conf.Ue.Snssai.Sd,
 		conf.Ue.TunnelEnabled,
 		id,
-        conf.GetSockPath())
+		conf.GetSockPath())
 
 	// starting communication with GNB and listen.
 	err := service.InitConn(ue)
 	if err != nil {
 		log.Fatal("Error in", err)
 	} else {
-			log.Info("[UE] UNIX/NAS service is running")
+		log.Info("[UE] UNIX/NAS service is running")
 		// wg.Add(1)
 	}
 
@@ -62,11 +59,15 @@ func RegistrationUe(conf config.Config, id uint8, timeBeforeDeregistration int, 
 	sigUe := make(chan os.Signal, 1)
 	signal.Notify(sigUe, os.Interrupt)
 
+
 	// Block until a signal is received.
-	<-sigUe
-	if ue.GetStateMM() == context.MM5G_REGISTERED {
-		trigger.InitDeregistration(ue)
-		time.Sleep(1 * time.Second)
+	select {
+	case <-sigUe:
+		if ue.GetStateMM() == context.MM5G_REGISTERED {
+			trigger.InitDeregistration(ue)
+			time.Sleep(1 * time.Second)
+		}
+	case _ = <-ueMgrChannel:
 	}
 	ue.Terminate()
 	wg.Done()
@@ -97,7 +98,7 @@ func RegistrationUeMonitor(conf config.Config,
 		conf.Ue.Snssai.Sd,
 		conf.Ue.TunnelEnabled,
 		id,
-        conf.GetSockPath())
+		conf.GetSockPath())
 
 	// starting communication with GNB and listen.
 	err := service.InitConn(ue)

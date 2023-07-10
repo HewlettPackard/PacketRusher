@@ -28,11 +28,17 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
         log.Fatal(jsonErr)
     }
 
-    // get UE GNB IP.
-    ue.SetGnbIp(net.ParseIP(msg.GetGnbIp()))
+	pduSession, err := ue.GetPduSession(uint8(msg.PDUSessionId))
+	if err != nil {
+		log.Error("[GNB][GTP] ", err)
+		return
+	}
 
-	ueGnbIp := ue.GetGnbIp()
-    ueIp := ue.GetIp()
+    // get UE GNB IP.
+	pduSession.SetGnbIp(net.ParseIP(msg.GetGnbIp()))
+
+	ueGnbIp := pduSession.GetGnbIp()
+    ueIp := pduSession.GetIp()
     msin := ue.GetMsin()
 	nameInf := fmt.Sprintf("val%s", msin)
 	vrfInf := fmt.Sprintf("vrf%s", msin)
@@ -87,7 +93,7 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
 	}
 
 	link, _ := netlink.LinkByName(nameInf)
-	ue.SetTunInterface(link)
+	pduSession.SetTunInterface(link)
 
 	if err := netlink.AddrAdd(link, addrTun); err != nil {
 		log.Fatal("[UE][DATA] Error in adding IP for virtual interface", err)
@@ -118,7 +124,7 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
 		log.Fatal("[UE][DATA] Unable to set interface VRF UP", err)
 		return
 	}
-	ue.SetVrfDevice(vrfDevice)
+	pduSession.SetVrfDevice(vrfDevice)
 
 	route := &netlink.Route{
 		Dst:       &net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)}, // default
@@ -132,7 +138,7 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
 	if err := netlink.RouteReplace(route); err != nil {
 		log.Fatal("[GNB][GTP] Unable to create Kernel Route ", err)
 	}
-	ue.SetTunRoute(route)
+	pduSession.SetTunRoute(route)
 
 	log.Info(fmt.Sprintf("[UE][GTP] Interface %s has successfully been configured for UE %s", nameInf, ueIp))
 	log.Info(fmt.Sprintf("[UE][GTP] You can do traffic for this UE using VRF %s, eg:", vrfInf))

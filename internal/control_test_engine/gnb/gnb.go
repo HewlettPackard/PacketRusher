@@ -63,8 +63,6 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) {
 	<-sigGnb
 	//gnb.Terminate()
 	wg.Done()
-	// os.Exit(0)
-
 }
 
 func InitGnbForUeLatency(conf config.Config, sigGnb chan bool, synch chan bool) {

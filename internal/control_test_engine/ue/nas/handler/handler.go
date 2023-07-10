@@ -7,8 +7,8 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
 	"my5G-RANTester/lib/nas"
-	"my5G-RANTester/lib/nas/nasMessage"
 	"time"
 )
 
@@ -105,16 +105,16 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 
 	// use the slice allowed by the network
 	// in PDU session request
-	if ue.PduSession.Snssai.Sst == 0 {
+	if ue.Snssai.Sst == 0 {
 
 		// check the allowed NSSAI received from the 5GC
 		snssai := message.RegistrationAccept.AllowedNSSAI.GetSNSSAIValue()
 
 		// update UE slice selected for PDU Session
-		ue.PduSession.Snssai.Sst = int32(snssai[1])
-		ue.PduSession.Snssai.Sd = fmt.Sprintf("0%x0%x0%x", snssai[2], snssai[3], snssai[4])
+		ue.Snssai.Sst = int32(snssai[1])
+		ue.Snssai.Sd = fmt.Sprintf("0%x0%x0%x", snssai[2], snssai[3], snssai[4])
 
-		log.Warn("[UE][NAS] ALLOWED NSSAI: SST: ", ue.PduSession.Snssai.Sst, " SD: ", ue.PduSession.Snssai.Sd)
+		log.Warn("[UE][NAS] ALLOWED NSSAI: SST: ", ue.Snssai.Sst, " SD: ", ue.Snssai.Sd)
 	}
 
 	log.Info("[UE][NAS] UE 5G GUTI: ", ue.Get5gGuti())
@@ -129,19 +129,10 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 	sender.SendToGnb(ue, registrationComplete)
 
 	// waiting receive Configuration Update Command.
-	time.Sleep(20 * time.Millisecond)
+	// TODO: Wait more properly for Configuration Update Command
+	time.Sleep(50 * time.Millisecond)
 
-	// getting ul nas transport and pduSession establishment request.
-	ulNasTransport, err := mm_5gs.UlNasTransport(ue, nasMessage.ULNASTransportRequestTypeInitialRequest)
-	if err != nil {
-		log.Fatal("[UE][NAS] Error sending ul nas transport and pdu session establishment request: ", err)
-	}
-
-	// change the sate of ue(SM).
-	ue.SetStateSM_PDU_SESSION_PENDING()
-
-	// sending to GNB
-	sender.SendToGnb(ue, ulNasTransport)
+	trigger.InitNewPduSession(ue)
 }
 
 func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message) {
@@ -156,14 +147,23 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message)
 	case nas.MsgTypePDUSessionEstablishmentAccept:
 		log.Info("[UE][NAS] Receiving PDU Session Establishment Accept")
 
-		// update PDU Session information.
-
 		// change the state of ue(SM)(PDU Session Active).
 		ue.SetStateSM_PDU_SESSION_ACTIVE()
 
 		// get UE ip
-		UeIp := payloadContainer.PDUSessionEstablishmentAccept.GetPDUAddressInformation()
-		ue.SetIp(UeIp)
+		pduSessionEstablishmentAccept := payloadContainer.PDUSessionEstablishmentAccept
+
+		// update PDU Session information.
+		pduSessionId := pduSessionEstablishmentAccept.GetPDUSessionID()
+		pduSession, err := ue.GetPduSession(pduSessionId)
+		if err != nil {
+			log.Error("[UE][NAS] Receiving PDU Session Establishment Accept about an unknown PDU Session, id: ", pduSessionId)
+			return
+		}
+
+		UeIp := pduSessionEstablishmentAccept.GetPDUAddressInformation()
+		pduSession.SetIp(UeIp)
+
 	default:
 		log.Error("[UE][NAS] Receiving Unknown Dl NAS Transport message!! ", payloadContainer.GsmHeader.GetMessageType())
 	}

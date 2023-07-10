@@ -3,6 +3,7 @@ package context
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -37,8 +38,13 @@ type UEContext struct {
 	StateSM    int
 	UnixConn   net.Conn
 	SockPath   string
-	PduSession PDUSession
+	PduSession [16]*PDUSession
 	amfInfo    Amf
+
+	// TODO: Modify config so you can configure these parameters per PDUSession
+	Dnn       string
+	Snssai    models.Snssai
+	TunnelEnabled bool
 }
 
 type Amf struct {
@@ -51,13 +57,9 @@ type PDUSession struct {
 	Id        uint8
 	ueIP      string
 	ueGnbIP   net.IP
-	Dnn       string
-	Snssai    models.Snssai
-	gatewayIP net.IP
 	tun       netlink.Link
 	routeTun  *netlink.Route
 	vrf   *netlink.Vrf
-	TunnelEnabled bool
 }
 
 type SECURITY struct {
@@ -105,23 +107,17 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	// added supi
 	ue.UeSecurity.Supi = fmt.Sprintf("imsi-%s%s%s", mcc, mnc, msin)
 
-	// added PDU Session id
-	ue.PduSession.Id = 1
-
 	// added UE id.
 	ue.id = id
     ue.SockPath = sockPath
 
 	// added network slice
-	ue.PduSession.Snssai.Sd = sd
-	ue.PduSession.Snssai.Sst = sst
+	ue.Snssai.Sd = sd
+	ue.Snssai.Sst = sst
 
 	// added Domain Network Name.
-	ue.PduSession.Dnn = dnn
-	ue.PduSession.TunnelEnabled = tunnelEnabled
-
-	// added gateway ip.
-	ue.PduSession.gatewayIP = net.ParseIP("127.0.0.2").To4()
+	ue.Dnn = dnn
+	ue.TunnelEnabled = tunnelEnabled
 
 	// encode mcc and mnc for mobileIdentity5Gs.
 	resu := ue.GetMccAndMncInOctets()
@@ -147,7 +143,27 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 	// added initial state for SM(INACTIVE)
 	ue.SetStateSM_PDU_SESSION_INACTIVE()
+}
 
+func (ue *UEContext) CreatePDUSession() (*PDUSession, error) {
+	pduSessionIndex := -1
+	for i, pduSession := range ue.PduSession {
+		if pduSession == nil {
+			pduSessionIndex = i
+			break
+		}
+	}
+
+	if pduSessionIndex == -1 {
+		return nil, errors.New("unable to create an additional PDU Session, we already created the max number of PDU Session")
+	}
+
+	pduSession := &PDUSession{}
+	pduSession.Id = uint8(pduSessionIndex + 1)
+
+	ue.PduSession[pduSessionIndex] = pduSession
+
+	return pduSession, nil
 }
 
 func (ue *UEContext) GetUeId() uint8 {
@@ -221,32 +237,59 @@ func (ue *UEContext) GetUnixConn() net.Conn {
 	return ue.UnixConn
 }
 
-func (ue *UEContext) SetIp(ip [12]uint8) {
-	ue.PduSession.ueIP = fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
-}
-
-func (ue *UEContext) GetIp() string {
-	return ue.PduSession.ueIP
-}
-
-func (ue *UEContext) GetGatewayIp() net.IP {
-	return ue.PduSession.gatewayIP
-}
-
-func (ue *UEContext) SetGnbIp(ip net.IP) {
-	ue.PduSession.ueGnbIP = ip
-}
-
-func (ue *UEContext) GetGnbIp() net.IP {
-	return ue.PduSession.ueGnbIP
-}
-
-func (ue *UEContext) GetPduSesssionId() uint8 {
-	return ue.PduSession.Id
-}
-
 func (ue *UEContext) IsTunnelEnabled() bool {
-	return ue.PduSession.TunnelEnabled
+	return ue.TunnelEnabled
+}
+
+func (ue *UEContext) GetPduSession(pduSessionid uint8) (*PDUSession, error) {
+	if pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil{
+		return nil, errors.New("Unable to find PDUSession ID " + string(pduSessionid))
+	}
+	return ue.PduSession[pduSessionid-1], nil
+}
+
+func (pduSession *PDUSession) SetIp(ip [12]uint8) {
+	pduSession.ueIP = fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
+}
+
+func (pduSession *PDUSession) GetIp() string {
+	return pduSession.ueIP
+}
+
+func (pduSession *PDUSession) SetGnbIp(ip net.IP) {
+	pduSession.ueGnbIP = ip
+}
+
+func (pduSession *PDUSession) GetGnbIp() net.IP {
+	return pduSession.ueGnbIP
+}
+
+func (pduSession *PDUSession) GetPduSesssionId() uint8 {
+	return pduSession.Id
+}
+
+func (pduSession *PDUSession) SetTunInterface(tun netlink.Link) {
+	pduSession.tun = tun
+}
+
+func (pduSession *PDUSession) GetTunInterface() netlink.Link {
+	return pduSession.tun
+}
+
+func (pduSession *PDUSession) SetTunRoute(route *netlink.Route) {
+	pduSession.routeTun = route
+}
+
+func (pduSession *PDUSession) GetTunRoute() *netlink.Route {
+	return pduSession.routeTun
+}
+
+func (pduSession *PDUSession) SetVrfDevice(vrf *netlink.Vrf) {
+	pduSession.vrf = vrf
+}
+
+func (pduSession *PDUSession) GetVrfDevice() *netlink.Vrf {
+	return pduSession.vrf
 }
 
 func (ue *UEContext) deriveSNN() string {
@@ -521,52 +564,32 @@ func SetUESecurityCapability(ue *UEContext) (UESecurityCapability *nasType.UESec
 	return
 }
 
-func (ue *UEContext) SetTunInterface(tun netlink.Link) {
-	ue.PduSession.tun = tun
-}
-
-func (ue *UEContext) GetTunInterface() netlink.Link {
-	return ue.PduSession.tun
-}
-
-func (ue *UEContext) SetTunRoute(route *netlink.Route) {
-	ue.PduSession.routeTun = route
-}
-
-func (ue *UEContext) GetTunRoute() *netlink.Route {
-	return ue.PduSession.routeTun
-}
-
-func (ue *UEContext) SetVrfDevice(vrf *netlink.Vrf) {
-	ue.PduSession.vrf = vrf
-}
-
-func (ue *UEContext) GetVrfDevice() *netlink.Vrf {
-	return ue.PduSession.vrf
-}
-
 func (ue *UEContext) Terminate() {
 
 	// clean all context of tun interface
-	ueTun := ue.GetTunInterface()
-	ueRoute := ue.GetTunRoute()
-	ueVrf := ue.GetVrfDevice()
+	for _, pduSession := range ue.PduSession {
+		if pduSession != nil {
+			ueTun := pduSession.GetTunInterface()
+			ueRoute := pduSession.GetTunRoute()
+			ueVrf := pduSession.GetVrfDevice()
+
+			if ueTun != nil {
+				_ = netlink.LinkSetDown(ueTun)
+				_ = netlink.LinkDel(ueTun)
+			}
+
+			if ueRoute != nil {
+				_ = netlink.RouteDel(ueRoute)
+			}
+
+			if ueVrf != nil {
+				_ = netlink.LinkSetDown(ueVrf)
+				_ = netlink.LinkDel(ueVrf)
+			}
+		}
+	}
+
 	ueUnix := ue.GetUnixConn()
-
-	if ueTun != nil {
-		_ = netlink.LinkSetDown(ueTun)
-		_ = netlink.LinkDel(ueTun)
-	}
-
-	if ueRoute != nil {
-		_ = netlink.RouteDel(ueRoute)
-	}
-
-	if ueVrf != nil {
-		_ = netlink.LinkSetDown(ueVrf)
-		_ = netlink.LinkDel(ueVrf)
-	}
-
 	if ueUnix != nil {
 		ueUnix.Close()
 	}

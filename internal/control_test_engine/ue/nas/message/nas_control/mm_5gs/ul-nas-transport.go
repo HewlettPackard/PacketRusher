@@ -13,9 +13,9 @@ import (
 	"my5G-RANTester/lib/openapi/models"
 )
 
-func UlNasTransport(ue *context.UEContext, requestType uint8) ([]byte, error) {
+func UlNasTransport(pduSession *context.PDUSession, ue *context.UEContext, requestType uint8) ([]byte, error) {
 
-	pdu := getUlNasTransport_PduSessionEstablishmentRequest(ue.PduSession.Id, requestType, ue.PduSession.Dnn, &ue.PduSession.Snssai)
+	pdu := getUlNasTransport_PduSessionEstablishmentRequest(pduSession.Id, requestType, ue.Dnn, &ue.Snssai)
 	if pdu == nil {
 		return nil, fmt.Errorf("Error encoding %s IMSI UE PduSession Establishment Request Msg", ue.UeSecurity.Supi)
 	}

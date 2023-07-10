@@ -1,17 +1,23 @@
 package context
 
 type UEMessage struct {
+	PDUSessionId int64
 	GnbIp string
 	UpfIp string
 	OTeid string
 	ITeid string
 }
 
-func (ue *UEMessage) NewUeMessage(GnbIp string, UpfIp string, OTeid string, ITeid string) {
+func (ue *UEMessage) NewUeMessage(PDUSessionId int64, GnbIp string, UpfIp string, OTeid string, ITeid string) {
+	ue.PDUSessionId = PDUSessionId
 	ue.GnbIp = GnbIp
 	ue.OTeid = OTeid
 	ue.UpfIp = UpfIp
 	ue.ITeid = ITeid
+}
+
+func (ue *UEMessage) GetPDUSessionId() int64 {
+	return ue.PDUSessionId
 }
 
 func (ue *UEMessage) GetGnbIp() string {
