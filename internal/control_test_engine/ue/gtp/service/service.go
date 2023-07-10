@@ -7,10 +7,12 @@ import (
     gnbContext 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	gtpLink "my5G-RANTester/internal/cmd/gogtp5g-link"
 	gtpTunnel "my5G-RANTester/internal/cmd/gogtp5g-tunnel"
+	"github.com/vishvananda/netlink"
 
     "encoding/json"
 	"net"
 	"time"
+	"strings"
 )
 
 func SetupGtpInterface(ue *context.UEContext, message []byte) {
@@ -22,10 +24,6 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
 
     // get UE GNB IP.
     ue.SetGnbIp(net.ParseIP(msg.GetGnbIp()))
-
-	// create interface for data plane.
-	/*gatewayIp := ue.GetGatewayIp()
-	*/
 
 	ueGnbIp := ue.GetGnbIp()
     ueIp := ue.GetIp()
@@ -43,48 +41,54 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
 
     time.Sleep(time.Second)
 
-    cmdAddFar := fmt.Sprintf("%s 1 --action 2", nameInf)
-    log.Info("[UE][GTP] ", cmdAddFar)
-    if err := gtpTunnel.CmdAddFAR([]string{nameInf, "1", "--action", "2"}); err != nil {
+	cmdAddFar := []string{nameInf, "1", "--action", "2"}
+	log.Info("[UE][GTP] ", strings.Join(cmdAddFar, " "))
+    if err := gtpTunnel.CmdAddFAR(cmdAddFar); err != nil {
         log.Fatal("[GNB][GTP] Unable to create FAR: ", err)
         return
     }
 
-    cmdAddFar = fmt.Sprintf("%s 2 --action 2 --hdr-creation 0 %s %s 2152", nameInf, msg.GetOTeid(), msg.GetUpfIp())
-    log.Info("[UE][GTP] ", cmdAddFar)
-    if err := gtpTunnel.CmdAddFAR([]string{nameInf, "2", "--action", "2", "--hdr-creation", "0", msg.GetOTeid(), msg.GetUpfIp(), "2152"}); err != nil {
+    cmdAddFar = []string{nameInf, "2", "--action", "2", "--hdr-creation", "0", msg.GetOTeid(), msg.GetUpfIp(), "2152"}
+	log.Info("[UE][GTP] ", strings.Join(cmdAddFar, " "))
+    if err := gtpTunnel.CmdAddFAR(cmdAddFar); err != nil {
         log.Fatal("[UE][GTP] Unable to create FAR ", err)
         return
     }
 
-    cmdAddPdr := fmt.Sprintf("%s 2 --pcd 1 --ue-ipv4 %s --far-id 1 --hdr-rm 1 --f-teid %s %s", nameInf, ueIp, msg.GetITeid(), msg.GetGnbIp())
-    log.Info("[UE][GTP] ", cmdAddPdr)
-    if err := gtpTunnel.CmdAddPDR([]string{nameInf, "1", "--pcd", "1", "--hdr-rm", "1", "--ue-ipv4", ueIp, "--f-teid", msg.GetITeid(), msg.GetGnbIp()}); err != nil {
+    cmdAddPdr := []string{nameInf, "1", "--pcd", "1", "--hdr-rm", "1", "--ue-ipv4", ueIp, "--f-teid", msg.GetITeid(), msg.GetGnbIp(), "--far-id", "1"}
+    log.Info("[UE][GTP] ", strings.Join(cmdAddPdr, " "))
+
+    if err := gtpTunnel.CmdAddPDR(cmdAddPdr); err != nil {
         log.Fatal("[GNB][GTP] Unable to create FAR: ", err)
         return
     }
 
-    cmdAddPdr = fmt.Sprintf("%s 2 --pcd 2 --ue-ipv4 %s --far-id 2", nameInf, ueIp)
-    log.Info("[UE][GTP] ", cmdAddPdr)
-//    if err := gtpTunnel.CmdAddPDR([]string{nameInf, "2", "--pcd", "2", "--ue-ipv4", ueIp, "--far-id", "2"}); err != nil {
-//        log.Fatal("[UE][GTP] Unable to create FAR ", err)
-//        return
-//    }
+    cmdAddPdr = []string{nameInf, "2", "--pcd", "2", "--ue-ipv4", ueIp, "--far-id", "2"}
+	log.Info("[UE][GTP] ", strings.Join(cmdAddPdr, " "))
+    if err := gtpTunnel.CmdAddPDR(cmdAddPdr); err != nil {
+        log.Fatal("[UE][GTP] Unable to create FAR ", err)
+        return
+    }
+
+	// add an IP address to a link device.
+	addrTun := &netlink.Addr{
+		IPNet: &net.IPNet{
+			IP:   net.ParseIP(ueIp).To4(),
+			Mask: net.IPv4Mask(255, 255, 255, 0),
+		},
+	}
+
+	link, _ := netlink.LinkByName(nameInf)
+	ue.SetTunInterface(link)
+
+	if err := netlink.AddrAdd(link, addrTun); err != nil {
+		log.Info("[UE][DATA] Error in adding IP for virtual interface", err)
+		return
+	}
 
     log.Info(fmt.Sprintf("[GNB][GTP] Interface %s has successfully been configured for UE %s", nameInf, ueIp))
 
-
 /*
-    // add a tunnel by giving GTP peer's IP, subscriber's IP,
-   if err := gnb.GetN3Plane().AddTunnelOverride(
-    	net.ParseIP("30.103.12.22"), // GTP peer's IP
-    	net.ParseIP("30.103.12.26"),     // subscriber's IP
-    	ue.GetTeidUplink(),                 // outgoing TEID
-    	ue.GetTeidDownlink(),                 // incoming TEID
-    ); err != nil {
-        log.Info("[GNB][NGAP][UE] Err: ", err)
-    }
-
 	route := &netlink.Route{
 		Dst:       &net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)}, // default
 		LinkIndex: gnb.GetN3Plane().KernelGTP.Link.Attrs().Index,            // dev gtp-<ECI>
@@ -104,19 +108,6 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
 
     if err := netlink.RuleAdd(rule); err != nil {
 	   log.Fatal("[GNB][GTP] Unable to create Kernel Route ", err)
-    }
-
-	// add an IP address to a link device.
-	addrTun := &netlink.Addr{
-		IPNet: &net.IPNet{
-			IP:   net.ParseIP("30.103.12.26").To4(),
-			Mask: net.IPv4Mask(255, 255, 255, 0),
-		},
-	}
-
-	if err := netlink.AddrAdd(gnb.GetN3Plane().KernelGTP.Link, addrTun); err != nil {
-		log.Info("[UE][DATA] Error in adding IP for virtual interface", err)
-		return
-	}*/
+    }*/
 
 }
