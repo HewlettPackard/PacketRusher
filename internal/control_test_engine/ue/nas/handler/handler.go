@@ -149,6 +149,11 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message)
 	//getting PDU Session establishment accept.
 	payloadContainer := nas_control.GetNasPduFromPduAccept(message)
 	if payloadContainer.GsmHeader.GetMessageType() == nas.MsgTypePDUSessionEstablishmentAccept {
+
+	}
+
+	switch payloadContainer.GsmHeader.GetMessageType() {
+	case nas.MsgTypePDUSessionEstablishmentAccept:
 		log.Info("[UE][NAS] Receiving PDU Session Establishment Accept")
 
 		// update PDU Session information.
@@ -159,5 +164,7 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message)
 		// get UE ip
 		UeIp := payloadContainer.PDUSessionEstablishmentAccept.GetPDUAddressInformation()
 		ue.SetIp(UeIp)
+	default:
+		log.Error("[UE][NAS] Receiving Unknown Dl NAS Transport message!! ", payloadContainer.GsmHeader.GetMessageType())
 	}
 }

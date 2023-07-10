@@ -2,17 +2,17 @@ package handler
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	_ "github.com/vishvananda/netlink"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap/ngapType"
-	_ "github.com/vishvananda/netlink"
-    _ "net"
-    "time"
-    "encoding/json"
+	_ "net"
+	"time"
 )
 
 func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAPPDU) {

@@ -48,6 +48,7 @@ type Config struct {
 			Sst int    `yaml: "sst"`
 			Sd  string `yaml: "sd"`
 		} `yaml: "snssai"`
+		TunnelEnabled bool `yaml: "tunnelenabled"`
 	} `yaml:"ue"`
 	AMF struct {
 		Ip   string `yaml: "ip"`

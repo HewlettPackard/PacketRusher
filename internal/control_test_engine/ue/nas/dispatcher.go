@@ -153,6 +153,10 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 	case nas.MsgTypeDLNASTransport:
 		// handler DL NAS Transport.
 		log.Info("[UE][NAS] Receive DL NAS Transport")
+		if m.DLNASTransport.Cause5GMM != nil {
+			log.Error("[UE][NAS] UE received a 5GMM Failure, cause: 0x", m.DLNASTransport.Cause5GMM.Octet)
+		}
+
 		handler.HandlerDlNasTransportPduaccept(ue, m)
 
 	case nas.MsgTypeRegistrationReject:

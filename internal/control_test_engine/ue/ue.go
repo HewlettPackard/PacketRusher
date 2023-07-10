@@ -36,6 +36,7 @@ func RegistrationUe(conf config.Config, id uint8, wg *sync.WaitGroup) {
 		conf.Ue.Dnn,
 		int32(conf.Ue.Snssai.Sst),
 		conf.Ue.Snssai.Sd,
+		conf.Ue.TunnelEnabled,
 		id,
         conf.GetSockPath())
 
@@ -86,6 +87,7 @@ func RegistrationUeMonitor(conf config.Config,
 		conf.Ue.Dnn,
 		int32(conf.Ue.Snssai.Sst),
 		conf.Ue.Snssai.Sd,
+		conf.Ue.TunnelEnabled,
 		id,
         conf.GetSockPath())
 

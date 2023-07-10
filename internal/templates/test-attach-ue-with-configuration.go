@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestAttachUeWithConfiguration() {
+func TestAttachUeWithConfiguration(tunnelEnabled bool) {
 
 	wg := sync.WaitGroup{}
 
@@ -18,6 +18,8 @@ func TestAttachUeWithConfiguration() {
 		//return nil
 		log.Fatal("Error in get configuration")
 	}
+
+	cfg.Ue.TunnelEnabled = tunnelEnabled
 
 	go gnb.InitGnb(cfg, &wg)
 

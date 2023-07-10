@@ -34,7 +34,7 @@ func init() {
 
 	spew.Config.Indent = "\t"
 
-	log.Info("my5G-RANTester version " + version)
+	log.Info("PacketRusher version " + version)
 }
 
 func main() {
@@ -44,26 +44,31 @@ func main() {
 			{
 				Name:    "ue",
 				Aliases: []string{"ue"},
-				Usage:   "Testing an ue attached with configuration",
+				Usage:   "Launch a gNB and a UE with a PDU Session\n",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{Name: "disableTunnel", Aliases: []string{"t"}, Usage: "Disable the creation of the GTP-U tunnel interface."},
+				},
 				Action: func(c *cli.Context) error {
 					name := "Testing an ue attached with configuration"
 					cfg := config.Data
+					tunnelEnabled := !c.Bool("disableTunnel")
 
 					log.Info("---------------------------------------")
 					log.Info("[TESTER] Starting test function: ", name)
 					log.Info("[TESTER][UE] Number of UEs: ", 1)
+					log.Info("[TESTER][UE] disableTunnel is ", !tunnelEnabled)
 					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
 					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
 					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
 					log.Info("---------------------------------------")
-					templates.TestAttachUeWithConfiguration()
+					templates.TestAttachUeWithConfiguration(tunnelEnabled)
 					return nil
 				},
 			},
 			{
 				Name:    "gnb",
 				Aliases: []string{"gnb"},
-				Usage:   "Testing an gnb attached with configuration",
+				Usage:   "Launch only a gNB",
 				Action: func(c *cli.Context) error {
 					name := "Testing an gnb attached with configuration"
 					cfg := config.Data
@@ -80,12 +85,15 @@ func main() {
 				},
 			},
 			{
-				Name:    "load-test",
-				Aliases: []string{"load-test"},
+				Name:    "multi-ue-pdu",
+				Aliases: []string{"multi-ue"},
 				Usage: "\nLoad endurance stress tests.\n" +
-					"Example for testing multiple UEs: load-test -n 5 \n",
+					"Example for testing multiple UEs: multi-ue -n 5 \n" +
+					"This test case will launch N UEs.",
 				Flags: []cli.Flag{
 					&cli.IntFlag{Name: "number-of-ues", Value: 1, Aliases: []string{"n"}},
+					&cli.BoolFlag{Name: "tunnel", Aliases: []string{"t"}, Usage: "Enable the creation of the GTP-U tunnel interface."},
+					&cli.BoolFlag{Name: "dedicatedGnb", Aliases: []string{"d"}, Usage: "Enable the creation of a dedicated gNB per UE. Require one IP on N2/N3 per gNB"},
 				},
 				Action: func(c *cli.Context) error {
 					var numUes int
@@ -106,7 +114,7 @@ func main() {
 					log.Info("[TESTER][GNB] gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
 					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
 					log.Info("---------------------------------------")
-					templates.TestMultiUesInQueue(numUes)
+					templates.TestMultiUesInQueue(numUes, c.Bool("tunnel"), c.Bool("dedicatedGnb"))
 
 					return nil
 				},

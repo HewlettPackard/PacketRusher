@@ -6,11 +6,13 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas"
 	"net"
+	"os"
 )
 
 func InitServer(gnb *context.GNBContext) error {
 
 	// initiated GNB server with unix sockets.
+	_ = os.Remove(gnb.GetSockPath())
 	ln, err := net.Listen("unix", gnb.GetSockPath())
 	if err != nil {
 		fmt.Errorf("Listen error: ", err)

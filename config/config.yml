@@ -1,21 +1,21 @@
 gnodeb:
   controlif:
-    ip: "30.103.11.21"
+    ip: "192.168.11.13"
     port: 9487
   dataif:
-    ip: "30.103.11.21"
+    ip: "192.168.11.13"
     port: 2152
   plmnlist:
     mcc: "999"
     mnc: "27"
     tac: "000001"
-    gnbid: "000001"
+    gnbid: "000008"
   slicesupportlist:
     sst: "01"
     sd: "000001"
 
 ue:
-  msin: "0000000100"
+  msin: "0000000120"
   key: "00112233445566778899AABBCCDDEEFF"
   opc: "00112233445566778899AABBCCDDEEFF"
   amf: "8000"
@@ -27,17 +27,17 @@ ue:
   snssai:
     sst: 01
     sd: "000001"
-  integrity:
-    nia0: true
-    nia1: true
-    nia2: true
-  ciphering:
-    nea0: true
-    nea1: true
-    nea2: true
-  test: "test-5g-guti"
+#  integrity:
+#    nia0: true
+#    nia1: true
+#    nia2: true
+#  ciphering:
+#    nea0: true
+#    nea1: true
+#    nea2: true
+#  test: "test-5g-guti"
 amfif:
-  ip: "30.103.11.20"
+  ip: "192.168.11.10"
   port: 38412
 logs:
     level: 4

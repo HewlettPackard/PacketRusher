@@ -57,6 +57,7 @@ type PDUSession struct {
 	tun       netlink.Link
 	routeTun  *netlink.Route
 	vrf   *netlink.Vrf
+	TunnelEnabled bool
 }
 
 type SECURITY struct {
@@ -80,7 +81,7 @@ type SECURITY struct {
 func (ue *UEContext) NewRanUeContext(msin string,
 	cipheringAlg, integrityAlg uint8,
 	k, opc, op, amf, sqn, mcc, mnc, dnn string,
-	sst int32, sd string, id uint8, sockPath string) {
+	sst int32, sd string, tunnelEnabled bool, id uint8, sockPath string) {
 
 	// added SUPI.
 	ue.UeSecurity.Msin = msin
@@ -117,6 +118,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 	// added Domain Network Name.
 	ue.PduSession.Dnn = dnn
+	ue.PduSession.TunnelEnabled = tunnelEnabled
 
 	// added gateway ip.
 	ue.PduSession.gatewayIP = net.ParseIP("127.0.0.2").To4()
@@ -241,6 +243,10 @@ func (ue *UEContext) GetGnbIp() net.IP {
 
 func (ue *UEContext) GetPduSesssionId() uint8 {
 	return ue.PduSession.Id
+}
+
+func (ue *UEContext) IsTunnelEnabled() bool {
+	return ue.PduSession.TunnelEnabled
 }
 
 func (ue *UEContext) deriveSNN() string {
