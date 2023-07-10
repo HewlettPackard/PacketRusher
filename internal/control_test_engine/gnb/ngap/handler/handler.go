@@ -8,6 +8,8 @@ import (
 	_ "github.com/vishvananda/netlink"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
+	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_context_management"
+	senderNgap "my5G-RANTester/internal/control_test_engine/gnb/ngap/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap/ngapType"
@@ -574,4 +576,49 @@ func HandlerNgSetupFailure(amf *context.GNBAmf, gnb *context.GNBContext, message
 	amf.SetStateInactive()
 
 	log.Info("[GNB][NGAP] AMF is inactive")
+}
+
+func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+
+	valueMessage := message.InitiatingMessage.Value.UEContextReleaseCommand
+
+	var cause *ngapType.CauseNas
+	var ue_id *ngapType.RANUENGAPID
+
+	for _, ies := range valueMessage.ProtocolIEs.List {
+
+		switch ies.Id.Value {
+
+		case ngapType.ProtocolIEIDUENGAPIDs:
+			ue_id = &ies.Value.UENGAPIDs.UENGAPIDPair.RANUENGAPID
+
+		case ngapType.ProtocolIEIDCause:
+
+			switch ies.Value.Cause.Present {
+			case ngapType.CausePresentNas:
+				cause = ies.Value.Cause.Nas
+
+			default:
+				// TODO treatment error
+
+			}
+		}
+	}
+
+	ue, err := gnb.GetGnbUe(ue_id.Value)
+	if err != nil {
+		log.Error("[GNB][AMF] AMF is trying to free the context of an unknown UE")
+		return
+	}
+	gnb.DeleteGnBUe(ue)
+
+	// Send UEContextReleaseComplete
+	conn := ue.GetSCTP()
+	ngapMsg, _ := ue_context_management.UeContextReleaseComplete(ue)
+	err = senderNgap.SendToAmF(ngapMsg, conn)
+	if err != nil {
+		log.Fatal("[GNB][AMF] Error sending UE Release Context Complete: ", err)
+	}
+
+	log.Info("[GNB][NGAP] Releasing UE Context, cause: ", cause.Value)
 }

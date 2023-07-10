@@ -27,7 +27,7 @@ func TestAttachUeWithConfiguration(tunnelEnabled bool) {
 
 	time.Sleep(1 * time.Second)
 
-	go ue.RegistrationUe(cfg, 1, &wg)
+	go ue.RegistrationUe(cfg, 1, 0, &wg)
 
 	wg.Add(1)
 

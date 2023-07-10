@@ -61,7 +61,7 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) {
 
 	// Block until a signal is received.
 	<-sigGnb
-	gnb.Terminate()
+	//gnb.Terminate()
 	wg.Done()
 	// os.Exit(0)
 

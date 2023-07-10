@@ -106,7 +106,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	ue.UeSecurity.Supi = fmt.Sprintf("imsi-%s%s%s", mcc, mnc, msin)
 
 	// added PDU Session id
-	ue.PduSession.Id = id
+	ue.PduSession.Id = 1
 
 	// added UE id.
 	ue.id = id

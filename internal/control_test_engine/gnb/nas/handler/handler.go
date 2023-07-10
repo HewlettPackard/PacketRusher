@@ -43,6 +43,15 @@ func HandlerUeOngoing(ue *context.GNBUe, message []byte, gnb *context.GNBContext
 
 func HandlerUeReady(ue *context.GNBUe, message []byte, gnb *context.GNBContext) {
 
-	// receive UE ip or other messages.
+	ngap, err := nas_transport.SendUplinkNasTransport(message, ue, gnb)
+	if err != nil {
+		log.Info("[GNB][NGAP] Error making Uplink Nas Transport: ", err)
+	}
 
+	// Send Uplink Nas Transport
+	conn := ue.GetSCTP()
+	err = sender.SendToAmF(ngap, conn)
+	if err != nil {
+		log.Info("[GNB][AMF] Error sending Uplink Nas Transport: ", err)
+	}
 }

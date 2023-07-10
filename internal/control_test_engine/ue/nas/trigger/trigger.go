@@ -1,6 +1,7 @@
 package trigger
 
 import (
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
@@ -8,6 +9,7 @@ import (
 )
 
 func InitRegistration(ue *context.UEContext) {
+	log.Info("[UE] Initiating Registration")
 
 	// registration procedure started.
 	registrationRequest := mm_5gs.GetRegistrationRequest(
@@ -19,6 +21,19 @@ func InitRegistration(ue *context.UEContext) {
 
 	// send to GNB.
 	sender.SendToGnb(ue, registrationRequest)
+
+	// change the state of ue for deregistered
+	ue.SetStateMM_DEREGISTERED()
+}
+
+func InitDeregistration(ue *context.UEContext) {
+	log.Info("[UE] Initiating Deregistration")
+
+	// registration procedure started.
+	deregistrationRequest := mm_5gs.GetDeregistrationRequest(ue)
+
+	// send to GNB.
+	sender.SendToGnb(ue, deregistrationRequest)
 
 	// change the state of ue for deregistered
 	ue.SetStateMM_DEREGISTERED()

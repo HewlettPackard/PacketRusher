@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func RegistrationUe(conf config.Config, id uint8, wg *sync.WaitGroup) {
+func RegistrationUe(conf config.Config, id uint8, timeBeforeDeregistration int, wg *sync.WaitGroup) {
 
 	// wg := sync.WaitGroup{}
 
@@ -45,13 +45,17 @@ func RegistrationUe(conf config.Config, id uint8, wg *sync.WaitGroup) {
 	if err != nil {
 		log.Fatal("Error in", err)
 	} else {
-		log.Info("[UE] UNIX/NAS service is running")
+			log.Info("[UE] UNIX/NAS service is running")
 		// wg.Add(1)
 	}
 
 	// registration procedure started.
 	trigger.InitRegistration(ue)
 
+	if timeBeforeDeregistration != 0 {
+		time.Sleep(time.Duration(timeBeforeDeregistration) * time.Millisecond)
+		trigger.InitDeregistration(ue)
+	}
 	// wg.Wait()
 
 	// control the signals
@@ -60,6 +64,10 @@ func RegistrationUe(conf config.Config, id uint8, wg *sync.WaitGroup) {
 
 	// Block until a signal is received.
 	<-sigUe
+	if ue.GetStateMM() == context.MM5G_REGISTERED {
+		trigger.InitDeregistration(ue)
+		time.Sleep(1 * time.Second)
+	}
 	ue.Terminate()
 	wg.Done()
 	// os.Exit(0)

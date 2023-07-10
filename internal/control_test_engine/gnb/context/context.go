@@ -142,16 +142,10 @@ func (gnb *GNBContext) GetN3GnbIp() string {
 	return gnb.dataInfo.gnbIp
 }
 
-func (gnb *GNBContext) DeleteGnBUeByTeid(teid uint32) {
-	gnb.teidPool.Delete(teid)
-}
-
-func (gnb *GNBContext) DeleteGnBUe(ranUeId int64) {
-	gnb.uePool.Delete(ranUeId)
-}
-
-func (gnb *GNBContext) DeleteGnBUeByIp(ip string) {
-	gnb.ueIpPool.Delete(ip)
+func (gnb *GNBContext) DeleteGnBUe(ue *GNBUe) {
+	gnb.uePool.Delete(ue.ranUeNgapId)
+	gnb.ueIpPool.Delete(ue.GetIp().String())
+	gnb.teidPool.Delete(ue.context.pduSession.downlinkTeid)
 }
 
 func (gnb *GNBContext) GetGnbUe(ranUeId int64) (*GNBUe, error) {

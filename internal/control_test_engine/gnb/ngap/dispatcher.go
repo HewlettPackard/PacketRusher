@@ -44,6 +44,14 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 			// handler NGAP PDU Session Resource Setup Request.
 			log.Info("[GNB][NGAP] Receive PDU Session Resource Setup Request")
 			handler.HandlerPduSessionResourceSetupRequest(gnb, ngapMsg)
+
+		case ngapType.ProcedureCodeUEContextRelease:
+			// handler NGAP PDU Session Resource Setup Request.
+			log.Info("[GNB][NGAP] Receive UE Context Release Command")
+			handler.HandlerUeContextReleaseCommand(gnb, ngapMsg)
+
+		default:
+			log.Info("[GNB][NGAP] Received unknown NGAP message")
 		}
 
 	case ngapType.NGAPPDUPresentSuccessfulOutcome:
@@ -55,6 +63,8 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 			log.Info("[GNB][NGAP] Receive Ng Setup Response")
 			handler.HandlerNgSetupResponse(amf, gnb, ngapMsg)
 
+		default:
+			log.Info("[GNB][NGAP] Received unknown NGAP message")
 		}
 
 	case ngapType.NGAPPDUPresentUnsuccessfulOutcome:
@@ -66,6 +76,8 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 			log.Info("[GNB][NGAP] Receive Ng Setup Failure")
 			handler.HandlerNgSetupFailure(amf, gnb, ngapMsg)
 
+		default:
+			log.Info("[GNB][NGAP] Received unknown NGAP message")
 		}
 	}
 }
