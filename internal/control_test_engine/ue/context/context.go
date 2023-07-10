@@ -56,7 +56,7 @@ type PDUSession struct {
 	gatewayIP net.IP
 	tun       netlink.Link
 	routeTun  *netlink.Route
-	ruleTun   *netlink.Rule
+	vrf   *netlink.Vrf
 }
 
 type SECURITY struct {
@@ -531,12 +531,12 @@ func (ue *UEContext) GetTunRoute() *netlink.Route {
 	return ue.PduSession.routeTun
 }
 
-func (ue *UEContext) SetTunRule(rule *netlink.Rule) {
-	ue.PduSession.ruleTun = rule
+func (ue *UEContext) SetVrfDevice(vrf *netlink.Vrf) {
+	ue.PduSession.vrf = vrf
 }
 
-func (ue *UEContext) GetTunRule() *netlink.Rule {
-	return ue.PduSession.ruleTun
+func (ue *UEContext) GetVrfDevice() *netlink.Vrf {
+	return ue.PduSession.vrf
 }
 
 func (ue *UEContext) Terminate() {
@@ -544,7 +544,7 @@ func (ue *UEContext) Terminate() {
 	// clean all context of tun interface
 	ueTun := ue.GetTunInterface()
 	ueRoute := ue.GetTunRoute()
-	ueRule := ue.GetTunRule()
+	ueVrf := ue.GetVrfDevice()
 	ueUnix := ue.GetUnixConn()
 
 	if ueTun != nil {
@@ -556,8 +556,9 @@ func (ue *UEContext) Terminate() {
 		_ = netlink.RouteDel(ueRoute)
 	}
 
-	if ueRule != nil {
-		_ = netlink.RuleDel(ueRule)
+	if ueVrf != nil {
+		_ = netlink.LinkSetDown(ueVrf)
+		_ = netlink.LinkDel(ueVrf)
 	}
 
 	if ueUnix != nil {

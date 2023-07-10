@@ -30,6 +30,7 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
     ueIp := ue.GetIp()
     msin := ue.GetMsin()
 	nameInf := fmt.Sprintf("val%s", msin)
+	vrfInf := fmt.Sprintf("vrf%s", msin)
 
    _ = gtpLink.CmdDel(nameInf)
 
@@ -76,7 +77,7 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
 	addrTun := &netlink.Addr{
 		IPNet: &net.IPNet{
 			IP:   netUeIp.To4(),
-			Mask: net.IPv4Mask(255, 255, 255, 255),
+			Mask: net.IPv4Mask(255, 255, 255, 0),
 		},
 	}
 
@@ -89,7 +90,6 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
 	}
 
 	tableId, _ := strconv.Atoi(msg.GetOTeid())
-
 	route := &netlink.Route{
 		Dst:       &net.IPNet{IP: net.ParseIP("30.103.12.0").To4(), Mask: net.CIDRMask(24, 32)}, // default
 		LinkIndex: link.Attrs().Index,            // dev gtp-<ECI>
@@ -104,23 +104,30 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
 	}
 	ue.SetTunRoute(route)
 
-    rule := netlink.NewRule()
-    rule.IifName = nameInf
-    rule.Table = tableId
-
-    if err := netlink.RuleAdd(rule); err != nil {
-	   log.Fatal("[GNB][GTP] Unable to create Kernel Route ", err)
-    }
-
-	rule = netlink.NewRule()
-	rule.IifName = nameInf
-	rule.Src = &net.IPNet{IP: netUeIp, Mask: net.CIDRMask(0, 32)}
-	rule.Table = tableId
-
-	if err := netlink.RuleAdd(rule); err != nil {
-		log.Fatal("[GNB][GTP] Unable to create Kernel Route ", err)
+	vrfDevice := &netlink.Vrf{
+		LinkAttrs: netlink.LinkAttrs{
+			Name: vrfInf,
+		},
+		Table: uint32(tableId),
 	}
-	ue.SetTunRule(rule)
 
-	log.Info(fmt.Sprintf("[GNB][GTP] Interface %s has successfully been configured for UE %s", nameInf, ueIp))
+	if err := netlink.LinkAdd(vrfDevice); err != nil {
+		log.Info("[UE][DATA] Unable to create VRF for UE", err)
+		return
+	}
+
+	if err := netlink.LinkSetMaster(link, vrfDevice); err != nil {
+		log.Info("[UE][DATA] Unable to set interface as slave of VRF interface", err)
+		return
+	}
+
+	if err := netlink.LinkSetUp(vrfDevice); err != nil {
+		log.Info("[UE][DATA] Unable to set interface VRF UP", err)
+		return
+	}
+	ue.SetVrfDevice(vrfDevice)
+
+	log.Info(fmt.Sprintf("[UE][GTP] Interface %s has successfully been configured for UE %s", nameInf, ueIp))
+	log.Info(fmt.Sprintf("[UE][GTP] You can do traffic for this UE using VRF %s, eg:", vrfInf))
+	log.Info(fmt.Sprintf("[UE][GTP] sudo ip vrf exec %s iperf3 -c IPERF_SERVER -p PORT -t 9000", vrfInf))
 }
