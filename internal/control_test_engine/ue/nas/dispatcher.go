@@ -148,7 +148,7 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 
 	case nas.MsgTypeConfigurationUpdateCommand:
 		log.Info("[UE][NAS] Receive Configuration Update Command")
-		// handler Configuration Update Command.
+		log.Info("[UE][NAS] ", ue.GetSupi(), " was succesfully registered")
 
 	case nas.MsgTypeDLNASTransport:
 		// handler DL NAS Transport.

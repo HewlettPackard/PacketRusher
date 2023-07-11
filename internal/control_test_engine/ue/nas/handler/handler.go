@@ -7,7 +7,6 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
-	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
 	"my5G-RANTester/lib/nas"
 	"time"
 )
@@ -131,17 +130,12 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 	// waiting receive Configuration Update Command.
 	// TODO: Wait more properly for Configuration Update Command
 	time.Sleep(50 * time.Millisecond)
-
-	trigger.InitNewPduSession(ue)
 }
 
 func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message) {
 
 	//getting PDU Session establishment accept.
 	payloadContainer := nas_control.GetNasPduFromPduAccept(message)
-	if payloadContainer.GsmHeader.GetMessageType() == nas.MsgTypePDUSessionEstablishmentAccept {
-
-	}
 
 	switch payloadContainer.GsmHeader.GetMessageType() {
 	case nas.MsgTypePDUSessionEstablishmentAccept:

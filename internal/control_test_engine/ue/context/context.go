@@ -16,6 +16,7 @@ import (
 	"net"
 	"reflect"
 	"regexp"
+	"sync"
 )
 
 // 5GMM main states in the UE.
@@ -45,6 +46,9 @@ type UEContext struct {
 	Dnn       string
 	Snssai    models.Snssai
 	TunnelEnabled bool
+
+	// Sync primitive
+	stateChange *sync.Cond
 }
 
 type Amf struct {
@@ -84,6 +88,8 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	cipheringAlg, integrityAlg uint8,
 	k, opc, op, amf, sqn, mcc, mnc, dnn string,
 	sst int32, sd string, tunnelEnabled bool, id uint8, sockPath string) {
+
+	ue.stateChange = &sync.Cond{L: &sync.Mutex{}}
 
 	// added SUPI.
 	ue.UeSecurity.Msin = msin
@@ -186,47 +192,91 @@ func (ue *UEContext) GetSupi() string {
 }
 
 func (ue *UEContext) SetStateSM_PDU_SESSION_INACTIVE() {
+	ue.stateChange.L.Lock()
+	defer ue.stateChange.L.Unlock()
 	ue.StateSM = SM5G_PDU_SESSION_INACTIVE
+	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) SetStateSM_PDU_SESSION_ACTIVE() {
+	ue.stateChange.L.Lock()
+	defer ue.stateChange.L.Unlock()
 	ue.StateSM = SM5G_PDU_SESSION_ACTIVE
+	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) SetStateSM_PDU_SESSION_PENDING() {
+	ue.stateChange.L.Lock()
+	defer ue.stateChange.L.Unlock()
 	ue.StateSM = SM5G_PDU_SESSION_ACTIVE_PENDING
+	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) SetStateMM_DEREGISTERED_INITIATED() {
+	ue.stateChange.L.Lock()
+	defer ue.stateChange.L.Unlock()
 	ue.StateMM = MM5G_DEREGISTERED_INIT
+	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) SetStateMM_MM5G_SERVICE_REQ_INIT() {
+	ue.stateChange.L.Lock()
+	defer ue.stateChange.L.Unlock()
 	ue.StateMM = MM5G_SERVICE_REQ_INIT
+	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) SetStateMM_REGISTERED_INITIATED() {
+	ue.stateChange.L.Lock()
+	defer ue.stateChange.L.Unlock()
 	ue.StateMM = MM5G_REGISTERED_INITIATED
+	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) SetStateMM_REGISTERED() {
+	ue.stateChange.L.Lock()
+	defer ue.stateChange.L.Unlock()
 	ue.StateMM = MM5G_REGISTERED
+	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) SetStateMM_NULL() {
+	ue.stateChange.L.Lock()
+	defer ue.stateChange.L.Unlock()
 	ue.StateMM = MM5G_NULL
+	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) SetStateMM_DEREGISTERED() {
+	ue.stateChange.L.Lock()
+	defer ue.stateChange.L.Unlock()
 	ue.StateMM = MM5G_DEREGISTERED
+	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) GetStateSM() int {
-	return ue.StateSM
+	var state int
+	ue.stateChange.L.Lock()
+	state = ue.StateSM
+	ue.stateChange.L.Unlock()
+	return state
 }
 
 func (ue *UEContext) GetStateMM() int {
-	return ue.StateMM
+	var state int
+	ue.stateChange.L.Lock()
+	state = ue.StateMM
+	ue.stateChange.L.Unlock()
+	return state
+}
+
+func (ue *UEContext) WaitOnStateMM() int {
+	var state int
+	ue.stateChange.L.Lock()
+	ue.stateChange.Wait()
+	state = ue.StateMM
+	ue.stateChange.L.Unlock()
+	return state
 }
 
 func (ue *UEContext) SetUnixConn(conn net.Conn) {

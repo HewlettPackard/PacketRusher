@@ -3,6 +3,7 @@ package ue
 import (
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/service"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
@@ -14,7 +15,7 @@ import (
 	"time"
 )
 
-func RegistrationUe(conf config.Config, id uint8, ueMgrChannel chan string, timeBeforeDeregistration int, wg *sync.WaitGroup) {
+func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMessage, wg *sync.WaitGroup) *context.UEContext {
 	// new UE instance.
 	ue := &context.UEContext{}
 
@@ -37,42 +38,48 @@ func RegistrationUe(conf config.Config, id uint8, ueMgrChannel chan string, time
 		id,
 		conf.GetSockPath())
 
-	// starting communication with GNB and listen.
-	err := service.InitConn(ue)
-	if err != nil {
-		log.Fatal("Error in", err)
-	} else {
-		log.Info("[UE] UNIX/NAS service is running")
-		// wg.Add(1)
-	}
-
-	// registration procedure started.
-	trigger.InitRegistration(ue)
-
-	if timeBeforeDeregistration != 0 {
-		time.Sleep(time.Duration(timeBeforeDeregistration) * time.Millisecond)
-		trigger.InitDeregistration(ue)
-	}
-	// wg.Wait()
-
-	// control the signals
-	sigUe := make(chan os.Signal, 1)
-	signal.Notify(sigUe, os.Interrupt)
-
-
-	// Block until a signal is received.
-	select {
-	case <-sigUe:
-		if ue.GetStateMM() == context.MM5G_REGISTERED {
-			trigger.InitDeregistration(ue)
-			time.Sleep(1 * time.Second)
+	go func() {
+		// starting communication with GNB and listen.
+		err := service.InitConn(ue)
+		if err != nil {
+			log.Fatal("Error in", err)
+		} else {
+			log.Info("[UE] UNIX/NAS service is running")
+			// wg.Add(1)
 		}
-	case _ = <-ueMgrChannel:
-	}
-	ue.Terminate()
-	wg.Done()
-	// os.Exit(0)
 
+		// control the signals
+		sigUe := make(chan os.Signal, 1)
+		signal.Notify(sigUe, os.Interrupt)
+
+		// Block until a signal is received.
+		loop := true
+		for loop {
+			select {
+			case <-sigUe:
+				if ue.GetStateMM() == context.MM5G_REGISTERED {
+					trigger.InitDeregistration(ue)
+					time.Sleep(1 * time.Second)
+				}
+				loop = false
+			case msg := <-ueMgrChannel:
+				switch msg {
+				case procedures.Registration:
+					trigger.InitRegistration(ue)
+				case procedures.Deregistration:
+					trigger.InitDeregistration(ue)
+				case procedures.NewPDUSession:
+					trigger.InitNewPduSession(ue)
+				case procedures.Kill:
+					loop = false
+				}
+			}
+		}
+		ue.Terminate()
+		wg.Done()
+	}()
+
+	return ue
 }
 
 func RegistrationUeMonitor(conf config.Config,

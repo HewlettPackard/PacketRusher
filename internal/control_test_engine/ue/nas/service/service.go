@@ -1,3 +1,6 @@
+// Package service
+// TODO: Replace Unix sockets between UE and gNB with Go channels
+// TODO: Instead of just passing the NAS-PDU between UE and gNB, it would be great to pass a Msg struct with more context (eg. enter/exit idle scenarios, handover scenarios...)
 package service
 
 import (

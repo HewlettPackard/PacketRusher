@@ -1,3 +1,8 @@
+// Package trigger
+// Triggers are the basic building block of test scenarios.
+// They allow to trigger NAS procedures by the UE, eg: registration, PDU Session creation...
+// Replies from the AMF are handled in the global handler.
+// TODO: Maybe it would be better to have a NAS state machine per trigger? -> It would allow more easily for negative testing
 package trigger
 
 import (

@@ -5,7 +5,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
+	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue"
+	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"net"
 	"os"
 	"os/signal"
@@ -37,6 +39,11 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 		numGnb = 1
 	}
 
+	// Each gNB have their own IP address on both N2 and N3
+	// TODO: Limitation for now, these IPs must be sequential, eg:
+	// gnb[0].n2_ip = 192.168.2.10, gnb[0].n3_ip = 192.168.3.10
+	// gnb[1].n2_ip = 192.168.2.11, gnb[1].n3_ip = 192.168.3.11
+	// ...
 	n2Ip := cfg.GNodeB.ControlIF.Ip
 	n3Ip := cfg.GNodeB.DataIF.Ip
 	for i := 1; i <= numGnb; i++ {
@@ -47,39 +54,74 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 		go gnb.InitGnb(cfg, &wg)
 		wg.Add(1)
 
+		// TODO: We could find the interfaces where N2/N3 are
+		// and check that the generated IPs, still belong to the interfaces' subnet
 		n2Ip, _ = incrementIP(n2Ip, "0.0.0.0/0")
 		n3Ip, _ = incrementIP(n3Ip, "0.0.0.0/0")
 	}
 
+	// Wait for gNB to be connected before registering UEs
+	// TODO: We should wait for NGSetupResponse instead
 	time.Sleep(1 * time.Second)
 
 	msin := cfg.Ue.Msin
 	cfg.Ue.TunnelEnabled = tunnelEnabled
 
-	ues := make([]chan string, numUes+1)
+	ues := make([]chan procedures.UeTesterMessage, numUes+1)
 
 	sigStop := make(chan os.Signal, 1)
 	signal.Notify(sigStop, os.Interrupt)
 
 	stopSignal := true
 	for stopSignal {
+		// If CTRL-C signal has been received,
+		// stop creating new UEs, else we create numUes UEs
 		for i := 1; stopSignal && i <= numUes; i++ {
 			imsi := imsiGenerator(i, msin)
 			log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", imsi, " UE")
 			cfg.Ue.Msin = imsi
+
+			// Associate UE[i] with gnb[i] when dedicatedGnb = true
+			// else all UE[i] are associated with gnb[0]
 			if dedicatedGnb {
 				cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(i)
 			}
 
+			// If there is currently a coroutine handling current UE
+			// kill it, before creating a new coroutine with same UE
+			// Use case: Registration of N UEs in loop, when loop = true
 			if ues[i] != nil {
-				ues[i] <- "kill"
+				ues[i] <- procedures.Kill
 			}
-			ues[i] = make(chan string)
+			ues[i] = make(chan procedures.UeTesterMessage)
 
-			go ue.RegistrationUe(cfg, uint8(i), ues[i], timeBeforeDeregistration, &wg)
-
+			// Launch a coroutine to handle UE
 			wg.Add(1)
+			go func() {
+				ueChan := ues[i]
 
+				// Create a new UE coroutine
+				// ue.NewUE returns context of the new UE
+				ue := ue.NewUE(cfg, uint8(i), ueChan, &wg)
+
+				// We tell the UE to perform a registration
+				ueChan <- procedures.Registration
+				for {
+					// TODO: Add timeout + check for unexpected state
+					// When the UE is registered, tell the UE to trigger a PDU Session
+					if ue.WaitOnStateMM() == context.MM5G_REGISTERED {
+						ueChan <- procedures.NewPDUSession
+						break
+					}
+				}
+
+				if timeBeforeDeregistration > 0 {
+					time.Sleep(time.Duration(timeBeforeDeregistration) * time.Millisecond)
+					ueChan <- procedures.Deregistration
+				}
+			}()
+
+			// Before creating a new UE, we wait for timeBetweenRegistration ms
 			time.Sleep(time.Duration(timeBetweenRegistration) * time.Millisecond)
 			select {
 			case <-sigStop:
@@ -87,6 +129,8 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 			default:
 			}
 		}
+		// If loop = false, we don't go over the for loop a second time
+		// and we only do the numUes registration once
 		if !loop {
 			break
 		}

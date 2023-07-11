@@ -34,6 +34,11 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
 		return
 	}
 
+	if pduSession.Id != 1 {
+		log.Warn("[GNB][GTP] Only one tunnel per UE is supported for now, no tunnel will be created for second PDU Session of given UE")
+		return
+	}
+
     // get UE GNB IP.
 	pduSession.SetGnbIp(net.ParseIP(msg.GetGnbIp()))
 
@@ -46,6 +51,7 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
    _ = gtpLink.CmdDel(nameInf)
 
     go func() {
+		// This function should not return as long as the GTP-U UDP socket is open
         if err := gtpLink.CmdAdd(nameInf, 1, ueGnbIp.String()); err != nil {
             log.Fatal("[GNB][GTP] Unable to create Kernel GTP interface: ", err, msin, nameInf)
             return
