@@ -158,6 +158,19 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message)
 		UeIp := pduSessionEstablishmentAccept.GetPDUAddressInformation()
 		pduSession.SetIp(UeIp)
 
+	case nas.MsgTypePDUSessionReleaseCommand:
+		log.Info("[UE][NAS] Receiving PDU Session Release Command")
+
+		pduSessionReleaseCommand := payloadContainer.PDUSessionReleaseCommand
+		pduSessionId := pduSessionReleaseCommand.GetPDUSessionID()
+		pduSession, err := ue.GetPduSession(pduSessionId)
+		if pduSession == nil || err != nil {
+			log.Error("[UE][NAS] Unable to delete PDU Session ", pduSessionId, " from UE ", ue.GetMsin(), " as the PDU Session was not found. Ignoring.")
+			break
+		}
+		ue.DeletePduSession(pduSessionId)
+		log.Info("[UE][NAS] Successfully released PDU Session ", pduSessionId, " from UE Context")
+
 	default:
 		log.Error("[UE][NAS] Receiving Unknown Dl NAS Transport message!! ", payloadContainer.GsmHeader.GetMessageType())
 	}

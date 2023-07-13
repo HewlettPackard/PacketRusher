@@ -39,12 +39,12 @@ func TestAttachUeWithConfiguration(tunnelEnabled bool) {
 		// ue.NewUE returns context of the new UE
 		ue := ue.NewUE(cfg, 1, ueChan, &wg)
 		// We tell the UE to perform a registration
-		ueChan <- procedures.Registration
+		ueChan <- procedures.UeTesterMessage{Type: procedures.Registration}
 		for {
 			// TODO: Add timeout + check for unexpected state
 			// When the UE is registered, tell the UE to trigger a PDU Session
 			if ue.WaitOnStateMM() == context.MM5G_REGISTERED {
-				ueChan <- procedures.NewPDUSession
+				ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
 				break
 			}
 		}

@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int) {
+func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, numPduSessions int) {
 	if tunnelEnabled && !dedicatedGnb {
 		log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
 	}
@@ -91,7 +91,7 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 			// kill it, before creating a new coroutine with same UE
 			// Use case: Registration of N UEs in loop, when loop = true
 			if ues[i] != nil {
-				ues[i] <- procedures.Kill
+				ues[i] <- procedures.UeTesterMessage{Type: procedures.Kill}
 			}
 			ues[i] = make(chan procedures.UeTesterMessage)
 
@@ -105,19 +105,26 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 				ue := ue.NewUE(cfg, uint8(i), ueChan, &wg)
 
 				// We tell the UE to perform a registration
-				ueChan <- procedures.Registration
+				ueChan <- procedures.UeTesterMessage{Type: procedures.Registration}
 				for {
 					// TODO: Add timeout + check for unexpected state
 					// When the UE is registered, tell the UE to trigger a PDU Session
 					if ue.WaitOnStateMM() == context.MM5G_REGISTERED {
-						ueChan <- procedures.NewPDUSession
+						// We create as many PDU session as requested
+						// Only PDU Session id 1 will have a tunnel established
+						for i := 0; i < numPduSessions; i ++ {
+							ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
+						}
 						break
 					}
 				}
 
 				if timeBeforeDeregistration > 0 {
+					for i := 0; i < numPduSessions; i ++ {
+						ueChan <- procedures.UeTesterMessage{Type: procedures.DestroyPDUSession, Param: ue.PduSession[i]}
+					}
 					time.Sleep(time.Duration(timeBeforeDeregistration) * time.Millisecond)
-					ueChan <- procedures.Deregistration
+					ueChan <- procedures.UeTesterMessage{Type: procedures.Deregistration}
 				}
 			}()
 

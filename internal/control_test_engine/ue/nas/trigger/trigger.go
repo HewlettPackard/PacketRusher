@@ -31,7 +31,7 @@ func InitRegistration(ue *context.UEContext) {
 	ue.SetStateMM_DEREGISTERED()
 }
 
-func InitNewPduSession(ue *context.UEContext) {
+func InitPduSessionRequest(ue *context.UEContext) {
 	log.Info("[UE] Initiating New PDU Session")
 
 	pduSession, err := ue.CreatePDUSession()
@@ -40,7 +40,22 @@ func InitNewPduSession(ue *context.UEContext) {
 		return
 	}
 
-	ulNasTransport, err := mm_5gs.UlNasTransport(pduSession, ue, nasMessage.ULNASTransportRequestTypeInitialRequest)
+	ulNasTransport, err := mm_5gs.Request_UlNasTransport(pduSession, ue)
+	if err != nil {
+		log.Fatal("[UE][NAS] Error sending ul nas transport and pdu session establishment request: ", err)
+	}
+
+	// change the state of ue(SM).
+	ue.SetStateSM_PDU_SESSION_PENDING()
+
+	// sending to GNB
+	sender.SendToGnb(ue, ulNasTransport)
+}
+
+func InitPduSessionRelease(ue *context.UEContext, pduSession *context.PDUSession) {
+	log.Info("[UE] Initiating Release of PDU Session ", pduSession.Id)
+
+	ulNasTransport, err := mm_5gs.Release_UlNasTransport(pduSession, ue)
 	if err != nil {
 		log.Fatal("[UE][NAS] Error sending ul nas transport and pdu session establishment request: ", err)
 	}

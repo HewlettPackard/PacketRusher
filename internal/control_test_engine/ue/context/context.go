@@ -58,12 +58,13 @@ type Amf struct {
 }
 
 type PDUSession struct {
-	Id        uint8
-	ueIP      string
-	ueGnbIP   net.IP
-	tun       netlink.Link
-	routeTun  *netlink.Route
-	vrf   *netlink.Vrf
+	Id       uint8
+	ueIP     string
+	ueGnbIP  net.IP
+	tun      netlink.Link
+	routeTun *netlink.Route
+	vrf      *netlink.Vrf
+	stopSignal chan bool
 }
 
 type SECURITY struct {
@@ -298,6 +299,18 @@ func (ue *UEContext) GetPduSession(pduSessionid uint8) (*PDUSession, error) {
 	return ue.PduSession[pduSessionid-1], nil
 }
 
+func (ue *UEContext) DeletePduSession(pduSessionid uint8) error {
+	if pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil{
+		return errors.New("Unable to find PDUSession ID " + string(pduSessionid))
+	}
+	stopSignal := ue.PduSession[pduSessionid-1].GetStopSignal()
+	if stopSignal != nil {
+		stopSignal <- true
+	}
+	ue.PduSession[pduSessionid-1] = nil
+	return nil
+}
+
 func (pduSession *PDUSession) SetIp(ip [12]uint8) {
 	pduSession.ueIP = fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
 }
@@ -312,6 +325,14 @@ func (pduSession *PDUSession) SetGnbIp(ip net.IP) {
 
 func (pduSession *PDUSession) GetGnbIp() net.IP {
 	return pduSession.ueGnbIP
+}
+
+func (pduSession *PDUSession) SetStopSignal(stopSignal chan bool) {
+	pduSession.stopSignal = stopSignal
+}
+
+func (pduSession *PDUSession) GetStopSignal() chan bool {
+	return pduSession.stopSignal
 }
 
 func (pduSession *PDUSession) GetPduSesssionId() uint8 {

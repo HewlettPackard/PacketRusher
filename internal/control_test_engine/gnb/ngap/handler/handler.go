@@ -52,21 +52,7 @@ func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAP
 		}
 	}
 
-	// check RanUeId and get UE.
-	ue, err := gnb.GetGnbUe(ranUeId)
-	if err != nil || ue == nil {
-		log.Fatal("[GNB][NGAP] RAN UE NGAP ID is incorrect")
-		// TODO SEND ERROR INDICATION
-	}
-
-	// update AMF UE id.
-	if ue.GetAmfUeId() == 0 {
-		ue.SetAmfUeId(amfUeId)
-	} else {
-		if ue.GetAmfUeId() != amfUeId {
-			log.Fatal("[GNB][NGAP] AMF UE NGAP ID is incorrect")
-		}
-	}
+	ue := getUeFromContext(gnb, ranUeId, amfUeId)
 
 	// send NAS message to UE.
 	sender.SendToUe(ue, messageNas)
@@ -177,18 +163,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 
 	}
 
-	// check RanUeId and get UE.
-	ue, err := gnb.GetGnbUe(ranUeId)
-	if err != nil || ue == nil {
-		log.Fatal("[GNB][NGAP] RAN UE NGAP ID is incorrect")
-		// TODO SEND ERROR INDICATION
-	}
-
-	// check if AMF UE id.
-	if ue.GetAmfUeId() != amfUeId {
-		log.Fatal("[GNB][NGAP] AMF UE NGAP ID is incorrect")
-		// TODO SEND ERROR INDICATION
-	}
+	ue := getUeFromContext(gnb, ranUeId, amfUeId)
 
 	// create UE context.
 	ue.CreateUeContext(mobilityRestrict, maskedImeisv, sst, sd)
@@ -322,18 +297,7 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 		}
 	}
 
-	// check RanUeId and get UE.
-	ue, err := gnb.GetGnbUe(ranUeId)
-	if err != nil || ue == nil {
-		log.Fatal("[GNB][NGAP] Error in Pdu Session Resource Setup Request. UE was not found in GNB POOL")
-		// TODO SEND ERROR INDICATION
-	}
-
-	// check if AMF UE id.
-	if ue.GetAmfUeId() != amfUeId {
-		log.Fatal("[GNB][NGAP] Error in Pdu Session Resource Setup Request. Problem in AMF UE ID from CORE")
-		// TODO SEND ERROR INDICATION
-	}
+	ue := getUeFromContext(gnb, ranUeId, amfUeId)
 
 	// create PDU Session for GNB UE.
 	pduSession, err := ue.CreatePduSession(pduSessionId, sst, sd, pduSType, qosId, priArp, fiveQi, ulTeid, gnb.GetUeTeid(ue))
@@ -377,6 +341,71 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
         log.Fatal(jsonErr)
     }
 	sender.SendToUe(ue, value)
+}
+
+func HandlerPduSessionReleaseCommand(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+	valueMessage := message.InitiatingMessage.Value.PDUSessionResourceReleaseCommand
+
+	var amfUeId int64
+	var ranUeId int64
+	var messageNas aper.OctetString
+	var pduSessionIds []ngapType.PDUSessionID
+
+	for _, ies := range valueMessage.ProtocolIEs.List {
+
+		// TODO MORE FIELDS TO CHECK HERE
+		switch ies.Id.Value {
+
+		case ngapType.ProtocolIEIDAMFUENGAPID:
+
+			if ies.Value.AMFUENGAPID == nil {
+				log.Fatal("[GNB][NGAP] AMF UE ID is missing")
+			}
+			amfUeId = ies.Value.AMFUENGAPID.Value
+
+		case ngapType.ProtocolIEIDRANUENGAPID:
+
+			if ies.Value.RANUENGAPID == nil {
+				log.Fatal("[GNB][NGAP] RAN UE ID is missing")
+				// TODO SEND ERROR INDICATION
+			}
+			ranUeId = ies.Value.RANUENGAPID.Value
+
+		case ngapType.ProtocolIEIDNASPDU:
+			if ies.Value.NASPDU == nil {
+				log.Info("[GNB][NGAP] NAS PDU is missing")
+				// TODO SEND ERROR INDICATION
+			}
+			messageNas = ies.Value.NASPDU.Value
+
+		case ngapType.ProtocolIEIDPDUSessionResourceToReleaseListRelCmd:
+
+			if ies.Value.PDUSessionResourceToReleaseListRelCmd == nil {
+				log.Fatal("[GNB][NGAP] PDU SESSION RESOURCE SETUP LIST SU REQ is missing")
+			}
+			pDUSessionRessourceToReleaseListRelCmd := ies.Value.PDUSessionResourceToReleaseListRelCmd
+
+			for _, pDUSessionRessourceToReleaseItemRelCmd := range pDUSessionRessourceToReleaseListRelCmd.List {
+				pduSessionIds = append(pduSessionIds, pDUSessionRessourceToReleaseItemRelCmd.PDUSessionID)
+			}
+		}
+	}
+
+	ue := getUeFromContext(gnb, ranUeId, amfUeId)
+
+	for _, pduSessionId := range pduSessionIds {
+		pduSession, err := ue.GetPduSession(pduSessionId.Value)
+		if pduSession == nil || err != nil {
+			log.Error("[GNB][NGAP] Unable to delete PDU Session ", pduSessionId.Value, " from UE as the PDU Session was not found. Ignoring.")
+			continue
+		}
+		ue.DeletePduSession(pduSessionId.Value)
+		log.Info("[GNB][NGAP] Successfully deleted PDU Session ", pduSessionId.Value, " from UE Context")
+	}
+
+	trigger.SendPduSessionReleaseResponse(pduSessionIds, ue)
+
+	sender.SendToUe(ue, messageNas)
 }
 
 func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
@@ -580,7 +609,7 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 
 	valueMessage := message.InitiatingMessage.Value.UEContextReleaseCommand
 
-	var cause *ngapType.CauseNas
+	var cause int
 	var ue_id *ngapType.RANUENGAPID
 
 	for _, ies := range valueMessage.ProtocolIEs.List {
@@ -594,11 +623,11 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 
 			switch ies.Value.Cause.Present {
 			case ngapType.CausePresentNas:
-				cause = ies.Value.Cause.Nas
-
+				cause = int(ies.Value.Cause.Nas.Value)
+			case ngapType.CausePresentProtocol:
+				cause = int(ies.Value.Cause.Protocol.Value)
 			default:
 				// TODO treatment error
-
 			}
 		}
 	}
@@ -618,5 +647,24 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 		log.Fatal("[GNB][AMF] Error sending UE Release Context Complete: ", err)
 	}
 
-	log.Info("[GNB][NGAP] Releasing UE Context, cause: ", cause.Value)
+	log.Info("[GNB][NGAP] Releasing UE Context, cause: ", cause)
+}
+
+func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *context.GNBUe {
+	// check RanUeId and get UE.
+	ue, err := gnb.GetGnbUe(ranUeId)
+	if err != nil || ue == nil {
+		log.Fatal("[GNB][NGAP] RAN UE NGAP ID is incorrect")
+		// TODO SEND ERROR INDICATION
+	}
+
+	// update AMF UE id.
+	if ue.GetAmfUeId() == 0 {
+		ue.SetAmfUeId(amfUeId)
+	} else {
+		if ue.GetAmfUeId() != amfUeId {
+			log.Fatal("[GNB][NGAP] AMF UE NGAP ID is incorrect")
+		}
+	}
+	return ue
 }

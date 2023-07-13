@@ -13,9 +13,9 @@ import (
 	"my5G-RANTester/lib/openapi/models"
 )
 
-func UlNasTransport(pduSession *context.PDUSession, ue *context.UEContext, requestType uint8) ([]byte, error) {
+func Request_UlNasTransport(pduSession *context.PDUSession, ue *context.UEContext) ([]byte, error) {
 
-	pdu := getUlNasTransport_PduSessionEstablishmentRequest(pduSession.Id, requestType, ue.Dnn, &ue.Snssai)
+	pdu := getUlNasTransport_PduSessionEstablishmentRequest(pduSession.Id, ue.Dnn, &ue.Snssai)
 	if pdu == nil {
 		return nil, fmt.Errorf("Error encoding %s IMSI UE PduSession Establishment Request Msg", ue.UeSecurity.Supi)
 	}
@@ -27,7 +27,21 @@ func UlNasTransport(pduSession *context.PDUSession, ue *context.UEContext, reque
 	return pdu, nil
 }
 
-func getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, requestType uint8, dnnString string, sNssai *models.Snssai) (nasPdu []byte) {
+func Release_UlNasTransport(pduSession *context.PDUSession, ue *context.UEContext) ([]byte, error) {
+
+	pdu := getUlNasTransport_PduSessionEstablishmentRelease(pduSession.Id)
+	if pdu == nil {
+		return nil, fmt.Errorf("Error encoding %s IMSI UE PduSession Establishment Request Msg", ue.UeSecurity.Supi)
+	}
+	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)
+	if err != nil {
+		return nil, fmt.Errorf("Error encoding %s IMSI UE PduSession Establishment Request Msg", ue.UeSecurity.Supi)
+	}
+
+	return pdu, nil
+}
+
+func getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, dnnString string, sNssai *models.Snssai) (nasPdu []byte) {
 
 	pduSessionEstablishmentRequest := sm_5gs.GetPduSessionEstablishmentRequest(pduSessionId)
 
@@ -44,7 +58,7 @@ func getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, reques
 	ulNasTransport.PduSessionID2Value.SetPduSessionID2Value(pduSessionId)
 	ulNasTransport.RequestType = new(nasType.RequestType)
 	ulNasTransport.RequestType.SetIei(nasMessage.ULNASTransportRequestTypeType)
-	ulNasTransport.RequestType.SetRequestTypeValue(requestType)
+	ulNasTransport.RequestType.SetRequestTypeValue(nasMessage.ULNASTransportRequestTypeInitialRequest)
 
 	if dnnString != "" {
 		dnn := []byte(dnnString)
@@ -71,6 +85,38 @@ func getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, reques
 	ulNasTransport.SpareHalfOctetAndPayloadContainerType.SetPayloadContainerType(nasMessage.PayloadContainerTypeN1SMInfo)
 	ulNasTransport.PayloadContainer.SetLen(uint16(len(pduSessionEstablishmentRequest)))
 	ulNasTransport.PayloadContainer.SetPayloadContainerContents(pduSessionEstablishmentRequest)
+
+	m.GmmMessage.ULNASTransport = ulNasTransport
+
+	data := new(bytes.Buffer)
+	err := m.GmmMessageEncode(data)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	nasPdu = data.Bytes()
+	return
+}
+
+func getUlNasTransport_PduSessionEstablishmentRelease(pduSessionId uint8) (nasPdu []byte) {
+
+	pduSessionReleaseRequest := sm_5gs.GetPduSessionReleaseRequest(pduSessionId)
+
+	m := nas.NewMessage()
+	m.GmmMessage = nas.NewGmmMessage()
+	m.GmmHeader.SetMessageType(nas.MsgTypeULNASTransport)
+
+	ulNasTransport := nasMessage.NewULNASTransport(0)
+	ulNasTransport.SpareHalfOctetAndSecurityHeaderType.SetSecurityHeaderType(nas.SecurityHeaderTypePlainNas)
+	ulNasTransport.SetMessageType(nas.MsgTypeULNASTransport)
+	ulNasTransport.ExtendedProtocolDiscriminator.SetExtendedProtocolDiscriminator(nasMessage.Epd5GSMobilityManagementMessage)
+	ulNasTransport.PduSessionID2Value = new(nasType.PduSessionID2Value)
+	ulNasTransport.PduSessionID2Value.SetIei(nasMessage.ULNASTransportPduSessionID2ValueType)
+	ulNasTransport.PduSessionID2Value.SetPduSessionID2Value(pduSessionId)
+
+	ulNasTransport.SpareHalfOctetAndPayloadContainerType.SetPayloadContainerType(nasMessage.PayloadContainerTypeN1SMInfo)
+	ulNasTransport.PayloadContainer.SetLen(uint16(len(pduSessionReleaseRequest)))
+	ulNasTransport.PayloadContainer.SetPayloadContainerContents(pduSessionReleaseRequest)
 
 	m.GmmMessage.ULNASTransport = ulNasTransport
 

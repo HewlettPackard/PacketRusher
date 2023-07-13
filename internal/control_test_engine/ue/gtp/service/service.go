@@ -47,16 +47,19 @@ func SetupGtpInterface(ue *context.UEContext, message []byte) {
     msin := ue.GetMsin()
 	nameInf := fmt.Sprintf("val%s", msin)
 	vrfInf := fmt.Sprintf("vrf%s", msin)
+	stopSignal := make(chan bool)
 
-   _ = gtpLink.CmdDel(nameInf)
+    _ = gtpLink.CmdDel(nameInf)
 
     go func() {
 		// This function should not return as long as the GTP-U UDP socket is open
-        if err := gtpLink.CmdAdd(nameInf, 1, ueGnbIp.String()); err != nil {
+        if err := gtpLink.CmdAdd(nameInf, 1, ueGnbIp.String(), stopSignal); err != nil {
             log.Fatal("[GNB][GTP] Unable to create Kernel GTP interface: ", err, msin, nameInf)
             return
         }
     }()
+
+    pduSession.SetStopSignal(stopSignal)
 
     time.Sleep(time.Second)
 

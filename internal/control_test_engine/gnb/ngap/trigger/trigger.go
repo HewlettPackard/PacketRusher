@@ -7,9 +7,11 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/pdu_session_management"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_context_management"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/sender"
+	"my5G-RANTester/lib/ngap/ngapType"
 )
 
 func SendPduSessionResourceSetupResponse(pduSession *context.PDUSession, ue *context.GNBUe, gnb *context.GNBContext) {
+	log.Info("[GNB] Initiating PDU Session Resource Setup Response")
 
 	// send PDU Session Resource Setup Response.
 	gnbIp := gnb.GetGnbIpByData()
@@ -28,7 +30,27 @@ func SendPduSessionResourceSetupResponse(pduSession *context.PDUSession, ue *con
 	}
 }
 
+func SendPduSessionReleaseResponse(pduSessionIds []ngapType.PDUSessionID, ue *context.GNBUe) {
+	log.Info("[GNB] Initiating PDU Session Release Response")
+
+	if len(pduSessionIds) == 0 {
+		log.Fatal("[GNB][NGAP] Trying to send a PDU Session Release Reponse for no PDU Session")
+	}
+
+		ngapMsg, err := pdu_session_management.PDUSessionReleaseResponse(pduSessionIds, ue)
+	if err != nil {
+		log.Fatal("[GNB][NGAP] Error sending PDU Session Release Response.: ", err)
+	}
+
+	conn := ue.GetSCTP()
+	err = sender.SendToAmF(ngapMsg, conn)
+	if err != nil {
+		log.Fatal("[GNB][NGAP] Error sending PDU Session Release Response.: ", err)
+	}
+}
+
 func SendInitialContextSetupResponse(ue *context.GNBUe) {
+	log.Info("[GNB] Initiating Initial Context Setup Response")
 
 	// send Initial Context Setup Response.
 	ngapMsg, err := ue_context_management.InitialContextSetupResponse(ue)
@@ -45,6 +67,7 @@ func SendInitialContextSetupResponse(ue *context.GNBUe) {
 }
 
 func SendNgSetupRequest(gnb *context.GNBContext, amf *context.GNBAmf) {
+	log.Info("[GNB] Initiating NG Setup Request")
 
 	// send NG setup response.
 	ngapMsg, err := interface_management.NGSetupRequest(gnb, "my5gRANTester")

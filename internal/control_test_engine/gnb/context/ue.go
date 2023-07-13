@@ -92,13 +92,24 @@ func (ue *GNBUe) CreatePduSession(pduSessionId int64, sst string, sd string, pdu
 	return pduSession, nil
 }
 
-func (ue *GNBUe) GetPduSession(pduSessionId int64)  (*PDUSession, error) {
+func (ue *GNBUe) GetPduSession(pduSessionId int64) (*PDUSession, error) {
 	if pduSessionId < 1 && pduSessionId > 16 {
 		return nil, errors.New("PDU Session Id must lies between 1 and 16, id: " + string(pduSessionId))
 	}
 
 	return ue.context.pduSession[pduSessionId-1], nil
 }
+
+func (ue *GNBUe) DeletePduSession(pduSessionId int64) error {
+	if pduSessionId < 1 && pduSessionId > 16 {
+		return errors.New("PDU Session Id must lies between 1 and 16, id: " + string(pduSessionId))
+	}
+
+	ue.context.pduSession[pduSessionId-1] = nil
+
+	return nil
+}
+
 func (ue *GNBUe) GetUeMobility() (string, string) {
 	return ue.context.mobilityInfo.mcc, ue.context.mobilityInfo.mnc
 }

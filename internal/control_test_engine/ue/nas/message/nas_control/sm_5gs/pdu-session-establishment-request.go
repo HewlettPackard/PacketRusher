@@ -47,3 +47,27 @@ func GetPduSessionEstablishmentRequest(pduSessionId uint8) (nasPdu []byte) {
 	nasPdu = data.Bytes()
 	return
 }
+
+func GetPduSessionReleaseRequest(pduSessionId uint8) (nasPdu []byte) {
+
+	m := nas.NewMessage()
+	m.GsmMessage = nas.NewGsmMessage()
+	m.GsmHeader.SetMessageType(nas.MsgTypePDUSessionReleaseRequest)
+
+	pduSessionReleaseRequest := nasMessage.NewPDUSessionReleaseRequest(0)
+	pduSessionReleaseRequest.ExtendedProtocolDiscriminator.SetExtendedProtocolDiscriminator(nasMessage.Epd5GSSessionManagementMessage)
+	pduSessionReleaseRequest.SetMessageType(nas.MsgTypePDUSessionReleaseRequest)
+	pduSessionReleaseRequest.PDUSessionID.SetPDUSessionID(pduSessionId)
+	pduSessionReleaseRequest.PTI.SetPTI(0x01)
+
+	m.GsmMessage.PDUSessionReleaseRequest = pduSessionReleaseRequest
+
+	data := new(bytes.Buffer)
+	err := m.GsmMessageEncode(data)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	nasPdu = data.Bytes()
+	return
+}

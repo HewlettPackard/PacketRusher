@@ -45,7 +45,7 @@ func CmdDel(ifname string) error {
 	return nil
 }
 
-func CmdAdd(ifname string, role int, ip string) error {
+func CmdAdd(ifname string, role int, ip string, stopSignal chan bool) error {
 	var wg sync.WaitGroup
 	mux, err := nl.NewMux()
 	if err != nil {
@@ -120,14 +120,7 @@ func CmdAdd(ifname string, role int, ip string) error {
 		return err
 	}
 
-	b := make([]byte, 96*1024)
-	for {
-		n, from, err := conn2.ReadFrom(b)
-		if err != nil {
-			break
-		}
-		fmt.Printf("received %v bytes from %v.\n", n, from)
-	}
+	<-stopSignal
 
 	return nil
 }
@@ -152,7 +145,7 @@ func main() {
 
 	switch cmd {
 	case "add":
-		err := CmdAdd(ifname, role, ip)
+		err := CmdAdd(ifname, role, ip, nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%v: %v\n", prog, err)
 			os.Exit(1)

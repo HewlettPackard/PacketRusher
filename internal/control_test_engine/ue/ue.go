@@ -58,18 +58,26 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 			select {
 			case <-sigUe:
 				if ue.GetStateMM() == context.MM5G_REGISTERED {
+					for i := uint8(1); i <= 16; i++ {
+						pduSession, _ := ue.GetPduSession(i)
+						if pduSession != nil {
+							trigger.InitPduSessionRelease(ue, pduSession)
+						}
+					}
 					trigger.InitDeregistration(ue)
 					time.Sleep(1 * time.Second)
 				}
 				loop = false
 			case msg := <-ueMgrChannel:
-				switch msg {
+				switch msg.Type {
 				case procedures.Registration:
 					trigger.InitRegistration(ue)
 				case procedures.Deregistration:
 					trigger.InitDeregistration(ue)
 				case procedures.NewPDUSession:
-					trigger.InitNewPduSession(ue)
+					trigger.InitPduSessionRequest(ue)
+				case procedures.DestroyPDUSession:
+					trigger.InitPduSessionRelease(ue, msg.Param)
 				case procedures.Kill:
 					loop = false
 				}
