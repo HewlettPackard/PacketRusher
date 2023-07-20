@@ -22,7 +22,11 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 	}
 
 	if tunnelEnabled && timeBetweenRegistration < 500 {
-		log.Fatal("When using the --tunnel option, --timeBetweenRegistration must equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
+		log.Fatal("When using the --tunnel option, --timeBetweenRegistration must be equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
+	}
+
+	if numPduSessions > 16 {
+		log.Fatal("You can't have more than 16 PDU Sessions per UE as per spec.")
 	}
 
 	wg := sync.WaitGroup{}

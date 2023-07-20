@@ -9,7 +9,6 @@ import (
 	"github.com/vishvananda/netlink"
 	"my5G-RANTester/lib/UeauCommon"
 	"my5G-RANTester/lib/milenage"
-	"my5G-RANTester/lib/nas/nasMessage"
 	"my5G-RANTester/lib/nas/nasType"
 	"my5G-RANTester/lib/nas/security"
 	"my5G-RANTester/lib/openapi/models"
@@ -43,8 +42,8 @@ type UEContext struct {
 	amfInfo    Amf
 
 	// TODO: Modify config so you can configure these parameters per PDUSession
-	Dnn       string
-	Snssai    models.Snssai
+	Dnn           string
+	Snssai        models.Snssai
 	TunnelEnabled bool
 
 	// Sync primitive
@@ -58,36 +57,38 @@ type Amf struct {
 }
 
 type PDUSession struct {
-	Id       uint8
-	ueIP     string
-	ueGnbIP  net.IP
-	tun      netlink.Link
-	routeTun *netlink.Route
-	vrf      *netlink.Vrf
+	Id         uint8
+	ueIP       string
+	ueGnbIP    net.IP
+	tun        netlink.Link
+	routeTun   *netlink.Route
+	vrf        *netlink.Vrf
 	stopSignal chan bool
 }
 
 type SECURITY struct {
-	Supi               string
-	Msin               string
-	mcc                string
-	mnc                string
-	ULCount            security.Count
-	DLCount            security.Count
-	CipheringAlg       uint8
-	IntegrityAlg       uint8
-	Snn                string
-	KnasEnc            [16]uint8
-	KnasInt            [16]uint8
-	Kamf               []uint8
-	AuthenticationSubs models.AuthenticationSubscription
-	Suci               nasType.MobileIdentity5GS
-	Guti               [4]byte
+	Supi                 string
+	Msin                 string
+	mcc                  string
+	mnc                  string
+	ULCount              security.Count
+	DLCount              security.Count
+	UeSecurityCapability *nasType.UESecurityCapability
+	IntegrityAlg         uint8
+	CipheringAlg         uint8
+	Snn                  string
+	KnasEnc              [16]uint8
+	KnasInt              [16]uint8
+	Kamf                 []uint8
+	AuthenticationSubs   models.AuthenticationSubscription
+	Suci                 nasType.MobileIdentity5GS
+	RoutingIndicator     string
+	Guti                 [4]byte
 }
 
 func (ue *UEContext) NewRanUeContext(msin string,
-	cipheringAlg, integrityAlg uint8,
-	k, opc, op, amf, sqn, mcc, mnc, dnn string,
+	ueSecurityCapability *nasType.UESecurityCapability,
+	k, opc, op, amf, sqn, mcc, mnc, routingIndicator, dnn string,
 	sst int32, sd string, tunnelEnabled bool, id uint8, sockPath string) {
 
 	ue.stateChange = &sync.Cond{L: &sync.Mutex{}}
@@ -96,11 +97,24 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	ue.UeSecurity.Msin = msin
 
 	// added ciphering algorithm.
-	ue.UeSecurity.CipheringAlg = cipheringAlg
+	ue.UeSecurity.UeSecurityCapability = ueSecurityCapability
+	// set the algorithms of integrity
+	if ueSecurityCapability.GetIA0_5G() == 1 {
+		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA0
+	} else if ueSecurityCapability.GetIA1_128_5G() == 1  {
+		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA1
+	} else if ueSecurityCapability.GetIA2_128_5G() == 1  {
+		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA2
+	}
 
-	// added integrity algorithm.
-	ue.UeSecurity.IntegrityAlg = integrityAlg
-
+	// set the algorithms of ciphering
+	if ueSecurityCapability.GetEA0_5G() == 1 {
+		ue.UeSecurity.CipheringAlg = security.AlgCiphering128NEA0
+	} else if ueSecurityCapability.GetEA1_128_5G() == 1 {
+		ue.UeSecurity.CipheringAlg = security.AlgCiphering128NEA1
+	} else if ueSecurityCapability.GetEA2_128_5G() == 1 {
+		ue.UeSecurity.CipheringAlg = security.AlgCiphering128NEA2
+	}
 	// added key, AuthenticationManagementField and opc or op.
 	ue.SetAuthSubscription(k, opc, op, amf, sqn)
 
@@ -111,12 +125,15 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	ue.UeSecurity.mcc = mcc
 	ue.UeSecurity.mnc = mnc
 
+	// added routing indidcator
+	ue.UeSecurity.RoutingIndicator = routingIndicator
+
 	// added supi
 	ue.UeSecurity.Supi = fmt.Sprintf("imsi-%s%s%s", mcc, mnc, msin)
 
 	// added UE id.
 	ue.id = id
-    ue.SockPath = sockPath
+	ue.SockPath = sockPath
 
 	// added network slice
 	ue.Snssai.Sd = sd
@@ -128,17 +145,18 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 	// encode mcc and mnc for mobileIdentity5Gs.
 	resu := ue.GetMccAndMncInOctets()
+	encodedRoutingIndicator := ue.GetRoutingIndicatorInOctets()
 
 	// added suci to mobileIdentity5GS
 	if len(ue.UeSecurity.Msin) == 8 {
 		ue.UeSecurity.Suci = nasType.MobileIdentity5GS{
 			Len:    12,
-			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, suciV4, suciV3, suciV2, suciV1},
+			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], encodedRoutingIndicator[0], encodedRoutingIndicator[1], 0x00, 0x00, suciV4, suciV3, suciV2, suciV1},
 		}
 	} else if len(ue.UeSecurity.Msin) == 10 {
 		ue.UeSecurity.Suci = nasType.MobileIdentity5GS{
 			Len:    13,
-			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], 0xf0, 0xff, 0x00, 0x00, suciV5, suciV4, suciV3, suciV2, suciV1},
+			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], encodedRoutingIndicator[0], encodedRoutingIndicator[1], 0x00, 0x00, suciV5, suciV4, suciV3, suciV2, suciV1},
 		}
 	}
 
@@ -293,14 +311,14 @@ func (ue *UEContext) IsTunnelEnabled() bool {
 }
 
 func (ue *UEContext) GetPduSession(pduSessionid uint8) (*PDUSession, error) {
-	if pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil{
+	if pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil {
 		return nil, errors.New("Unable to find PDUSession ID " + string(pduSessionid))
 	}
 	return ue.PduSession[pduSessionid-1], nil
 }
 
 func (ue *UEContext) DeletePduSession(pduSessionid uint8) error {
-	if pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil{
+	if pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil {
 		return errors.New("Unable to find PDUSession ID " + string(pduSessionid))
 	}
 	stopSignal := ue.PduSession[pduSessionid-1].GetStopSignal()
@@ -375,6 +393,10 @@ func (ue *UEContext) deriveSNN() string {
 	return resu
 }
 
+func (ue *UEContext) GetUeSecurityCapability() *nasType.UESecurityCapability {
+	return ue.UeSecurity.UeSecurityCapability
+}
+
 func (ue *UEContext) GetMccAndMncInOctets() []byte {
 
 	// reverse mcc and mnc
@@ -400,6 +422,28 @@ func (ue *UEContext) GetMccAndMncInOctets() []byte {
 	}
 
 	return resu
+}
+
+func (ue *UEContext) GetRoutingIndicatorInOctets() []byte {
+
+	routingIndicator := []byte(ue.UeSecurity.RoutingIndicator)
+	// Reverse the bytes in group of two
+	for i := 1; i < len(routingIndicator); i += 2 {
+		tmp := routingIndicator[i-1]
+		routingIndicator[i-1] = routingIndicator[i]
+		routingIndicator[i] = tmp
+	}
+
+	// BCD conversion
+	encodedRoutingIndicator, err := hex.DecodeString(string(routingIndicator))
+
+	if err != nil {
+		log.Fatal("[UE] Unable to encode routing indicator ", err)
+	}
+
+	log.Info(encodedRoutingIndicator)
+
+	return encodedRoutingIndicator
 }
 
 func (ue *UEContext) EncodeUeSuci() (uint8, uint8, uint8, uint8, uint8) {
@@ -602,37 +646,6 @@ func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
 
 	ue.UeSecurity.AuthenticationSubs.SequenceNumber = sqn
 	ue.UeSecurity.AuthenticationSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
-}
-
-func SetUESecurityCapability(ue *UEContext) (UESecurityCapability *nasType.UESecurityCapability) {
-	UESecurityCapability = &nasType.UESecurityCapability{
-		Iei:    nasMessage.RegistrationRequestUESecurityCapabilityType,
-		Len:    8,
-		Buffer: []uint8{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	}
-	switch ue.UeSecurity.CipheringAlg {
-	case security.AlgCiphering128NEA0:
-		UESecurityCapability.SetEA0_5G(1)
-	case security.AlgCiphering128NEA1:
-		UESecurityCapability.SetEA1_128_5G(1)
-	case security.AlgCiphering128NEA2:
-		UESecurityCapability.SetEA2_128_5G(1)
-	case security.AlgCiphering128NEA3:
-		UESecurityCapability.SetEA3_128_5G(1)
-	}
-
-	switch ue.UeSecurity.IntegrityAlg {
-	case security.AlgIntegrity128NIA0:
-		UESecurityCapability.SetIA0_5G(1)
-	case security.AlgIntegrity128NIA1:
-		UESecurityCapability.SetIA1_128_5G(1)
-	case security.AlgIntegrity128NIA2:
-		UESecurityCapability.SetIA2_128_5G(1)
-	case security.AlgIntegrity128NIA3:
-		UESecurityCapability.SetIA3_128_5G(1)
-	}
-
-	return
 }
 
 func (ue *UEContext) Terminate() {

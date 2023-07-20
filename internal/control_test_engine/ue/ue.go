@@ -8,7 +8,6 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/service"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
 	"my5G-RANTester/internal/monitoring"
-	"my5G-RANTester/lib/nas/security"
 	"os"
 	"os/signal"
 	"sync"
@@ -22,8 +21,7 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 	// new UE context
 	ue.NewRanUeContext(
 		conf.Ue.Msin,
-		security.AlgCiphering128NEA0,
-		security.AlgIntegrity128NIA2,
+		conf.GetUESecurityCapability(),
 		conf.Ue.Key,
 		conf.Ue.Opc,
 		"c9e8763286b5b9ffbdf56e1297d0887b",
@@ -31,6 +29,7 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 		conf.Ue.Sqn,
 		conf.Ue.Hplmn.Mcc,
 		conf.Ue.Hplmn.Mnc,
+		conf.Ue.RoutingIndicator,
 		conf.Ue.Dnn,
 		int32(conf.Ue.Snssai.Sst),
 		conf.Ue.Snssai.Sd,
@@ -99,8 +98,7 @@ func RegistrationUeMonitor(conf config.Config,
 	// new UE context
 	ue.NewRanUeContext(
 		conf.Ue.Msin,
-		security.AlgCiphering128NEA0,
-		security.AlgIntegrity128NIA2,
+		conf.GetUESecurityCapability(),
 		conf.Ue.Key,
 		conf.Ue.Opc,
 		"c9e8763286b5b9ffbdf56e1297d0887b",
@@ -108,6 +106,7 @@ func RegistrationUeMonitor(conf config.Config,
 		conf.Ue.Sqn,
 		conf.Ue.Hplmn.Mcc,
 		conf.Ue.Hplmn.Mnc,
+		conf.Ue.RoutingIndicator,
 		conf.Ue.Dnn,
 		int32(conf.Ue.Snssai.Sst),
 		conf.Ue.Snssai.Sd,

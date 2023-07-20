@@ -21,21 +21,21 @@ ue:
   amf: "8000"
   sqn: "0000000"
   dnn: "data1"
+  routingindicator: "4567"
   hplmn:
     mcc: "999"
     mnc: "27"
   snssai:
     sst: 01
     sd: "000001"
-#  integrity:
-#    nia0: true
-#    nia1: true
-#    nia2: true
-#  ciphering:
-#    nea0: true
-#    nea1: true
-#    nea2: true
-#  test: "test-5g-guti"
+  integrity:
+    nia0: false
+    nia1: false
+    nia2: true
+  ciphering:
+    nea0: false
+    nea1: false
+    nea2: true
 amfif:
   ip: "192.168.11.10"
   port: 38412

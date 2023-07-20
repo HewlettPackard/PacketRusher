@@ -78,9 +78,11 @@ func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) {
 		log.Info("[UE][NAS] Type of integrity protection algorithm is 128-5G-IA2")
 	}
 
-	// checking BIT RINMR that triggered registration request in security mode complete.
-	rinmr := message.SecurityModeCommand.Additional5GSecurityInformation.GetRINMR()
-
+	rinmr := uint8(0)
+	if message.SecurityModeCommand.Additional5GSecurityInformation != nil {
+		// checking BIT RINMR that triggered registration request in security mode complete.
+		rinmr = message.SecurityModeCommand.Additional5GSecurityInformation.GetRINMR()
+	}
 	// getting NAS Security Mode Complete.
 	securityModeComplete, err := mm_5gs.SecurityModeComplete(ue, rinmr)
 	if err != nil {

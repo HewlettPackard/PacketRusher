@@ -124,6 +124,28 @@ func main() {
 				},
 			},
 			{
+				Name: "custom-scenario",
+				Usage: "Test",
+				Aliases: []string{"c"},
+				Flags: []cli.Flag{
+					&cli.PathFlag{Name: "scenario", Usage: "Specify the scenario path in .wasm"},
+				},
+				Action: func(c *cli.Context) error {
+					var scenarioPath string
+
+					if c.IsSet("scenario") {
+						scenarioPath = c.Path("scenario")
+					} else {
+						log.Info(c.Command.Usage)
+						return nil
+					}
+
+					templates.TestWithCustomScenario(scenarioPath)
+
+					return nil
+				},
+			},
+			{
 				Name:    "amf-load-loop",
 				Aliases: []string{"amf-load-loop"},
 				Usage: "\nTest AMF responses in interval\n" +
