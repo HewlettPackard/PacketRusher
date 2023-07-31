@@ -71,7 +71,7 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 	msin := cfg.Ue.Msin
 	cfg.Ue.TunnelEnabled = tunnelEnabled
 
-	ues := make([]chan procedures.UeTesterMessage, numUes+1)
+	ueChans := make([]chan procedures.UeTesterMessage, numUes+1)
 
 	sigStop := make(chan os.Signal, 1)
 	signal.Notify(sigStop, os.Interrupt)
@@ -80,33 +80,37 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 	for stopSignal {
 		// If CTRL-C signal has been received,
 		// stop creating new UEs, else we create numUes UEs
-		for i := 1; stopSignal && i <= numUes; i++ {
-			imsi := imsiGenerator(i, msin)
+		for ueId := 1; stopSignal && ueId <= numUes; ueId++ {
+			imsi := imsiGenerator(ueId, msin)
 			log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", imsi, " UE")
 			cfg.Ue.Msin = imsi
 
-			// Associate UE[i] with gnb[i] when dedicatedGnb = true
-			// else all UE[i] are associated with gnb[0]
+			// Associate UE[ueId] with gnb[ueId] when dedicatedGnb = true
+			// else all UE[ueId] are associated with gnb[0]
 			if dedicatedGnb {
-				cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(i)
+				cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(ueId)
 			}
 
 			// If there is currently a coroutine handling current UE
 			// kill it, before creating a new coroutine with same UE
 			// Use case: Registration of N UEs in loop, when loop = true
-			if ues[i] != nil {
-				ues[i] <- procedures.UeTesterMessage{Type: procedures.Kill}
+			if ueChans[ueId] != nil {
+				ueChans[ueId] <- procedures.UeTesterMessage{Type: procedures.Terminate}
 			}
-			ues[i] = make(chan procedures.UeTesterMessage)
+
+			ueChans[ueId] = make(chan procedures.UeTesterMessage)
+
+			// Before creating a new UE, we wait for timeBetweenRegistration ms
+			time.Sleep(time.Duration(timeBetweenRegistration) * time.Millisecond)
 
 			// Launch a coroutine to handle UE
 			wg.Add(1)
-			go func() {
-				ueChan := ues[i]
+			go func(currentUeId int) {
+				ueChan := ueChans[currentUeId]
 
 				// Create a new UE coroutine
 				// ue.NewUE returns context of the new UE
-				ue := ue.NewUE(cfg, uint8(i), ueChan, &wg)
+				ue := ue.NewUE(cfg, uint8(currentUeId), ueChan, &wg)
 
 				// We tell the UE to perform a registration
 				ueChan <- procedures.UeTesterMessage{Type: procedures.Registration}
@@ -116,24 +120,14 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 					if ue.WaitOnStateMM() == context.MM5G_REGISTERED {
 						// We create as many PDU session as requested
 						// Only PDU Session id 1 will have a tunnel established
-						for i := 0; i < numPduSessions; i ++ {
+						for i := 0; i < numPduSessions; i++ {
 							ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
 						}
 						break
 					}
 				}
+			}(ueId)
 
-				if timeBeforeDeregistration > 0 {
-					for i := 0; i < numPduSessions; i ++ {
-						ueChan <- procedures.UeTesterMessage{Type: procedures.DestroyPDUSession, Param: ue.PduSession[i]}
-					}
-					time.Sleep(time.Duration(timeBeforeDeregistration) * time.Millisecond)
-					ueChan <- procedures.UeTesterMessage{Type: procedures.Deregistration}
-				}
-			}()
-
-			// Before creating a new UE, we wait for timeBetweenRegistration ms
-			time.Sleep(time.Duration(timeBetweenRegistration) * time.Millisecond)
 			select {
 			case <-sigStop:
 				stopSignal = false
@@ -144,6 +138,16 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 		// and we only do the numUes registration once
 		if !loop {
 			break
+		}
+	}
+	// If CTRL-C was not yet received, wait for it
+	if stopSignal {
+		<-sigStop
+	}
+	// When CTRL-C is received, terminate all UEs
+	for i := 1; i <= numUes; i++ {
+		if ueChans[i] != nil {
+			ueChans[i] <- procedures.UeTesterMessage{Type: procedures.Terminate}
 		}
 	}
 	wg.Wait()

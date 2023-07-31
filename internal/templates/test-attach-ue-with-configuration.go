@@ -7,6 +7,8 @@ import (
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
+	"os"
+	"os/signal"
 	"sync"
 	"time"
 )
@@ -33,6 +35,9 @@ func TestAttachUeWithConfiguration(tunnelEnabled bool) {
 
 	wg.Add(1)
 
+	sigStop := make(chan os.Signal, 1)
+	signal.Notify(sigStop, os.Interrupt)
+
 	// Launch a coroutine for procedures handling
 	go func() {
 		// Create a new UE coroutine
@@ -47,6 +52,10 @@ func TestAttachUeWithConfiguration(tunnelEnabled bool) {
 				ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
 				break
 			}
+
+			// When CTRL-C is received, terminate UE
+			<-sigStop
+			ueChan <- procedures.UeTesterMessage{Type: procedures.Terminate}
 		}
 	}()
 

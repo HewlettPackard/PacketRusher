@@ -64,6 +64,7 @@ type PDUSession struct {
 	routeTun   *netlink.Route
 	vrf        *netlink.Vrf
 	stopSignal chan bool
+	Wait       chan bool
 }
 
 type SECURITY struct {
@@ -185,6 +186,7 @@ func (ue *UEContext) CreatePDUSession() (*PDUSession, error) {
 
 	pduSession := &PDUSession{}
 	pduSession.Id = uint8(pduSessionIndex + 1)
+	pduSession.Wait = make(chan bool)
 
 	ue.PduSession[pduSessionIndex] = pduSession
 
@@ -321,7 +323,9 @@ func (ue *UEContext) DeletePduSession(pduSessionid uint8) error {
 	if pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil {
 		return errors.New("Unable to find PDUSession ID " + string(pduSessionid))
 	}
-	stopSignal := ue.PduSession[pduSessionid-1].GetStopSignal()
+	pduSession := ue.PduSession[pduSessionid-1]
+	close(pduSession.Wait)
+	stopSignal := pduSession.GetStopSignal()
 	if stopSignal != nil {
 		stopSignal <- true
 	}
@@ -424,9 +428,27 @@ func (ue *UEContext) GetMccAndMncInOctets() []byte {
 	return resu
 }
 
+// TS 24.501 9.11.3.4.1
+// Routing Indicator shall consist of 1 to 4 digits. The coding of this field is the
+// responsibility of home network operator but BCD coding shall be used. If a network
+// operator decides to assign less than 4 digits to Routing Indicator, the remaining digits
+// shall be coded as "1111" to fill the 4 digits coding of Routing Indicator (see NOTE 2). If
+// no Routing Indicator is configured in the USIM, the UE shall coxde bits 1 to 4 of octet 8
+// of the Routing Indicator as "0000" and the remaining digits as “1111".
 func (ue *UEContext) GetRoutingIndicatorInOctets() []byte {
+	if len(ue.UeSecurity.RoutingIndicator) == 0 {
+		ue.UeSecurity.RoutingIndicator = "0"
+	}
+
+	if len(ue.UeSecurity.RoutingIndicator) > 4 {
+		log.Fatal("[UE][CONFIG] Routing indicator must be 4 digits maximum, ", ue.UeSecurity.RoutingIndicator, " is invalid")
+	}
 
 	routingIndicator := []byte(ue.UeSecurity.RoutingIndicator)
+	for len(routingIndicator) < 4 {
+		routingIndicator = append(routingIndicator, 'F')
+ 	}
+
 	// Reverse the bytes in group of two
 	for i := 1; i < len(routingIndicator); i += 2 {
 		tmp := routingIndicator[i-1]
@@ -436,12 +458,9 @@ func (ue *UEContext) GetRoutingIndicatorInOctets() []byte {
 
 	// BCD conversion
 	encodedRoutingIndicator, err := hex.DecodeString(string(routingIndicator))
-
 	if err != nil {
-		log.Fatal("[UE] Unable to encode routing indicator ", err)
+		log.Fatal("[UE][CONFIG] Unable to encode routing indicator ", err)
 	}
-
-	log.Info(encodedRoutingIndicator)
 
 	return encodedRoutingIndicator
 }

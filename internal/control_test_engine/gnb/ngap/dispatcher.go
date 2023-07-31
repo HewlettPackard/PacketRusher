@@ -46,14 +46,24 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 			handler.HandlerPduSessionResourceSetupRequest(gnb, ngapMsg)
 
 		case ngapType.ProcedureCodePDUSessionResourceRelease:
-			// handler NGAP PDU Session Resource Setup Request.
+			// handler NGAP PDU Session Resource Release
 			log.Info("[GNB][NGAP] Receive PDU Session Release Command")
 			handler.HandlerPduSessionReleaseCommand(gnb, ngapMsg)
 
 		case ngapType.ProcedureCodeUEContextRelease:
-			// handler NGAP PDU Session Resource Setup Request.
+			// handler NGAP UE Context Release
 			log.Info("[GNB][NGAP] Receive UE Context Release Command")
 			handler.HandlerUeContextReleaseCommand(gnb, ngapMsg)
+
+		case ngapType.ProcedureCodeAMFConfigurationUpdate:
+			// handler NGAP AMF Configuration Update
+			log.Info("[GNB][NGAP] Receive AMF Configuration Update")
+			handler.HandlerAmfConfiguratonUpdate(amf, gnb, ngapMsg)
+
+		case ngapType.ProcedureCodeErrorIndication:
+			// handler Error Indicator
+			log.Error("[GNB][NGAP] Receive Error Indication")
+			handler.HandlerErrorIndication(gnb, ngapMsg)
 
 		default:
 			log.Info("[GNB][NGAP] Received unknown NGAP message")

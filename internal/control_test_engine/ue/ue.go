@@ -8,8 +8,6 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/service"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
 	"my5G-RANTester/internal/monitoring"
-	"os"
-	"os/signal"
 	"sync"
 	"time"
 )
@@ -47,26 +45,11 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 			// wg.Add(1)
 		}
 
-		// control the signals
-		sigUe := make(chan os.Signal, 1)
-		signal.Notify(sigUe, os.Interrupt)
 
 		// Block until a signal is received.
 		loop := true
 		for loop {
 			select {
-			case <-sigUe:
-				if ue.GetStateMM() == context.MM5G_REGISTERED {
-					for i := uint8(1); i <= 16; i++ {
-						pduSession, _ := ue.GetPduSession(i)
-						if pduSession != nil {
-							trigger.InitPduSessionRelease(ue, pduSession)
-						}
-					}
-					trigger.InitDeregistration(ue)
-					time.Sleep(1 * time.Second)
-				}
-				loop = false
 			case msg := <-ueMgrChannel:
 				switch msg.Type {
 				case procedures.Registration:
@@ -77,6 +60,27 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 					trigger.InitPduSessionRequest(ue)
 				case procedures.DestroyPDUSession:
 					trigger.InitPduSessionRelease(ue, msg.Param)
+				case procedures.Terminate:
+					log.Info("[UE] Terminating UE as requested")
+					// If UE is registered
+					if ue.GetStateMM() == context.MM5G_REGISTERED {
+						// Release PDU Sessions
+						for i := uint8(1); i <= 16; i++ {
+							pduSession, _ := ue.GetPduSession(i)
+							if pduSession != nil {
+								trigger.InitPduSessionRelease(ue, pduSession)
+								select {
+								case <-pduSession.Wait:
+								case <-time.After(5 * time.Millisecond):
+									// If still unregistered after 5 ms, continue
+								}
+							}
+						}
+						// Initiate Deregistration
+						trigger.InitDeregistration(ue)
+					}
+					// Else, nothing to do
+					loop = false
 				case procedures.Kill:
 					loop = false
 				}

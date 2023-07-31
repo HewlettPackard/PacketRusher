@@ -33,7 +33,7 @@ ue:
     nia1: false
     nia2: true
   ciphering:
-    nea0: false
+    nea0: true
     nea1: false
     nea2: true
 amfif:

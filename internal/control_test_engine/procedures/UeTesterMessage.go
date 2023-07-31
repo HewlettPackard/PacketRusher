@@ -9,7 +9,8 @@ const (
 	Deregistration    UeTesterMessageType = 1
 	NewPDUSession     UeTesterMessageType = 2
 	DestroyPDUSession UeTesterMessageType = 3
-	Kill              UeTesterMessageType = 4
+	Terminate         UeTesterMessageType = 4
+	Kill              UeTesterMessageType = 5
 )
 
 type UeTesterMessage struct {

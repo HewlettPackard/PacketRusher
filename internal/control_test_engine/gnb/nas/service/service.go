@@ -81,6 +81,12 @@ func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
 		forwardData := make([]byte, n)
 		copy(forwardData, buf[:n])
 
+		gnbUeContext, err := gnb.GetGnbUe(ue.GetRanUeId())
+		if gnbUeContext == nil || err != nil {
+			log.Error("[GNB][NAS] Ignoring message from UE ", ue.GetRanUeId(), " as UE Context was cleaned as requested by AMF.")
+			break
+		}
+
 		// send to dispatch.
 		go nas.Dispatch(ue, forwardData, gnb)
 	}

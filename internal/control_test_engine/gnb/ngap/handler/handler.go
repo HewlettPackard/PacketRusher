@@ -8,8 +8,6 @@ import (
 	_ "github.com/vishvananda/netlink"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
-	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_context_management"
-	senderNgap "my5G-RANTester/internal/control_test_engine/gnb/ngap/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap/ngapType"
@@ -637,24 +635,63 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 		log.Error("[GNB][AMF] AMF is trying to free the context of an unknown UE")
 		return
 	}
+	// Wait for all messages to be sent to UE before deleting context
+	// TODO: Better synchro
+	time.Sleep(1 * time.Second)
 	gnb.DeleteGnBUe(ue)
 
 	// Send UEContextReleaseComplete
-	conn := ue.GetSCTP()
-	ngapMsg, _ := ue_context_management.UeContextReleaseComplete(ue)
-	err = senderNgap.SendToAmF(ngapMsg, conn)
-	if err != nil {
-		log.Fatal("[GNB][AMF] Error sending UE Release Context Complete: ", err)
-	}
+	trigger.SendUeContextReleaseComplete(ue)
 
 	log.Info("[GNB][NGAP] Releasing UE Context, cause: ", cause)
+}
+
+func HandlerAmfConfiguratonUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU)  {
+
+	// TODO: Implement update AMF Context from AMFConfigurationUpdate
+	_ = message.InitiatingMessage.Value.AMFConfigurationUpdate
+	log.Warn("[GNB][AMF] Ignoring AMFConfigurationUpdate but send AMFConfigurationUpdateAcknowledge")
+	log.Warn("[GNB][AMF] TODO: Implement update AMF Context from AMFConfigurationUpdate")
+
+	trigger.SendAmfConfigurationUpdateAcknowledge(amf)
+}
+
+func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU)  {
+
+	valueMessage := message.InitiatingMessage.Value.ErrorIndication
+
+	var amfUeId, ranUeId int64
+
+	for _, ies := range valueMessage.ProtocolIEs.List {
+		switch ies.Id.Value {
+
+		case ngapType.ProtocolIEIDAMFUENGAPID:
+
+			if ies.Value.AMFUENGAPID == nil {
+				log.Fatal("[GNB][NGAP] AMF UE ID is missing")
+			}
+			amfUeId = ies.Value.AMFUENGAPID.Value
+
+		case ngapType.ProtocolIEIDRANUENGAPID:
+
+			if ies.Value.RANUENGAPID == nil {
+				log.Fatal("[GNB][NGAP] RAN UE ID is missing")
+				// TODO SEND ERROR INDICATION
+			}
+			ranUeId = ies.Value.RANUENGAPID.Value
+		}
+	}
+
+	ue := getUeFromContext(gnb, ranUeId, amfUeId)
+
+	log.Warn("[GNB][AMF] Received an Error Indication for UE with AMF UE ID: ", ue.GetAmfUeId(), ", RAN UE ID: ", ue.GetRanUeId())
 }
 
 func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *context.GNBUe {
 	// check RanUeId and get UE.
 	ue, err := gnb.GetGnbUe(ranUeId)
 	if err != nil || ue == nil {
-		log.Fatal("[GNB][NGAP] RAN UE NGAP ID is incorrect")
+		log.Fatal("[GNB][NGAP] RAN UE NGAP ID is incorrect, found: ", ranUeId)
 		// TODO SEND ERROR INDICATION
 	}
 
@@ -663,7 +700,7 @@ func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *co
 		ue.SetAmfUeId(amfUeId)
 	} else {
 		if ue.GetAmfUeId() != amfUeId {
-			log.Fatal("[GNB][NGAP] AMF UE NGAP ID is incorrect")
+			log.Fatal("[GNB][NGAP] AMF UE NGAP ID is incorrect, found: ", amfUeId)
 		}
 	}
 	return ue

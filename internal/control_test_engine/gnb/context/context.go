@@ -97,12 +97,6 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	// store UE in the UE Pool of GNB.
 	gnb.uePool.Store(ranId, ue)
 
-	// TODO: Update UE IP Handling
-	// set ran UE IP
-	//ueIp := gnb.getRanUeIp()
-	//ue.SetIp(ueIp)
-	// store UE in the GNB UE IP Pool.
-	//gnb.ueIpPool.Store(ue.GetIp().String(), ue)
 
 	// select AMF with Capacity is more than 0.
 	amf := gnb.selectAmFByActive()
@@ -242,17 +236,6 @@ func (gnb *GNBContext) getGnbAmf(amfId int64) (*GNBAmf, error) {
 	return amf.(*GNBAmf), nil
 }
 
-func (gnb *GNBContext) getRanUeIp() uint8 {
-
-	// TODO implement mutex
-
-	id := gnb.ueIpGenerator
-
-	// increment Ue Ip Generator.
-	gnb.ueIpGenerator++
-
-	return id
-}
 
 func (gnb *GNBContext) getRanUeId() int64 {
 

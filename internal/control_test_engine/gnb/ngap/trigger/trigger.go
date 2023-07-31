@@ -37,7 +37,7 @@ func SendPduSessionReleaseResponse(pduSessionIds []ngapType.PDUSessionID, ue *co
 		log.Fatal("[GNB][NGAP] Trying to send a PDU Session Release Reponse for no PDU Session")
 	}
 
-		ngapMsg, err := pdu_session_management.PDUSessionReleaseResponse(pduSessionIds, ue)
+	ngapMsg, err := pdu_session_management.PDUSessionReleaseResponse(pduSessionIds, ue)
 	if err != nil {
 		log.Fatal("[GNB][NGAP] Error sending PDU Session Release Response.: ", err)
 	}
@@ -66,11 +66,47 @@ func SendInitialContextSetupResponse(ue *context.GNBUe) {
 	}
 }
 
+
+func SendUeContextReleaseComplete(ue *context.GNBUe) {
+	log.Info("[GNB] Initiating UE Context Complete")
+
+	// send UE Context Release Complete
+	ngapMsg, err := ue_context_management.UeContextReleaseComplete(ue)
+	if err != nil {
+		log.Fatal("[GNB][NGAP] Error sending UE Context Complete")
+	}
+
+	// Send UE Context Release Complete
+	conn := ue.GetSCTP()
+	err = sender.SendToAmF(ngapMsg, conn)
+	if err != nil {
+		log.Fatal("[GNB][AMF] Error sending UE Context Complete: ", err)
+	}
+}
+
+func SendAmfConfigurationUpdateAcknowledge(amf *context.GNBAmf) {
+	log.Info("[GNB] Initiating AMF Configuration Update Acknowledge")
+
+	// send AMF Configure Update Acknowledge
+	ngapMsg, err := interface_management.AmfConfigurationUpdateAcknowledge()
+	if err != nil {
+		log.Fatal("[GNB][NGAP] Error sending AMF Configuration Update Acknowledge")
+	}
+
+	// Send AMF Configure Update Acknowledge
+	conn := amf.GetSCTPConn()
+	err = sender.SendToAmF(ngapMsg, conn)
+	if err != nil {
+		log.Fatal("[GNB][NGAP] Error sending AMF Configuration Update Acknowledge")
+	}
+}
+
+
 func SendNgSetupRequest(gnb *context.GNBContext, amf *context.GNBAmf) {
 	log.Info("[GNB] Initiating NG Setup Request")
 
 	// send NG setup response.
-	ngapMsg, err := interface_management.NGSetupRequest(gnb, "my5gRANTester")
+	ngapMsg, err := interface_management.NGSetupRequest(gnb, "PacketRusher")
 	if err != nil {
 		log.Info("[GNB][NGAP] Error sending NG Setup Request")
 

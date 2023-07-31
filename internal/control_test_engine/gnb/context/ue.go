@@ -34,7 +34,6 @@ type PDUSession struct {
 	pduSessionId int64
 	sst          string
 	sd           string
-	ranUeIP      net.IP
 	uplinkTeid   uint32
 	downlinkTeid uint32
 	pduType      uint64
@@ -225,14 +224,6 @@ func (pduSession *PDUSession) GetPduType() (valor string) {
 
 	}
 	return
-}
-
-func (pduSession *PDUSession) SetIp(ueIp uint8) {
-	pduSession.ranUeIP = net.IPv4(127, 0, 0, ueIp)
-}
-
-func (pduSession *PDUSession) GetIp() net.IP {
-	return pduSession.ranUeIP
 }
 
 func (ue *GNBUe) GetRanUeId() int64 {
