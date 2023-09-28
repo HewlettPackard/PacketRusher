@@ -9,24 +9,17 @@ import (
 	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 
-	"encoding/json"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 )
 
-func SetupGtpInterface(ue *context.UEContext, message []byte) {
+func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	if !ue.IsTunnelEnabled() {
 		log.Info(fmt.Sprintf("[UE][GTP] Interface for UE %s has not been created. Tunnel has been disabled.", ue.GetMsin()))
 		return
 	}
-
-    var msg gnbContext.UEMessage
-    jsonErr := json.Unmarshal(message, &msg)
-    if jsonErr != nil {
-        log.Fatal(jsonErr)
-    }
 
 	pduSession, err := ue.GetPduSession(uint8(msg.PDUSessionId))
 	if err != nil {

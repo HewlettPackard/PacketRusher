@@ -176,33 +176,6 @@ func main() {
 				},
 			},
 			{
-				Name:    "ue-latency-interval",
-				Aliases: []string{"ue-latency-interval"},
-				Usage: "\nTesting UE latency in registration\n" +
-					"Testing UE latency for 20 requests: ue-latency-interval -n 20\n",
-				Flags: []cli.Flag{
-					&cli.IntFlag{Name: "number-of-requests", Value: 1, Aliases: []string{"n"}},
-				},
-				Action: func(c *cli.Context) error {
-					var requests int
-
-					name := "Testing UE latency in registration"
-					cfg := config.Data
-
-					requests = c.Int("number-of-requests")
-
-					log.Info("---------------------------------------")
-					log.Warn("[TESTER] Starting test function: ", name)
-					log.Warn("[TESTER][UE] Number of requests: ", requests)
-					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
-					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
-					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
-					log.Info("---------------------------------------")
-					log.Warn("[TESTER][UE] Average of the latency for a queue of requests: ", templates.TestUesLatencyInInterval(requests)/int64(requests), "ms")
-					return nil
-				},
-			},
-			{
 				Name:    "Test availability of AMF",
 				Aliases: []string{"amf-availability"},
 				Usage: "\nTest availability of AMF in interval\n" +

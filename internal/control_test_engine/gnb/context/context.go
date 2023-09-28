@@ -6,8 +6,6 @@ import (
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
 	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
-	"golang.org/x/net/ipv4"
-	"net"
 	"sync"
 )
 
@@ -17,7 +15,6 @@ type GNBContext struct {
 	uePool         sync.Map    // map[in64]*GNBUe, UeRanNgapId as key
 	amfPool        sync.Map    // map[int64]*GNBAmf, AmfId as key
 	teidPool       sync.Map    // map[uint32]*GNBUe, downlinkTeid as key
-	ueIpPool       sync.Map    // map[string]*GNBUe, ueGnbIp as key
 	sliceInfo      Slice
 	idUeGenerator  int64  // ran UE id.
 	idAmfGenerator int64  // ran amf id
@@ -32,7 +29,6 @@ type DataInfo struct {
 	upfPort      int               // upf port
 	gtpPlane     *gtpv1.UPlaneConn // N3 connection
 	gatewayGnbIp string            // IP gateway that communicates with UE data plane.
-	uePlane      *ipv4.RawConn     // listen UE data plane
 }
 
 type Slice struct {
@@ -41,23 +37,22 @@ type Slice struct {
 }
 
 type ControlInfo struct {
-	mcc          string
-	mnc          string
-	tac          string
-	gnbId        string
-	gnbIp        string
-	gnbPort      int
-	unixlistener net.Listener
-	n2           *sctp.SCTPConn
-	sockPath     string
+	mcc            string
+	mnc            string
+	tac            string
+	gnbId          string
+	gnbIp          string
+	gnbPort        int
+	inboundChannel chan UEMessage
+	n2             *sctp.SCTPConn
 }
 
-func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipData string, port, portData int, sockPath string) {
+func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipData string, port, portData int) {
 	gnb.controlInfo.mcc = mcc
 	gnb.controlInfo.mnc = mnc
 	gnb.controlInfo.tac = tac
 	gnb.controlInfo.gnbId = gnbId
-	gnb.controlInfo.sockPath = sockPath
+	gnb.controlInfo.inboundChannel = make(chan UEMessage, 1)
 	gnb.sliceInfo.sd = sd
 	gnb.sliceInfo.sst = sst
 	gnb.idUeGenerator = 1
@@ -74,7 +69,7 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipDat
 	gnb.dataInfo.gnbPort = portData
 }
 
-func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
+func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage) *GNBUe {
 
 	// TODO if necessary add more information for UE.
 	// TODO implement mutex
@@ -88,8 +83,9 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 
 	ue.SetAmfUeId(0)
 
-	// set unix connection for UE.
-	ue.SetUnixSocket(conn)
+	// Connect gNB and UE's channels
+	ue.SetGnbRx(gnbRx)
+	ue.SetGnbTx(gnbTx)
 
 	// set state to UE.
 	ue.SetStateInitialized()
@@ -97,11 +93,10 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	// store UE in the UE Pool of GNB.
 	gnb.uePool.Store(ranId, ue)
 
-
 	// select AMF with Capacity is more than 0.
 	amf := gnb.selectAmFByActive()
 	if amf == nil {
-		log.Info("No AMF available for this UE")
+		log.Error("No AMF available for this UE")
 		return nil
 	}
 
@@ -113,12 +108,8 @@ func (gnb *GNBContext) NewGnBUe(conn net.Conn) *GNBUe {
 	return ue
 }
 
-func (gnb *GNBContext) SetListener(conn net.Listener) {
-	gnb.controlInfo.unixlistener = conn
-}
-
-func (gnb *GNBContext) GetListener() net.Listener {
-	return gnb.controlInfo.unixlistener
+func (gnb *GNBContext) GetInboundChannel() chan UEMessage {
+	return gnb.controlInfo.inboundChannel
 }
 
 func (gnb *GNBContext) GetGatewayGnbIp() string {
@@ -131,26 +122,18 @@ func (gnb *GNBContext) GetN3GnbIp() string {
 
 func (gnb *GNBContext) DeleteGnBUe(ue *GNBUe) {
 	gnb.uePool.Delete(ue.ranUeNgapId)
-	//gnb.ueIpPool.Delete(ue.GetIp().String())
 	for _, pduSession := range ue.context.pduSession {
 		if pduSession != nil {
 			gnb.teidPool.Delete(pduSession.GetTeidDownlink())
 		}
 	}
+	close(ue.gnbTx)
 }
 
 func (gnb *GNBContext) GetGnbUe(ranUeId int64) (*GNBUe, error) {
 	ue, err := gnb.uePool.Load(ranUeId)
 	if !err {
 		return nil, fmt.Errorf("UE is not find in GNB UE POOL")
-	}
-	return ue.(*GNBUe), nil
-}
-
-func (gnb *GNBContext) GetGnbUeByIp(ip string) (*GNBUe, error) {
-	ue, err := gnb.ueIpPool.Load(ip)
-	if !err {
-		return nil, fmt.Errorf("UE is not find in GNB UE POOL using IP")
 	}
 	return ue.(*GNBUe), nil
 }
@@ -236,7 +219,6 @@ func (gnb *GNBContext) getGnbAmf(amfId int64) (*GNBAmf, error) {
 	return amf.(*GNBAmf), nil
 }
 
-
 func (gnb *GNBContext) getRanUeId() int64 {
 
 	// TODO implement mutex
@@ -309,14 +291,6 @@ func (gnb *GNBContext) GetN3Plane() *gtpv1.UPlaneConn {
 	return gnb.dataInfo.gtpPlane
 }
 
-func (gnb *GNBContext) GetUePlane() *ipv4.RawConn {
-	return gnb.dataInfo.uePlane
-}
-
-func (gnb *GNBContext) SetUePlane(uePlane *ipv4.RawConn) {
-	gnb.dataInfo.uePlane = uePlane
-}
-
 func (gnb *GNBContext) setGnbPort(port int) {
 	gnb.controlInfo.gnbPort = port
 }
@@ -359,10 +333,6 @@ func (gnb *GNBContext) GetGnbIp() string {
 
 func (gnb *GNBContext) GetGnbPort() int {
 	return gnb.controlInfo.gnbPort
-}
-
-func (gnb *GNBContext) GetSockPath() string {
-	return gnb.controlInfo.sockPath
 }
 
 func (gnb *GNBContext) GetGnbIdInBytes() []byte {
@@ -441,26 +411,14 @@ func (gnb *GNBContext) GetMccAndMncInOctets() []byte {
 func (gnb *GNBContext) Terminate() {
 
 	// close all connections
-	ln := gnb.GetListener()
-	if ln != nil {
-		log.Info("[GNB][UE] UNIX/NAS Terminated")
-		ln.Close()
-	}
+	close(gnb.GetInboundChannel())
+	log.Info("[GNB][UE] NAS channel Terminated")
 
 	n2 := gnb.GetN2()
 	if n2 != nil {
 		log.Info("[GNB][AMF] N2/TNLA Terminated")
 		n2.Close()
 	}
-
-	// TODO: problem in close de N3 socket in gtp library
-	/*
-		n3 := gnb.GetN3Plane()
-		if n3 != nil {
-			n3.Close()
-			log.Info("[GNB][UPF] N3/NG-U Terminated")
-		}
-	*/
 
 	log.Info("GNB Terminated")
 }

@@ -3,7 +3,6 @@ package context
 import (
 	"errors"
 	"github.com/ishidawataru/sctp"
-	"net"
 )
 
 // UE main states in the GNB Context.
@@ -17,7 +16,8 @@ type GNBUe struct {
 	amfId                int64          // Identifier for AMF in UE/GNB Context.
 	state                int            // State of UE in NAS/GNB Context.
 	sctpConnection       *sctp.SCTPConn // Sctp association in using by the UE.
-	unixSocketConnection net.Conn       // Unix sockets association in using by the UE.
+	gnbRx                 chan UEMessage
+	gnbTx                 chan UEMessage
 	context              Context
 }
 
@@ -170,12 +170,20 @@ func (ue *GNBUe) SetStateReady() {
 	ue.state = Ready
 }
 
-func (ue *GNBUe) GetUnixSocket() net.Conn {
-	return ue.unixSocketConnection
+func (ue *GNBUe) GetGnbRx() chan UEMessage {
+	return ue.gnbRx
 }
 
-func (ue *GNBUe) SetUnixSocket(conn net.Conn) {
-	ue.unixSocketConnection = conn
+func (ue *GNBUe) SetGnbRx(gnbRx chan UEMessage) {
+	ue.gnbRx = gnbRx
+}
+
+func (ue *GNBUe) GetGnbTx() chan UEMessage {
+	return ue.gnbTx
+}
+
+func (ue *GNBUe) SetGnbTx(gnbTx chan UEMessage) {
+	ue.gnbTx = gnbTx
 }
 
 func (pduSession *PDUSession) GetPduSessionId() int64 {

@@ -3,16 +3,20 @@ package ue
 import (
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
+	context2 "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
+	serviceGtp "my5G-RANTester/internal/control_test_engine/ue/gtp/service"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/service"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
-	"my5G-RANTester/internal/monitoring"
+	"my5G-RANTester/internal/control_test_engine/ue/state"
+	"os"
+	"os/signal"
 	"sync"
 	"time"
 )
 
-func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMessage, wg *sync.WaitGroup) *context.UEContext {
+func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMessage, gnb *context2.GNBContext, wg *sync.WaitGroup) *context.UEContext {
 	// new UE instance.
 	ue := &context.UEContext{}
 
@@ -32,60 +36,39 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 		int32(conf.Ue.Snssai.Sst),
 		conf.Ue.Snssai.Sd,
 		conf.Ue.TunnelEnabled,
-		id,
-		conf.GetSockPath())
+		id)
 
 	go func() {
 		// starting communication with GNB and listen.
-		err := service.InitConn(ue)
-		if err != nil {
-			log.Fatal("Error in", err)
-		} else {
-			log.Info("[UE] UNIX/NAS service is running")
-			// wg.Add(1)
-		}
-
+		gnbChannel := service.InitConn(ue, gnb)
+		sigStop := make(chan os.Signal, 1)
+		signal.Notify(sigStop, os.Interrupt)
 
 		// Block until a signal is received.
 		loop := true
 		for loop {
 			select {
-			case msg := <-ueMgrChannel:
-				switch msg.Type {
-				case procedures.Registration:
-					trigger.InitRegistration(ue)
-				case procedures.Deregistration:
-					trigger.InitDeregistration(ue)
-				case procedures.NewPDUSession:
-					trigger.InitPduSessionRequest(ue)
-				case procedures.DestroyPDUSession:
-					trigger.InitPduSessionRelease(ue, msg.Param)
-				case procedures.Terminate:
-					log.Info("[UE] Terminating UE as requested")
-					// If UE is registered
-					if ue.GetStateMM() == context.MM5G_REGISTERED {
-						// Release PDU Sessions
-						for i := uint8(1); i <= 16; i++ {
-							pduSession, _ := ue.GetPduSession(i)
-							if pduSession != nil {
-								trigger.InitPduSessionRelease(ue, pduSession)
-								select {
-								case <-pduSession.Wait:
-								case <-time.After(5 * time.Millisecond):
-									// If still unregistered after 5 ms, continue
-								}
-							}
-						}
-						// Initiate Deregistration
-						trigger.InitDeregistration(ue)
-					}
-					// Else, nothing to do
+			case msg, open := <-gnbChannel:
+				if !open {
+					log.Error("[UE][", ue.GetMsin(), "] Stopping UE as communication with gNB was closed")
 					loop = false
-				case procedures.Kill:
-					loop = false
+					break
 				}
+				gnbMsgHandler(msg, ue)
+			case msg, open := <-ueMgrChannel:
+				if !open {
+					log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with scenario was closed")
+					loop = false
+					break
+				}
+				loop = ueMgrHandler(msg, ue)
+			case <-sigStop:
+				log.Info("[UE][", ue.GetMsin(), "] Stopping UE as CTRL-C was received")
+				ueMgrHandler(procedures.UeTesterMessage{Type: procedures.Terminate}, ue)
+				loop = false
 			}
 		}
+		close(ueMgrChannel)
 		ue.Terminate()
 		wg.Done()
 	}()
@@ -93,61 +76,49 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 	return ue
 }
 
-func RegistrationUeMonitor(conf config.Config,
-	id uint8, monitor *monitoring.Monitor, wg *sync.WaitGroup, start time.Time) {
-
-	// new UE instance.
-	ue := &context.UEContext{}
-
-	// new UE context
-	ue.NewRanUeContext(
-		conf.Ue.Msin,
-		conf.GetUESecurityCapability(),
-		conf.Ue.Key,
-		conf.Ue.Opc,
-		"c9e8763286b5b9ffbdf56e1297d0887b",
-		conf.Ue.Amf,
-		conf.Ue.Sqn,
-		conf.Ue.Hplmn.Mcc,
-		conf.Ue.Hplmn.Mnc,
-		conf.Ue.RoutingIndicator,
-		conf.Ue.Dnn,
-		int32(conf.Ue.Snssai.Sst),
-		conf.Ue.Snssai.Sd,
-		conf.Ue.TunnelEnabled,
-		id,
-		conf.GetSockPath())
-
-	// starting communication with GNB and listen.
-	err := service.InitConn(ue)
-	if err != nil {
-		log.Fatal("Error in", err)
+func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
+	if msg.IsNas {
+		// handling NAS message.
+		go state.DispatchState(ue, msg.Nas)
 	} else {
-		log.Info("[UE] UNIX/NAS service is running")
-		// wg.Add(1)
+		serviceGtp.SetupGtpInterface(ue, msg)
 	}
+}
 
-	// registration procedure started.
-	trigger.InitRegistration(ue)
-
-	for {
-
-		// UE is register in network
-		if ue.GetStateMM() == 0x03 {
-			elapsed := time.Since(start)
-			monitor.LtRegisterLocal = elapsed.Milliseconds()
-			log.Warn("[TESTER][UE] UE LATENCY IN REGISTRATION: ", monitor.LtRegisterLocal, " ms")
-			break
+func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
+	loop := true
+	switch msg.Type {
+	case procedures.Registration:
+		trigger.InitRegistration(ue)
+	case procedures.Deregistration:
+		trigger.InitDeregistration(ue)
+	case procedures.NewPDUSession:
+		trigger.InitPduSessionRequest(ue)
+	case procedures.DestroyPDUSession:
+		trigger.InitPduSessionRelease(ue, msg.Param)
+	case procedures.Terminate:
+		log.Info("[UE] Terminating UE as requested")
+		// If UE is registered
+		if ue.GetStateMM() == context.MM5G_REGISTERED {
+			// Release PDU Sessions
+			for i := uint8(1); i <= 16; i++ {
+				pduSession, _ := ue.GetPduSession(i)
+				if pduSession != nil {
+					trigger.InitPduSessionRelease(ue, pduSession)
+					select {
+					case <-pduSession.Wait:
+					case <-time.After(5 * time.Millisecond):
+						// If still unregistered after 5 ms, continue
+					}
+				}
+			}
+			// Initiate Deregistration
+			trigger.InitDeregistration(ue)
 		}
-
-		// timeout is 10 000 ms
-		if time.Since(start).Milliseconds() >= 10000 {
-			log.Warn("[TESTER][UE] TIME EXPIRED IN UE REGISTRATION 10 000 ms")
-			break
-		}
+		// Else, nothing to do
+		loop = false
+	case procedures.Kill:
+		loop = false
 	}
-
-	wg.Done()
-	// ue.Terminate()
-	// os.Exit(0)
+	return loop
 }

@@ -7,7 +7,7 @@ gnodeb:
     port: 2152
   plmnlist:
     mcc: "999"
-    mnc: "70"
+    mnc: "27"
     tac: "000001"
     gnbid: "000008"
   slicesupportlist:
@@ -19,12 +19,12 @@ ue:
   key: "00112233445566778899AABBCCDDEEFF"
   opc: "00112233445566778899AABBCCDDEEFF"
   amf: "8000"
-  sqn: "00000000"
-  dnn: "internet"
+  sqn: "0000000"
+  dnn: "data1"
   routingindicator: "4567"
   hplmn:
     mcc: "999"
-    mnc: "70"
+    mnc: "27"
   snssai:
     sst: 01
     sd: "000001"
@@ -37,7 +37,7 @@ ue:
     nea1: false
     nea2: true
 amfif:
-  ip: "192.168.11.30"
+  ip: "192.168.11.10"
   port: 38412
 logs:
     level: 4

@@ -6,6 +6,11 @@ type UEMessage struct {
 	UpfIp string
 	OTeid string
 	ITeid string
+	GNBRx chan UEMessage
+	GNBTx chan UEMessage
+	IsNas bool
+	Nas   []byte
+	ConnectionClosed bool
 }
 
 func (ue *UEMessage) NewUeMessage(PDUSessionId int64, GnbIp string, UpfIp string, OTeid string, ITeid string) {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/lib/UeauCommon"
 	"my5G-RANTester/lib/milenage"
 	"my5G-RANTester/lib/nas/nasType"
@@ -36,8 +37,8 @@ type UEContext struct {
 	UeSecurity SECURITY
 	StateMM    int
 	StateSM    int
-	UnixConn   net.Conn
-	SockPath   string
+	gnbRx      chan context.UEMessage
+	gnbTx      chan context.UEMessage
 	PduSession [16]*PDUSession
 	amfInfo    Amf
 
@@ -90,7 +91,7 @@ type SECURITY struct {
 func (ue *UEContext) NewRanUeContext(msin string,
 	ueSecurityCapability *nasType.UESecurityCapability,
 	k, opc, op, amf, sqn, mcc, mnc, routingIndicator, dnn string,
-	sst int32, sd string, tunnelEnabled bool, id uint8, sockPath string) {
+	sst int32, sd string, tunnelEnabled bool, id uint8) {
 
 	ue.stateChange = &sync.Cond{L: &sync.Mutex{}}
 
@@ -134,7 +135,6 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 	// added UE id.
 	ue.id = id
-	ue.SockPath = sockPath
 
 	// added network slice
 	ue.Snssai.Sd = sd
@@ -143,6 +143,9 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	// added Domain Network Name.
 	ue.Dnn = dnn
 	ue.TunnelEnabled = tunnelEnabled
+
+	ue.gnbRx = make(chan context.UEMessage, 1)
+	ue.gnbTx = make(chan context.UEMessage, 1)
 
 	// encode mcc and mnc for mobileIdentity5Gs.
 	resu := ue.GetMccAndMncInOctets()
@@ -195,9 +198,6 @@ func (ue *UEContext) CreatePDUSession() (*PDUSession, error) {
 
 func (ue *UEContext) GetUeId() uint8 {
 	return ue.id
-}
-func (ue *UEContext) GetSockPath() string {
-	return ue.SockPath
 }
 
 func (ue *UEContext) GetSuci() nasType.MobileIdentity5GS {
@@ -300,12 +300,12 @@ func (ue *UEContext) WaitOnStateMM() int {
 	return state
 }
 
-func (ue *UEContext) SetUnixConn(conn net.Conn) {
-	ue.UnixConn = conn
+func (ue *UEContext) GetGnbRx() chan context.UEMessage {
+	return ue.gnbRx
 }
 
-func (ue *UEContext) GetUnixConn() net.Conn {
-	return ue.UnixConn
+func (ue *UEContext) GetGnbTx() chan context.UEMessage {
+	return ue.gnbTx
 }
 
 func (ue *UEContext) IsTunnelEnabled() bool {
@@ -547,10 +547,22 @@ func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscr
 	AK, AKstar := make([]byte, 6), make([]byte, 6)
 
 	// Get OPC, K, SQN, AMF from USIM.
-	OPC, _ := hex.DecodeString(authSubs.Opc.OpcValue)
-	K, _ := hex.DecodeString(authSubs.PermanentKey.PermanentKeyValue)
-	sqnUe, _ := hex.DecodeString(authSubs.SequenceNumber)
-	AMF, _ := hex.DecodeString(authSubs.AuthenticationManagementField)
+	OPC, err := hex.DecodeString(authSubs.Opc.OpcValue)
+	if err != nil {
+		log.Fatal("[UE] OPC error: ", err, authSubs.Opc.OpcValue)
+	}
+	K, err := hex.DecodeString(authSubs.PermanentKey.PermanentKeyValue)
+	if err != nil {
+		log.Fatal("[UE] K error: ", err, authSubs.PermanentKey.PermanentKeyValue)
+	}
+	sqnUe, err := hex.DecodeString(authSubs.SequenceNumber)
+	if err != nil {
+		log.Fatal("[UE] sqn error: ", err, authSubs.SequenceNumber)
+	}
+	AMF, err := hex.DecodeString(authSubs.AuthenticationManagementField)
+	if err != nil {
+		log.Fatal("[UE] AuthenticationManagementField error: ", err, authSubs.AuthenticationManagementField)
+	}
 
 	// Generate RES, CK, IK, AK, AKstar
 	milenage.F2345_Test(OPC, K, RAND, RES, CK, IK, AK, AKstar)
@@ -650,6 +662,14 @@ func (ue *UEContext) DerivateAlgKey() {
 }
 
 func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
+	log.WithFields(log.Fields{
+		"k":  k,
+		"opc": opc,
+		"op": op,
+		"amf": amf,
+		"sqn": sqn,
+	}).Info("[UE] Authentification parameters:")
+
 	ue.UeSecurity.AuthenticationSubs.PermanentKey = &models.PermanentKey{
 		PermanentKeyValue: k,
 	}
@@ -668,6 +688,7 @@ func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
 }
 
 func (ue *UEContext) Terminate() {
+	ue.SetStateMM_NULL()
 
 	// clean all context of tun interface
 	for _, pduSession := range ue.PduSession {
@@ -692,13 +713,9 @@ func (ue *UEContext) Terminate() {
 		}
 	}
 
-	ueUnix := ue.GetUnixConn()
-	if ueUnix != nil {
-		ueUnix.Close()
-	}
+	close(ue.gnbRx)
 
 	log.Info("[UE] UE Terminated")
-
 }
 
 func reverse(s string) string {

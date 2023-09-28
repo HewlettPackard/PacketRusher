@@ -21,7 +21,7 @@ func ueHandler(ueId uint32)  {
 	think(5000)
 
 	fmt.Println("Hi, I'm an UE that wants to have 16 PDU Sessions!")
-	for pduSessionId:=uint32(1); pduSessionId<16; pduSessionId++ {
+	for pduSessionId:=uint32(1); pduSessionId<2; pduSessionId++ {
 		fmt.Println("Hi, I'm an UE that wants to request PDU Session id: ", pduSessionId)
 		pduSessionRequest(ueId, pduSessionId)
 	}
@@ -29,7 +29,7 @@ func ueHandler(ueId uint32)  {
 	think(5000)
 
 	fmt.Println("Hi, I'm an UE that wants to release 16 PDU Sessions!")
-	for pduSessionId:=uint32(1); pduSessionId<16; pduSessionId++ {
+	for pduSessionId:=uint32(1); pduSessionId<2; pduSessionId++ {
 		fmt.Println("Hi, I'm an UE that wants to release PDU Session id: ", pduSessionId)
 		pduSessionRelease(ueId, pduSessionId)
 	}

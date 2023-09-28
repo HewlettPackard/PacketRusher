@@ -210,6 +210,7 @@ void del_related_urr_hash(struct gtp5g_dev *gtp, struct pdr *pdr)
     char seid_urr_id_hexstr[SEID_U32ID_HEX_STR_LEN] = {0};
 
     for (j = 0; j < pdr->urr_num; j++) {
+        to_be_del = NULL;
         seid_urr_id_to_hex_str(pdr->seid, pdr->urr_ids[j], seid_urr_id_hexstr);
         i = str_hashfn(seid_urr_id_hexstr) % gtp->hash_size;
         hlist_for_each_entry_rcu(pdr_node, &gtp->related_urr_hash[i], hlist) {

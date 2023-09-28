@@ -5,6 +5,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
+	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
@@ -42,6 +43,7 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 	} else {
 		numGnb = 1
 	}
+	gnbs:= make(map[string]*gnbContext.GNBContext)
 
 	// Each gNB have their own IP address on both N2 and N3
 	// TODO: Limitation for now, these IPs must be sequential, eg:
@@ -55,7 +57,7 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 		cfg.GNodeB.ControlIF.Ip = n2Ip
 		cfg.GNodeB.DataIF.Ip = n3Ip
 
-		go gnb.InitGnb(cfg, &wg)
+		gnbs[cfg.GNodeB.PlmnList.GnbId] = gnb.InitGnb(cfg, &wg)
 		wg.Add(1)
 
 		// TODO: We could find the interfaces where N2/N3 are
@@ -81,14 +83,14 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 		// If CTRL-C signal has been received,
 		// stop creating new UEs, else we create numUes UEs
 		for ueId := 1; stopSignal && ueId <= numUes; ueId++ {
-			imsi := imsiGenerator(ueId, msin)
-			log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", imsi, " UE")
-			cfg.Ue.Msin = imsi
+			ueCfg := cfg
+			ueCfg.Ue.Msin = imsiGenerator(ueId, msin)
+			log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", ueCfg.Ue.Msin, " UE")
 
 			// Associate UE[ueId] with gnb[ueId] when dedicatedGnb = true
 			// else all UE[ueId] are associated with gnb[0]
 			if dedicatedGnb {
-				cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(ueId)
+				ueCfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(ueId)
 			}
 
 			// If there is currently a coroutine handling current UE
@@ -100,9 +102,6 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 
 			ueChans[ueId] = make(chan procedures.UeTesterMessage)
 
-			// Before creating a new UE, we wait for timeBetweenRegistration ms
-			time.Sleep(time.Duration(timeBetweenRegistration) * time.Millisecond)
-
 			// Launch a coroutine to handle UE
 			wg.Add(1)
 			go func(currentUeId int) {
@@ -110,23 +109,40 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 
 				// Create a new UE coroutine
 				// ue.NewUE returns context of the new UE
-				ue := ue.NewUE(cfg, uint8(currentUeId), ueChan, &wg)
+				ue := ue.NewUE(ueCfg, uint8(currentUeId), ueChan, gnbs[ueCfg.GNodeB.PlmnList.GnbId], &wg)
 
 				// We tell the UE to perform a registration
 				ueChan <- procedures.UeTesterMessage{Type: procedures.Registration}
+
+				// We automatically terminate the UE after timeBeforeDeregistration ms if
+				// timeBeforeDeregistration is set
+				if timeBeforeDeregistration != 0 {
+					go func() {
+						time.Sleep(time.Duration(timeBeforeDeregistration) * time.Millisecond)
+						ueChan <- procedures.UeTesterMessage{Type: procedures.Terminate}
+					}()
+				}
+
+				pduStarted := false
 				for {
 					// TODO: Add timeout + check for unexpected state
 					// When the UE is registered, tell the UE to trigger a PDU Session
-					if ue.WaitOnStateMM() == context.MM5G_REGISTERED {
+					switch ue.WaitOnStateMM() {
+					case context.MM5G_REGISTERED:
 						// We create as many PDU session as requested
 						// Only PDU Session id 1 will have a tunnel established
-						for i := 0; i < numPduSessions; i++ {
-							ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
+						if !pduStarted {
+							for i := 0; i < numPduSessions; i++ {
+								ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
+							}
+							pduStarted = true
 						}
-						break
 					}
 				}
 			}(ueId)
+
+			// Before creating a new UE, we wait for timeBetweenRegistration ms
+			time.Sleep(time.Duration(timeBetweenRegistration) * time.Millisecond)
 
 			select {
 			case <-sigStop:
@@ -140,16 +156,7 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 			break
 		}
 	}
-	// If CTRL-C was not yet received, wait for it
-	if stopSignal {
-		<-sigStop
-	}
-	// When CTRL-C is received, terminate all UEs
-	for i := 1; i <= numUes; i++ {
-		if ueChans[i] != nil {
-			ueChans[i] <- procedures.UeTesterMessage{Type: procedures.Terminate}
-		}
-	}
+
 	wg.Wait()
 }
 

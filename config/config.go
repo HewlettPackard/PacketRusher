@@ -112,10 +112,6 @@ func GetConfig() (Config, error) {
 	return cfg, nil
 }
 
-func (config *Config) GetSockPath() string {
-	return "/tmp/" + config.GNodeB.PlmnList.Mcc + config.GNodeB.PlmnList.Mnc + config.GNodeB.PlmnList.GnbId + ".sock"
-}
-
 func (config *Config) GetUESecurityCapability() *nasType.UESecurityCapability {
 	UESecurityCapability := &nasType.UESecurityCapability{
 		Iei:    nasMessage.RegistrationRequestUESecurityCapabilityType,

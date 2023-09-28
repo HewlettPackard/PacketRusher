@@ -24,7 +24,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	wg.Add(1)
 
-	go gnb.InitGnb(cfg, &wg)
+	gnb := gnb.InitGnb(cfg, &wg)
 
 	time.Sleep(1 * time.Second)
 
@@ -32,7 +32,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	wg.Add(1)
 
-	ue := ue.NewUE(cfg, 1, ueChan, &wg)
+	ue := ue.NewUE(cfg, 1, ueChan, gnb, &wg)
 
 	ctx, runtime := script.NewCustomScenario(scenarioPath)
 

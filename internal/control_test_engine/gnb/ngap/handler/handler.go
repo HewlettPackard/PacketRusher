@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	_ "github.com/vishvananda/netlink"
@@ -331,14 +330,10 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 
 	time.Sleep(20 * time.Millisecond)
 
-    msg := &context.UEMessage{}
+    msg := context.UEMessage{}
     msg.NewUeMessage(pduSessionId, gnb.GetN3GnbIp(), gnb.GetUpfIp(), fmt.Sprint(pduSession.GetTeidUplink()), fmt.Sprint(pduSession.GetTeidDownlink()))
 
-    value, jsonErr := json.Marshal(msg)
-    if jsonErr != nil {
-        log.Fatal(jsonErr)
-    }
-	sender.SendToUe(ue, value)
+	sender.SendMessageToUe(ue, msg)
 }
 
 func HandlerPduSessionReleaseCommand(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
