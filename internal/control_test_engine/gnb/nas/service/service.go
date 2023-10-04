@@ -35,22 +35,25 @@ func gnbListen(gnb *context.GNBContext) {
 }
 
 func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
+	rx := ue.GetGnbRx()
 	for {
-		message, done := <- ue.GetGnbRx()
-
-		if !done {
-			break
-		}
+		message, done := <- rx
 
 		gnbUeContext, err := gnb.GetGnbUe(ue.GetRanUeId())
 		if gnbUeContext == nil || err != nil {
 			log.Error("[GNB][NAS] Ignoring message from UE ", ue.GetRanUeId(), " as UE Context was cleaned as requested by AMF.")
 			break
 		}
+		if !done {
+			gnbUeContext.SetStateDown()
+			break
+		}
 
 		// send to dispatch.
 		if message.IsNas {
 			go nas.Dispatch(ue, message.Nas, gnb)
+		} else {
+			log.Error("[GNB] Received unknown message from UE")
 		}
 	}
 }

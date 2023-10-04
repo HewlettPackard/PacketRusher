@@ -127,7 +127,10 @@ func (gnb *GNBContext) DeleteGnBUe(ue *GNBUe) {
 			gnb.teidPool.Delete(pduSession.GetTeidDownlink())
 		}
 	}
+	ue.Lock()
 	close(ue.gnbTx)
+	ue.gnbTx = nil
+	ue.Unlock()
 }
 
 func (gnb *GNBContext) GetGnbUe(ranUeId int64) (*GNBUe, error) {

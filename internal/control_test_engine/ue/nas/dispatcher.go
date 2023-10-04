@@ -5,6 +5,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/handler"
 	"my5G-RANTester/lib/nas"
+	"my5G-RANTester/lib/nas/nasType"
 	"my5G-RANTester/lib/nas/security"
 	"reflect"
 )
@@ -153,15 +154,20 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 	case nas.MsgTypeDLNASTransport:
 		// handler DL NAS Transport.
 		log.Info("[UE][NAS] Receive DL NAS Transport")
-		if m.DLNASTransport.Cause5GMM != nil {
-			log.Error("[UE][NAS] UE received a 5GMM Failure, cause: 0x", m.DLNASTransport.Cause5GMM.Octet)
-		}
-
+		handleCause5GMM(m.DLNASTransport.Cause5GMM)
 		handler.HandlerDlNasTransportPduaccept(ue, m)
 
 	case nas.MsgTypeRegistrationReject:
 		// handler registration reject
-		log.Info("[UE][NAS] Receive Registration Reject")
+		log.Error("[UE][NAS] Receive Registration Reject")
+		handleCause5GMM(&m.RegistrationReject.Cause5GMM)
 	}
 
+}
+
+
+func handleCause5GMM(cause5GMM *nasType.Cause5GMM) {
+	if cause5GMM != nil {
+		log.Error("[UE][NAS] UE received a 5GMM Failure, cause: 0x", cause5GMM.Octet)
+	}
 }

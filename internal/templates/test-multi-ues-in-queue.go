@@ -97,49 +97,47 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 			// kill it, before creating a new coroutine with same UE
 			// Use case: Registration of N UEs in loop, when loop = true
 			if ueChans[ueId] != nil {
-				ueChans[ueId] <- procedures.UeTesterMessage{Type: procedures.Terminate}
+				ueChans[ueId] <- procedures.UeTesterMessage{Type: procedures.Kill}
+				close(ueChans[ueId])
 			}
 
 			ueChans[ueId] = make(chan procedures.UeTesterMessage)
 
-			// Launch a coroutine to handle UE
+			// Create a new UE coroutine
+			// ue.NewUE returns context of the new UE
 			wg.Add(1)
-			go func(currentUeId int) {
-				ueChan := ueChans[currentUeId]
+			ue := ue.NewUE(ueCfg, uint8(ueId), ueChans[ueId], gnbs[ueCfg.GNodeB.PlmnList.GnbId], &wg)
 
-				// Create a new UE coroutine
-				// ue.NewUE returns context of the new UE
-				ue := ue.NewUE(ueCfg, uint8(currentUeId), ueChan, gnbs[ueCfg.GNodeB.PlmnList.GnbId], &wg)
+			// We tell the UE to perform a registration
+			ueChans[ueId] <- procedures.UeTesterMessage{Type: procedures.Registration}
 
-				// We tell the UE to perform a registration
-				ueChan <- procedures.UeTesterMessage{Type: procedures.Registration}
-
+			// Launch a coroutine to handle UE
+			go func(ue *context.UEContext, ueChan chan procedures.UeTesterMessage) {
 				// We automatically terminate the UE after timeBeforeDeregistration ms if
 				// timeBeforeDeregistration is set
 				if timeBeforeDeregistration != 0 {
 					go func() {
 						time.Sleep(time.Duration(timeBeforeDeregistration) * time.Millisecond)
 						ueChan <- procedures.UeTesterMessage{Type: procedures.Terminate}
+						close(ueChan)
 					}()
 				}
 
 				pduStarted := false
-				for {
+				for !pduStarted {
 					// TODO: Add timeout + check for unexpected state
 					// When the UE is registered, tell the UE to trigger a PDU Session
 					switch ue.WaitOnStateMM() {
 					case context.MM5G_REGISTERED:
 						// We create as many PDU session as requested
 						// Only PDU Session id 1 will have a tunnel established
-						if !pduStarted {
-							for i := 0; i < numPduSessions; i++ {
-								ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
-							}
-							pduStarted = true
+						for i := 0; i < numPduSessions; i++ {
+							ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
 						}
+						pduStarted = true
 					}
 				}
-			}(ueId)
+			}(ue, ueChans[ueId])
 
 			// Before creating a new UE, we wait for timeBetweenRegistration ms
 			time.Sleep(time.Duration(timeBetweenRegistration) * time.Millisecond)

@@ -68,7 +68,6 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 				loop = false
 			}
 		}
-		close(ueMgrChannel)
 		ue.Terminate()
 		wg.Done()
 	}()

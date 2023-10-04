@@ -8,6 +8,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
 	"my5G-RANTester/lib/nas"
+	"my5G-RANTester/lib/nas/nasMessage"
 	"time"
 )
 
@@ -175,7 +176,90 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message)
 		ue.DeletePduSession(pduSessionId)
 		log.Info("[UE][NAS] Successfully released PDU Session ", pduSessionId, " from UE Context")
 
+	case nas.MsgTypePDUSessionEstablishmentReject:
+		log.Error("[UE][NAS] Receiving PDU Session Establishment Reject")
+
+		pduSessionEstablishmentReject := payloadContainer.PDUSessionEstablishmentReject
+		pduSessionId := pduSessionEstablishmentReject.GetPDUSessionID()
+
+		log.Error("[UE][NAS] PDU Session Establishment Reject for PDU Session ID ", pduSessionId, ", 5GSM Cause: ", cause5GSMToString(pduSessionEstablishmentReject.GetCauseValue()))
+
 	default:
 		log.Error("[UE][NAS] Receiving Unknown Dl NAS Transport message!! ", payloadContainer.GsmHeader.GetMessageType())
+	}
+}
+
+func cause5GSMToString(causeValue uint8) string {
+	switch causeValue {
+	case nasMessage.Cause5GSMInsufficientResources:
+		return "Insufficient Ressources"
+	case nasMessage.Cause5GSMMissingOrUnknownDNN:
+		return "Missing or Unknown DNN"
+	case nasMessage.Cause5GSMUnknownPDUSessionType:
+		return "Unknown PDU Session Type"
+	case nasMessage.Cause5GSMUserAuthenticationOrAuthorizationFailed:
+		return "User authentification or authorization failed"
+	case nasMessage.Cause5GSMRequestRejectedUnspecified:
+		return "Request rejected, unspecified"
+	case nasMessage.Cause5GSMServiceOptionTemporarilyOutOfOrder:
+		return "Service option temporarily out of order"
+	case nasMessage.Cause5GSMPTIAlreadyInUse:
+		return "PTI already in use"
+	case nasMessage.Cause5GSMRegularDeactivation:
+		return "Regular deactivation"
+	case nasMessage.Cause5GSMReactivationRequested:
+		return "Reactivation requested"
+	case nasMessage.Cause5GSMInvalidPDUSessionIdentity:
+		return "Invalid PDU session identity"
+	case nasMessage.Cause5GSMSemanticErrorsInPacketFilter:
+		return "Semantic errors in packet filter(s)"
+	case nasMessage.Cause5GSMSyntacticalErrorInPacketFilter:
+		return "Syntactical error in packet filter(s)"
+	case nasMessage.Cause5GSMOutOfLADNServiceArea:
+		return "Out of LADN service area"
+	case nasMessage.Cause5GSMPTIMismatch:
+		return "PTI mismatch"
+	case nasMessage.Cause5GSMPDUSessionTypeIPv4OnlyAllowed:
+		return "PDU session type IPv4 only allowed"
+	case nasMessage.Cause5GSMPDUSessionTypeIPv6OnlyAllowed:
+		return "PDU session type IPv6 only allowed"
+	case nasMessage.Cause5GSMPDUSessionDoesNotExist:
+		return "PDU session does not exist"
+	case nasMessage.Cause5GSMInsufficientResourcesForSpecificSliceAndDNN:
+		return "Insufficient resources for specific slice and DNN"
+	case nasMessage.Cause5GSMNotSupportedSSCMode:
+		return "Not supported SSC mode"
+	case nasMessage.Cause5GSMInsufficientResourcesForSpecificSlice:
+		return "Insufficient resources for specific slice"
+	case nasMessage.Cause5GSMMissingOrUnknownDNNInASlice:
+		return "Missing or unknown DNN in a slice"
+	case nasMessage.Cause5GSMInvalidPTIValue:
+		return "Invalid PTI value"
+	case nasMessage.Cause5GSMMaximumDataRatePerUEForUserPlaneIntegrityProtectionIsTooLow:
+		return "Maximum data rate per UE for user-plane integrity protection is too low"
+	case nasMessage.Cause5GSMSemanticErrorInTheQoSOperation:
+		return "Semantic error in the QoS operation"
+	case nasMessage.Cause5GSMSyntacticalErrorInTheQoSOperation:
+		return "Syntactical error in the QoS operation"
+	case nasMessage.Cause5GSMInvalidMappedEPSBearerIdentity:
+		return "Invalid mapped EPS bearer identity"
+	case nasMessage.Cause5GSMSemanticallyIncorrectMessage:
+		return "Semantically incorrect message"
+	case nasMessage.Cause5GSMInvalidMandatoryInformation:
+		return "Invalid mandatory information"
+	case nasMessage.Cause5GSMMessageTypeNonExistentOrNotImplemented:
+		return "Message type non-existent or not implemented"
+	case nasMessage.Cause5GSMMessageTypeNotCompatibleWithTheProtocolState:
+		return "Message type not compatible with the protocol state"
+	case nasMessage.Cause5GSMInformationElementNonExistentOrNotImplemented:
+		return "Information element non-existent or not implemented"
+	case nasMessage.Cause5GSMConditionalIEError:
+		return "Conditional IE error"
+	case nasMessage.Cause5GSMMessageNotCompatibleWithTheProtocolState:
+		return "Message not compatible with the protocol state"
+	case nasMessage.Cause5GSMProtocolErrorUnspecified:
+		return "Protocol error, unspecified"
+	default:
+		return "Service option temporarily out of order"
 	}
 }

@@ -3,12 +3,14 @@ package context
 import (
 	"errors"
 	"github.com/ishidawataru/sctp"
+	"sync"
 )
 
 // UE main states in the GNB Context.
 const Initialized = 0x00
 const Ongoing = 0x01
 const Ready = 0x02
+const Down = 0x03
 
 type GNBUe struct {
 	ranUeNgapId          int64          // Identifier for UE in GNB Context.
@@ -19,6 +21,7 @@ type GNBUe struct {
 	gnbRx                 chan UEMessage
 	gnbTx                 chan UEMessage
 	context              Context
+	lock                 sync.Mutex
 }
 
 type Context struct {
@@ -170,6 +173,10 @@ func (ue *GNBUe) SetStateReady() {
 	ue.state = Ready
 }
 
+func (ue *GNBUe) SetStateDown() {
+	ue.state = Down
+}
+
 func (ue *GNBUe) GetGnbRx() chan UEMessage {
 	return ue.gnbRx
 }
@@ -184,6 +191,14 @@ func (ue *GNBUe) GetGnbTx() chan UEMessage {
 
 func (ue *GNBUe) SetGnbTx(gnbTx chan UEMessage) {
 	ue.gnbTx = gnbTx
+}
+
+func (ue *GNBUe) Lock() {
+	ue.lock.Lock()
+}
+
+func (ue *GNBUe) Unlock() {
+	ue.lock.Unlock()
 }
 
 func (pduSession *PDUSession) GetPduSessionId() int64 {

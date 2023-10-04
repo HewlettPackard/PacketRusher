@@ -49,6 +49,8 @@ type UEContext struct {
 
 	// Sync primitive
 	stateChange *sync.Cond
+
+	lock		sync.Mutex
 }
 
 type Amf struct {
@@ -306,6 +308,14 @@ func (ue *UEContext) GetGnbRx() chan context.UEMessage {
 
 func (ue *UEContext) GetGnbTx() chan context.UEMessage {
 	return ue.gnbTx
+}
+
+func (ue *UEContext) Lock() {
+	ue.lock.Lock()
+}
+
+func (ue *UEContext) Unlock() {
+	ue.lock.Unlock()
 }
 
 func (ue *UEContext) IsTunnelEnabled() bool {
@@ -713,7 +723,10 @@ func (ue *UEContext) Terminate() {
 		}
 	}
 
+	ue.Lock()
 	close(ue.gnbRx)
+	ue.gnbRx = nil
+	ue.Unlock()
 
 	log.Info("[UE] UE Terminated")
 }
