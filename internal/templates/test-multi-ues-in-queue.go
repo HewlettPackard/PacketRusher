@@ -73,7 +73,7 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 	msin := cfg.Ue.Msin
 	cfg.Ue.TunnelEnabled = tunnelEnabled
 
-	ueChans := make([]chan procedures.UeTesterMessage, numUes+1)
+	scenarioChans := make([]chan procedures.UeTesterMessage, numUes+1)
 
 	sigStop := make(chan os.Signal, 1)
 	signal.Notify(sigStop, os.Interrupt)
@@ -96,48 +96,53 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 			// If there is currently a coroutine handling current UE
 			// kill it, before creating a new coroutine with same UE
 			// Use case: Registration of N UEs in loop, when loop = true
-			if ueChans[ueId] != nil {
-				ueChans[ueId] <- procedures.UeTesterMessage{Type: procedures.Kill}
-				close(ueChans[ueId])
+			if scenarioChans[ueId] != nil {
+				scenarioChans[ueId] <- procedures.UeTesterMessage{Type: procedures.Kill}
+				close(scenarioChans[ueId])
 			}
 
-			ueChans[ueId] = make(chan procedures.UeTesterMessage)
+			// Launch a coroutine to handle UE's individual scenario
+			go func(scenarioChan chan procedures.UeTesterMessage) {
+				wg.Add(1)
 
-			// Create a new UE coroutine
-			// ue.NewUE returns context of the new UE
-			wg.Add(1)
-			ue := ue.NewUE(ueCfg, uint8(ueId), ueChans[ueId], gnbs[ueCfg.GNodeB.PlmnList.GnbId], &wg)
+				ueRx := make(chan procedures.UeTesterMessage)
 
-			// We tell the UE to perform a registration
-			ueChans[ueId] <- procedures.UeTesterMessage{Type: procedures.Registration}
+				// Create a new UE coroutine
+				// ue.NewUE returns context of the new UE
+				ueTx := ue.NewUE(ueCfg, uint8(ueId), ueRx, gnbs[ueCfg.GNodeB.PlmnList.GnbId], &wg)
 
-			// Launch a coroutine to handle UE
-			go func(ue *context.UEContext, ueChan chan procedures.UeTesterMessage) {
-				// We automatically terminate the UE after timeBeforeDeregistration ms if
-				// timeBeforeDeregistration is set
+				// We tell the UE to perform a registration
+				ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
+
+				var sleepingChannel <-chan time.Time = nil
 				if timeBeforeDeregistration != 0 {
-					go func() {
-						time.Sleep(time.Duration(timeBeforeDeregistration) * time.Millisecond)
-						ueChan <- procedures.UeTesterMessage{Type: procedures.Terminate}
-						close(ueChan)
-					}()
+					sleepingChannel = time.After(time.Duration(timeBeforeDeregistration) * time.Millisecond)
 				}
 
-				pduStarted := false
-				for !pduStarted {
-					// TODO: Add timeout + check for unexpected state
-					// When the UE is registered, tell the UE to trigger a PDU Session
-					switch ue.WaitOnStateMM() {
-					case context.MM5G_REGISTERED:
-						// We create as many PDU session as requested
-						// Only PDU Session id 1 will have a tunnel established
-						for i := 0; i < numPduSessions; i++ {
-							ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
+				loop := true
+				state := context.MM5G_NULL
+				for loop {
+					select {
+					case <-sleepingChannel:
+						ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
+					case msg := <-scenarioChan:
+						ueRx <- msg
+					case msg := <-ueTx:
+						log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)
+						switch msg.StateChange {
+						case context.MM5G_REGISTERED:
+							if state != msg.StateChange {
+								for i := 0; i < numPduSessions; i++ {
+									ueRx <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
+								}
+							}
+						case context.MM5G_NULL:
+							loop = false
 						}
-						pduStarted = true
+						state = msg.StateChange
 					}
 				}
-			}(ue, ueChans[ueId])
+			}(scenarioChans[ueId])
 
 			// Before creating a new UE, we wait for timeBetweenRegistration ms
 			time.Sleep(time.Duration(timeBetweenRegistration) * time.Millisecond)

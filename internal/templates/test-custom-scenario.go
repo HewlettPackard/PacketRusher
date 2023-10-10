@@ -32,7 +32,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	wg.Add(1)
 
-	ue := ue.NewUE(cfg, 1, ueChan, gnb, &wg)
+	_ = ue.NewUE(cfg, 1, ueChan, gnb, &wg)
 
 	ctx, runtime := script.NewCustomScenario(scenarioPath)
 
@@ -48,13 +48,13 @@ func TestWithCustomScenario(scenarioPath string) {
 		}).
 		Export("detach").
 		NewFunctionBuilder().
-		WithFunc(func(ueId uint32, pduSessionId uint32) {
-			ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession, Param: ue.PduSession[pduSessionId-1]}
+		WithFunc(func(ueId uint32, pduSessionId uint8) {
+			ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession, Param: pduSessionId-1}
 		}).
 		Export("pduSessionRequest").
 		NewFunctionBuilder().
-		WithFunc(func(ueId uint32, pduSessionId uint32) {
-			ueChan <- procedures.UeTesterMessage{Type: procedures.DestroyPDUSession, Param: ue.PduSession[pduSessionId-1]}
+		WithFunc(func(ueId uint32, pduSessionId uint8) {
+			ueChan <- procedures.UeTesterMessage{Type: procedures.DestroyPDUSession, Param: pduSessionId-1}
 		}).
 		Export("pduSessionRelease").
 		NewFunctionBuilder().

@@ -1,7 +1,5 @@
 package procedures
 
-import "my5G-RANTester/internal/control_test_engine/ue/context"
-
 type UeTesterMessageType int32
 
 const (
@@ -15,5 +13,5 @@ const (
 
 type UeTesterMessage struct {
 	Type UeTesterMessageType
-	Param *context.PDUSession
+	Param uint8
 }

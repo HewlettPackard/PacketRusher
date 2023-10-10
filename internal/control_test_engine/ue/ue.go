@@ -9,6 +9,7 @@ import (
 	serviceGtp "my5G-RANTester/internal/control_test_engine/ue/gtp/service"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/service"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
+	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 	"my5G-RANTester/internal/control_test_engine/ue/state"
 	"os"
 	"os/signal"
@@ -16,9 +17,10 @@ import (
 	"time"
 )
 
-func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMessage, gnb *context2.GNBContext, wg *sync.WaitGroup) *context.UEContext {
+func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMessage, gnb *context2.GNBContext, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
 	// new UE instance.
 	ue := &context.UEContext{}
+	scenarioChan := make(chan scenario.ScenarioMessage)
 
 	// new UE context
 	ue.NewRanUeContext(
@@ -36,6 +38,7 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 		int32(conf.Ue.Snssai.Sst),
 		conf.Ue.Snssai.Sd,
 		conf.Ue.TunnelEnabled,
+		scenarioChan,
 		id)
 
 	go func() {
@@ -72,13 +75,13 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 		wg.Done()
 	}()
 
-	return ue
+	return scenarioChan
 }
 
 func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 	if msg.IsNas {
 		// handling NAS message.
-		go state.DispatchState(ue, msg.Nas)
+		state.DispatchState(ue, msg.Nas)
 	} else {
 		serviceGtp.SetupGtpInterface(ue, msg)
 	}
@@ -94,7 +97,12 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 	case procedures.NewPDUSession:
 		trigger.InitPduSessionRequest(ue)
 	case procedures.DestroyPDUSession:
-		trigger.InitPduSessionRelease(ue, msg.Param)
+		pdu, err := ue.GetPduSession(msg.Param)
+		if err == nil {
+			log.Error("[UE] Cannot release unknown PDU Session ID ", msg.Param)
+			return loop
+		}
+		trigger.InitPduSessionRelease(ue, pdu)
 	case procedures.Terminate:
 		log.Info("[UE] Terminating UE as requested")
 		// If UE is registered

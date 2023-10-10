@@ -202,7 +202,7 @@ func cause5GSMToString(causeValue uint8) string {
 	case nasMessage.Cause5GSMRequestRejectedUnspecified:
 		return "Request rejected, unspecified"
 	case nasMessage.Cause5GSMServiceOptionTemporarilyOutOfOrder:
-		return "Service option temporarily out of order"
+		return "Service option temporarily out of order. Please share pcap with packetrusher@hpe.com."
 	case nasMessage.Cause5GSMPTIAlreadyInUse:
 		return "PTI already in use"
 	case nasMessage.Cause5GSMRegularDeactivation:
@@ -258,8 +258,8 @@ func cause5GSMToString(causeValue uint8) string {
 	case nasMessage.Cause5GSMMessageNotCompatibleWithTheProtocolState:
 		return "Message not compatible with the protocol state"
 	case nasMessage.Cause5GSMProtocolErrorUnspecified:
-		return "Protocol error, unspecified"
+		return "Protocol error, unspecified. Please share pcap with packetrusher@hpe.com."
 	default:
-		return "Service option temporarily out of order"
+		return "Service option temporarily out of order. Please share pcap with packetrusher@hpe.com."
 	}
 }

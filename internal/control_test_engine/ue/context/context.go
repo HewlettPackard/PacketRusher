@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
+	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 	"my5G-RANTester/lib/UeauCommon"
 	"my5G-RANTester/lib/milenage"
 	"my5G-RANTester/lib/nas/nasType"
@@ -33,14 +34,14 @@ const SM5G_PDU_SESSION_ACTIVE_PENDING = 0x07
 const SM5G_PDU_SESSION_ACTIVE = 0x08
 
 type UEContext struct {
-	id         uint8
-	UeSecurity SECURITY
-	StateMM    int
-	StateSM    int
-	gnbRx      chan context.UEMessage
-	gnbTx      chan context.UEMessage
-	PduSession [16]*PDUSession
-	amfInfo    Amf
+	id           uint8
+	UeSecurity   SECURITY
+	StateMM      int
+	StateSM      int
+	gnbRx        chan context.UEMessage
+	gnbTx        chan context.UEMessage
+	PduSession   [16]*PDUSession
+	amfInfo      Amf
 
 	// TODO: Modify config so you can configure these parameters per PDUSession
 	Dnn           string
@@ -48,9 +49,9 @@ type UEContext struct {
 	TunnelEnabled bool
 
 	// Sync primitive
-	stateChange *sync.Cond
+	scenarioChan chan scenario.ScenarioMessage
 
-	lock		sync.Mutex
+	lock sync.Mutex
 }
 
 type Amf struct {
@@ -93,9 +94,8 @@ type SECURITY struct {
 func (ue *UEContext) NewRanUeContext(msin string,
 	ueSecurityCapability *nasType.UESecurityCapability,
 	k, opc, op, amf, sqn, mcc, mnc, routingIndicator, dnn string,
-	sst int32, sd string, tunnelEnabled bool, id uint8) {
-
-	ue.stateChange = &sync.Cond{L: &sync.Mutex{}}
+	sst int32, sd string, tunnelEnabled bool, scenarioChan chan scenario.ScenarioMessage,
+	id uint8) {
 
 	// added SUPI.
 	ue.UeSecurity.Msin = msin
@@ -105,9 +105,9 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	// set the algorithms of integrity
 	if ueSecurityCapability.GetIA0_5G() == 1 {
 		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA0
-	} else if ueSecurityCapability.GetIA1_128_5G() == 1  {
+	} else if ueSecurityCapability.GetIA1_128_5G() == 1 {
 		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA1
-	} else if ueSecurityCapability.GetIA2_128_5G() == 1  {
+	} else if ueSecurityCapability.GetIA2_128_5G() == 1 {
 		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA2
 	}
 
@@ -169,8 +169,10 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	// added snn.
 	ue.UeSecurity.Snn = ue.deriveSNN()
 
+	ue.scenarioChan = scenarioChan
+
 	// added initial state for MM(NULL)
-	ue.SetStateMM_NULL()
+	ue.StateMM = MM5G_NULL
 
 	// added initial state for SM(INACTIVE)
 	ue.SetStateSM_PDU_SESSION_INACTIVE()
@@ -215,91 +217,52 @@ func (ue *UEContext) GetSupi() string {
 }
 
 func (ue *UEContext) SetStateSM_PDU_SESSION_INACTIVE() {
-	ue.stateChange.L.Lock()
-	defer ue.stateChange.L.Unlock()
 	ue.StateSM = SM5G_PDU_SESSION_INACTIVE
-	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) SetStateSM_PDU_SESSION_ACTIVE() {
-	ue.stateChange.L.Lock()
-	defer ue.stateChange.L.Unlock()
 	ue.StateSM = SM5G_PDU_SESSION_ACTIVE
-	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) SetStateSM_PDU_SESSION_PENDING() {
-	ue.stateChange.L.Lock()
-	defer ue.stateChange.L.Unlock()
 	ue.StateSM = SM5G_PDU_SESSION_ACTIVE_PENDING
-	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) SetStateMM_DEREGISTERED_INITIATED() {
-	ue.stateChange.L.Lock()
-	defer ue.stateChange.L.Unlock()
 	ue.StateMM = MM5G_DEREGISTERED_INIT
-	ue.stateChange.Broadcast()
+	ue.scenarioChan <- scenario.ScenarioMessage{StateChange: ue.StateMM}
 }
 
 func (ue *UEContext) SetStateMM_MM5G_SERVICE_REQ_INIT() {
-	ue.stateChange.L.Lock()
-	defer ue.stateChange.L.Unlock()
 	ue.StateMM = MM5G_SERVICE_REQ_INIT
-	ue.stateChange.Broadcast()
+	ue.scenarioChan <- scenario.ScenarioMessage{StateChange: ue.StateMM}
 }
 
 func (ue *UEContext) SetStateMM_REGISTERED_INITIATED() {
-	ue.stateChange.L.Lock()
-	defer ue.stateChange.L.Unlock()
 	ue.StateMM = MM5G_REGISTERED_INITIATED
-	ue.stateChange.Broadcast()
+	ue.scenarioChan <- scenario.ScenarioMessage{StateChange: ue.StateMM}
 }
 
 func (ue *UEContext) SetStateMM_REGISTERED() {
-	ue.stateChange.L.Lock()
-	defer ue.stateChange.L.Unlock()
 	ue.StateMM = MM5G_REGISTERED
-	ue.stateChange.Broadcast()
+	ue.scenarioChan <- scenario.ScenarioMessage{StateChange: ue.StateMM}
 }
 
 func (ue *UEContext) SetStateMM_NULL() {
-	ue.stateChange.L.Lock()
-	defer ue.stateChange.L.Unlock()
 	ue.StateMM = MM5G_NULL
-	ue.stateChange.Broadcast()
 }
 
 func (ue *UEContext) SetStateMM_DEREGISTERED() {
-	ue.stateChange.L.Lock()
-	defer ue.stateChange.L.Unlock()
 	ue.StateMM = MM5G_DEREGISTERED
-	ue.stateChange.Broadcast()
+	ue.scenarioChan <- scenario.ScenarioMessage{StateChange: ue.StateMM}
 }
 
 func (ue *UEContext) GetStateSM() int {
-	var state int
-	ue.stateChange.L.Lock()
-	state = ue.StateSM
-	ue.stateChange.L.Unlock()
-	return state
+	return ue.StateSM
 }
 
 func (ue *UEContext) GetStateMM() int {
-	var state int
-	ue.stateChange.L.Lock()
-	state = ue.StateMM
-	ue.stateChange.L.Unlock()
-	return state
-}
-
-func (ue *UEContext) WaitOnStateMM() int {
-	var state int
-	ue.stateChange.L.Lock()
-	ue.stateChange.Wait()
-	state = ue.StateMM
-	ue.stateChange.L.Unlock()
-	return state
+	return ue.StateMM
 }
 
 func (ue *UEContext) GetGnbRx() chan context.UEMessage {
@@ -457,7 +420,7 @@ func (ue *UEContext) GetRoutingIndicatorInOctets() []byte {
 	routingIndicator := []byte(ue.UeSecurity.RoutingIndicator)
 	for len(routingIndicator) < 4 {
 		routingIndicator = append(routingIndicator, 'F')
- 	}
+	}
 
 	// Reverse the bytes in group of two
 	for i := 1; i < len(routingIndicator); i += 2 {
@@ -673,9 +636,9 @@ func (ue *UEContext) DerivateAlgKey() {
 
 func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
 	log.WithFields(log.Fields{
-		"k":  k,
+		"k":   k,
 		"opc": opc,
-		"op": op,
+		"op":  op,
 		"amf": amf,
 		"sqn": sqn,
 	}).Info("[UE] Authentification parameters:")
@@ -727,6 +690,7 @@ func (ue *UEContext) Terminate() {
 	close(ue.gnbRx)
 	ue.gnbRx = nil
 	ue.Unlock()
+	close(ue.scenarioChan)
 
 	log.Info("[UE] UE Terminated")
 }
