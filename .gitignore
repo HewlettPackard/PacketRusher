@@ -5,5 +5,7 @@
 .vscode/
 
 # debug/
-*.log
-*.pcap
+*log
+*pcap
+packetrusher
+app
