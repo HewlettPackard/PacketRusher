@@ -531,38 +531,7 @@ func HandlerNgSetupFailure(amf *context.GNBAmf, gnb *context.GNBContext, message
 		switch ies.Id.Value {
 
 		case ngapType.ProtocolIEIDCause:
-
-			switch ies.Value.Cause.Present {
-
-			case ngapType.CausePresentMisc:
-
-				causeMisc := ies.Value.Cause.Misc.Value
-
-				switch causeMisc {
-
-				case ngapType.CauseMiscPresentUnknownPLMN:
-					// Cannot find Served TAI in AMF.
-					log.Info("[GNB][AMF][NGAP] Unknown PLMN in Supported TAI")
-
-				case ngapType.CauseMiscPresentUnspecified:
-					// No supported TA exist in NG-Setup request.
-					log.Info("[GNB][AMF][NGAP] Error cause unspecified")
-
-				}
-
-			case ngapType.CausePresentRadioNetwork:
-				// TODO treatment error
-
-			case ngapType.CausePresentTransport:
-				// TODO treatment error
-
-			case ngapType.CausePresentProtocol:
-				// TODO treatment error
-
-			case ngapType.CausePresentNas:
-				// TODO treatment error
-
-			}
+			log.Error("[GNB][NGAP] Received failure from AMF: ", causeToString(ies.Value.Cause))
 
 		case ngapType.ProtocolIEIDTimeToWait:
 
@@ -602,7 +571,7 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 
 	valueMessage := message.InitiatingMessage.Value.UEContextReleaseCommand
 
-	var cause int
+	var cause *ngapType.Cause
 	var ue_id *ngapType.RANUENGAPID
 
 	for _, ies := range valueMessage.ProtocolIEs.List {
@@ -613,15 +582,7 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 			ue_id = &ies.Value.UENGAPIDs.UENGAPIDPair.RANUENGAPID
 
 		case ngapType.ProtocolIEIDCause:
-
-			switch ies.Value.Cause.Present {
-			case ngapType.CausePresentNas:
-				cause = int(ies.Value.Cause.Nas.Value)
-			case ngapType.CausePresentProtocol:
-				cause = int(ies.Value.Cause.Protocol.Value)
-			default:
-				// TODO treatment error
-			}
+			cause = ies.Value.Cause
 		}
 	}
 
@@ -638,7 +599,7 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 	// Send UEContextReleaseComplete
 	trigger.SendUeContextReleaseComplete(ue)
 
-	log.Info("[GNB][NGAP] Releasing UE Context, cause: ", cause)
+	log.Info("[GNB][NGAP] Releasing UE Context, cause: ", causeToString(cause))
 }
 
 func HandlerAmfConfiguratonUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU)  {
@@ -699,4 +660,190 @@ func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *co
 		}
 	}
 	return ue
+}
+
+func causeToString(cause *ngapType.Cause) string {
+	if cause != nil {
+		switch cause.Present {
+		case ngapType.CausePresentRadioNetwork:
+			return "radioNetwork: " + causeRadioNetworkToString(cause.RadioNetwork)
+			break
+		case ngapType.CausePresentTransport:
+			return "transport: " + causeTransportToString(cause.Transport)
+			break
+		case ngapType.CausePresentNas:
+			return "nas: " + causeNasToString(cause.Nas)
+			break
+		case ngapType.CausePresentProtocol:
+			return "protocol: " + causeProtocolToString(cause.Protocol)
+			break
+		case ngapType.CausePresentMisc:
+			return "misc: " + causeMiscToString(cause.Misc)
+			break
+		}
+	}
+	return "Cause not found"
+}
+
+func causeRadioNetworkToString(network *ngapType.CauseRadioNetwork) string {
+	switch network.Value {
+	case ngapType.CauseRadioNetworkPresentUnspecified:
+		return "Unspecified cause for radio network"
+	case ngapType.CauseRadioNetworkPresentTxnrelocoverallExpiry:
+		return "Transfer the overall timeout of radio resources during handover"
+	case ngapType.CauseRadioNetworkPresentSuccessfulHandover:
+		return "Successful handover"
+	case ngapType.CauseRadioNetworkPresentReleaseDueToNgranGeneratedReason:
+		return "Release due to NG-RAN generated reason"
+	case ngapType.CauseRadioNetworkPresentReleaseDueTo5gcGeneratedReason:
+		return "Release due to 5GC generated reason"
+	case ngapType.CauseRadioNetworkPresentHandoverCancelled:
+		return "Handover cancelled"
+	case ngapType.CauseRadioNetworkPresentPartialHandover:
+		return "Partial handover"
+	case ngapType.CauseRadioNetworkPresentHoFailureInTarget5GCNgranNodeOrTargetSystem:
+		return "Handover failure in target 5GC NG-RAN node or target system"
+	case ngapType.CauseRadioNetworkPresentHoTargetNotAllowed:
+		return "Handover target not allowed"
+	case ngapType.CauseRadioNetworkPresentTngrelocoverallExpiry:
+		return "Transfer the overall timeout of radio resources during target NG-RAN relocation"
+	case ngapType.CauseRadioNetworkPresentTngrelocprepExpiry:
+		return "Transfer the preparation timeout of radio resources during target NG-RAN relocation"
+	case ngapType.CauseRadioNetworkPresentCellNotAvailable:
+		return "Cell not available"
+	case ngapType.CauseRadioNetworkPresentUnknownTargetID:
+		return "Unknown target ID"
+	case ngapType.CauseRadioNetworkPresentNoRadioResourcesAvailableInTargetCell:
+		return "No radio resources available in the target cell"
+	case ngapType.CauseRadioNetworkPresentUnknownLocalUENGAPID:
+		return "Unknown local UE NGAP ID"
+	case ngapType.CauseRadioNetworkPresentInconsistentRemoteUENGAPID:
+		return "Inconsistent remote UE NGAP ID"
+	case ngapType.CauseRadioNetworkPresentHandoverDesirableForRadioReason:
+		return "Handover desirable for radio reason"
+	case ngapType.CauseRadioNetworkPresentTimeCriticalHandover:
+		return "Time-critical handover"
+	case ngapType.CauseRadioNetworkPresentResourceOptimisationHandover:
+		return "Resource optimization handover"
+	case ngapType.CauseRadioNetworkPresentReduceLoadInServingCell:
+		return "Reduce load in serving cell"
+	case ngapType.CauseRadioNetworkPresentUserInactivity:
+		return "User inactivity"
+	case ngapType.CauseRadioNetworkPresentRadioConnectionWithUeLost:
+		return "Radio connection with UE lost"
+	case ngapType.CauseRadioNetworkPresentRadioResourcesNotAvailable:
+		return "Radio resources not available"
+	case ngapType.CauseRadioNetworkPresentInvalidQosCombination:
+		return "Invalid QoS combination"
+	case ngapType.CauseRadioNetworkPresentFailureInRadioInterfaceProcedure:
+		return "Failure in radio interface procedure"
+	case ngapType.CauseRadioNetworkPresentInteractionWithOtherProcedure:
+		return "Interaction with other procedure"
+	case ngapType.CauseRadioNetworkPresentUnknownPDUSessionID:
+		return "Unknown PDU session ID"
+	case ngapType.CauseRadioNetworkPresentUnkownQosFlowID:
+		return "Unknown QoS flow ID"
+	case ngapType.CauseRadioNetworkPresentMultiplePDUSessionIDInstances:
+		return "Multiple PDU session ID instances"
+	case ngapType.CauseRadioNetworkPresentMultipleQosFlowIDInstances:
+		return "Multiple QoS flow ID instances"
+	case ngapType.CauseRadioNetworkPresentEncryptionAndOrIntegrityProtectionAlgorithmsNotSupported:
+		return "Encryption and/or integrity protection algorithms not supported"
+	case ngapType.CauseRadioNetworkPresentNgIntraSystemHandoverTriggered:
+		return "NG intra-system handover triggered"
+	case ngapType.CauseRadioNetworkPresentNgInterSystemHandoverTriggered:
+		return "NG inter-system handover triggered"
+	case ngapType.CauseRadioNetworkPresentXnHandoverTriggered:
+		return "Xn handover triggered"
+	case ngapType.CauseRadioNetworkPresentNotSupported5QIValue:
+		return "Not supported 5QI value"
+	case ngapType.CauseRadioNetworkPresentUeContextTransfer:
+		return "UE context transfer"
+	case ngapType.CauseRadioNetworkPresentImsVoiceEpsFallbackOrRatFallbackTriggered:
+		return "IMS voice EPS fallback or RAT fallback triggered"
+	case ngapType.CauseRadioNetworkPresentUpIntegrityProtectionNotPossible:
+		return "UP integrity protection not possible"
+	case ngapType.CauseRadioNetworkPresentUpConfidentialityProtectionNotPossible:
+		return "UP confidentiality protection not possible"
+	case ngapType.CauseRadioNetworkPresentSliceNotSupported:
+		return "Slice not supported"
+	case ngapType.CauseRadioNetworkPresentUeInRrcInactiveStateNotReachable:
+		return "UE in RRC inactive state not reachable"
+	case ngapType.CauseRadioNetworkPresentRedirection:
+		return "Redirection"
+	case ngapType.CauseRadioNetworkPresentResourcesNotAvailableForTheSlice:
+		return "Resources not available for the slice"
+	case ngapType.CauseRadioNetworkPresentUeMaxIntegrityProtectedDataRateReason:
+		return "UE maximum integrity protected data rate reason"
+	case ngapType.CauseRadioNetworkPresentReleaseDueToCnDetectedMobility:
+		return "Release due to CN detected mobility"
+	default:
+		return "Unknown cause for radio network"
+	}
+}
+
+func causeTransportToString(transport *ngapType.CauseTransport) string {
+	switch transport.Value {
+	case ngapType.CauseTransportPresentTransportResourceUnavailable:
+		return "Transport resource unavailable"
+	case ngapType.CauseTransportPresentUnspecified:
+		return "Unspecified cause for transport"
+	default:
+		return "Unknown cause for transport"
+	}
+}
+
+func causeNasToString(nas *ngapType.CauseNas) string {
+	switch nas.Value {
+	case ngapType.CauseNasPresentNormalRelease:
+		return "Normal release"
+	case ngapType.CauseNasPresentAuthenticationFailure:
+		return "Authentication failure"
+	case ngapType.CauseNasPresentDeregister:
+		return "Deregister"
+	case ngapType.CauseNasPresentUnspecified:
+		return "Unspecified cause for NAS"
+	default:
+		return "Unknown cause for NAS"
+	}
+}
+
+func causeProtocolToString(protocol *ngapType.CauseProtocol) string {
+	switch protocol.Value {
+	case ngapType.CauseProtocolPresentTransferSyntaxError:
+		return "Transfer syntax error"
+	case ngapType.CauseProtocolPresentAbstractSyntaxErrorReject:
+		return "Abstract syntax error - Reject"
+	case ngapType.CauseProtocolPresentAbstractSyntaxErrorIgnoreAndNotify:
+		return "Abstract syntax error - Ignore and notify"
+	case ngapType.CauseProtocolPresentMessageNotCompatibleWithReceiverState:
+		return "Message not compatible with receiver state"
+	case ngapType.CauseProtocolPresentSemanticError:
+		return "Semantic error"
+	case ngapType.CauseProtocolPresentAbstractSyntaxErrorFalselyConstructedMessage:
+		return "Abstract syntax error - Falsely constructed message"
+	case ngapType.CauseProtocolPresentUnspecified:
+		return "Unspecified cause for protocol"
+	default:
+		return "Unknown cause for protocol"
+	}
+}
+
+func causeMiscToString(misc *ngapType.CauseMisc) string {
+	switch misc.Value {
+	case ngapType.CauseMiscPresentControlProcessingOverload:
+		return "Control processing overload"
+	case ngapType.CauseMiscPresentNotEnoughUserPlaneProcessingResources:
+		return "Not enough user plane processing resources"
+	case ngapType.CauseMiscPresentHardwareFailure:
+		return "Hardware failure"
+	case ngapType.CauseMiscPresentOmIntervention:
+		return "OM (Operations and Maintenance) intervention"
+	case ngapType.CauseMiscPresentUnknownPLMN:
+		return "Unknown PLMN (Public Land Mobile Network)"
+	case ngapType.CauseMiscPresentUnspecified:
+		return "Unspecified cause for miscellaneous"
+	default:
+		return "Unknown cause for miscellaneous"
+	}
 }
