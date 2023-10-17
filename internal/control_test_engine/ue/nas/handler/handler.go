@@ -7,6 +7,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
 	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/nas/nasMessage"
 	"time"
@@ -146,15 +147,14 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message)
 	case nas.MsgTypePDUSessionEstablishmentAccept:
 		log.Info("[UE][NAS] Receiving PDU Session Establishment Accept")
 
-		// change the state of ue(SM)(PDU Session Active).
-		ue.SetStateSM_PDU_SESSION_ACTIVE()
-
 		// get UE ip
 		pduSessionEstablishmentAccept := payloadContainer.PDUSessionEstablishmentAccept
 
 		// update PDU Session information.
 		pduSessionId := pduSessionEstablishmentAccept.GetPDUSessionID()
 		pduSession, err := ue.GetPduSession(pduSessionId)
+		// change the state of ue(SM)(PDU Session Active).
+		pduSession.SetStateSM_PDU_SESSION_ACTIVE()
 		if err != nil {
 			log.Error("[UE][NAS] Receiving PDU Session Establishment Accept about an unknown PDU Session, id: ", pduSessionId)
 			return
@@ -183,6 +183,14 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message)
 		pduSessionId := pduSessionEstablishmentReject.GetPDUSessionID()
 
 		log.Error("[UE][NAS] PDU Session Establishment Reject for PDU Session ID ", pduSessionId, ", 5GSM Cause: ", cause5GSMToString(pduSessionEstablishmentReject.GetCauseValue()))
+
+		// Per 5GSM state machine in TS 24.501 - 6.1.3.2.1., we re-try the setup until it's successful
+		pduSession, err := ue.GetPduSession(pduSessionId)
+		if err != nil {
+			log.Error("[UE][NAS] Cannot retry PDU Session Request for PDU Session ", pduSession, " after Reject as ", err)
+			break
+		}
+		trigger.InitPduSessionRequestInner(ue, pduSession)
 
 	default:
 		log.Error("[UE][NAS] Receiving Unknown Dl NAS Transport message!! ", payloadContainer.GsmHeader.GetMessageType())
