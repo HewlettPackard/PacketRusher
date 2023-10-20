@@ -69,7 +69,7 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipDat
 	gnb.dataInfo.gnbPort = portData
 }
 
-func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage) *GNBUe {
+func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, msin string) *GNBUe {
 
 	// TODO if necessary add more information for UE.
 	// TODO implement mutex
@@ -86,6 +86,7 @@ func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage) *GNB
 	// Connect gNB and UE's channels
 	ue.SetGnbRx(gnbRx)
 	ue.SetGnbTx(gnbTx)
+	ue.SetMsin(msin)
 
 	// set state to UE.
 	ue.SetStateInitialized()

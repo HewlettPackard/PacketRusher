@@ -11,7 +11,7 @@ func SendToUe(ue *context.GNBUe, message []byte) {
 	if gnbTx == nil {
 		log.Warn("[GNB] Do not send NAS messages to UE as channel is closed")
 	} else {
-		gnbTx <- context.UEMessage{IsNas: true, Nas: message}
+		gnbTx <- context.UEMessage{IsNas: true, Nas: message, AmfId: ue.GetAmfUeId()}
 	}
 	ue.Unlock()
 }

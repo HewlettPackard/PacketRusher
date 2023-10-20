@@ -7,6 +7,7 @@ package trigger
 
 import (
 	log "github.com/sirupsen/logrus"
+	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
@@ -78,4 +79,25 @@ func InitDeregistration(ue *context.UEContext) {
 
 	// change the state of ue for deregistered
 	ue.SetStateMM_DEREGISTERED()
+}
+
+func InitHandover(ue *context.UEContext, gnbChan chan gnbContext.UEMessage) {
+	log.Info("[UE] Initiating Handover")
+
+	// Stop connectivity with previous gNb
+	close(ue.GetGnbRx())
+
+	newGnbRx := make(chan gnbContext.UEMessage, 1)
+	newGnbTx := make(chan gnbContext.UEMessage, 1)
+	ue.SetGnbRx(newGnbRx)
+	ue.SetGnbTx(newGnbTx)
+
+	// Connect to new gNb
+	gnbChan <- gnbContext.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, Msin: ue.GetMsin()}
+
+	// Trigger Handover
+	ue.GetGnbRx() <- gnbContext.UEMessage{AmfId: ue.GetAmfUeId()}
+
+	// TODO: Test to remove
+	InitDeregistration(ue)
 }

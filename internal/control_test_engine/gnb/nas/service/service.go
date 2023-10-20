@@ -4,6 +4,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas"
+	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 )
 
 func InitServer(gnb *context.GNBContext)  {
@@ -23,7 +24,7 @@ func gnbListen(gnb *context.GNBContext) {
 		// store UE connection
 		// select AMF and get sctp association
 		// make a tun interface
-		ue := gnb.NewGnBUe(message.GNBTx, message.GNBRx)
+		ue := gnb.NewGnBUe(message.GNBTx, message.GNBRx, message.Msin)
 		if ue == nil {
 			log.Warn("[GNB] UE has not been created")
 			break
@@ -38,7 +39,6 @@ func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
 	rx := ue.GetGnbRx()
 	for {
 		message, done := <- rx
-
 		gnbUeContext, err := gnb.GetGnbUe(ue.GetRanUeId())
 		if gnbUeContext == nil || err != nil {
 			log.Error("[GNB][NAS] Ignoring message from UE ", ue.GetRanUeId(), " as UE Context was cleaned as requested by AMF.")
@@ -52,6 +52,11 @@ func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
 		// send to dispatch.
 		if message.IsNas {
 			go nas.Dispatch(ue, message.Nas, gnb)
+		} else if message.AmfId >= 0 {
+			log.Info("[GNB] Received handover for UE")
+			gnbUeContext.SetStateReady()
+			ue.SetAmfUeId(message.AmfId)
+			trigger.SendPathSwitchRequest(ue)
 		} else {
 			log.Error("[GNB] Received unknown message from UE")
 		}

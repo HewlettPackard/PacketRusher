@@ -58,6 +58,7 @@ type Amf struct {
 	amfRegionId uint8
 	amfSetId    uint16
 	amfPointer  uint8
+	amfUeId     int64
 }
 
 type PDUSession struct {
@@ -263,6 +264,14 @@ func (ue *UEContext) GetStateSM() int {
 
 func (ue *UEContext) GetStateMM() int {
 	return ue.StateMM
+}
+
+func (ue *UEContext) SetGnbRx(gnbRx chan context.UEMessage) {
+	ue.gnbRx = gnbRx
+}
+
+func (ue *UEContext) SetGnbTx(gnbTx chan context.UEMessage) {
+	ue.gnbTx = gnbTx
 }
 
 func (ue *UEContext) GetGnbRx() chan context.UEMessage {
@@ -480,6 +489,14 @@ func (ue *UEContext) SetAmfSetId(amfSetId uint16) {
 
 func (ue *UEContext) GetAmfSetId() uint16 {
 	return ue.amfInfo.amfSetId
+}
+
+func (ue *UEContext) SetAmfUeId(id int64) {
+	ue.amfInfo.amfUeId = id
+}
+
+func (ue *UEContext) GetAmfUeId() int64 {
+	return ue.amfInfo.amfUeId
 }
 
 func (ue *UEContext) Get5gGuti() [4]uint8 {

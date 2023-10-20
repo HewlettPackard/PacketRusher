@@ -10,7 +10,7 @@ func InitConn(ue *context.UEContext, gnb *gnbContext.GNBContext) chan gnbContext
 	inboundChannel := gnb.GetInboundChannel()
 
 	// Send channels to gNB
-	inboundChannel <- gnbContext.UEMessage{GNBTx: ue.GetGnbTx(), GNBRx: ue.GetGnbRx()}
+	inboundChannel <- gnbContext.UEMessage{GNBTx: ue.GetGnbTx(), GNBRx: ue.GetGnbRx(), Msin: ue.GetMsin()}
 
 	return ue.GetGnbTx()
 }

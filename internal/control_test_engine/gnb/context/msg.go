@@ -11,6 +11,8 @@ type UEMessage struct {
 	IsNas bool
 	Nas   []byte
 	ConnectionClosed bool
+	AmfId int64
+	Msin string
 }
 
 func (ue *UEMessage) NewUeMessage(PDUSessionId int64, GnbIp string, UpfIp string, OTeid string, ITeid string) {

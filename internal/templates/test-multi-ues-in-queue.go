@@ -43,6 +43,8 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 	} else {
 		numGnb = 1
 	}
+	// TODO: Temp handover test
+	numGnb++
 	gnbs:= make(map[string]*gnbContext.GNBContext)
 
 	// Each gNB have their own IP address on both N2 and N3
@@ -124,7 +126,8 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 				for loop {
 					select {
 					case <-sleepingChannel:
-						ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
+						//ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
+						ueRx <- procedures.UeTesterMessage{Type: procedures.Handover, GnbChan: gnbs[gnbIdGenerator(1)].GetInboundChannel()}
 					case msg := <-scenarioChan:
 						ueRx <- msg
 					case msg := <-ueTx:

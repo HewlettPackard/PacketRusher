@@ -81,6 +81,7 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 	if msg.IsNas {
 		// handling NAS message.
+		ue.SetAmfUeId(msg.AmfId)
 		state.DispatchState(ue, msg.Nas)
 	} else {
 		serviceGtp.SetupGtpInterface(ue, msg)
@@ -103,6 +104,8 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 			return loop
 		}
 		trigger.InitPduSessionRelease(ue, pdu)
+	case procedures.Handover:
+		trigger.InitHandover(ue, msg.GnbChan)
 	case procedures.Terminate:
 		log.Info("[UE] Terminating UE as requested")
 		// If UE is registered

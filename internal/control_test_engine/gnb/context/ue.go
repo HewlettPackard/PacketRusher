@@ -13,15 +13,16 @@ const Ready = 0x02
 const Down = 0x03
 
 type GNBUe struct {
-	ranUeNgapId          int64          // Identifier for UE in GNB Context.
-	amfUeNgapId          int64          // Identifier for UE in AMF Context.
-	amfId                int64          // Identifier for AMF in UE/GNB Context.
-	state                int            // State of UE in NAS/GNB Context.
-	sctpConnection       *sctp.SCTPConn // Sctp association in using by the UE.
-	gnbRx                 chan UEMessage
-	gnbTx                 chan UEMessage
-	context              Context
-	lock                 sync.Mutex
+	ranUeNgapId    int64          // Identifier for UE in GNB Context.
+	amfUeNgapId    int64          // Identifier for UE in AMF Context.
+	amfId          int64          // Identifier for AMF in UE/GNB Context.
+	state          int            // State of UE in NAS/GNB Context.
+	sctpConnection *sctp.SCTPConn // Sctp association in using by the UE.
+	gnbRx          chan UEMessage
+	gnbTx          chan UEMessage
+	msin           string
+	context        Context
+	lock           sync.Mutex
 }
 
 type Context struct {
@@ -191,6 +192,14 @@ func (ue *GNBUe) GetGnbTx() chan UEMessage {
 
 func (ue *GNBUe) SetGnbTx(gnbTx chan UEMessage) {
 	ue.gnbTx = gnbTx
+}
+
+func (ue *GNBUe) SetMsin(msin string) {
+	ue.msin = msin
+}
+
+func (ue *GNBUe) GetMsin() string {
+	return ue.msin
 }
 
 func (ue *GNBUe) Lock() {
