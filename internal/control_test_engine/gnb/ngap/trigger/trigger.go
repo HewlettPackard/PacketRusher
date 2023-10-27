@@ -11,7 +11,7 @@ import (
 	"my5G-RANTester/lib/ngap/ngapType"
 )
 
-func SendPduSessionResourceSetupResponse(pduSession *context.PDUSession, ue *context.GNBUe, gnb *context.GNBContext) {
+func SendPduSessionResourceSetupResponse(pduSession *context.GnbPDUSession, ue *context.GNBUe, gnb *context.GNBContext) {
 	log.Info("[GNB] Initiating PDU Session Resource Setup Response")
 
 	// send PDU Session Resource Setup Response.
@@ -120,11 +120,11 @@ func SendNgSetupRequest(gnb *context.GNBContext, amf *context.GNBAmf) {
 
 }
 
-func SendPathSwitchRequest(ue *context.GNBUe) {
+func SendPathSwitchRequest(gnb *context.GNBContext, ue *context.GNBUe) {
 	log.Info("[GNB] Initiating PDU Session Release Response")
 
 	// send NG setup response.
-	ngapMsg, err := ue_mobility_management.PathSwitchRequest(ue)
+	ngapMsg, err := ue_mobility_management.PathSwitchRequest(gnb, ue)
 	if err != nil {
 		log.Info("[GNB][NGAP] Error sending Path Switch Request ", err)
 	}

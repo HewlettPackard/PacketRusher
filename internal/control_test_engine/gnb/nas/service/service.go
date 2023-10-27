@@ -25,6 +25,8 @@ func gnbListen(gnb *context.GNBContext) {
 		// select AMF and get sctp association
 		// make a tun interface
 		ue := gnb.NewGnBUe(message.GNBTx, message.GNBRx, message.Msin)
+		ue.SetPduSessions(message.GNBPduSessions)
+
 		if ue == nil {
 			log.Warn("[GNB] UE has not been created")
 			break
@@ -56,7 +58,7 @@ func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
 			log.Info("[GNB] Received handover for UE")
 			gnbUeContext.SetStateReady()
 			ue.SetAmfUeId(message.AmfId)
-			trigger.SendPathSwitchRequest(ue)
+			trigger.SendPathSwitchRequest(gnb, ue)
 		} else {
 			log.Error("[GNB] Received unknown message from UE")
 		}

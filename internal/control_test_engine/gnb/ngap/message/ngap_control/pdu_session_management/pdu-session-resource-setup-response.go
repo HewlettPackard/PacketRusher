@@ -10,7 +10,7 @@ import (
 	"net"
 )
 
-func PDUSessionResourceSetupResponse(pduSession *context.PDUSession, ue *context.GNBUe, ipv4 string) ([]byte, error) {
+func PDUSessionResourceSetupResponse(pduSession *context.GnbPDUSession, ue *context.GNBUe, ipv4 string) ([]byte, error) {
 
 	// check hostname(Error in docker if using hostname)
 	nameIp, err := net.LookupHost(ipv4)

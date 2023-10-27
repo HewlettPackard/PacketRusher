@@ -105,6 +105,17 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 		}
 		trigger.InitPduSessionRelease(ue, pdu)
 	case procedures.Handover:
+		var pduSession *context.UEPDUSession
+		for i := uint8(1); i <= 16; i++ {
+			pduSession, _ = ue.GetPduSession(i)
+			if pduSession != nil {
+				break
+			}
+		}
+		if pduSession == nil {
+			log.Error("[UE] Cannot handover / PathSwitchRequest to a new gNodeB without any PDU Sessions")
+			break
+		}
 		trigger.InitHandover(ue, msg.GnbChan)
 	case procedures.Terminate:
 		log.Info("[UE] Terminating UE as requested")

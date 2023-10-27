@@ -13,7 +13,7 @@ import (
 	"my5G-RANTester/lib/openapi/models"
 )
 
-func Request_UlNasTransport(pduSession *context.PDUSession, ue *context.UEContext) ([]byte, error) {
+func Request_UlNasTransport(pduSession *context.UEPDUSession, ue *context.UEContext) ([]byte, error) {
 
 	pdu := getUlNasTransport_PduSessionEstablishmentRequest(pduSession.Id, ue.Dnn, &ue.Snssai)
 	if pdu == nil {
@@ -27,7 +27,7 @@ func Request_UlNasTransport(pduSession *context.PDUSession, ue *context.UEContex
 	return pdu, nil
 }
 
-func Release_UlNasTransport(pduSession *context.PDUSession, ue *context.UEContext) ([]byte, error) {
+func Release_UlNasTransport(pduSession *context.UEPDUSession, ue *context.UEContext) ([]byte, error) {
 
 	pdu := getUlNasTransport_PduSessionEstablishmentRelease(pduSession.Id)
 	if pdu == nil {

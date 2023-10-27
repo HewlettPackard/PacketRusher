@@ -53,7 +53,7 @@ func InitPduSessionRequest(ue *context.UEContext) {
 	sender.SendToGnb(ue, ulNasTransport)
 }
 
-func InitPduSessionRelease(ue *context.UEContext, pduSession *context.PDUSession) {
+func InitPduSessionRelease(ue *context.UEContext, pduSession *context.UEPDUSession) {
 	log.Info("[UE] Initiating Release of PDU Session ", pduSession.Id)
 
 	ulNasTransport, err := mm_5gs.Release_UlNasTransport(pduSession, ue)
@@ -93,11 +93,8 @@ func InitHandover(ue *context.UEContext, gnbChan chan gnbContext.UEMessage) {
 	ue.SetGnbTx(newGnbTx)
 
 	// Connect to new gNb
-	gnbChan <- gnbContext.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, Msin: ue.GetMsin()}
+	gnbChan <- gnbContext.UEMessage{GNBPduSessions: ue.GetPduSessions(), GNBRx: newGnbRx, GNBTx: newGnbTx, Msin: ue.GetMsin()}
 
 	// Trigger Handover
 	ue.GetGnbRx() <- gnbContext.UEMessage{AmfId: ue.GetAmfUeId()}
-
-	// TODO: Test to remove
-	InitDeregistration(ue)
 }

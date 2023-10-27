@@ -75,8 +75,13 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 
 		case ngapType.ProcedureCodeNGSetup:
 			// handler NGAP Setup Response.
-			log.Info("[GNB][NGAP] Receive Ng Setup Response")
+			log.Info("[GNB][NGAP] Receive NG Setup Response")
 			handler.HandlerNgSetupResponse(amf, gnb, ngapMsg)
+
+		case ngapType.ProcedureCodePathSwitchRequest:
+			// handler PathSwitchRequestAcknowledge
+			log.Info("[GNB][NGAP] Receive PathSwitchRequestAcknowledge")
+			handler.HandlerPathSwitchRequestAcknowledge(gnb, ngapMsg)
 
 		default:
 			log.Info("[GNB][NGAP] Received unknown NGAP message")
