@@ -6,11 +6,9 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 )
 
-func InitConn(ue *context.UEContext, gnb *gnbContext.GNBContext) chan gnbContext.UEMessage {
+func InitConn(ue *context.UEContext, gnb *gnbContext.GNBContext) {
 	inboundChannel := gnb.GetInboundChannel()
 
 	// Send channels to gNB
-	inboundChannel <- gnbContext.UEMessage{GNBTx: ue.GetGnbTx(), GNBRx: ue.GetGnbRx()}
-
-	return ue.GetGnbTx()
+	inboundChannel <- gnbContext.UEMessage{GNBTx: ue.GetGnbTx(), GNBRx: ue.GetGnbRx(), Msin: ue.GetMsin()}
 }

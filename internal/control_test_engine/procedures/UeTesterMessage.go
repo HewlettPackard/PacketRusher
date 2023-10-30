@@ -1,5 +1,7 @@
 package procedures
 
+import "my5G-RANTester/internal/control_test_engine/gnb/context"
+
 type UeTesterMessageType int32
 
 const (
@@ -9,9 +11,11 @@ const (
 	DestroyPDUSession UeTesterMessageType = 3
 	Terminate         UeTesterMessageType = 4
 	Kill              UeTesterMessageType = 5
+	Handover          UeTesterMessageType = 6
 )
 
 type UeTesterMessage struct {
 	Type UeTesterMessageType
 	Param uint8
+	GnbChan chan context.UEMessage
 }

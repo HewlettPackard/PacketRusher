@@ -39,7 +39,7 @@ type UEContext struct {
 	StateMM      int
 	gnbRx        chan context.UEMessage
 	gnbTx        chan context.UEMessage
-	PduSession   [16]*PDUSession
+	PduSession   [16]*UEPDUSession
 	amfInfo      Amf
 
 	// TODO: Modify config so you can configure these parameters per PDUSession
@@ -57,20 +57,22 @@ type Amf struct {
 	amfRegionId uint8
 	amfSetId    uint16
 	amfPointer  uint8
+	amfUeId     int64
 }
 
-type PDUSession struct {
-	Id         uint8
-	ueIP       string
-	ueGnbIP    net.IP
-	tun        netlink.Link
-	routeTun   *netlink.Route
-	vrf        *netlink.Vrf
-	stopSignal chan bool
-	Wait       chan bool
+type UEPDUSession struct {
+	Id            uint8
+	GnbPduSession *context.GnbPDUSession
+	ueIP          string
+	ueGnbIP       net.IP
+	tun           netlink.Link
+	routeTun      *netlink.Route
+	vrf           *netlink.Vrf
+	stopSignal    chan bool
+	Wait          chan bool
 
 	// TS 24.501 - 6.1.3.2.1.1 State Machine for Session Management
-	StateSM      int
+	StateSM       int
 }
 
 type SECURITY struct {
@@ -177,7 +179,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	ue.StateMM = MM5G_NULL
 }
 
-func (ue *UEContext) CreatePDUSession() (*PDUSession, error) {
+func (ue *UEContext) CreatePDUSession() (*UEPDUSession, error) {
 	pduSessionIndex := -1
 	for i, pduSession := range ue.PduSession {
 		if pduSession == nil {
@@ -190,7 +192,7 @@ func (ue *UEContext) CreatePDUSession() (*PDUSession, error) {
 		return nil, errors.New("unable to create an additional PDU Session, we already created the max number of PDU Session")
 	}
 
-	pduSession := &PDUSession{}
+	pduSession := &UEPDUSession{}
 	pduSession.Id = uint8(pduSessionIndex + 1)
 	pduSession.Wait = make(chan bool)
 
@@ -248,6 +250,14 @@ func (ue *UEContext) GetStateMM() int {
 	return ue.StateMM
 }
 
+func (ue *UEContext) SetGnbRx(gnbRx chan context.UEMessage) {
+	ue.gnbRx = gnbRx
+}
+
+func (ue *UEContext) SetGnbTx(gnbTx chan context.UEMessage) {
+	ue.gnbTx = gnbTx
+}
+
 func (ue *UEContext) GetGnbRx() chan context.UEMessage {
 	return ue.gnbRx
 }
@@ -268,16 +278,28 @@ func (ue *UEContext) IsTunnelEnabled() bool {
 	return ue.TunnelEnabled
 }
 
-func (ue *UEContext) GetPduSession(pduSessionid uint8) (*PDUSession, error) {
+func (ue *UEContext) GetPduSession(pduSessionid uint8) (*UEPDUSession, error) {
 	if pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil {
-		return nil, errors.New("Unable to find PDUSession ID " + string(pduSessionid))
+		return nil, errors.New("Unable to find GnbPDUSession ID " + string(pduSessionid))
 	}
 	return ue.PduSession[pduSessionid-1], nil
 }
 
+func (ue *UEContext) GetPduSessions() [16]*context.GnbPDUSession {
+	var pduSessions [16]*context.GnbPDUSession
+
+	for i, pduSession := range ue.PduSession {
+		if pduSession != nil {
+			pduSessions[i] = pduSession.GnbPduSession
+		}
+	}
+
+	return pduSessions
+}
+
 func (ue *UEContext) DeletePduSession(pduSessionid uint8) error {
 	if pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil {
-		return errors.New("Unable to find PDUSession ID " + string(pduSessionid))
+		return errors.New("Unable to find GnbPDUSession ID " + string(pduSessionid))
 	}
 	pduSession := ue.PduSession[pduSessionid-1]
 	close(pduSession.Wait)
@@ -289,71 +311,71 @@ func (ue *UEContext) DeletePduSession(pduSessionid uint8) error {
 	return nil
 }
 
-func (pduSession *PDUSession) SetIp(ip [12]uint8) {
+func (pduSession *UEPDUSession) SetIp(ip [12]uint8) {
 	pduSession.ueIP = fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
 }
 
-func (pduSession *PDUSession) GetIp() string {
+func (pduSession *UEPDUSession) GetIp() string {
 	return pduSession.ueIP
 }
 
-func (pduSession *PDUSession) SetGnbIp(ip net.IP) {
+func (pduSession *UEPDUSession) SetGnbIp(ip net.IP) {
 	pduSession.ueGnbIP = ip
 }
 
-func (pduSession *PDUSession) GetGnbIp() net.IP {
+func (pduSession *UEPDUSession) GetGnbIp() net.IP {
 	return pduSession.ueGnbIP
 }
 
-func (pduSession *PDUSession) SetStopSignal(stopSignal chan bool) {
+func (pduSession *UEPDUSession) SetStopSignal(stopSignal chan bool) {
 	pduSession.stopSignal = stopSignal
 }
 
-func (pduSession *PDUSession) GetStopSignal() chan bool {
+func (pduSession *UEPDUSession) GetStopSignal() chan bool {
 	return pduSession.stopSignal
 }
 
-func (pduSession *PDUSession) GetPduSesssionId() uint8 {
+func (pduSession *UEPDUSession) GetPduSesssionId() uint8 {
 	return pduSession.Id
 }
 
-func (pduSession *PDUSession) SetTunInterface(tun netlink.Link) {
+func (pduSession *UEPDUSession) SetTunInterface(tun netlink.Link) {
 	pduSession.tun = tun
 }
 
-func (pduSession *PDUSession) GetTunInterface() netlink.Link {
+func (pduSession *UEPDUSession) GetTunInterface() netlink.Link {
 	return pduSession.tun
 }
 
-func (pduSession *PDUSession) SetTunRoute(route *netlink.Route) {
+func (pduSession *UEPDUSession) SetTunRoute(route *netlink.Route) {
 	pduSession.routeTun = route
 }
 
-func (pduSession *PDUSession) GetTunRoute() *netlink.Route {
+func (pduSession *UEPDUSession) GetTunRoute() *netlink.Route {
 	return pduSession.routeTun
 }
 
-func (pduSession *PDUSession) SetVrfDevice(vrf *netlink.Vrf) {
+func (pduSession *UEPDUSession) SetVrfDevice(vrf *netlink.Vrf) {
 	pduSession.vrf = vrf
 }
 
-func (pduSession *PDUSession) GetVrfDevice() *netlink.Vrf {
+func (pduSession *UEPDUSession) GetVrfDevice() *netlink.Vrf {
 	return pduSession.vrf
 }
 
-func (pdu *PDUSession) SetStateSM_PDU_SESSION_INACTIVE() {
+func (pdu *UEPDUSession) SetStateSM_PDU_SESSION_INACTIVE() {
 	pdu.StateSM = SM5G_PDU_SESSION_INACTIVE
 }
 
-func (pdu *PDUSession) SetStateSM_PDU_SESSION_ACTIVE() {
+func (pdu *UEPDUSession) SetStateSM_PDU_SESSION_ACTIVE() {
 	pdu.StateSM = SM5G_PDU_SESSION_ACTIVE
 }
 
-func (pdu *PDUSession) SetStateSM_PDU_SESSION_PENDING() {
+func (pdu *UEPDUSession) SetStateSM_PDU_SESSION_PENDING() {
 	pdu.StateSM = SM5G_PDU_SESSION_ACTIVE_PENDING
 }
 
-func (pduSession *PDUSession) GetStateSM() int {
+func (pduSession *UEPDUSession) GetStateSM() int {
 	return pduSession.StateSM
 }
 
@@ -479,6 +501,14 @@ func (ue *UEContext) SetAmfSetId(amfSetId uint16) {
 
 func (ue *UEContext) GetAmfSetId() uint16 {
 	return ue.amfInfo.amfSetId
+}
+
+func (ue *UEContext) SetAmfUeId(id int64) {
+	ue.amfInfo.amfUeId = id
+}
+
+func (ue *UEContext) GetAmfUeId() int64 {
+	return ue.amfInfo.amfUeId
 }
 
 func (ue *UEContext) Get5gGuti() [4]uint8 {
@@ -634,14 +664,6 @@ func (ue *UEContext) DerivateAlgKey() {
 }
 
 func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
-	log.WithFields(log.Fields{
-		"k":   k,
-		"opc": opc,
-		"op":  op,
-		"amf": amf,
-		"sqn": sqn,
-	}).Info("[UE] Authentification parameters:")
-
 	ue.UeSecurity.AuthenticationSubs.PermanentKey = &models.PermanentKey{
 		PermanentKeyValue: k,
 	}

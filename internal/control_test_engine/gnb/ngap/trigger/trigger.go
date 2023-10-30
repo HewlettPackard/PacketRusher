@@ -6,11 +6,12 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/interface_management"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/pdu_session_management"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_context_management"
+	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_mobility_management"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/sender"
 	"my5G-RANTester/lib/ngap/ngapType"
 )
 
-func SendPduSessionResourceSetupResponse(pduSession *context.PDUSession, ue *context.GNBUe, gnb *context.GNBContext) {
+func SendPduSessionResourceSetupResponse(pduSession *context.GnbPDUSession, ue *context.GNBUe, gnb *context.GNBContext) {
 	log.Info("[GNB] Initiating PDU Session Resource Setup Response")
 
 	// send PDU Session Resource Setup Response.
@@ -109,7 +110,6 @@ func SendNgSetupRequest(gnb *context.GNBContext, amf *context.GNBAmf) {
 	ngapMsg, err := interface_management.NGSetupRequest(gnb, "PacketRusher")
 	if err != nil {
 		log.Info("[GNB][NGAP] Error sending NG Setup Request")
-
 	}
 
 	conn := amf.GetSCTPConn()
@@ -118,4 +118,20 @@ func SendNgSetupRequest(gnb *context.GNBContext, amf *context.GNBAmf) {
 		log.Info("[GNB][AMF] Error sending NG Setup Request: ", err)
 	}
 
+}
+
+func SendPathSwitchRequest(gnb *context.GNBContext, ue *context.GNBUe) {
+	log.Info("[GNB] Initiating PDU Session Release Response")
+
+	// send NG setup response.
+	ngapMsg, err := ue_mobility_management.PathSwitchRequest(gnb, ue)
+	if err != nil {
+		log.Info("[GNB][NGAP] Error sending Path Switch Request ", err)
+	}
+
+	conn := ue.GetSCTP()
+	err = sender.SendToAmF(ngapMsg, conn)
+	if err != nil {
+		log.Fatal("[GNB][NGAP] Error sending Path Switch Request.: ", err)
+	}
 }

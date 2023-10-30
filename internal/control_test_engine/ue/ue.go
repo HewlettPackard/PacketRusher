@@ -43,7 +43,7 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 
 	go func() {
 		// starting communication with GNB and listen.
-		gnbChannel := service.InitConn(ue, gnb)
+		service.InitConn(ue, gnb)
 		sigStop := make(chan os.Signal, 1)
 		signal.Notify(sigStop, os.Interrupt)
 
@@ -51,7 +51,7 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 		loop := true
 		for loop {
 			select {
-			case msg, open := <-gnbChannel:
+			case msg, open := <-ue.GetGnbTx():
 				if !open {
 					log.Error("[UE][", ue.GetMsin(), "] Stopping UE as communication with gNB was closed")
 					loop = false
@@ -81,6 +81,7 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 	if msg.IsNas {
 		// handling NAS message.
+		ue.SetAmfUeId(msg.AmfId)
 		state.DispatchState(ue, msg.Nas)
 	} else {
 		serviceGtp.SetupGtpInterface(ue, msg)
@@ -103,6 +104,19 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 			return loop
 		}
 		trigger.InitPduSessionRelease(ue, pdu)
+	case procedures.Handover:
+		var pduSession *context.UEPDUSession
+		for i := uint8(1); i <= 16; i++ {
+			pduSession, _ = ue.GetPduSession(i)
+			if pduSession != nil {
+				break
+			}
+		}
+		if pduSession == nil {
+			log.Error("[UE] Cannot handover / PathSwitchRequest to a new gNodeB without any PDU Sessions")
+			break
+		}
+		trigger.InitHandover(ue, msg.GnbChan)
 	case procedures.Terminate:
 		log.Info("[UE] Terminating UE as requested")
 		// If UE is registered

@@ -13,27 +13,28 @@ const Ready = 0x02
 const Down = 0x03
 
 type GNBUe struct {
-	ranUeNgapId          int64          // Identifier for UE in GNB Context.
-	amfUeNgapId          int64          // Identifier for UE in AMF Context.
-	amfId                int64          // Identifier for AMF in UE/GNB Context.
-	state                int            // State of UE in NAS/GNB Context.
-	sctpConnection       *sctp.SCTPConn // Sctp association in using by the UE.
-	gnbRx                 chan UEMessage
-	gnbTx                 chan UEMessage
-	context              Context
-	lock                 sync.Mutex
+	ranUeNgapId    int64          // Identifier for UE in GNB Context.
+	amfUeNgapId    int64          // Identifier for UE in AMF Context.
+	amfId          int64          // Identifier for AMF in UE/GNB Context.
+	state          int            // State of UE in NAS/GNB Context.
+	sctpConnection *sctp.SCTPConn // Sctp association in using by the UE.
+	gnbRx          chan UEMessage
+	gnbTx          chan UEMessage
+	msin           string
+	context        Context
+	lock           sync.Mutex
 }
 
 type Context struct {
 	mobilityInfo mobility
 	maskedIMEISV string
-	pduSession   [16]*PDUSession
+	pduSession   [16]*GnbPDUSession
 	allowedSst   []string
 	allowedSd    []string
 	lenSlice     int
 }
 
-type PDUSession struct {
+type GnbPDUSession struct {
 	pduSessionId int64
 	sst          string
 	sd           string
@@ -64,7 +65,7 @@ func (ue *GNBUe) CreateUeContext(plmn string, imeisv string, sst []string, sd []
 }
 
 func (ue *GNBUe) CreatePduSession(pduSessionId int64, sst string, sd string, pduType uint64,
-	qosId int64, priArp int64, fiveQi int64, ulTeid uint32, dlTeid uint32)  (*PDUSession, error) {
+	qosId int64, priArp int64, fiveQi int64, ulTeid uint32, dlTeid uint32)  (*GnbPDUSession, error) {
 
 	if pduSessionId < 1 && pduSessionId > 16 {
 		return nil, errors.New("PDU Session Id must lies between 0 and 15, id: " + string(pduSessionId))
@@ -74,7 +75,7 @@ func (ue *GNBUe) CreatePduSession(pduSessionId int64, sst string, sd string, pdu
 		return nil, errors.New("Unable to create PDU Session " + string(pduSessionId) + " as such PDU Session already exists")
 	}
 
-	var pduSession = new(PDUSession)
+	var pduSession = new(GnbPDUSession)
 	pduSession.pduSessionId = pduSessionId
 
 	if !ue.isWantedNssai(sst, sd) {
@@ -94,12 +95,20 @@ func (ue *GNBUe) CreatePduSession(pduSessionId int64, sst string, sd string, pdu
 	return pduSession, nil
 }
 
-func (ue *GNBUe) GetPduSession(pduSessionId int64) (*PDUSession, error) {
+func (ue *GNBUe) GetPduSession(pduSessionId int64) (*GnbPDUSession, error) {
 	if pduSessionId < 1 && pduSessionId > 16 {
 		return nil, errors.New("PDU Session Id must lies between 1 and 16, id: " + string(pduSessionId))
 	}
 
 	return ue.context.pduSession[pduSessionId-1], nil
+}
+
+func (ue *GNBUe) GetPduSessions() [16]*GnbPDUSession {
+	return ue.context.pduSession
+}
+
+func (ue *GNBUe) SetPduSessions(pduSessions [16]*GnbPDUSession) {
+	ue.context.pduSession = pduSessions
 }
 
 func (ue *GNBUe) DeletePduSession(pduSessionId int64) error {
@@ -193,6 +202,14 @@ func (ue *GNBUe) SetGnbTx(gnbTx chan UEMessage) {
 	ue.gnbTx = gnbTx
 }
 
+func (ue *GNBUe) SetMsin(msin string) {
+	ue.msin = msin
+}
+
+func (ue *GNBUe) GetMsin() string {
+	return ue.msin
+}
+
 func (ue *GNBUe) Lock() {
 	ue.lock.Lock()
 }
@@ -201,39 +218,39 @@ func (ue *GNBUe) Unlock() {
 	ue.lock.Unlock()
 }
 
-func (pduSession *PDUSession) GetPduSessionId() int64 {
+func (pduSession *GnbPDUSession) GetPduSessionId() int64 {
 	return pduSession.pduSessionId
 }
 
-func (pduSession *PDUSession) GetTeidUplink() uint32 {
+func (pduSession *GnbPDUSession) GetTeidUplink() uint32 {
 	return pduSession.uplinkTeid
 }
 
-func (pduSession *PDUSession) SetTeidUplink(teidUplink uint32) {
+func (pduSession *GnbPDUSession) SetTeidUplink(teidUplink uint32) {
 	pduSession.uplinkTeid = teidUplink
 }
 
-func (pduSession *PDUSession) GetTeidDownlink() uint32 {
+func (pduSession *GnbPDUSession) GetTeidDownlink() uint32 {
 	return pduSession.downlinkTeid
 }
 
-func (pduSession *PDUSession) SetTeidDownlink(teidDownlink uint32) {
+func (pduSession *GnbPDUSession) SetTeidDownlink(teidDownlink uint32) {
 	pduSession.downlinkTeid = teidDownlink
 }
 
-func (pduSession *PDUSession) GetQosId() int64 {
+func (pduSession *GnbPDUSession) GetQosId() int64 {
 	return pduSession.qosId
 }
 
-func (pduSession *PDUSession) GetFiveQI() int64 {
+func (pduSession *GnbPDUSession) GetFiveQI() int64 {
 	return pduSession.fiveQi
 }
 
-func (pduSession *PDUSession) GetPriorityARP() int64 {
+func (pduSession *GnbPDUSession) GetPriorityARP() int64 {
 	return pduSession.priArp
 }
 
-func (pduSession *PDUSession) GetPduType() (valor string) {
+func (pduSession *GnbPDUSession) GetPduType() (valor string) {
 
 	switch pduSession.pduType {
 	case 0:

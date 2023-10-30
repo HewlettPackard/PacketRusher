@@ -9,6 +9,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"my5G-RANTester/lib/aper"
+	"my5G-RANTester/lib/ngap/ngapConvert"
 	"my5G-RANTester/lib/ngap/ngapType"
 	_ "net"
 	"time"
@@ -325,15 +326,14 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	// send NAS message to UE.
 	sender.SendToUe(ue, messageNas)
 
-	// send PDU Session Resource Setup Response.
-	trigger.SendPduSessionResourceSetupResponse(pduSession, ue, gnb)
-
-	time.Sleep(20 * time.Millisecond)
-
-    msg := context.UEMessage{}
-    msg.NewUeMessage(pduSessionId, gnb.GetN3GnbIp(), gnb.GetUpfIp(), fmt.Sprint(pduSession.GetTeidUplink()), fmt.Sprint(pduSession.GetTeidDownlink()))
+	var pduSessions [16]*context.GnbPDUSession
+	pduSessions[0] = pduSession
+    msg := context.UEMessage{GnbIp: gnb.GetN3GnbIp(), UpfIp: gnb.GetUpfIp(), GNBPduSessions: pduSessions}
 
 	sender.SendMessageToUe(ue, msg)
+
+	// send PDU Session Resource Setup Response.
+	trigger.SendPduSessionResourceSetupResponse(pduSession, ue, gnb)
 }
 
 func HandlerPduSessionReleaseCommand(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
@@ -612,6 +612,80 @@ func HandlerAmfConfiguratonUpdate(amf *context.GNBAmf, gnb *context.GNBContext, 
 	trigger.SendAmfConfigurationUpdateAcknowledge(amf)
 }
 
+func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapType.NGAPPDU)  {
+	var pduSessionResourceSwitchedList *ngapType.PDUSessionResourceSwitchedList
+	valueMessage := message.SuccessfulOutcome.Value.PathSwitchRequestAcknowledge
+
+	var amfUeId, ranUeId int64
+
+	for _, ies := range valueMessage.ProtocolIEs.List {
+		switch ies.Id.Value {
+
+		case ngapType.ProtocolIEIDAMFUENGAPID:
+
+			if ies.Value.AMFUENGAPID == nil {
+				log.Fatal("[GNB][NGAP] AMF UE ID is missing")
+			}
+			amfUeId = ies.Value.AMFUENGAPID.Value
+
+		case ngapType.ProtocolIEIDRANUENGAPID:
+
+			if ies.Value.RANUENGAPID == nil {
+				log.Fatal("[GNB][NGAP] RAN UE ID is missing")
+				// TODO SEND ERROR INDICATION
+			}
+			ranUeId = ies.Value.RANUENGAPID.Value
+
+		case ngapType.ProtocolIEIDPDUSessionResourceSwitchedList:
+			pduSessionResourceSwitchedList = ies.Value.PDUSessionResourceSwitchedList
+			if pduSessionResourceSwitchedList == nil {
+				log.Fatal("[GNB][NGAP] PduSessionResourceSwitchedList is missing")
+				// TODO SEND ERROR INDICATION
+			}
+		}
+
+	}
+	ue := getUeFromContext(gnb, ranUeId, amfUeId)
+
+	if pduSessionResourceSwitchedList == nil || len(pduSessionResourceSwitchedList.List) == 0 {
+		log.Warn("[GNB] No PDU Sessions to be switched")
+		return
+	}
+
+	for _, pduSessionResourceSwitchedItem := range pduSessionResourceSwitchedList.List {
+		pduSessionId := pduSessionResourceSwitchedItem.PDUSessionID.Value
+
+		pathSwitchRequestAcknowledgeTransferBytes := pduSessionResourceSwitchedItem.PathSwitchRequestAcknowledgeTransfer
+		pathSwitchRequestAcknowledgeTransfer := &ngapType.PathSwitchRequestAcknowledgeTransfer{}
+		err := aper.UnmarshalWithParams(pathSwitchRequestAcknowledgeTransferBytes, pathSwitchRequestAcknowledgeTransfer, "valueExt")
+		if err != nil {
+			log.Error("[GNB] Unable to unmarshall PathSwitchRequestAcknowledgeTransfer: ", err)
+			continue
+		}
+
+		gtpTunnel := pathSwitchRequestAcknowledgeTransfer.ULNGUUPTNLInformation.GTPTunnel
+		upfIpv4, _ := ngapConvert.IPAddressToString(gtpTunnel.TransportLayerAddress)
+		teidUplink := gtpTunnel.GTPTEID.Value
+
+		pduSession, err := ue.GetPduSession(pduSessionId)
+		if err != nil {
+			log.Error("[GNB] Trying to path switch an unknown PDU Session ID ", pduSessionId, ": ", err)
+			continue
+		}
+		// Set new Teid Uplink received in PathSwitchRequestAcknowledge
+		pduSession.SetTeidUplink(binary.BigEndian.Uint32(teidUplink))
+
+		var pduSessions [16]*context.GnbPDUSession
+		pduSessions[0] = pduSession
+
+		msg := context.UEMessage{GNBPduSessions: pduSessions, UpfIp: upfIpv4, GnbIp: gnb.GetN3GnbIp()}
+
+		sender.SendMessageToUe(ue, msg)
+	}
+
+	log.Info("[GNB] Handover completed successfully for UE ", ue.GetMsin())
+}
+
 func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU)  {
 
 	valueMessage := message.InitiatingMessage.Value.ErrorIndication
@@ -651,14 +725,8 @@ func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *co
 		// TODO SEND ERROR INDICATION
 	}
 
-	// update AMF UE id.
-	if ue.GetAmfUeId() == 0 {
 		ue.SetAmfUeId(amfUeId)
-	} else {
-		if ue.GetAmfUeId() != amfUeId {
-			log.Fatal("[GNB][NGAP] AMF UE NGAP ID is incorrect, found: ", amfUeId)
-		}
-	}
+
 	return ue
 }
 
