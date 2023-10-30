@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, numPduSessions int) {
+func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeHandover int, numPduSessions int) {
 	if tunnelEnabled && !dedicatedGnb {
 		log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
 	}
@@ -43,8 +43,10 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 	} else {
 		numGnb = 1
 	}
-	// TODO: Temp handover test
-	numGnb++
+	if numGnb <= 1 && timeBeforeHandover != 0 {
+		log.Warn("[TESTER] We are increasing the number of gNodeB to two for handover test cases. Make you sure you fill the requirements for having two gNodeBs.")
+		numGnb++
+	}
 	gnbs:= make(map[string]*gnbContext.GNBContext)
 
 	// Each gNB have their own IP address on both N2 and N3
@@ -89,11 +91,7 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 			ueCfg.Ue.Msin = imsiGenerator(ueId, msin)
 			log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", ueCfg.Ue.Msin, " UE")
 
-			// Associate UE[ueId] with gnb[ueId] when dedicatedGnb = true
-			// else all UE[ueId] are associated with gnb[0]
-			if dedicatedGnb {
-				ueCfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(ueId)
-			}
+			ueCfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(ueId % numGnb + 1)
 
 			// If there is currently a coroutine handling current UE
 			// kill it, before creating a new coroutine with same UE
@@ -104,7 +102,7 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 			}
 
 			// Launch a coroutine to handle UE's individual scenario
-			go func(scenarioChan chan procedures.UeTesterMessage) {
+			go func(scenarioChan chan procedures.UeTesterMessage, ueId int) {
 				wg.Add(1)
 
 				ueRx := make(chan procedures.UeTesterMessage)
@@ -116,20 +114,30 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 				// We tell the UE to perform a registration
 				ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
 
-				var sleepingChannel <-chan time.Time = nil
+				var deregistrationChannel <-chan time.Time = nil
 				if timeBeforeDeregistration != 0 {
-					sleepingChannel = time.After(time.Duration(timeBeforeDeregistration) * time.Millisecond)
+					deregistrationChannel = time.After(time.Duration(timeBeforeDeregistration) * time.Millisecond)
+				}
+				var handoverChannel <-chan time.Time = nil
+				if timeBeforeHandover != 0 {
+					handoverChannel = time.After(time.Duration(timeBeforeHandover) * time.Millisecond)
 				}
 
 				loop := true
 				state := context.MM5G_NULL
 				for loop {
 					select {
-					case <-sleepingChannel:
-						//ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
-						ueRx <- procedures.UeTesterMessage{Type: procedures.Handover, GnbChan: gnbs[gnbIdGenerator(1)].GetInboundChannel()}
+					case <-deregistrationChannel:
+						ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
+						ueRx = nil
+					case <-handoverChannel:
+						if ueRx != nil {
+							ueRx <- procedures.UeTesterMessage{Type: procedures.Handover, GnbChan: gnbs[gnbIdGenerator((ueId+1) % numGnb + 1)].GetInboundChannel()}
+						}
 					case msg := <-scenarioChan:
-						ueRx <- msg
+						if ueRx != nil {
+							ueRx <- msg
+						}
 					case msg := <-ueTx:
 						log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)
 						switch msg.StateChange {
@@ -145,7 +153,7 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 						state = msg.StateChange
 					}
 				}
-			}(scenarioChans[ueId])
+			}(scenarioChans[ueId], ueId)
 
 			// Before creating a new UE, we wait for timeBetweenRegistration ms
 			time.Sleep(time.Duration(timeBetweenRegistration) * time.Millisecond)

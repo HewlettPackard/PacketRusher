@@ -43,7 +43,7 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 
 	go func() {
 		// starting communication with GNB and listen.
-		gnbChannel := service.InitConn(ue, gnb)
+		service.InitConn(ue, gnb)
 		sigStop := make(chan os.Signal, 1)
 		signal.Notify(sigStop, os.Interrupt)
 
@@ -51,7 +51,7 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 		loop := true
 		for loop {
 			select {
-			case msg, open := <-gnbChannel:
+			case msg, open := <-ue.GetGnbTx():
 				if !open {
 					log.Error("[UE][", ue.GetMsin(), "] Stopping UE as communication with gNB was closed")
 					loop = false

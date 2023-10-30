@@ -44,7 +44,7 @@ func main() {
 			{
 				Name:    "ue",
 				Aliases: []string{"ue"},
-				Usage:   "Launch a gNB and a UE with a PDU Session\n",
+				Usage:   "Launch a gNB and a UE with a PDU Session\nFor more complex scenario and features, use instead packetrusher multi-ue\n",
 				Flags: []cli.Flag{
 					&cli.BoolFlag{Name: "disableTunnel", Aliases: []string{"t"}, Usage: "Disable the creation of the GTP-U tunnel interface."},
 				},
@@ -89,11 +89,12 @@ func main() {
 				Aliases: []string{"multi-ue"},
 				Usage: "\nLoad endurance stress tests.\n" +
 					"Example for testing multiple UEs: multi-ue -n 5 \n" +
-					"This test case will launch N UEs.",
+					"This test case will launch N UEs. See packetrusher multi-ue --help\n",
 				Flags: []cli.Flag{
 					&cli.IntFlag{Name: "number-of-ues", Value: 1, Aliases: []string{"n"}},
 					&cli.IntFlag{Name: "timeBetweenRegistration", Value: 500, Aliases: []string{"tr"}, Usage: "The time in ms, between UE registration."},
 					&cli.IntFlag{Name: "timeBeforeDeregistration", Value: 0, Aliases: []string{"td"}, Usage: "The time in ms, before a UE deregisters once it has been registered. 0 to disable auto-deregistration."},
+					&cli.IntFlag{Name: "timeBeforeHandover", Value: 0, Aliases: []string{"th"}, Usage: "The time in ms, before triggering a UE handover. 0 to disable handover. This requires at least two gNodeB, eg: two N2/N3 IPs."},
 					&cli.IntFlag{Name: "numPduSessions", Value: 1, Aliases: []string{"nPdu"}, Usage: "The number of PDU Sessions to create"},
 					&cli.BoolFlag{Name: "loop", Aliases: []string{"l"}, Usage: "Enable the creation of the GTP-U tunnel interface."},
 					&cli.BoolFlag{Name: "tunnel", Aliases: []string{"t"}, Usage: "Enable the creation of the GTP-U tunnel interface."},
@@ -118,14 +119,13 @@ func main() {
 					log.Info("[TESTER][GNB] gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
 					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
 					log.Info("---------------------------------------")
-					templates.TestMultiUesInQueue(numUes, c.Bool("tunnel"), c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("numPduSessions"))
+					templates.TestMultiUesInQueue(numUes, c.Bool("tunnel"), c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeHandover"), c.Int("numPduSessions"))
 
 					return nil
 				},
 			},
 			{
 				Name: "custom-scenario",
-				Usage: "Test",
 				Aliases: []string{"c"},
 				Flags: []cli.Flag{
 					&cli.PathFlag{Name: "scenario", Usage: "Specify the scenario path in .wasm"},

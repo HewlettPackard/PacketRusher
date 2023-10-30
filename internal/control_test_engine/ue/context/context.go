@@ -665,14 +665,6 @@ func (ue *UEContext) DerivateAlgKey() {
 }
 
 func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
-	log.WithFields(log.Fields{
-		"k":   k,
-		"opc": opc,
-		"op":  op,
-		"amf": amf,
-		"sqn": sqn,
-	}).Info("[UE] Authentification parameters:")
-
 	ue.UeSecurity.AuthenticationSubs.PermanentKey = &models.PermanentKey{
 		PermanentKeyValue: k,
 	}

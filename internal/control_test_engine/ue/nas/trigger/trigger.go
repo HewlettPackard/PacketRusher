@@ -84,8 +84,7 @@ func InitDeregistration(ue *context.UEContext) {
 func InitHandover(ue *context.UEContext, gnbChan chan gnbContext.UEMessage) {
 	log.Info("[UE] Initiating Handover")
 
-	// Stop connectivity with previous gNb
-	close(ue.GetGnbRx())
+	previousGnbRx := ue.GetGnbRx()
 
 	newGnbRx := make(chan gnbContext.UEMessage, 1)
 	newGnbTx := make(chan gnbContext.UEMessage, 1)
@@ -97,4 +96,8 @@ func InitHandover(ue *context.UEContext, gnbChan chan gnbContext.UEMessage) {
 
 	// Trigger Handover
 	ue.GetGnbRx() <- gnbContext.UEMessage{AmfId: ue.GetAmfUeId()}
+
+	// Clear UEContext in previous gNb
+	previousGnbRx <- gnbContext.UEMessage{ConnectionClosed: true}
+	close(previousGnbRx)
 }

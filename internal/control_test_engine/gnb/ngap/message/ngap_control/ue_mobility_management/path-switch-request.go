@@ -87,7 +87,7 @@ func (builder *PathSwitchRequestBuilder) PathSwitchRequestTransfer(gnbN3Ip strin
 		}
 		item := ngapType.PDUSessionResourceToBeSwitchedDLItem{PDUSessionID: ngapType.PDUSessionID{Value: pduSession.GetPduSessionId()}}
 		buf := new(bytes.Buffer)
-		binary.Write(buf, binary.LittleEndian, pduSession.GetTeidUplink())
+		binary.Write(buf, binary.BigEndian, pduSession.GetTeidDownlink())
 		transfer := ngapType.PathSwitchRequestTransfer{
 			DLNGUUPTNLInformation: ngapType.UPTransportLayerInformation{
 				Present: ngapType.UPTransportLayerInformationPresentGTPTunnel,
@@ -98,7 +98,7 @@ func (builder *PathSwitchRequestBuilder) PathSwitchRequestTransfer(gnbN3Ip strin
 				}},
 			DLNGUTNLInformationReused:    nil,
 			UserPlaneSecurityInformation: nil,
-			QosFlowAcceptedList:          ngapType.QosFlowAcceptedList{List: []ngapType.QosFlowAcceptedItem{{QosFlowIdentifier: ngapType.QosFlowIdentifier{Value: 1}}}},
+			QosFlowAcceptedList:          ngapType.QosFlowAcceptedList{List: []ngapType.QosFlowAcceptedItem{{QosFlowIdentifier: ngapType.QosFlowIdentifier{Value: pduSession.GetQosId()}}}},
 			IEExtensions:                 nil,
 		}
 		res, _ := aper.MarshalWithParams(transfer, "valueExt")

@@ -42,20 +42,26 @@ func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
 	for {
 		message, done := <- rx
 		gnbUeContext, err := gnb.GetGnbUe(ue.GetRanUeId())
-		if gnbUeContext == nil || err != nil {
+		if (gnbUeContext == nil || err != nil) && done {
 			log.Error("[GNB][NAS] Ignoring message from UE ", ue.GetRanUeId(), " as UE Context was cleaned as requested by AMF.")
 			break
 		}
 		if !done {
-			gnbUeContext.SetStateDown()
+			if gnbUeContext != nil {
+				gnbUeContext.SetStateDown()
+			}
 			break
 		}
 
 		// send to dispatch.
-		if message.IsNas {
+		if message.ConnectionClosed {
+			log.Info("[GNB] Received outgoing handover for UE: Cleaning up context on current gNb")
+			gnbUeContext.SetStateDown()
+			gnb.DeleteGnBUe(ue)
+		} else if message.IsNas {
 			go nas.Dispatch(ue, message.Nas, gnb)
 		} else if message.AmfId >= 0 {
-			log.Info("[GNB] Received handover for UE")
+			log.Info("[GNB] Received incoming handover for UE")
 			gnbUeContext.SetStateReady()
 			ue.SetAmfUeId(message.AmfId)
 			trigger.SendPathSwitchRequest(gnb, ue)
