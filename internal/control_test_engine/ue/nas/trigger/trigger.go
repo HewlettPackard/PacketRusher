@@ -2,7 +2,6 @@
 // Triggers are the basic building block of test scenarios.
 // They allow to trigger NAS procedures by the UE, eg: registration, PDU Session creation...
 // Replies from the AMF are handled in the global handler.
-// TODO: Maybe it would be better to have a NAS state machine per trigger? -> It would allow more easily for negative testing
 package trigger
 
 import (
@@ -41,13 +40,19 @@ func InitPduSessionRequest(ue *context.UEContext) {
 		return
 	}
 
+	InitPduSessionRequestInner(ue, pduSession)
+}
+
+func InitPduSessionRequestInner(ue *context.UEContext, pduSession *context.PDUSession) {
+	log.Info("[UE] Initiating New PDU Session")
+
 	ulNasTransport, err := mm_5gs.Request_UlNasTransport(pduSession, ue)
 	if err != nil {
 		log.Fatal("[UE][NAS] Error sending ul nas transport and pdu session establishment request: ", err)
 	}
 
 	// change the state of ue(SM).
-	ue.SetStateSM_PDU_SESSION_PENDING()
+	pduSession.SetStateSM_PDU_SESSION_PENDING()
 
 	// sending to GNB
 	sender.SendToGnb(ue, ulNasTransport)
@@ -56,13 +61,18 @@ func InitPduSessionRequest(ue *context.UEContext) {
 func InitPduSessionRelease(ue *context.UEContext, pduSession *context.UEPDUSession) {
 	log.Info("[UE] Initiating Release of PDU Session ", pduSession.Id)
 
+	if pduSession.GetStateSM() != context.SM5G_PDU_SESSION_ACTIVE {
+		log.Warn("[UE][NAS] Skipping releasing the PDU Session ID ", pduSession.Id, " as it's not active")
+		return
+	}
+
 	ulNasTransport, err := mm_5gs.Release_UlNasTransport(pduSession, ue)
 	if err != nil {
 		log.Fatal("[UE][NAS] Error sending ul nas transport and pdu session establishment request: ", err)
 	}
 
 	// change the state of ue(SM).
-	ue.SetStateSM_PDU_SESSION_PENDING()
+	pduSession.SetStateSM_PDU_SESSION_INACTIVE()
 
 	// sending to GNB
 	sender.SendToGnb(ue, ulNasTransport)

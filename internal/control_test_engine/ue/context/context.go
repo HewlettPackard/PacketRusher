@@ -34,16 +34,15 @@ const SM5G_PDU_SESSION_ACTIVE_PENDING = 0x07
 const SM5G_PDU_SESSION_ACTIVE = 0x08
 
 type UEContext struct {
-	id         uint8
-	UeSecurity SECURITY
-	StateMM    int
-	StateSM    int
-	gnbRx      chan context.UEMessage
-	gnbTx      chan context.UEMessage
-	PduSession [16]*UEPDUSession
-	amfInfo    Amf
+	id           uint8
+	UeSecurity   SECURITY
+	StateMM      int
+	gnbRx        chan context.UEMessage
+	gnbTx        chan context.UEMessage
+	PduSession   [16]*UEPDUSession
+	amfInfo      Amf
 
-	// TODO: Modify config so you can configure these parameters per UEPDUSession
+	// TODO: Modify config so you can configure these parameters per PDUSession
 	Dnn           string
 	Snssai        models.Snssai
 	TunnelEnabled bool
@@ -71,6 +70,9 @@ type UEPDUSession struct {
 	vrf           *netlink.Vrf
 	stopSignal    chan bool
 	Wait          chan bool
+
+	// TS 24.501 - 6.1.3.2.1.1 State Machine for Session Management
+	StateSM       int
 }
 
 type SECURITY struct {
@@ -175,9 +177,6 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 	// added initial state for MM(NULL)
 	ue.StateMM = MM5G_NULL
-
-	// added initial state for SM(INACTIVE)
-	ue.SetStateSM_PDU_SESSION_INACTIVE()
 }
 
 func (ue *UEContext) CreatePDUSession() (*UEPDUSession, error) {
@@ -218,18 +217,6 @@ func (ue *UEContext) GetSupi() string {
 	return ue.UeSecurity.Supi
 }
 
-func (ue *UEContext) SetStateSM_PDU_SESSION_INACTIVE() {
-	ue.StateSM = SM5G_PDU_SESSION_INACTIVE
-}
-
-func (ue *UEContext) SetStateSM_PDU_SESSION_ACTIVE() {
-	ue.StateSM = SM5G_PDU_SESSION_ACTIVE
-}
-
-func (ue *UEContext) SetStateSM_PDU_SESSION_PENDING() {
-	ue.StateSM = SM5G_PDU_SESSION_ACTIVE_PENDING
-}
-
 func (ue *UEContext) SetStateMM_DEREGISTERED_INITIATED() {
 	ue.StateMM = MM5G_DEREGISTERED_INIT
 	ue.scenarioChan <- scenario.ScenarioMessage{StateChange: ue.StateMM}
@@ -257,10 +244,6 @@ func (ue *UEContext) SetStateMM_NULL() {
 func (ue *UEContext) SetStateMM_DEREGISTERED() {
 	ue.StateMM = MM5G_DEREGISTERED
 	ue.scenarioChan <- scenario.ScenarioMessage{StateChange: ue.StateMM}
-}
-
-func (ue *UEContext) GetStateSM() int {
-	return ue.StateSM
 }
 
 func (ue *UEContext) GetStateMM() int {
@@ -378,6 +361,22 @@ func (pduSession *UEPDUSession) SetVrfDevice(vrf *netlink.Vrf) {
 
 func (pduSession *UEPDUSession) GetVrfDevice() *netlink.Vrf {
 	return pduSession.vrf
+}
+
+func (pdu *PDUSession) SetStateSM_PDU_SESSION_INACTIVE() {
+	pdu.StateSM = SM5G_PDU_SESSION_INACTIVE
+}
+
+func (pdu *PDUSession) SetStateSM_PDU_SESSION_ACTIVE() {
+	pdu.StateSM = SM5G_PDU_SESSION_ACTIVE
+}
+
+func (pdu *PDUSession) SetStateSM_PDU_SESSION_PENDING() {
+	pdu.StateSM = SM5G_PDU_SESSION_ACTIVE_PENDING
+}
+
+func (pduSession *PDUSession) GetStateSM() int {
+	return pduSession.StateSM
 }
 
 func (ue *UEContext) deriveSNN() string {
