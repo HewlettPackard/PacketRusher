@@ -18,4 +18,5 @@ require (
 	github.com/wmnsk/go-gtp v0.8.6
 	golang.org/x/net v0.10.0
 	gopkg.in/yaml.v2 v2.4.0
+	github.com/google/gopacket v1.1.19
 )

@@ -3,7 +3,7 @@ package main
 import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/templates"
-
+	pcap "my5G-RANTester/internal/utils"
 	// "fmt"
 	"github.com/davecgh/go-spew/spew"
 	log "github.com/sirupsen/logrus"
@@ -99,6 +99,7 @@ func main() {
 					&cli.BoolFlag{Name: "loop", Aliases: []string{"l"}, Usage: "Enable the creation of the GTP-U tunnel interface."},
 					&cli.BoolFlag{Name: "tunnel", Aliases: []string{"t"}, Usage: "Enable the creation of the GTP-U tunnel interface."},
 					&cli.BoolFlag{Name: "dedicatedGnb", Aliases: []string{"d"}, Usage: "Enable the creation of a dedicated gNB per UE. Require one IP on N2/N3 per gNB."},
+					&cli.PathFlag{Name: "pcap", Usage: "Capture traffic to given PCAP file when a path is given", Value: "./dump.pcap"},
 				},
 				Action: func(c *cli.Context) error {
 					var numUes int
@@ -119,6 +120,11 @@ func main() {
 					log.Info("[TESTER][GNB] gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
 					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
 					log.Info("---------------------------------------")
+
+					if c.IsSet("pcap") {
+						pcap.CaptureTraffic(c.Path("pcap"))
+					}
+
 					templates.TestMultiUesInQueue(numUes, c.Bool("tunnel"), c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeHandover"), c.Int("numPduSessions"))
 
 					return nil
