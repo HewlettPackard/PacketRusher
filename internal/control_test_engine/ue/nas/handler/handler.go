@@ -2,15 +2,16 @@ package handler
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
-	"my5G-RANTester/lib/nas"
-	"my5G-RANTester/lib/nas/nasMessage"
 	"time"
+
+	"github.com/free5gc/nas"
+	"github.com/free5gc/nas/nasMessage"
+	log "github.com/sirupsen/logrus"
 )
 
 func HandlerAuthenticationReject(ue *context.UEContext, message *nas.Message) {

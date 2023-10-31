@@ -3,7 +3,8 @@ package ngapConvert
 import (
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap/ngapType"
-	"my5G-RANTester/lib/openapi/models"
+
+	"github.com/free5gc/openapi/models"
 )
 
 // TS 38.413 9.3.1.85

@@ -5,19 +5,21 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	"github.com/vishvananda/netlink"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 	"my5G-RANTester/lib/UeauCommon"
 	"my5G-RANTester/lib/milenage"
-	"my5G-RANTester/lib/nas/nasType"
-	"my5G-RANTester/lib/nas/security"
-	"my5G-RANTester/lib/openapi/models"
 	"net"
 	"reflect"
 	"regexp"
 	"sync"
+
+	"github.com/free5gc/nas/nasType"
+	"github.com/free5gc/nas/security"
+
+	"github.com/free5gc/openapi/models"
+	log "github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 )
 
 // 5GMM main states in the UE.
@@ -34,13 +36,13 @@ const SM5G_PDU_SESSION_ACTIVE_PENDING = 0x07
 const SM5G_PDU_SESSION_ACTIVE = 0x08
 
 type UEContext struct {
-	id           uint8
-	UeSecurity   SECURITY
-	StateMM      int
-	gnbRx        chan context.UEMessage
-	gnbTx        chan context.UEMessage
-	PduSession   [16]*UEPDUSession
-	amfInfo      Amf
+	id         uint8
+	UeSecurity SECURITY
+	StateMM    int
+	gnbRx      chan context.UEMessage
+	gnbTx      chan context.UEMessage
+	PduSession [16]*UEPDUSession
+	amfInfo    Amf
 
 	// TODO: Modify config so you can configure these parameters per PDUSession
 	Dnn           string
@@ -72,7 +74,7 @@ type UEPDUSession struct {
 	Wait          chan bool
 
 	// TS 24.501 - 6.1.3.2.1.1 State Machine for Session Management
-	StateSM       int
+	StateSM int
 }
 
 type SECURITY struct {

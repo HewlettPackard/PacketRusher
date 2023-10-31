@@ -4,8 +4,9 @@ import (
 	"encoding/hex"
 	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/lib/ngap/ngapType"
-	"my5G-RANTester/lib/openapi/models"
 	"strings"
+
+	"github.com/free5gc/openapi/models"
 )
 
 func TraceDataToModels(traceActivation ngapType.TraceActivation) (traceData models.TraceData) {

@@ -3,9 +3,10 @@ package nas_control
 import (
 	"fmt"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
-	"my5G-RANTester/lib/nas"
-	"my5G-RANTester/lib/nas/nasMessage"
-	"my5G-RANTester/lib/nas/security"
+
+	"github.com/free5gc/nas"
+	"github.com/free5gc/nas/nasMessage"
+	"github.com/free5gc/nas/security"
 )
 
 func EncodeNasPduWithSecurity(ue *context.UEContext, pdu []byte, securityHeaderType uint8, securityContextAvailable, newSecurityContext bool) ([]byte, error) {

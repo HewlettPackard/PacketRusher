@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"my5G-RANTester/lib/nas"
-	"my5G-RANTester/lib/nas/nasMessage"
-	"my5G-RANTester/lib/nas/nasType"
+
+	"github.com/free5gc/nas"
+	"github.com/free5gc/nas/nasMessage"
+	"github.com/free5gc/nas/nasType"
 )
 
 func AuthenticationResponse(authenticationResponseParam []uint8, eapMsg string) (nasPdu []byte) {

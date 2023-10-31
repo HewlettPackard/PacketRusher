@@ -3,10 +3,11 @@ package sm_5gs
 import (
 	"bytes"
 	"fmt"
-	"my5G-RANTester/lib/nas"
-	"my5G-RANTester/lib/nas/nasConvert"
-	"my5G-RANTester/lib/nas/nasMessage"
-	"my5G-RANTester/lib/nas/nasType"
+
+	"github.com/free5gc/nas"
+	"github.com/free5gc/nas/nasConvert"
+	"github.com/free5gc/nas/nasMessage"
+	"github.com/free5gc/nas/nasType"
 )
 
 func GetPduSessionEstablishmentRequest(pduSessionId uint8) (nasPdu []byte) {

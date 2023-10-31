@@ -1,8 +1,9 @@
 package nas_control
 
 import (
-	"my5G-RANTester/lib/nas"
 	"my5G-RANTester/lib/ngap/ngapType"
+
+	"github.com/free5gc/nas"
 )
 
 func GetNasPduFromDownlink(msg *ngapType.DownlinkNASTransport) (m *nas.Message) {

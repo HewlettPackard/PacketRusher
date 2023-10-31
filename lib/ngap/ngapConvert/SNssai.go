@@ -3,7 +3,8 @@ package ngapConvert
 import (
 	"encoding/hex"
 	"my5G-RANTester/lib/ngap/ngapType"
-	"my5G-RANTester/lib/openapi/models"
+
+	"github.com/free5gc/openapi/models"
 )
 
 func SNssaiToModels(ngapSnssai ngapType.SNSSAI) (modelsSnssai models.Snssai) {

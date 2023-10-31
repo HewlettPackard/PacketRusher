@@ -7,10 +7,12 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/sm_5gs"
-	"my5G-RANTester/lib/nas"
-	"my5G-RANTester/lib/nas/nasMessage"
-	"my5G-RANTester/lib/nas/nasType"
-	"my5G-RANTester/lib/openapi/models"
+
+	"github.com/free5gc/nas"
+	"github.com/free5gc/nas/nasMessage"
+	"github.com/free5gc/nas/nasType"
+
+	"github.com/free5gc/openapi/models"
 )
 
 func Request_UlNasTransport(pduSession *context.UEPDUSession, ue *context.UEContext) ([]byte, error) {
@@ -41,7 +43,7 @@ func Release_UlNasTransport(pduSession *context.UEPDUSession, ue *context.UECont
 	return pdu, nil
 }
 
-func getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, dnnString string, sNssai *models.Snssai) (nasPdu []byte) {
+func getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, dnn string, sNssai *models.Snssai) (nasPdu []byte) {
 
 	pduSessionEstablishmentRequest := sm_5gs.GetPduSessionEstablishmentRequest(pduSessionId)
 
@@ -60,8 +62,7 @@ func getUlNasTransport_PduSessionEstablishmentRequest(pduSessionId uint8, dnnStr
 	ulNasTransport.RequestType.SetIei(nasMessage.ULNASTransportRequestTypeType)
 	ulNasTransport.RequestType.SetRequestTypeValue(nasMessage.ULNASTransportRequestTypeInitialRequest)
 
-	if dnnString != "" {
-		dnn := []byte(dnnString)
+	if dnn != "" {
 		ulNasTransport.DNN = new(nasType.DNN)
 		ulNasTransport.DNN.SetIei(nasMessage.ULNASTransportDNNType)
 		ulNasTransport.DNN.SetLen(uint8(len(dnn)))

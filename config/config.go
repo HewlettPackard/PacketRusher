@@ -1,14 +1,15 @@
 package config
 
 import (
-	log "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
-	"my5G-RANTester/lib/nas/nasMessage"
-	"my5G-RANTester/lib/nas/nasType"
 	"path"
 	"path/filepath"
 	"runtime"
+
+	"github.com/free5gc/nas/nasMessage"
+	"github.com/free5gc/nas/nasType"
+	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v2"
 )
 
 // Conf: Used for access to configuration
@@ -36,14 +37,14 @@ type Config struct {
 		} `yaml: "slicesupportlist"`
 	} `yaml:"gnodeb"`
 	Ue struct {
-		Msin  string `yaml: "msin"`
-		Key   string `yaml: "key"`
-		Opc   string `yaml: "opc"`
-		Amf   string `yaml: "amf"`
-		Sqn   string `yaml: "sqn"`
-		Dnn   string `yaml: "dnn"`
+		Msin             string `yaml: "msin"`
+		Key              string `yaml: "key"`
+		Opc              string `yaml: "opc"`
+		Amf              string `yaml: "amf"`
+		Sqn              string `yaml: "sqn"`
+		Dnn              string `yaml: "dnn"`
 		RoutingIndicator string `yaml: "routingindicator"`
-		Hplmn struct {
+		Hplmn            struct {
 			Mcc string `yaml: "mcc"`
 			Mnc string `yaml: "mnc"`
 		} `yaml: "hplmn"`

@@ -1,14 +1,15 @@
 package nas
 
 import (
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/handler"
-	"my5G-RANTester/lib/nas"
-	"my5G-RANTester/lib/nas/nasMessage"
-	"my5G-RANTester/lib/nas/nasType"
-	"my5G-RANTester/lib/nas/security"
 	"reflect"
+
+	"github.com/free5gc/nas"
+	"github.com/free5gc/nas/nasMessage"
+	"github.com/free5gc/nas/nasType"
+	"github.com/free5gc/nas/security"
+	log "github.com/sirupsen/logrus"
 )
 
 func DispatchNas(ue *context.UEContext, message []byte) {
@@ -165,7 +166,6 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 	}
 
 }
-
 
 func handleCause5GMM(cause5GMM *nasType.Cause5GMM) {
 	if cause5GMM != nil {
