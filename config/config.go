@@ -56,11 +56,13 @@ type Config struct {
 			Nia0 bool `yaml: "nia0"`
 			Nia1 bool `yaml: "nia1"`
 			Nia2 bool `yaml: "nia2"`
+			Nia3 bool `yaml: "nia2"`
 		} `yaml: "integrity"`
 		Ciphering struct {
 			Nea0 bool `yaml: "nea0"`
 			Nea1 bool `yaml: "nea1"`
 			Nea2 bool `yaml: "nea2"`
+			Nea3 bool `yaml: "nia2"`
 		} `yaml: "ciphering"`
 		TunnelEnabled bool `yaml: "tunnelenabled"`
 	} `yaml:"ue"`
@@ -124,13 +126,13 @@ func (config *Config) GetUESecurityCapability() *nasType.UESecurityCapability {
 	UESecurityCapability.SetEA0_5G(boolToUint8(config.Ue.Ciphering.Nea0))
 	UESecurityCapability.SetEA1_128_5G(boolToUint8(config.Ue.Ciphering.Nea1))
 	UESecurityCapability.SetEA2_128_5G(boolToUint8(config.Ue.Ciphering.Nea2))
-	UESecurityCapability.SetEA3_128_5G(0)
+	UESecurityCapability.SetEA3_128_5G(boolToUint8(config.Ue.Ciphering.Nea3))
 
 	// Integrity algorithms
 	UESecurityCapability.SetIA0_5G(boolToUint8(config.Ue.Integrity.Nia0))
 	UESecurityCapability.SetIA1_128_5G(boolToUint8(config.Ue.Integrity.Nia1))
 	UESecurityCapability.SetIA2_128_5G(boolToUint8(config.Ue.Integrity.Nia2))
-	UESecurityCapability.SetIA3_128_5G(0)
+	UESecurityCapability.SetIA3_128_5G(boolToUint8(config.Ue.Integrity.Nia3))
 
 	return UESecurityCapability
 }

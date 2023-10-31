@@ -115,6 +115,8 @@ func (ue *UEContext) NewRanUeContext(msin string,
 		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA1
 	} else if ueSecurityCapability.GetIA2_128_5G() == 1 {
 		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA2
+	} else if ueSecurityCapability.GetIA3_128_5G() == 1 {
+		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA3
 	}
 
 	// set the algorithms of ciphering
@@ -124,6 +126,8 @@ func (ue *UEContext) NewRanUeContext(msin string,
 		ue.UeSecurity.CipheringAlg = security.AlgCiphering128NEA1
 	} else if ueSecurityCapability.GetEA2_128_5G() == 1 {
 		ue.UeSecurity.CipheringAlg = security.AlgCiphering128NEA2
+	} else if ueSecurityCapability.GetEA3_128_5G() == 1 {
+		ue.UeSecurity.CipheringAlg = security.AlgCiphering128NEA3
 	}
 	// added key, AuthenticationManagementField and opc or op.
 	ue.SetAuthSubscription(k, opc, op, amf, sqn)
