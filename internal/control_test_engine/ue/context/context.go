@@ -17,6 +17,8 @@ import (
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/nas/security"
 
+	"my5G-RANTester/internal/common/auth"
+
 	"github.com/free5gc/openapi/models"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -108,27 +110,14 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 	// added ciphering algorithm.
 	ue.UeSecurity.UeSecurityCapability = ueSecurityCapability
-	// set the algorithms of integrity
-	if ueSecurityCapability.GetIA0_5G() == 1 {
-		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA0
-	} else if ueSecurityCapability.GetIA1_128_5G() == 1 {
-		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA1
-	} else if ueSecurityCapability.GetIA2_128_5G() == 1 {
-		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA2
-	} else if ueSecurityCapability.GetIA3_128_5G() == 1 {
-		ue.UeSecurity.IntegrityAlg = security.AlgIntegrity128NIA3
-	}
 
+	integAlg, cipherAlg := auth.SelectAlgorithms(ue.UeSecurity.UeSecurityCapability)
+
+	// set the algorithms of integritys
+	ue.UeSecurity.IntegrityAlg = integAlg
 	// set the algorithms of ciphering
-	if ueSecurityCapability.GetEA0_5G() == 1 {
-		ue.UeSecurity.CipheringAlg = security.AlgCiphering128NEA0
-	} else if ueSecurityCapability.GetEA1_128_5G() == 1 {
-		ue.UeSecurity.CipheringAlg = security.AlgCiphering128NEA1
-	} else if ueSecurityCapability.GetEA2_128_5G() == 1 {
-		ue.UeSecurity.CipheringAlg = security.AlgCiphering128NEA2
-	} else if ueSecurityCapability.GetEA3_128_5G() == 1 {
-		ue.UeSecurity.CipheringAlg = security.AlgCiphering128NEA3
-	}
+	ue.UeSecurity.CipheringAlg = cipherAlg
+
 	// added key, AuthenticationManagementField and opc or op.
 	ue.SetAuthSubscription(k, opc, op, amf, sqn)
 
@@ -648,25 +637,17 @@ func (ue *UEContext) DerivateKamf(key []byte, snName string, SQN, AK []byte) {
 	ue.UeSecurity.Kamf = UeauCommon.GetKDFValue(Kseaf, UeauCommon.FC_FOR_KAMF_DERIVATION, P0, L0, P1, L1)
 }
 
-// Algorithm key Derivation function defined in TS 33.501 Annex A.9
 func (ue *UEContext) DerivateAlgKey() {
-	// Security Key
-	P0 := []byte{security.NNASEncAlg}
-	L0 := UeauCommon.KDFLen(P0)
-	P1 := []byte{ue.UeSecurity.CipheringAlg}
-	L1 := UeauCommon.KDFLen(P1)
 
-	kenc := UeauCommon.GetKDFValue(ue.UeSecurity.Kamf, UeauCommon.FC_FOR_ALGORITHM_KEY_DERIVATION, P0, L0, P1, L1)
-	copy(ue.UeSecurity.KnasEnc[:], kenc[16:32])
+	err := auth.AlgorithmKeyDerivation(ue.UeSecurity.CipheringAlg,
+		ue.UeSecurity.Kamf,
+		&ue.UeSecurity.KnasEnc,
+		ue.UeSecurity.IntegrityAlg,
+		&ue.UeSecurity.KnasInt)
 
-	// Integrity Key
-	P0 = []byte{security.NNASIntAlg}
-	L0 = UeauCommon.KDFLen(P0)
-	P1 = []byte{ue.UeSecurity.IntegrityAlg}
-	L1 = UeauCommon.KDFLen(P1)
-
-	kint := UeauCommon.GetKDFValue(ue.UeSecurity.Kamf, UeauCommon.FC_FOR_ALGORITHM_KEY_DERIVATION, P0, L0, P1, L1)
-	copy(ue.UeSecurity.KnasInt[:], kint[16:32])
+	if err != nil {
+		log.Errorf("[UE] Algorithm key derivation failed  %v", err)
+	}
 }
 
 func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {

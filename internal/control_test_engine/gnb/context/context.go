@@ -3,10 +3,11 @@ package context
 import (
 	"encoding/hex"
 	"fmt"
+	"sync"
+
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
 	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
-	"sync"
 )
 
 type GNBContext struct {

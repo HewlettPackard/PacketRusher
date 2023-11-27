@@ -14,6 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+
 func HandlerAuthenticationReject(ue *context.UEContext, message *nas.Message) {
 
 	log.Info("[UE][NAS] Authentication of UE ", ue.GetUeId(), " failed")

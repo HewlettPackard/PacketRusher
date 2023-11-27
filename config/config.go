@@ -16,63 +16,81 @@ import (
 var Data = getConfig()
 
 type Config struct {
-	GNodeB struct {
-		ControlIF struct {
-			Ip   string `yaml: "ip"`
-			Port int    `yaml: "port"`
-		} `yaml: "controlif"`
-		DataIF struct {
-			Ip   string `yaml: "ip"`
-			Port int    `yaml: "port"`
-		} `yaml: "dataif"`
-		PlmnList struct {
-			Mcc   string `yaml: "mmc"`
-			Mnc   string `yaml: "mnc"`
-			Tac   string `yaml: "tac"`
-			GnbId string `yaml: "gnbid"`
-		} `yaml: "plmnlist"`
-		SliceSupportList struct {
-			Sst string `yaml: "sst"`
-			Sd  string `yaml: "sd"`
-		} `yaml: "slicesupportlist"`
-	} `yaml:"gnodeb"`
-	Ue struct {
-		Msin             string `yaml: "msin"`
-		Key              string `yaml: "key"`
-		Opc              string `yaml: "opc"`
-		Amf              string `yaml: "amf"`
-		Sqn              string `yaml: "sqn"`
-		Dnn              string `yaml: "dnn"`
-		RoutingIndicator string `yaml: "routingindicator"`
-		Hplmn            struct {
-			Mcc string `yaml: "mcc"`
-			Mnc string `yaml: "mnc"`
-		} `yaml: "hplmn"`
-		Snssai struct {
-			Sst int    `yaml: "sst"`
-			Sd  string `yaml: "sd"`
-		} `yaml: "snssai"`
-		Integrity struct {
-			Nia0 bool `yaml: "nia0"`
-			Nia1 bool `yaml: "nia1"`
-			Nia2 bool `yaml: "nia2"`
-			Nia3 bool `yaml: "nia2"`
-		} `yaml: "integrity"`
-		Ciphering struct {
-			Nea0 bool `yaml: "nea0"`
-			Nea1 bool `yaml: "nea1"`
-			Nea2 bool `yaml: "nea2"`
-			Nea3 bool `yaml: "nia2"`
-		} `yaml: "ciphering"`
-		TunnelEnabled bool `yaml: "tunnelenabled"`
-	} `yaml:"ue"`
-	AMF struct {
-		Ip   string `yaml: "ip"`
-		Port int    `yaml: "port"`
-	} `yaml:"amfif"`
-	Logs struct {
-		Level int `yaml: "level"`
-	} `yaml:"logs"`
+	GNodeB GNodeB `yaml:"gnodeb"`
+	Ue     Ue     `yaml:"ue"`
+	AMF    AMF    `yaml:"amfif"`
+	Logs   Logs   `yaml:"logs"`
+}
+
+type GNodeB struct {
+	ControlIF        ControlIF        `yaml:"controlif"`
+	DataIF           DataIF           `yaml:"dataif"`
+	PlmnList         PlmnList         `yaml:"plmnlist"`
+	SliceSupportList SliceSupportList `yaml:"slicesupportlist"`
+}
+
+type ControlIF struct {
+	Ip   string `yaml:"ip"`
+	Port int    `yaml:"port"`
+}
+type DataIF struct {
+	Ip   string `yaml:"ip"`
+	Port int    `yaml:"port"`
+}
+type PlmnList struct {
+	Mcc   string `yaml:"mcc"`
+	Mnc   string `yaml:"mnc"`
+	Tac   string `yaml:"tac"`
+	GnbId string `yaml:"gnbid"`
+}
+type SliceSupportList struct {
+	Sst string `yaml:"sst"`
+	Sd  string `yaml:"sd"`
+}
+
+type Ue struct {
+	Msin             string    `yaml:"msin"`
+	Key              string    `yaml:"key"`
+	Opc              string    `yaml:"opc"`
+	Amf              string    `yaml:"amf"`
+	Sqn              string    `yaml:"sqn"`
+	Dnn              string    `yaml:"dnn"`
+	RoutingIndicator string    `yaml:"routingindicator"`
+	Hplmn            Hplmn     `yaml:"hplmn"`
+	Snssai           Snssai    `yaml:"snssai"`
+	Integrity        Integrity `yaml:"integrity"`
+	Ciphering        Ciphering `yaml:"ciphering"`
+	TunnelEnabled    bool      `yaml:"tunnelenabled"`
+}
+
+type Hplmn struct {
+	Mcc string `yaml:"mcc"`
+	Mnc string `yaml:"mnc"`
+}
+type Snssai struct {
+	Sst int    `yaml:"sst"`
+	Sd  string `yaml:"sd"`
+}
+type Integrity struct {
+	Nia0 bool `yaml:"nia0"`
+	Nia1 bool `yaml:"nia1"`
+	Nia2 bool `yaml:"nia2"`
+	Nia3 bool `yaml:"nia3"`
+}
+type Ciphering struct {
+	Nea0 bool `yaml:"nea0"`
+	Nea1 bool `yaml:"nea1"`
+	Nea2 bool `yaml:"nea2"`
+	Nea3 bool `yaml:"nea3"`
+}
+
+type AMF struct {
+	Ip   string `yaml:"ip"`
+	Port int    `yaml:"port"`
+}
+
+type Logs struct {
+	Level int `yaml:"level"`
 }
 
 func RootDir() string {
