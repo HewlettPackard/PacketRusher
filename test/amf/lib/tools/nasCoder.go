@@ -111,7 +111,7 @@ func Encode(ue *context.UEContext, msg *nas.Message) ([]byte, error) {
 
 		// add sequece number
 		payload = append([]byte{dlCount.SQN()}, payload[:]...)
-		mac32, err := security.NASMacCalculate(ue.GetSecurityContext().GetCipheringAlg(), ue.GetSecurityContext().GetKnasInt(), dlCount.Get(),
+		mac32, err := security.NASMacCalculate(ue.GetSecurityContext().GetIntegrityAlg(), ue.GetSecurityContext().GetKnasInt(), dlCount.Get(),
 			security.Bearer3GPP, security.DirectionDownlink, payload)
 		if err != nil {
 			return nil, fmt.Errorf("MAC calcuate error: %+v", err)
