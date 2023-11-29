@@ -10,6 +10,21 @@ If you have questions or comments, feel free to open an issue.
 
 PacketRusher borrows libraries and data structures from the [free5gc project](https://github.com/free5gc/free5gc).
 
+## Features
+* Simulate multiple UEs and gNodeB from a single tool
+  * We tested up to 10k UEs!
+* Supports both N2 (NGAP) and N1 (NAS) interfaces for stress testing
+* --pcap parameter to capture pcap of N1/N2 traffic
+* Implements main control plane procedures:
+  * Supports UE attach/detach (registration/authentifcation/security mode) procedures
+  * Supports Create/Delete PDU Sessions,  up to 15 PDU Sessions per UE
+  * Supports Xn handover: UE handover between simulated gNodeB (PathSwitchRequest)
+* Implements high-performant N3 (GTP-U) interface
+  * Generic tunnel supporting all kind of traffic (TCP, UDP, Video…)
+    * We tested iperf3 traffic, and Youtube traffic through PacketRusher
+    * We roughly reach 5 GB/s per UE, which is more than what a real UE can achieve.
+* Integrated all-in-one mocked 5GC/AMF for PacketRusher's integration testing
+
 ## Installation
 ### Quick start guide
 The following is a quick start guide, for more details on the installation, configuration or usage, you may refer to the [wiki](https://github.com/HewlettPackard/PacketRusher/wiki).
@@ -49,7 +64,7 @@ $ go build cmd/packetrusher.go
 $ ./packetrusher --help
 ```
 
-You can edit the configuration in $PACKETRUSHER/config/config.yml, and then run a basic scenario using `sudo ./packetrusher ue` while in the $PACKETRUSHER folder.   
+You can edit the configuration in $PACKETRUSHER/config/config.yml as specified [here](https://github.com/HewlettPackard/PacketRusher/wiki/Configuration), and then run a basic scenario using `sudo ./packetrusher ue` while in the $PACKETRUSHER folder.   
 More complex scenarios are possible using `sudo ./packetrusher multi-ue`, see `./packetrusher multi-ue --help` for more details.   
 For more details on the installation, configuration or usage, you may refer to the [wiki](https://github.com/HewlettPackard/PacketRusher/wiki).
 
