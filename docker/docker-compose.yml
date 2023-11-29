@@ -1,8 +1,8 @@
 version: '3.8'
 services:
-  my5grantester:
-    image: my5grantester:latest
-    container_name: my5grantester
+  packetrusher:
+    image: packetrusher:latest
+    container_name: packetrusher
     privileged: true
     entrypoint: /bin/bash -c "sleep infinity"
     environment:

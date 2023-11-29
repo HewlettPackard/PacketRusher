@@ -1,3 +1,8 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ */
+
 // Package trigger
 // Triggers are the basic building block of test scenarios.
 // They allow to trigger NAS procedures by the UE, eg: registration, PDU Session creation...

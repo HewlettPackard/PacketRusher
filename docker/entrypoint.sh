@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-CONFIG_DIR="/my5G-RANTester/config"
+CONFIG_DIR="/packetrusher/config"
 
 DEREG_AFTER=${DEREG_AFTER:-3600}
 

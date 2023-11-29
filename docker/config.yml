@@ -27,6 +27,16 @@ ue:
   snssai:
     sst: @SST_UE@
     sd: "@SD@"
+  integrity:
+    nia0: false
+    nia1: false
+    nia2: true
+    nia3: false
+  ciphering:
+    nea0: false
+    nea1: false
+    nea2: true
+    nea3: false
 
 amfif:
   ip: "@NGAP_REMOTE_ADDR@"

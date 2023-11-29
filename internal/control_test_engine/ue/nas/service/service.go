@@ -1,3 +1,8 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ */
+
 // Package service
 package service
 

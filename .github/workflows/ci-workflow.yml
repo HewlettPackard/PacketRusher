@@ -1,10 +1,9 @@
-name: My5G-RANTester Workflow
+name: PacketRusher Workflow
 on:
   pull_request:
   push:
     branches:
       - master
-      - develop
 jobs:
   test:
     name: build and test
@@ -16,7 +15,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.14.10
+          go-version: 1.21.0
         
       - name: Check Versions
         run: |
@@ -34,3 +33,6 @@ jobs:
           
       - name: Install Go Deps
         run: go mod download
+
+      - name: Launch tests
+        run: go test -v ./test/amf
