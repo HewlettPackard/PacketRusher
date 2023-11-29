@@ -24,15 +24,15 @@ import (
 func TestCreatePDUSession(t *testing.T) {
 
 	controlIFConfig := config.ControlIF{
-		Ip:   "192.168.11.13",
+		Ip:   "127.0.0.1",
 		Port: 9489,
 	}
 	dataIFConfig := config.DataIF{
-		Ip:   "192.168.11.13",
+		Ip:   "127.0.0.1",
 		Port: 2154,
 	}
 	amfConfig := config.AMF{
-		Ip:   "192.168.11.14",
+		Ip:   "127.0.0.1",
 		Port: 38414,
 	}
 
