@@ -28,6 +28,7 @@ type UEContext struct {
 	SecurityContextAvailable bool
 	guti                     string
 	tmsi                     int32
+	smContexts               []*SmContext
 }
 
 func (ue *UEContext) AllocateGuti(a *AMFContext) {
@@ -105,6 +106,10 @@ func (ue *UEContext) SetSecurityContext(context *SecurityContext) {
 
 func (ue *UEContext) GetSecurityContext() *SecurityContext {
 	return ue.securityContext
+}
+
+func (ue *UEContext) AddSmContext(newContext *SmContext) {
+	ue.smContexts = append(ue.smContexts, newContext)
 }
 
 // Kamf Derivation function defined in TS 33.501 Annex A.7

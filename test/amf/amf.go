@@ -112,6 +112,10 @@ func (a *Amf) NgapDefaultHandler(ngapMsg *ngapType.NGAPPDU, gnb context.GNBConte
 
 		switch ngapMsg.SuccessfulOutcome.ProcedureCode.Value {
 
+		case ngapType.ProcedureCodeInitialContextSetup:
+			log.Info("[AMF][NGAP] Received initial context setup response")
+			ngapMsgHandler.InitialContextSetupResponse(ngapMsg.SuccessfulOutcome.Value.InitialContextSetupResponse, a.context)
+
 		default:
 			err = errors.New("[AMF][NGAP] Received unknown NGAP NGAPPDUPresentSuccessfulOutcome ProcedureCode")
 		}
@@ -129,7 +133,8 @@ func (a *Amf) NgapDefaultHandler(ngapMsg *ngapType.NGAPPDU, gnb context.GNBConte
 	return msg, err
 }
 
-func (a *Amf) NasDefaultHandler(nasPDU *ngapType.NASPDU, ueContext *context.UEContext) (nasType uint8, err error) {
+func (a *Amf) NasDefaultHandler(nasPDU *ngapType.NASPDU, ueContext *context.UEContext) (resNasType uint8, err error) {
+	resNasType = 0
 	payload := nasPDU.Value
 	m := new(nas.Message)
 	m.SecurityHeaderType = nas.GetSecurityHeaderType(payload) & 0x0f
@@ -139,7 +144,7 @@ func (a *Amf) NasDefaultHandler(nasPDU *ngapType.NASPDU, ueContext *context.UECo
 		var integrityProtected bool
 		msg, integrityProtected, err = tools.Decode(ueContext, payload, false)
 		if !integrityProtected {
-			return 0, errors.New("[AMF][NAS] message integrity could not be verified")
+			return resNasType, errors.New("[AMF][NAS] message integrity could not be verified")
 		}
 
 	} else {
@@ -150,23 +155,35 @@ func (a *Amf) NasDefaultHandler(nasPDU *ngapType.NASPDU, ueContext *context.UECo
 	amfContext := a.GetContext()
 	switch msg.GmmHeader.GetMessageType() {
 	case nas.MsgTypeRegistrationRequest:
+		log.Info("[AMF][NAS] Received Registration Request")
 		err = nasMsgHandler.RegistrationRequest(msg, &amfContext, ueContext)
+		resNasType = nas.MsgTypeAuthenticationRequest
 
-		nasType = nas.MsgTypeAuthenticationRequest
 	case nas.MsgTypeAuthenticationResponse:
+		log.Info("[AMF][NAS] Received Authentication Response")
 		err = nasMsgHandler.AuthenticationResponse(msg, ueContext)
+		resNasType = nas.MsgTypeSecurityModeCommand
 
-		nasType = nas.MsgTypeSecurityModeCommand
 	case nas.MsgTypeSecurityModeComplete:
+		log.Info("[AMF][NAS] Received Security Mode Complete")
 		err = nasMsgHandler.SecurityModeComplete(msg, &amfContext, ueContext)
+		resNasType = nas.MsgTypeRegistrationAccept
 
-		nasType = nas.MsgTypeRegistrationAccept
+	case nas.MsgTypeRegistrationComplete:
+		log.Info("[AMF][NAS] Received Registration Complete")
+		//TODO: resNasType = nas.MsgTypeConfigurationUpdateCommand
+
+	case nas.MsgTypeULNASTransport:
+		err = nasMsgHandler.NASTransport(msg, &amfContext, ueContext)
+		log.Info("[AMF][NAS] Received UL NAS Transport")
+		resNasType = nas.MsgTypePDUSessionEstablishmentAccept
+
 	default:
-		err = errors.New("[AMF][NAS] unrecognised nas message type")
+		err = errors.New("[AMF][NAS] unrecognised nas message type: " + strconv.Itoa(int(msg.GmmHeader.GetMessageType())))
 	}
 	if err == nil {
-		return nasType, nil
+		return resNasType, nil
 	} else {
-		return 0, err
+		return resNasType, err
 	}
 }

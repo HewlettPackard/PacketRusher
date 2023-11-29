@@ -10,6 +10,7 @@ import (
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue"
+	engineUeContest "my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/amf/context"
 	amfTools "my5G-RANTester/test/amf/lib/tools"
@@ -79,12 +80,24 @@ func TestCreatePDUSession(t *testing.T) {
 
 	// setup some PacketRusher UE
 	ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
-	log.Print(<-ueTx)
-	log.Print(<-ueTx)
-	log.Print(<-ueTx)
-	log.Print(<-ueTx)
 
-	// ueRx <- CreatePDUSession
+	loop := true
+	state := engineUeContest.MM5G_NULL
+	for loop {
+		msg := <-ueTx
+		log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)
+		switch msg.StateChange {
+		case engineUeContest.MM5G_REGISTERED:
+			if state != msg.StateChange {
+				for i := 0; i < 1; i++ {
+					ueRx <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
+				}
+			}
+		case engineUeContest.MM5G_NULL:
+			loop = false
+		}
+		state = msg.StateChange
+	}
 
 	wg.Wait()
 	// assert.True(t, true)

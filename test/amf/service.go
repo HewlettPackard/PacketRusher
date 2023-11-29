@@ -69,10 +69,12 @@ func (a Amf) serveClient(conn *sctp.SCTPConn, bufsize int, gnb context.GNBContex
 			Stream: uint16(0),
 			PPID:   ngapSctp.NGAP_PPID,
 		}
-		_, err = conn.SCTPWrite(res, info)
-		if err != nil {
-			log.Printf("[AMF] write failed: %v", err)
-			os.Exit(1)
+		if res != nil {
+			_, err = conn.SCTPWrite(res, info)
+			if err != nil {
+				log.Printf("[AMF] write failed: %v", err)
+				os.Exit(1)
+			}
 		}
 	}
 }

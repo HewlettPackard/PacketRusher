@@ -66,16 +66,32 @@ func UplinkNASTransport(req *ngapType.UplinkNASTransport, amf context.AMFContext
 	if err != nil {
 		return msg, err
 	}
+
+	var resType string
 	switch nastype {
 	case nas.MsgTypeRegistrationAccept:
 		msg, err = InitialContextSetupRequest(ue, amf)
-	default:
+		resType = "initial context setup request"
+
+	case nas.MsgTypeAuthenticationRequest:
 		msg, err = DownlinkNASTransport(nastype, ue)
+		resType = "downlink NAS transport - Authentication Request"
+
+	case nas.MsgTypeSecurityModeCommand:
+		msg, err = DownlinkNASTransport(nastype, ue)
+		resType = "downlink NAS transport - Security Mode Complete"
+
+	case nas.MsgTypePDUSessionEstablishmentAccept:
+		msg, err = DownlinkNASTransport(nastype, ue)
+		resType = "downlink NAS transport - PDU Session Establishment Accept"
+
+	case 0:
+		return nil, nil
 	}
 	if err != nil {
 		return msg, err
 	}
-	log.Info("[AMF][NGAP] Sent UplinkNASTransport")
+	log.Info("[AMF][NGAP] Sent " + resType)
 
 	return msg, nil
 }

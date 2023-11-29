@@ -32,6 +32,7 @@ type AMFContext struct {
 	ues                 []UEContext
 	securityContext     []SecurityContext
 	idUeGenerator       int64
+	session             Session
 }
 
 func init() {
@@ -48,6 +49,12 @@ func (c *AMFContext) NewAmfContext(name string, id string, supportedPlmnSnssai [
 	c.ues = []UEContext{}
 	c.securityContext = []SecurityContext{}
 	c.idUeGenerator = 0
+
+	//TODO parametrize DNN
+	dnn := []string{"internet, anotherDnn"}
+	c.session = Session{
+		Dnn: dnn,
+	}
 }
 
 func (c *AMFContext) TmsiAllocate() int32 {
@@ -61,6 +68,10 @@ func (c *AMFContext) TmsiAllocate() int32 {
 
 func (c *AMFContext) GetName() string {
 	return c.name
+}
+
+func (c *AMFContext) GetDnnList() []string {
+	return c.session.Dnn
 }
 
 func (c *AMFContext) GetId() string {

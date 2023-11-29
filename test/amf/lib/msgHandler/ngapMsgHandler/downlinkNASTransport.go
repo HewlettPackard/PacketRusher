@@ -24,6 +24,8 @@ func DownlinkNASTransport(messageType uint8, ue *context.UEContext) ([]byte, err
 		nasPdu, err = nasMsgHandler.AuthenticationRequest(ue)
 	case nas.MsgTypeSecurityModeCommand:
 		nasPdu, err = nasMsgHandler.SecurityModeCommand(ue)
+	case nas.MsgTypePDUSessionEstablishmentAccept:
+		nasPdu, err = nasMsgHandler.PDUSessionEstablishmentAccept(ue)
 	}
 	if err != nil {
 		return nasPdu, errors.New("[AMF] Error creating nas message: " + err.Error())
