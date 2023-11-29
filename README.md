@@ -10,7 +10,10 @@ If you have questions or comments, feel free to open an issue.
 
 PacketRusher borrows libraries and data structures from the [free5gc project](https://github.com/free5gc/free5gc).
 
-## Installation 
+## Installation
+### Quick start guide
+The following is a quick start guide, for more details on the installation, configuration or usage, you may refer to the [wiki](https://github.com/HewlettPackard/PacketRusher/wiki).
+
 ### Requirements
 - Ubuntu 20.04 or RHEL 
   - /!\ gtp5g kernel module does not work on Ubuntu 22.04 / RHEL 9, work is under way to fix that.
@@ -46,11 +49,12 @@ $ go build cmd/packetrusher.go
 $ ./packetrusher --help
 ```
 
-You can edit the configuration in $PACKETRUSHER/config/config.yml, and then run a basic scenario using `sudo ./packetrusher ue` while in the $PACKETRUSHER folder.
-More complex scenarios are possible using `sudo ./packetrusher multi-ue`, see `./packetrusher multi-ue --help` for more details.
+You can edit the configuration in $PACKETRUSHER/config/config.yml, and then run a basic scenario using `sudo ./packetrusher ue` while in the $PACKETRUSHER folder.   
+More complex scenarios are possible using `sudo ./packetrusher multi-ue`, see `./packetrusher multi-ue --help` for more details.   
+For more details on the installation, configuration or usage, you may refer to the [wiki](https://github.com/HewlettPackard/PacketRusher/wiki).
 
 ## Contributing
-We're thrilled that you'd like to contribute to this project. Your help is essential for keeping it great!
+We're thrilled that you'd like to contribute to this project. Your help is essential for keeping it great!   
 You can review our [contributing guide](CONTRIBUTING.md).
 
 ### Developer's Certificate of Origin
