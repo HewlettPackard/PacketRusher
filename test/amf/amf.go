@@ -25,7 +25,7 @@ import (
 type Amf struct {
 	context        context.AMFContext
 	ngapReqHandler func(*ngapType.NGAPPDU, context.GNBContext) ([]byte, error)
-	nasReqHandler  func(*ngapType.NASPDU, *context.UEContext) (uint8, error)
+	nasReqHandler  func(*ngapType.NASPDU, *context.UEContext) ([]byte, int64, error)
 	conf           config.Config
 }
 
@@ -33,7 +33,7 @@ func (a *Amf) GetGnb(amfAddr string) (context.GNBContext, error) {
 	return a.context.GetGnb(amfAddr)
 }
 
-func (a *Amf) GetNasHandler() func(*ngapType.NASPDU, *context.UEContext) (uint8, error) {
+func (a *Amf) GetNasHandler() func(*ngapType.NASPDU, *context.UEContext) ([]byte, int64, error) {
 	return a.nasReqHandler
 }
 
@@ -41,7 +41,7 @@ func (a *Amf) GetContext() context.AMFContext {
 	return a.context
 }
 
-func (a *Amf) Init(conf config.Config, handleRequest func(*ngapType.NGAPPDU, context.GNBContext) ([]byte, error), nasReqHandler func(*ngapType.NASPDU, *context.UEContext) (uint8, error)) error {
+func (a *Amf) Init(conf config.Config, handleRequest func(*ngapType.NGAPPDU, context.GNBContext) ([]byte, error), nasReqHandler func(*ngapType.NASPDU, *context.UEContext) ([]byte, int64, error)) error {
 	amfId := "196673"                    // TODO generate ID
 	amfName := "amf.5gc.3gppnetwork.org" // TODO generate Name
 	plmn := models.PlmnId{
@@ -133,8 +133,7 @@ func (a *Amf) NgapDefaultHandler(ngapMsg *ngapType.NGAPPDU, gnb context.GNBConte
 	return msg, err
 }
 
-func (a *Amf) NasDefaultHandler(nasPDU *ngapType.NASPDU, ueContext *context.UEContext) (resNasType uint8, err error) {
-	resNasType = 0
+func (a *Amf) NasDefaultHandler(nasPDU *ngapType.NASPDU, ueContext *context.UEContext) (resNasPdu []byte, resNgapType int64, err error) {
 	payload := nasPDU.Value
 	m := new(nas.Message)
 	m.SecurityHeaderType = nas.GetSecurityHeaderType(payload) & 0x0f
@@ -144,7 +143,7 @@ func (a *Amf) NasDefaultHandler(nasPDU *ngapType.NASPDU, ueContext *context.UECo
 		var integrityProtected bool
 		msg, integrityProtected, err = tools.Decode(ueContext, payload, false)
 		if !integrityProtected {
-			return resNasType, errors.New("[AMF][NAS] message integrity could not be verified")
+			return nil, 0, errors.New("[AMF][NAS] message integrity could not be verified")
 		}
 
 	} else {
@@ -157,33 +156,57 @@ func (a *Amf) NasDefaultHandler(nasPDU *ngapType.NASPDU, ueContext *context.UECo
 	case nas.MsgTypeRegistrationRequest:
 		log.Info("[AMF][NAS] Received Registration Request")
 		err = nasMsgHandler.RegistrationRequest(msg, &amfContext, ueContext)
-		resNasType = nas.MsgTypeAuthenticationRequest
+		if err != nil {
+			return nil, 0, err
+		}
+
+		log.Info("[AMF][NAS] Creating Authentication Request")
+		resNasPdu, err = nasMsgHandler.AuthenticationRequest(ueContext)
+		resNgapType = ngapType.ProcedureCodeDownlinkNASTransport
 
 	case nas.MsgTypeAuthenticationResponse:
 		log.Info("[AMF][NAS] Received Authentication Response")
 		err = nasMsgHandler.AuthenticationResponse(msg, ueContext)
-		resNasType = nas.MsgTypeSecurityModeCommand
+		if err != nil {
+			return nil, 0, err
+		}
+
+		log.Info("[AMF][NAS] Creating Security Mode Complete")
+		resNasPdu, err = nasMsgHandler.SecurityModeCommand(ueContext)
+		resNgapType = ngapType.ProcedureCodeDownlinkNASTransport
 
 	case nas.MsgTypeSecurityModeComplete:
 		log.Info("[AMF][NAS] Received Security Mode Complete")
 		err = nasMsgHandler.SecurityModeComplete(msg, &amfContext, ueContext)
-		resNasType = nas.MsgTypeRegistrationAccept
+		if err != nil {
+			return nil, 0, err
+		}
+
+		log.Info("[AMF][NAS] Creating Registration Accept")
+		resNasPdu, err = nasMsgHandler.RegistrationAccept(ueContext)
+		resNgapType = ngapType.ProcedureCodeInitialContextSetup
 
 	case nas.MsgTypeRegistrationComplete:
 		log.Info("[AMF][NAS] Received Registration Complete")
 		//TODO: resNasType = nas.MsgTypeConfigurationUpdateCommand
 
 	case nas.MsgTypeULNASTransport:
-		err = nasMsgHandler.NASTransport(msg, &amfContext, ueContext)
 		log.Info("[AMF][NAS] Received UL NAS Transport")
-		resNasType = nas.MsgTypePDUSessionEstablishmentAccept
+		smContext, err := nasMsgHandler.NASTransport(msg, &amfContext, ueContext)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		log.Info("[AMF][NAS] Creating PDU Session Establishment Accept")
+		resNasPdu, err = nasMsgHandler.PDUSessionEstablishmentAccept(ueContext, smContext)
+		resNgapType = ngapType.ProcedureCodePDUSessionResourceSetup
 
 	default:
 		err = errors.New("[AMF][NAS] unrecognised nas message type: " + strconv.Itoa(int(msg.GmmHeader.GetMessageType())))
 	}
 	if err == nil {
-		return resNasType, nil
+		return resNasPdu, resNgapType, nil
 	} else {
-		return resNasType, err
+		return resNasPdu, 0, err
 	}
 }

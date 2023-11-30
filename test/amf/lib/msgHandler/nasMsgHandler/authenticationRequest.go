@@ -64,7 +64,7 @@ func buildAuthenticationRequest(ue context.UEContext, authCtx models.UeAuthentic
 		var av5gAka models.Av5gAka
 
 		if err := mapstructure.Decode(authCtx.Var5gAuthData, &av5gAka); err != nil {
-			return nil, errors.New("[AMF]Var5gAuthData Convert Type Error")
+			return nil, errors.New("Var5gAuthData Convert Type Error")
 		}
 
 		rand, err := hex.DecodeString(av5gAka.Rand)
@@ -86,7 +86,7 @@ func buildAuthenticationRequest(ue context.UEContext, authCtx models.UeAuthentic
 		copy(tmpArray[:], autn[0:16])
 		authenticationRequest.AuthenticationParameterAUTN.SetAUTN(tmpArray)
 	default:
-		return msg, errors.New("[AMF] AuthenticationRequest unsupported AuthType")
+		return msg, errors.New("AuthenticationRequest unsupported AuthType")
 	}
 
 	m.GmmMessage.AuthenticationRequest = authenticationRequest

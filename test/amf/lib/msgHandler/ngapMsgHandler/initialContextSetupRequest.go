@@ -9,16 +9,9 @@ import (
 	"my5G-RANTester/lib/ngap/ngapConvert"
 	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/amf/context"
-	"my5G-RANTester/test/amf/lib/msgHandler/nasMsgHandler"
 )
 
-func InitialContextSetupRequest(ue *context.UEContext, amf context.AMFContext) ([]byte, error) {
-
-	nasPdu, err := nasMsgHandler.RegistrationAccept(ue)
-	if err != nil {
-		return []byte{}, err
-	}
-
+func InitialContextSetupRequest(nasPdu []byte, ue *context.UEContext, amf context.AMFContext) ([]byte, error) {
 	message, err := BuildInitialContextSetupRequest(nasPdu, *ue, amf)
 	if err != nil {
 		return []byte{}, err

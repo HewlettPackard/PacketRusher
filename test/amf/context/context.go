@@ -7,6 +7,7 @@ package context
 import (
 	"errors"
 	"math"
+	"net"
 	"strconv"
 	"sync"
 
@@ -32,7 +33,9 @@ type AMFContext struct {
 	ues                 []UEContext
 	securityContext     []SecurityContext
 	idUeGenerator       int64
-	session             Session
+	dataNetworks        []DataNetwork
+	sessionsRules       []*models.SessionRule
+	n3                  net.IP
 }
 
 func init() {
@@ -50,11 +53,34 @@ func (c *AMFContext) NewAmfContext(name string, id string, supportedPlmnSnssai [
 	c.securityContext = []SecurityContext{}
 	c.idUeGenerator = 0
 
-	//TODO parametrize DNN
-	dnn := []string{"internet, anotherDnn"}
-	c.session = Session{
-		Dnn: dnn,
+	//TODO parametrize session data
+	c.dataNetworks = []DataNetwork{
+		{
+			Dnn: "internet",
+			Ip:  net.ParseIP("8.8.8.8"),
+			Dns: DNS{
+				IPv4Addr: net.ParseIP("8.8.8.8"),
+				IPv6Addr: net.ParseIP("2001:4860:4860::8888"),
+			},
+		},
 	}
+
+	c.sessionsRules = []*models.SessionRule{{
+		AuthSessAmbr: &models.Ambr{
+			Uplink:   "1 Gbps",
+			Downlink: "1 Gbps",
+		},
+		AuthDefQos: &models.AuthorizedDefaultQos{
+			Var5qi: 6,
+			Arp: &models.Arp{
+				PriorityLevel: 8,
+			},
+			PriorityLevel: 8,
+		},
+		SessRuleId: "SessRuleId-1",
+	}}
+
+	c.n3 = net.ParseIP("127.0.0.1")
 }
 
 func (c *AMFContext) TmsiAllocate() int32 {
@@ -70,8 +96,29 @@ func (c *AMFContext) GetName() string {
 	return c.name
 }
 
+func (c *AMFContext) GetN3() net.IP {
+	return c.n3
+}
+
 func (c *AMFContext) GetDnnList() []string {
-	return c.session.Dnn
+	dnn := []string{}
+	for _, dn := range c.dataNetworks {
+		dnn = append(dnn, dn.Dnn)
+	}
+	return dnn
+}
+
+func (c *AMFContext) GetSessionRules() []*models.SessionRule {
+	return c.sessionsRules
+}
+
+func (c *AMFContext) GetDataNetwork(dnn string) (DataNetwork, error) {
+	for _, dn := range c.dataNetworks {
+		if dn.Dnn == dnn {
+			return dn, nil
+		}
+	}
+	return DataNetwork{}, errors.New("[AMF] Could not find requested datanetwork")
 }
 
 func (c *AMFContext) GetId() string {

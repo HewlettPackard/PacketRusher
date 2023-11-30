@@ -5,31 +5,12 @@
 package ngapMsgHandler
 
 import (
-	"errors"
 	"my5G-RANTester/lib/ngap"
 	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/amf/context"
-	"my5G-RANTester/test/amf/lib/msgHandler/nasMsgHandler"
-
-	"github.com/free5gc/nas"
 )
 
-func DownlinkNASTransport(messageType uint8, ue *context.UEContext) ([]byte, error) {
-
-	nasPdu := []byte{}
-	var err error
-
-	switch messageType {
-	case nas.MsgTypeAuthenticationRequest:
-		nasPdu, err = nasMsgHandler.AuthenticationRequest(ue)
-	case nas.MsgTypeSecurityModeCommand:
-		nasPdu, err = nasMsgHandler.SecurityModeCommand(ue)
-	case nas.MsgTypePDUSessionEstablishmentAccept:
-		nasPdu, err = nasMsgHandler.PDUSessionEstablishmentAccept(ue)
-	}
-	if err != nil {
-		return nasPdu, errors.New("[AMF] Error creating nas message: " + err.Error())
-	}
+func DownlinkNASTransport(nasPdu []byte, ue *context.UEContext) ([]byte, error) {
 
 	message, err := BuildDownlinkNASTransport(nasPdu, *ue)
 	if err != nil {

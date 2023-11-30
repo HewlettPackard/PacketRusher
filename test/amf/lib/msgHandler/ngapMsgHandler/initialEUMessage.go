@@ -14,7 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func InitialUEMessage(req *ngapType.InitialUEMessage, amf *context.AMFContext, gnb context.GNBContext, nasHandler func(*ngapType.NASPDU, *context.UEContext) (uint8, error)) (msg []byte, err error) {
+func InitialUEMessage(req *ngapType.InitialUEMessage, amf *context.AMFContext, gnb context.GNBContext, nasHandler func(*ngapType.NASPDU, *context.UEContext) ([]byte, int64, error)) (msg []byte, err error) {
 	// assert req contains wanted values?
 
 	ue := &context.UEContext{}
@@ -52,12 +52,12 @@ func InitialUEMessage(req *ngapType.InitialUEMessage, amf *context.AMFContext, g
 	}
 	ue.SetUserLocationInfo(&nrLocation)
 
-	nastype, err := nasHandler(nasMsg, ue)
+	nasRes, _, err := nasHandler(nasMsg, ue)
 	if err != nil {
 		return msg, err
 	}
 
-	msg, err = DownlinkNASTransport(nastype, ue)
+	msg, err = DownlinkNASTransport(nasRes, ue)
 	if err != nil {
 		return msg, err
 	}

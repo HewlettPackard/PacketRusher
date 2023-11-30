@@ -9,7 +9,7 @@ import (
 	"github.com/free5gc/nas/nasMessage"
 )
 
-func NASTransport(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext) (err error) {
+func NASTransport(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext) (*context.SmContext, error) {
 
 	ulNasTransport := nasReq.ULNASTransport
 
@@ -18,32 +18,31 @@ func NASTransport(nasReq *nas.Message, amf *context.AMFContext, ue *context.UECo
 	case nasMessage.PayloadContainerTypeN1SMInfo:
 		return transport5GSMMessage(ue, ulNasTransport, amf)
 	default:
-		return fmt.Errorf("[AMF][NAS] Payload Container type not implemented")
+		return nil, fmt.Errorf("[AMF][NAS] Payload Container type not implemented")
 	}
 }
 
-func transport5GSMMessage(ue *context.UEContext, ulNasTransport *nasMessage.ULNASTransport, amf *context.AMFContext) error {
+func transport5GSMMessage(ue *context.UEContext, ulNasTransport *nasMessage.ULNASTransport, amf *context.AMFContext) (*context.SmContext, error) {
 	requestType := ulNasTransport.RequestType
 	smMessage := ulNasTransport.PayloadContainer.GetPayloadContainerContents()
 	var pduSessionID int32
 
 	if requestType == nil {
-		return errors.New("[AMF][NAS] ulNasTransport Request type is nil")
+		return nil, errors.New("[AMF][NAS] ulNasTransport Request type is nil")
 	}
 
 	if id := ulNasTransport.PduSessionID2Value; id != nil {
 		pduSessionID = int32(id.GetPduSessionID2Value())
 	} else {
-		return errors.New("PDU Session ID is nil")
+		return nil, errors.New("PDU Session ID is nil")
 	}
 
 	switch requestType.GetRequestTypeValue() {
 	// case iii) if the AMF does not have a PDU session routing context for the PDU session ID and the UE
 	// and the Request type IE is included and is set to "initial request"
 	case nasMessage.ULNASTransportRequestTypeInitialRequest:
-		err := context.CreatePDUSession(ulNasTransport, ue, amf, pduSessionID, smMessage)
-		return err
+		return context.CreatePDUSession(ulNasTransport, ue, amf, pduSessionID, smMessage)
 	default:
-		return errors.New("[AMF][NAS] Unimplemented ulNasTransport Request type")
+		return nil, errors.New("[AMF][NAS] Unimplemented ulNasTransport Request type")
 	}
 }

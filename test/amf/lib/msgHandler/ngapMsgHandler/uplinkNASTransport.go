@@ -10,12 +10,11 @@ import (
 	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/amf/context"
 
-	"github.com/free5gc/nas"
 	"github.com/free5gc/openapi/models"
 	log "github.com/sirupsen/logrus"
 )
 
-func UplinkNASTransport(req *ngapType.UplinkNASTransport, amf context.AMFContext, gnb context.GNBContext, nasHandler func(*ngapType.NASPDU, *context.UEContext) (uint8, error)) ([]byte, error) {
+func UplinkNASTransport(req *ngapType.UplinkNASTransport, amf context.AMFContext, gnb context.GNBContext, nasHandler func(*ngapType.NASPDU, *context.UEContext) ([]byte, int64, error)) ([]byte, error) {
 
 	var ue *context.UEContext
 	var ranUe *context.UEContext
@@ -62,28 +61,25 @@ func UplinkNASTransport(req *ngapType.UplinkNASTransport, amf context.AMFContext
 	if ue != ranUe {
 		return msg, errors.New("[AMF][NGAP] RanUeNgapId does not match the one registred for this UE")
 	}
-	nastype, err := nasHandler(naspdu, ue)
+	resNasMsg, resNgapType, err := nasHandler(naspdu, ue)
 	if err != nil {
 		return msg, err
 	}
 
 	var resType string
-	switch nastype {
-	case nas.MsgTypeRegistrationAccept:
-		msg, err = InitialContextSetupRequest(ue, amf)
-		resType = "initial context setup request"
+	switch resNgapType {
+	case ngapType.ProcedureCodeInitialContextSetup:
+		msg, err = InitialContextSetupRequest(resNasMsg, ue, amf)
+		resType = "Initial Context Setup Request"
 
-	case nas.MsgTypeAuthenticationRequest:
-		msg, err = DownlinkNASTransport(nastype, ue)
-		resType = "downlink NAS transport - Authentication Request"
+	case ngapType.ProcedureCodeDownlinkNASTransport:
+		msg, err = DownlinkNASTransport(resNasMsg, ue)
+		resType = "Downlink NAS Transport"
 
-	case nas.MsgTypeSecurityModeCommand:
-		msg, err = DownlinkNASTransport(nastype, ue)
-		resType = "downlink NAS transport - Security Mode Complete"
-
-	case nas.MsgTypePDUSessionEstablishmentAccept:
-		msg, err = DownlinkNASTransport(nastype, ue)
-		resType = "downlink NAS transport - PDU Session Establishment Accept"
+	case ngapType.ProcedureCodePDUSessionResourceSetup:
+		// msg, err = PDUSessionResourceSetup(resNasMsg, ue, amf)
+		// resType = "Downlink NAS Transport"
+		err = errors.New("PDU Session Resource Setup not implemented yet")
 
 	case 0:
 		return nil, nil

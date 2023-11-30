@@ -44,9 +44,8 @@ func TestCreatePDUSession(t *testing.T) {
 	ngapHandler := func(ngapMsg *ngapType.NGAPPDU, gnb context.GNBContext) (msg []byte, err error) {
 		return amf.NgapDefaultHandler(ngapMsg, gnb)
 	}
-	nasHandler := func(nasPDU *ngapType.NASPDU, ue *context.UEContext) (uint8, error) {
-		nasType, err := amf.NasDefaultHandler(nasPDU, ue)
-		return nasType, err
+	nasHandler := func(nasPDU *ngapType.NASPDU, ue *context.UEContext) ([]byte, int64, error) {
+		return amf.NasDefaultHandler(nasPDU, ue)
 	}
 	err := amf.Init(conf, ngapHandler, nasHandler)
 	if err != nil {
