@@ -19,6 +19,7 @@ PacketRusher borrows libraries and data structures from the [free5gc project](ht
   * Supports UE attach/detach (registration/authentifcation/security mode) procedures
   * Supports Create/Delete PDU Sessions,  up to 15 PDU Sessions per UE
   * Supports Xn handover: UE handover between simulated gNodeB (PathSwitchRequest)
+  * Supports 5G roaming: Tested with new https://github.com/open5gs/open5gs/issues/2194 Roaming feature
 * Implements high-performant N3 (GTP-U) interface
   * Generic tunnel supporting all kind of traffic (TCP, UDP, Video…)
     * We tested iperf3 traffic, and Youtube traffic through PacketRusher
