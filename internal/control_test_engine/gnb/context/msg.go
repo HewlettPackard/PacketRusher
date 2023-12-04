@@ -15,4 +15,6 @@ type UEMessage struct {
 	ConnectionClosed bool
 	AmfId int64
 	Msin string
+	Mcc string
+	Mnc string
 }

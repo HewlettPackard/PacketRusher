@@ -87,8 +87,11 @@ func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 		// handling NAS message.
 		ue.SetAmfUeId(msg.AmfId)
 		state.DispatchState(ue, msg.Nas)
-	} else {
+	} else if msg.GNBPduSessions[0] != nil {
+		// Setup PDU Session
 		serviceGtp.SetupGtpInterface(ue, msg)
+	} else {
+		log.Error("[UE] Received unknown message from gNodeB", msg)
 	}
 }
 

@@ -29,6 +29,8 @@ func gnbListen(gnb *context.GNBContext) {
 		// select AMF and get sctp association
 		// make a tun interface
 		ue := gnb.NewGnBUe(message.GNBTx, message.GNBRx, message.Msin)
+		mcc, mnc := gnb.GetMccAndMnc()
+		message.GNBTx <- context.UEMessage{Mcc: mcc, Mnc: mnc}
 		ue.SetPduSessions(message.GNBPduSessions)
 
 		if ue == nil {

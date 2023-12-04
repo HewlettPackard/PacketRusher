@@ -62,6 +62,8 @@ type Amf struct {
 	amfSetId    uint16
 	amfPointer  uint8
 	amfUeId     int64
+	mcc         string
+	mnc         string
 }
 
 type UEPDUSession struct {
@@ -164,9 +166,6 @@ func (ue *UEContext) NewRanUeContext(msin string,
 			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], encodedRoutingIndicator[0], encodedRoutingIndicator[1], 0x00, 0x00, suciV5, suciV4, suciV3, suciV2, suciV1},
 		}
 	}
-
-	// added snn.
-	ue.UeSecurity.Snn = ue.deriveSNN()
 
 	ue.scenarioChan = scenarioChan
 
@@ -377,12 +376,11 @@ func (pduSession *UEPDUSession) GetStateSM() int {
 func (ue *UEContext) deriveSNN() string {
 	// 5G:mnc093.mcc208.3gppnetwork.org
 	var resu string
-	if len(ue.UeSecurity.mnc) == 2 {
-		resu = "5G:mnc0" + ue.UeSecurity.mnc + ".mcc" + ue.UeSecurity.mcc + ".3gppnetwork.org"
+	if len(ue.amfInfo.mnc) == 2 {
+		resu = "5G:mnc0" + ue.amfInfo.mnc + ".mcc" + ue.amfInfo.mcc + ".3gppnetwork.org"
 	} else {
-		resu = "5G:mnc" + ue.UeSecurity.mnc + ".mcc" + ue.UeSecurity.mcc + ".3gppnetwork.org"
+		resu = "5G:mnc" + ue.amfInfo.mnc + ".mcc" + ue.amfInfo.mcc + ".3gppnetwork.org"
 	}
-
 	return resu
 }
 
@@ -504,6 +502,12 @@ func (ue *UEContext) SetAmfUeId(id int64) {
 
 func (ue *UEContext) GetAmfUeId() int64 {
 	return ue.amfInfo.amfUeId
+}
+
+func (ue *UEContext) SetAmfMccAndMnc(mcc string, mnc string) {
+	ue.amfInfo.mcc = mcc
+	ue.amfInfo.mnc = mnc
+	ue.UeSecurity.Snn = ue.deriveSNN()
 }
 
 func (ue *UEContext) Get5gGuti() [4]uint8 {
