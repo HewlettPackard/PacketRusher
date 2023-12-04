@@ -386,7 +386,7 @@ func (gnb *GNBContext) GetSliceInBytes() ([]byte, []byte) {
 	return sstBytes, nil
 }
 
-func (gnb *GNBContext) getMccAndMnc() (string, string) {
+func (gnb *GNBContext) GetMccAndMnc() (string, string) {
 	return gnb.controlInfo.mcc, gnb.controlInfo.mnc
 }
 
