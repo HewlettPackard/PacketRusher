@@ -75,7 +75,8 @@ type UEPDUSession struct {
 	routeTun      *netlink.Route
 	vrf           *netlink.Vrf
 	stopSignal    chan bool
-	Wait          chan bool
+	Wait         chan bool
+	T3580Retries int
 
 	// TS 24.501 - 6.1.3.2.1.1 State Machine for Session Management
 	StateSM int

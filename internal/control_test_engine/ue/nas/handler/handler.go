@@ -6,6 +6,7 @@ package handler
 
 import (
 	"fmt"
+	"math"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
@@ -193,10 +194,20 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message)
 		// Per 5GSM state machine in TS 24.501 - 6.1.3.2.1., we re-try the setup until it's successful
 		pduSession, err := ue.GetPduSession(pduSessionId)
 		if err != nil {
-			log.Error("[UE][NAS] Cannot retry PDU Session Request for PDU Session ", pduSession, " after Reject as ", err)
+			log.Error("[UE][NAS] Cannot retry PDU Session Request for PDU Session ", pduSessionId, " after Reject as ", err)
 			break
 		}
-		trigger.InitPduSessionRequestInner(ue, pduSession)
+		if pduSession.T3580Retries < 5 {
+			// T3580 Timer
+			go func() {
+				// Exponential backoff
+				time.Sleep(time.Duration(math.Pow(5, float64(pduSession.T3580Retries))) * time.Second)
+				trigger.InitPduSessionRequestInner(ue, pduSession)
+				pduSession.T3580Retries++
+			}()
+		} else {
+			log.Error("[UE][NAS] We re-tried five times to create PDU Session ", pduSessionId, ", Aborting.")
+		}
 
 	default:
 		log.Error("[UE][NAS] Receiving Unknown Dl NAS Transport message!! ", payloadContainer.GsmHeader.GetMessageType())
@@ -216,7 +227,7 @@ func cause5GSMToString(causeValue uint8) string {
 	case nasMessage.Cause5GSMRequestRejectedUnspecified:
 		return "Request rejected, unspecified"
 	case nasMessage.Cause5GSMServiceOptionTemporarilyOutOfOrder:
-		return "Service option temporarily out of order. Please share pcap with packetrusher@hpe.com."
+		return "Service option temporarily out of order."
 	case nasMessage.Cause5GSMPTIAlreadyInUse:
 		return "PTI already in use"
 	case nasMessage.Cause5GSMRegularDeactivation:
@@ -272,8 +283,8 @@ func cause5GSMToString(causeValue uint8) string {
 	case nasMessage.Cause5GSMMessageNotCompatibleWithTheProtocolState:
 		return "Message not compatible with the protocol state"
 	case nasMessage.Cause5GSMProtocolErrorUnspecified:
-		return "Protocol error, unspecified. Please share pcap with packetrusher@hpe.com."
+		return "Protocol error, unspecified. Please open an issue on Github with pcap."
 	default:
-		return "Service option temporarily out of order. Please share pcap with packetrusher@hpe.com."
+		return "Service option temporarily out of order."
 	}
 }
