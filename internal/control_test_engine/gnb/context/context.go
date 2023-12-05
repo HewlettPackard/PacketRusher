@@ -134,8 +134,10 @@ func (gnb *GNBContext) DeleteGnBUe(ue *GNBUe) {
 		}
 	}
 	ue.Lock()
-	close(ue.gnbTx)
-	ue.gnbTx = nil
+	if ue.gnbTx != nil {
+		close(ue.gnbTx)
+		ue.gnbTx = nil
+	}
 	ue.Unlock()
 }
 

@@ -71,6 +71,15 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 		// If CTRL-C signal has been received,
 		// stop creating new UEs, else we create numUes UEs
 		for ueSimCfg.UeId = 1; stopSignal && ueSimCfg.UeId <= numUes; ueSimCfg.UeId++ {
+			// If there is currently a coroutine handling current UE
+			// kill it, before creating a new coroutine with same UE
+			// Use case: Registration of N UEs in loop, when loop = true
+			if scenarioChans[ueSimCfg.UeId] != nil {
+				scenarioChans[ueSimCfg.UeId] <- procedures.UeTesterMessage{Type: procedures.Kill}
+				close(scenarioChans[ueSimCfg.UeId])
+				scenarioChans[ueSimCfg.UeId] = nil
+			}
+			scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage)
 			ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
 
 			tools.SimulateSingleUE(ueSimCfg, &wg)
@@ -91,5 +100,14 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 		}
 	}
 
-	wg.Wait()
+	if stopSignal {
+		<-sigStop
+	}
+	for _, scenarioChan := range scenarioChans {
+		if scenarioChan != nil {
+			scenarioChan <- procedures.UeTesterMessage{Type: procedures.Terminate}
+		}
+	}
+
+	time.Sleep(time.Second*2)
 }

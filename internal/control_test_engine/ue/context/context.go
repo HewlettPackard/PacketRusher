@@ -1,3 +1,8 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ */
+
 package context
 
 import (
@@ -700,8 +705,10 @@ func (ue *UEContext) Terminate() {
 	}
 
 	ue.Lock()
-	close(ue.gnbRx)
-	ue.gnbRx = nil
+	if ue.gnbRx != nil {
+		close(ue.gnbRx)
+		ue.gnbRx = nil
+	}
 	ue.Unlock()
 	close(ue.scenarioChan)
 

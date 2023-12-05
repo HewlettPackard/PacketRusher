@@ -606,7 +606,7 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 	log.Info("[GNB][NGAP] Releasing UE Context, cause: ", causeToString(cause))
 }
 
-func HandlerAmfConfiguratonUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU)  {
+func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU)  {
 
 	// TODO: Implement update AMF Context from AMFConfigurationUpdate
 	_ = message.InitiatingMessage.Value.AMFConfigurationUpdate

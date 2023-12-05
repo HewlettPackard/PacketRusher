@@ -62,7 +62,7 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 		case ngapType.ProcedureCodeAMFConfigurationUpdate:
 			// handler NGAP AMF Configuration Update
 			log.Info("[GNB][NGAP] Receive AMF Configuration Update")
-			handler.HandlerAmfConfiguratonUpdate(amf, gnb, ngapMsg)
+			handler.HandlerAmfConfigurationUpdate(amf, gnb, ngapMsg)
 
 		case ngapType.ProcedureCodeErrorIndication:
 			// handler Error Indicator

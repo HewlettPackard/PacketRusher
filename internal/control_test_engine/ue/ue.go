@@ -58,7 +58,7 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 			case msg, open := <-ue.GetGnbTx():
 				if !open {
 					log.Error("[UE][", ue.GetMsin(), "] Stopping UE as communication with gNB was closed")
-					loop = false
+					ue.SetGnbTx(nil)
 					break
 				}
 				gnbMsgHandler(msg, ue)
@@ -69,10 +69,6 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 					break
 				}
 				loop = ueMgrHandler(msg, ue)
-			case <-sigStop:
-				log.Info("[UE][", ue.GetMsin(), "] Stopping UE as CTRL-C was received")
-				ueMgrHandler(procedures.UeTesterMessage{Type: procedures.Terminate}, ue)
-				loop = false
 			}
 		}
 		ue.Terminate()

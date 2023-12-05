@@ -84,6 +84,23 @@ func InitPduSessionRelease(ue *context.UEContext, pduSession *context.UEPDUSessi
 	sender.SendToGnb(ue, ulNasTransport)
 }
 
+func InitPduSessionReleaseComplete(ue *context.UEContext, pduSession *context.UEPDUSession) {
+	log.Info("[UE] Initiating PDU Session Release Complete for PDU Session", pduSession.Id)
+
+	if pduSession.GetStateSM() != context.SM5G_PDU_SESSION_INACTIVE {
+		log.Warn("[UE][NAS] Unable to send PDU Session Release Complete for a PDU Session which is not inactive")
+		return
+	}
+
+	ulNasTransport, err := mm_5gs.ReleasComplete_UlNasTransport(pduSession, ue)
+	if err != nil {
+		log.Fatal("[UE][NAS] Error sending ul nas transport and pdu session establishment request: ", err)
+	}
+
+	// sending to GNB
+	sender.SendToGnb(ue, ulNasTransport)
+}
+
 func InitDeregistration(ue *context.UEContext) {
 	log.Info("[UE] Initiating Deregistration")
 
@@ -116,4 +133,24 @@ func InitHandover(ue *context.UEContext, gnbChan chan gnbContext.UEMessage) {
 	// Clear UEContext in previous gNb
 	previousGnbRx <- gnbContext.UEMessage{ConnectionClosed: true}
 	close(previousGnbRx)
+}
+
+func InitIdentifyResponse(ue *context.UEContext) {
+	log.Info("[UE] Initiating Identify Response")
+
+	// trigger identity response.
+	identityResponse := mm_5gs.IdentityResponse(ue)
+
+	// send to GNB.
+	sender.SendToGnb(ue, identityResponse)
+}
+
+func InitConfigurationUpdateComplete(ue *context.UEContext) {
+	log.Info("[UE] Initiating Configuration Update Complete")
+
+	// trigger identity response.
+	identityResponse := mm_5gs.ConfigurationUpdateComplete(ue)
+
+	// send to GNB.
+	sender.SendToGnb(ue, identityResponse)
 }

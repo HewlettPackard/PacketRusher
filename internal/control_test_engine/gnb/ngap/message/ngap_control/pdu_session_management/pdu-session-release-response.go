@@ -68,6 +68,7 @@ func buildPDUSessionReleaseResponse(amfUeNgapID, ranUeNgapID int64, pduSessionId
 		pDUSessionResourceReleasedItemRelRes := ngapType.PDUSessionResourceReleasedItemRelRes{}
 
 		pDUSessionResourceReleasedItemRelRes.PDUSessionID = pduSessionId
+		pDUSessionResourceReleasedItemRelRes.PDUSessionResourceReleaseResponseTransfer = []byte{00}
 
 		pDUSessionResourceReleasedListRelRes.List = append(pDUSessionResourceReleasedListRelRes.List, pDUSessionResourceReleasedItemRelRes)
 	}
