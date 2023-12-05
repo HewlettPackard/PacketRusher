@@ -42,7 +42,7 @@ PacketRusher is not yet supported on Docker.
 
 ### Dependencies
 ```bash
-$ sudo apt install build-essentials linux-headers-generic make git wget tar
+$ sudo apt install build-essentials linux-headers-generic make git wget tar linux-modules-extra-$(uname -r)
 # Warning this command will remove your existing local Go installation if you have one
 $ wget https://go.dev/dl/go1.21.3.linux-amd64.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.21.3.linux-amd64.tar.gz
 # Download PacketRusher source code

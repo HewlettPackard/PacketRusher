@@ -47,6 +47,7 @@ func main() {
 				Usage:   "Launch a gNB and a UE with a PDU Session\nFor more complex scenario and features, use instead packetrusher multi-ue\n",
 				Flags: []cli.Flag{
 					&cli.BoolFlag{Name: "disableTunnel", Aliases: []string{"t"}, Usage: "Disable the creation of the GTP-U tunnel interface."},
+					&cli.PathFlag{Name: "pcap", Usage: "Capture traffic to given PCAP file when a path is given", Value: "./dump.pcap"},
 				},
 				Action: func(c *cli.Context) error {
 					name := "Testing an ue attached with configuration"
@@ -61,6 +62,11 @@ func main() {
 					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
 					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
 					log.Info("---------------------------------------")
+
+					if c.IsSet("pcap") {
+						pcap.CaptureTraffic(c.Path("pcap"))
+					}
+
 					templates.TestAttachUeWithConfiguration(tunnelEnabled)
 					return nil
 				},
