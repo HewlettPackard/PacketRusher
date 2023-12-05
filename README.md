@@ -42,9 +42,14 @@ PacketRusher is not yet supported on Docker.
 
 ### Dependencies
 ```bash
-$ sudo apt install build-essentials linux-headers-generic make git wget tar linux-modules-extra-$(uname -r)
+$ sudo apt install build-essential linux-headers-generic make git wget tar linux-modules-extra-$(uname -r)
 # Warning this command will remove your existing local Go installation if you have one
 $ wget https://go.dev/dl/go1.21.3.linux-amd64.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.21.3.linux-amd64.tar.gz
+# Add go binary to the executable PATH variable
+You can do this by adding the following line to your $HOME/.profile or /etc/profile (for a system-wide installation):
+export PATH=$PATH:/usr/local/go/bin
+Note - Changes made to a profile file may not apply until the next time you log into your computer. To apply PATH changes immediately without logging out or rebooting, run the following command:
+$ source $HOME/.profile
 # Download PacketRusher source code
 $ git clone https://github.com/HewlettPackard/PacketRusher # or download the ZIP from https://github.com/HewlettPackard/PacketRusher/archive/refs/heads/master.zip and upload it to your Linux server
 $ cd PacketRusher && export PACKETRUSHER=$PWD
