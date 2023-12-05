@@ -12,11 +12,13 @@ import (
 	"net"
 	"strconv"
 	"sync"
+
+	"errors"
 )
 
 func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*context.GNBContext {
 	gnbs := make(map[string]*context.GNBContext)
-
+	var err error
 	// Each gNB have their own IP address on both N2 and N3
 	// TODO: Limitation for now, these IPs must be sequential, eg:
 	// gnb[0].n2_ip = 192.168.2.10, gnb[0].n3_ip = 192.168.3.10
@@ -34,13 +36,20 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*co
 
 		// TODO: We could find the interfaces where N2/N3 are
 		// and check that the generated IPs, still belong to the interfaces' subnet
-		n2Ip, _ = incrementIP(n2Ip, "0.0.0.0/0")
-		n3Ip, _ = incrementIP(n3Ip, "0.0.0.0/0")
+		n2Ip, err = IncrementIP(n2Ip, "0.0.0.0/0")
+		if err != nil {
+			log.Fatal("[GNB][CONFIG] Error while allocating ip for N2: " + err.Error())
+		}
+		n3Ip, err = IncrementIP(n3Ip, "0.0.0.0/0")
+		if err != nil {
+			log.Fatal("[GNB][CONFIG] Error while allocating ip for N3: " + err.Error())
+		}
+
 	}
 	return gnbs
 }
 
-func incrementIP(origIP, cidr string) (string, error) {
+func IncrementIP(origIP, cidr string) (string, error) {
 	ip := net.ParseIP(origIP)
 	_, ipNet, err := net.ParseCIDR(cidr)
 	if err != nil {
@@ -53,7 +62,7 @@ func incrementIP(origIP, cidr string) (string, error) {
 		}
 	}
 	if !ipNet.Contains(ip) {
-		log.Fatal("[GNB][CONFIG] gNB IP Address is not in N2/N3 subnet")
+		return origIP, errors.New("Ip is not in provided subnet")
 	}
 	return ip.String(), nil
 }
