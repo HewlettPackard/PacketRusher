@@ -18,7 +18,7 @@ import (
 
 func PDUSessionEstablishmentAccept(ue *context.UEContext, smContext *context.SmContext) (msg []byte, err error) {
 
-	nasMsg, err := buildSessionEstablishmentAccept(*ue, smContext)
+	nasMsg, err := buildSessionEstablishmentAccept(ue, smContext)
 	if err != nil {
 		return nil, err
 	}
@@ -26,14 +26,14 @@ func PDUSessionEstablishmentAccept(ue *context.UEContext, smContext *context.SmC
 	if err != nil {
 		return nil, err
 	}
-	nasMsg, err = buildDLNASTransport(*ue, nasPdu, 1)
+	nasMsg, err = buildDLNASTransport(ue, nasPdu, 1)
 	if err != nil {
 		return nil, err
 	}
 	return tools.Encode(ue, nasMsg)
 }
 
-func buildDLNASTransport(ue context.UEContext, nasPdu []byte, pduSessionId uint8) (msg *nas.Message, err error) {
+func buildDLNASTransport(ue *context.UEContext, nasPdu []byte, pduSessionId uint8) (msg *nas.Message, err error) {
 
 	m := nas.NewMessage()
 	m.GmmMessage = nas.NewGmmMessage()
@@ -62,7 +62,7 @@ func buildDLNASTransport(ue context.UEContext, nasPdu []byte, pduSessionId uint8
 	return m, nil
 }
 
-func buildSessionEstablishmentAccept(ue context.UEContext, smContext *context.SmContext) (msg *nas.Message, err error) {
+func buildSessionEstablishmentAccept(ue *context.UEContext, smContext *context.SmContext) (msg *nas.Message, err error) {
 	m := nas.NewMessage()
 	m.GsmMessage = nas.NewGsmMessage()
 	m.GsmHeader.SetMessageType(nas.MsgTypePDUSessionEstablishmentAccept)

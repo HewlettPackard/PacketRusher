@@ -30,7 +30,7 @@ type AMFContext struct {
 	servedGuami         []models.Guami
 	relativeCapacity    int64
 	gnbs                map[string]*GNBContext
-	ues                 []UEContext
+	ues                 []*UEContext
 	securityContext     []SecurityContext
 	idUeGenerator       int64
 	networkName         NetworkName
@@ -52,7 +52,7 @@ func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssa
 	c.servedGuami = servedGuami
 	c.relativeCapacity = relativeCapacity
 	c.gnbs = make(map[string]*GNBContext)
-	c.ues = []UEContext{}
+	c.ues = []*UEContext{}
 	c.securityContext = []SecurityContext{}
 	c.idUeGenerator = 0
 	c.networkName = NetworkName{
@@ -94,7 +94,7 @@ func (c *AMFContext) FindUEById(id int64) (*UEContext, error) {
 	defer ueMutex.Unlock()
 	for ue := range c.ues {
 		if c.ues[ue].amfNgapId == id {
-			return &c.ues[ue], nil
+			return c.ues[ue], nil
 		}
 	}
 	return nil, errors.New("[5GC] UE with amfNgapId " + strconv.Itoa(int(id)) + "not found")
@@ -105,7 +105,7 @@ func (c *AMFContext) FindUEByRanId(id int64) (*UEContext, error) {
 	defer ueMutex.Unlock()
 	for ue := range c.ues {
 		if c.ues[ue].ranNgapId == id {
-			return &c.ues[ue], nil
+			return c.ues[ue], nil
 		}
 	}
 
@@ -129,7 +129,7 @@ func (c *AMFContext) NewUE(ueRanNgapId int64) *UEContext {
 	newUE.SetAmfNgapId(c.getAmfUeId())
 	newUE.SecurityContextAvailable = false
 	ueMutex.Lock()
-	c.ues = append(c.ues, newUE)
+	c.ues = append(c.ues, &newUE)
 	ueMutex.Unlock()
 	ue, _ := c.FindUEById(newUE.amfNgapId)
 	return ue
