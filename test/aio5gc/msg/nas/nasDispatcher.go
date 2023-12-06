@@ -79,6 +79,9 @@ func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *contex
 		log.Info("[5GC][NAS] Received UL NAS Transport")
 		err = nasHandler.UlNasTransport(msg, gnb, ueContext, session)
 
+	case nas.MsgTypeConfigurationUpdateComplete:
+		log.Info("[5GC][NAS] Received Configuration Update Complete")
+
 	default:
 		err = errors.New("[5GC][NAS] unrecognised nas message type: " + strconv.Itoa(int(msg.GmmHeader.GetMessageType())))
 	}

@@ -117,14 +117,6 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 
 	ueCfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(simConfig.UeId%numGnb + 1)
 
-	// If there is currently a coroutine handling current UE
-	// kill it, before creating a new coroutine with same UE
-	// Use case: Registration of N UEs in loop, when loop = true
-	if simConfig.ScenarioChan != nil {
-		simConfig.ScenarioChan <- procedures.UeTesterMessage{Type: procedures.Kill}
-		close(simConfig.ScenarioChan)
-	}
-
 	// Launch a coroutine to handle UE's individual scenario
 	go func(scenarioChan chan procedures.UeTesterMessage, ueId int) {
 		wg.Add(1)
@@ -152,8 +144,10 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 		for loop {
 			select {
 			case <-deregistrationChannel:
-				ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
-				ueRx = nil
+				if ueRx != nil {
+					ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
+					ueRx = nil
+				}
 			case <-handoverChannel:
 				if ueRx != nil {
 					ueRx <- procedures.UeTesterMessage{Type: procedures.Handover, GnbChan: simConfig.Gnbs[gnbIdGenerator((ueId+1)%numGnb+1)].GetInboundChannel()}
@@ -161,6 +155,9 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 			case msg := <-scenarioChan:
 				if ueRx != nil {
 					ueRx <- msg
+					if msg.Type == procedures.Terminate || msg.Type == procedures.Kill {
+						ueRx = nil
+					}
 				}
 			case msg := <-ueTx:
 				log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)

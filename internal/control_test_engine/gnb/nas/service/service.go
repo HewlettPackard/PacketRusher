@@ -65,7 +65,7 @@ func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
 			gnbUeContext.SetStateDown()
 			gnb.DeleteGnBUe(ue)
 		} else if message.IsNas {
-			go nas.Dispatch(ue, message.Nas, gnb)
+			nas.Dispatch(ue, message.Nas, gnb)
 		} else if message.AmfId >= 0 {
 			log.Info("[GNB] Received incoming handover for UE")
 			gnbUeContext.SetStateReady()
