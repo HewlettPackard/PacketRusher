@@ -6,11 +6,8 @@ package context
 
 import (
 	"errors"
-	"my5G-RANTester/internal/common/tools"
 	"net"
-	"slices"
 
-	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasConvert"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/openapi/models"
@@ -120,35 +117,13 @@ func (smContext *SmContext) PDUAddressToNAS() ([12]byte, uint8) {
 	return addr, addrLen
 }
 
-func CreatePDUSession(ulNasTransport *nasMessage.ULNASTransport,
+func CreatePDUSession(sessionRequest *nasMessage.PDUSessionEstablishmentRequest,
 	ue *UEContext,
-	fgc *Aio5gc,
+	session *SessionContext,
 	pduSessionID int32,
-	smMessage []uint8,
+	snssai models.Snssai,
+	dnn string,
 ) (smContext *SmContext, err error) {
-	session := fgc.session
-
-	var (
-		snssai models.Snssai
-		dnn    string
-	)
-	// If the S-NSSAI IE is not included, select a default snssai
-	if ulNasTransport.SNSSAI != nil {
-		snssai = nasConvert.SnssaiToModels(ulNasTransport.SNSSAI)
-	} else {
-		snssai = ue.GetNssai()
-	}
-
-	dnnList := session.GetDnnList()
-	if ulNasTransport.DNN != nil {
-		if !slices.Contains(dnnList, ulNasTransport.DNN.GetDNN()) {
-			return nil, errors.New("[5GC] Unknown DNN requested")
-		}
-		dnn = ulNasTransport.DNN.GetDNN()
-
-	} else {
-		dnn = dnnList[0]
-	}
 
 	newSmContext := NewSmContext(pduSessionID)
 	newSmContext.SetSnssai(snssai)
@@ -161,28 +136,12 @@ func CreatePDUSession(ulNasTransport *nasMessage.ULNASTransport,
 	locationCopy := deepcopy.Copy(*ue.GetUserLocationInfo()).(models.NrLocation)
 	newSmContext.SetUserLocation(locationCopy)
 
-	n1smContent := ulNasTransport.PayloadContainer.GetPayloadContainerContents()
-	m := nas.NewMessage()
-	err = m.GsmMessageDecode(&n1smContent)
-	if err != nil {
-		return nil, errors.New("[5GC][NAS] GsmMessageDecode Error: " + err.Error())
-	}
-	if m.GsmHeader.GetMessageType() != nas.MsgTypePDUSessionEstablishmentRequest {
-		return nil, errors.New("[5GC][NAS] UL NAS Transport container message expected to be PDU Session Establishment Request but was not")
-	}
-	sessionRequest := m.PDUSessionEstablishmentRequest
-
 	newSmContext.SetPti(sessionRequest.GetPTI())
 	newSmContext.SetPduSessionType(sessionRequest.GetPDUSessionTypeValue())
 	newSmContext.SetSessionRule(session.GetSessionRules()[0])
 	newSmContext.SetDefQosQFI(uint8(1))
-	ip, err := tools.IncrementIP(session.lastAllocatedIP.String(), "10.0.0.0/8")
-	if err != nil {
-		log.Fatal("[5GC][NAS] Error while allocating ip for PDU session: " + err.Error())
-	}
 
-	session.lastAllocatedIP = net.ParseIP(ip)
-	newSmContext.SetPDUAddress(session.lastAllocatedIP)
+	newSmContext.SetPDUAddress(session.GetUnallocatedIP())
 	EPCOContents := sessionRequest.ExtendedProtocolConfigurationOptions.GetExtendedProtocolConfigurationOptionsContents()
 	protocolConfigurationOptions := nasConvert.NewProtocolConfigurationOptions()
 	err = protocolConfigurationOptions.UnMarshal(EPCOContents)
@@ -202,9 +161,10 @@ func CreatePDUSession(ulNasTransport *nasMessage.ULNASTransport,
 		}
 	}
 
-	sessionRequest.GetExtendedProtocolConfigurationOptionsContents()
-
-	ue.AddSmContext(newSmContext)
+	err = ue.AddSmContext(newSmContext)
+	if err != nil {
+		return nil, err
+	}
 	log.Infof("[5GC] Create smContext[pduSessionID: %d] Success", pduSessionID)
 	return newSmContext, nil
 }

@@ -16,13 +16,12 @@ import (
 	"github.com/free5gc/nas"
 )
 
-func RegistrationRequest(nasReq *nas.Message, fgc *context.Aio5gc, ue *context.UEContext) (err error) {
+func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) (err error) {
 	regType := nasReq.RegistrationRequest.NgksiAndRegistrationType5GS.GetRegistrationType5GS()
 	if regType != nasMessage.RegistrationType5GSInitialRegistration {
 		return errors.New("[5GC][NAS] Received unsupported registration type")
 	}
 
-	amf := fgc.GetAMFContext()
 	gmm := nasReq.GmmMessage
 
 	mobileId, mobileIdType, err := gmm.RegistrationRequest.MobileIdentity5GS.GetMobileIdentity()
@@ -60,7 +59,7 @@ func RegistrationRequest(nasReq *nas.Message, fgc *context.Aio5gc, ue *context.U
 	ue.SetSecurityCapability(gmm.RegistrationRequest.UESecurityCapability)
 	ue.SetNgKsi(ngKsi)
 
-	msg.SendAuthenticationRequest(fgc, ue)
+	msg.SendAuthenticationRequest(gnb, ue)
 
 	return nil
 }

@@ -12,9 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func SendNGSetupResponse(gnb *context.GNBContext, fgc *context.Aio5gc) {
-
-	amf := fgc.GetAMFContext()
+func SendNGSetupResponse(gnb *context.GNBContext, amf *context.AMFContext) {
 	msg, err := ngapBuilder.NGSetupResponse(*amf)
 	if err != nil {
 		log.Fatal(err.Error())
@@ -24,12 +22,7 @@ func SendNGSetupResponse(gnb *context.GNBContext, fgc *context.Aio5gc) {
 	gnb.SendMsg(msg)
 }
 
-func SendAuthenticationRequest(fgc *context.Aio5gc, ue *context.UEContext) {
-
-	gnb, err := fgc.GetAMFContext().FindGnbById(*ue.GetUserLocationInfo().GlobalGnbId)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+func SendAuthenticationRequest(gnb *context.GNBContext, ue *context.UEContext) {
 	log.Info("[5GC][NAS] Creating Authentication Request")
 	nasRes, err := nasBuilder.AuthenticationRequest(ue)
 
@@ -42,12 +35,7 @@ func SendAuthenticationRequest(fgc *context.Aio5gc, ue *context.UEContext) {
 	gnb.SendMsg(msg)
 }
 
-func SendSecurityModeCommand(fgc *context.Aio5gc, ue *context.UEContext) {
-
-	gnb, err := fgc.GetAMFContext().FindGnbById(*ue.GetUserLocationInfo().GlobalGnbId)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+func SendSecurityModeCommand(gnb *context.GNBContext, ue *context.UEContext) {
 
 	log.Info("[5GC][NAS] Creating Security Mode Command")
 	nasRes, err := nasBuilder.SecurityModeCommand(ue)
@@ -61,12 +49,7 @@ func SendSecurityModeCommand(fgc *context.Aio5gc, ue *context.UEContext) {
 	gnb.SendMsg(msg)
 }
 
-func SendRegistrationAccept(fgc *context.Aio5gc, ue *context.UEContext) {
-	amf := fgc.GetAMFContext()
-	gnb, err := amf.FindGnbById(*ue.GetUserLocationInfo().GlobalGnbId)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+func SendRegistrationAccept(gnb *context.GNBContext, ue *context.UEContext, amf *context.AMFContext) {
 
 	log.Info("[5GC][NAS] Creating Registration Accept")
 	nasRes, err := nasBuilder.RegistrationAccept(ue)
@@ -80,17 +63,15 @@ func SendRegistrationAccept(fgc *context.Aio5gc, ue *context.UEContext) {
 	gnb.SendMsg(msg)
 }
 
-func SendPDUSessionEstablishmentAccept(fgc *context.Aio5gc, ue *context.UEContext, smContext *context.SmContext) {
-	amf := fgc.GetAMFContext()
-	gnb, err := amf.FindGnbById(*ue.GetUserLocationInfo().GlobalGnbId)
+func SendPDUSessionEstablishmentAccept(gnb *context.GNBContext, ue *context.UEContext, smContext *context.SmContext, session *context.SessionContext) {
+
+	log.Info("[5GC][NAS] Creating PDU Session Establishment Accept")
+	nasRes, err := nasBuilder.PDUSessionEstablishmentAccept(ue, smContext)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 
-	log.Info("[5GC][NAS] Creating PDU Session Establishment Accept")
-	nasRes, err := nasBuilder.PDUSessionEstablishmentAccept(ue, smContext)
-
-	msg, err := ngapBuilder.PDUSessionResourceSetup(nasRes, *smContext, ue, fgc)
+	msg, err := ngapBuilder.PDUSessionResourceSetup(nasRes, *smContext, ue, session)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -99,12 +80,7 @@ func SendPDUSessionEstablishmentAccept(fgc *context.Aio5gc, ue *context.UEContex
 	gnb.SendMsg(msg)
 }
 
-func SendConfigurationUpdateCommand(fgc *context.Aio5gc, ue *context.UEContext, nwName *context.NetworkName) {
-	amf := fgc.GetAMFContext()
-	gnb, err := amf.FindGnbById(*ue.GetUserLocationInfo().GlobalGnbId)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+func SendConfigurationUpdateCommand(gnb *context.GNBContext, ue *context.UEContext, nwName *context.NetworkName) {
 
 	log.Info("[5GC][NAS] Configuration Update Command")
 	nasRes, err := nasBuilder.ConfigurationUpdateCommand(ue, nwName)

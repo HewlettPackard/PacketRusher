@@ -16,8 +16,8 @@ import (
 
 type FiveGCBuilder struct {
 	config   config.Config
-	nasHook  func(*nas.Message, *context.UEContext, *context.Aio5gc) (bool, error)
-	ngapHook func(*ngapType.NGAPPDU, *context.GNBContext, *context.Aio5gc) (bool, error)
+	nasHook  []func(*nas.Message, *context.UEContext, *context.GNBContext, *context.Aio5gc) (bool, error)
+	ngapHook []func(*ngapType.NGAPPDU, *context.GNBContext, *context.Aio5gc) (bool, error)
 }
 
 func (f *FiveGCBuilder) WithConfig(conf config.Config) *FiveGCBuilder {
@@ -25,13 +25,13 @@ func (f *FiveGCBuilder) WithConfig(conf config.Config) *FiveGCBuilder {
 	return f
 }
 
-func (f *FiveGCBuilder) WithNASDispatcherHook(hook func(*nas.Message, *context.UEContext, *context.Aio5gc) (bool, error)) *FiveGCBuilder {
-	f.nasHook = hook
+func (f *FiveGCBuilder) WithNASDispatcherHook(hook func(*nas.Message, *context.UEContext, *context.GNBContext, *context.Aio5gc) (bool, error)) *FiveGCBuilder {
+	f.nasHook = append(f.nasHook, hook)
 	return f
 }
 
 func (f *FiveGCBuilder) WithNGAPDispatcherHook(hook func(*ngapType.NGAPPDU, *context.GNBContext, *context.Aio5gc) (bool, error)) *FiveGCBuilder {
-	f.ngapHook = hook
+	f.ngapHook = append(f.ngapHook, hook)
 	return f
 }
 
@@ -48,11 +48,11 @@ func (f *FiveGCBuilder) Build() (*context.Aio5gc, error) {
 		return &context.Aio5gc{}, err
 	}
 	if f.nasHook != nil {
-		fgc.SetNasHook(f.nasHook)
+		fgc.SetNasHooks(f.nasHook)
 	}
 
 	if f.ngapHook != nil {
-		fgc.SetNgapHook(f.ngapHook)
+		fgc.SetNgapHooks(f.ngapHook)
 	}
 	go service.RunServer(f.config.AMF.Ip, f.config.AMF.Port, &fgc)
 	return &fgc, nil

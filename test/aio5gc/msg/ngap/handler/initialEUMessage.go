@@ -52,6 +52,6 @@ func InitialUEMessage(req *ngapType.InitialUEMessage, gnb *context.GNBContext, f
 	}
 	ue.SetUserLocationInfo(&nrLocation)
 
-	nas.Dispatch(nasMsg, ue, fgc)
+	nas.Dispatch(nasMsg, ue, fgc, gnb)
 	return nil
 }

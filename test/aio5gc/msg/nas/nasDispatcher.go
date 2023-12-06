@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *context.Aio5gc) {
+func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *context.Aio5gc, gnb *context.GNBContext) {
 	payload := nasPDU.Value
 	m := new(nas.Message)
 	m.SecurityHeaderType = nas.GetSecurityHeaderType(payload) & 0x0f
@@ -35,36 +35,49 @@ func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *contex
 	}
 
 	// Hook for changing 5GC behaviour
-	hook := fgc.GetNasHook()
-	if hook != nil {
-		handled, err := hook(msg, ueContext, fgc)
-		if err != nil {
-			log.Fatal(err.Error())
-		} else if handled {
-			return
+	hooks := fgc.GetNasHooks()
+	msgHandled := false
+	if hooks != nil && len(hooks) > 0 {
+		for i := range hooks {
+			handled, err := hooks[i](msg, ueContext, gnb, fgc)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			if handled && msgHandled {
+				log.Warn("[5GC][NAS] Message handled several times by hooks")
+			} else if handled {
+				msgHandled = true
+			}
 		}
 	}
+	if msgHandled {
+		return
+	}
 
+	amf := fgc.GetAMFContext()
+	session := fgc.GetSessionContext()
+
+	// Default Dispacther
 	switch msg.GmmHeader.GetMessageType() {
 	case nas.MsgTypeRegistrationRequest:
 		log.Info("[5GC][NAS] Received Registration Request")
-		err = nasHandler.RegistrationRequest(msg, fgc, ueContext)
+		err = nasHandler.RegistrationRequest(msg, amf, ueContext, gnb)
 
 	case nas.MsgTypeAuthenticationResponse:
 		log.Info("[5GC][NAS] Received Authentication Response")
-		err = nasHandler.AuthenticationResponse(msg, fgc, ueContext)
+		err = nasHandler.AuthenticationResponse(msg, gnb, ueContext)
 
 	case nas.MsgTypeSecurityModeComplete:
 		log.Info("[5GC][NAS] Received Security Mode Complete")
-		err = nasHandler.SecurityModeComplete(msg, fgc, ueContext)
+		err = nasHandler.SecurityModeComplete(msg, amf, ueContext, gnb)
 
 	case nas.MsgTypeRegistrationComplete:
 		log.Info("[5GC][NAS] Received Registration Complete")
-		nasHandler.RegistrationComplete(msg, fgc, ueContext)
+		nasHandler.RegistrationComplete(msg, gnb, ueContext, *amf)
 
 	case nas.MsgTypeULNASTransport:
 		log.Info("[5GC][NAS] Received UL NAS Transport")
-		err = nasHandler.UlNasTransport(msg, fgc, ueContext)
+		err = nasHandler.UlNasTransport(msg, gnb, ueContext, session)
 
 	default:
 		err = errors.New("[5GC][NAS] unrecognised nas message type: " + strconv.Itoa(int(msg.GmmHeader.GetMessageType())))

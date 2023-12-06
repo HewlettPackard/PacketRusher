@@ -48,7 +48,7 @@ func GenerateDefaultConf(controlIF config.ControlIF, dataIF config.DataIF, amf c
 			Ciphering: config.Ciphering{
 				Nea0: true,
 				Nea1: false,
-				Nea2: false,
+				Nea2: true,
 			},
 		},
 		AMF: amf,

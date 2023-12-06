@@ -32,7 +32,7 @@ func NGSetupRequest(req *ngapType.NGSetupRequest, gnb *context.GNBContext, fgc *
 		}
 	}
 
-	msg.SendNGSetupResponse(gnb, fgc)
+	msg.SendNGSetupResponse(gnb, fgc.GetAMFContext())
 
 	return nil
 }

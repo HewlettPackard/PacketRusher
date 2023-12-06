@@ -6,8 +6,11 @@ package context
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
+	"sync"
 
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/openapi/models"
@@ -28,7 +31,8 @@ type UEContext struct {
 	SecurityContextAvailable bool
 	guti                     string
 	tmsi                     int32
-	smContexts               []*SmContext
+	smContexts               map[int32]*SmContext
+	SmContextMtx             sync.Mutex
 }
 
 func (ue *UEContext) AllocateGuti(a *AMFContext) {
@@ -108,8 +112,22 @@ func (ue *UEContext) GetSecurityContext() *SecurityContext {
 	return ue.securityContext
 }
 
-func (ue *UEContext) AddSmContext(newContext *SmContext) {
-	ue.smContexts = append(ue.smContexts, newContext)
+func (ue *UEContext) AddSmContext(newContext *SmContext) error {
+	ue.SmContextMtx.Lock()
+	defer ue.SmContextMtx.Unlock()
+	
+	sessionId := newContext.GetPduSessionId()
+	if ue.smContexts == nil {
+		ue.smContexts = make(map[int32]*SmContext)
+	}
+	_, hasKey := ue.smContexts[sessionId]
+	if hasKey {
+		id := strconv.Itoa(int(sessionId))
+		return errors.New("[5GC] UE" + ue.guti + " already have a PDU Sessions with Id" + id)
+	} else {
+		ue.smContexts[sessionId] = newContext
+	}
+	return nil
 }
 
 // Kamf Derivation function defined in TS 33.501 Annex A.7

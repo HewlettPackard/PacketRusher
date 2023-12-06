@@ -56,8 +56,8 @@ func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssa
 	c.securityContext = []SecurityContext{}
 	c.idUeGenerator = 0
 	c.networkName = NetworkName{
-		Full:  "TestNtwFull",
-		Short: "TestNtwShort",
+		Full:  "NtwFull",
+		Short: "Ntwshrt",
 	}
 }
 
@@ -97,7 +97,7 @@ func (c *AMFContext) FindUEById(id int64) (*UEContext, error) {
 			return &c.ues[ue], nil
 		}
 	}
-	return &UEContext{}, errors.New("[5GC] UE with amfNgapId " + strconv.Itoa(int(id)) + "not found")
+	return nil, errors.New("[5GC] UE with amfNgapId " + strconv.Itoa(int(id)) + "not found")
 }
 
 func (c *AMFContext) FindUEByRanId(id int64) (*UEContext, error) {
@@ -109,7 +109,7 @@ func (c *AMFContext) FindUEByRanId(id int64) (*UEContext, error) {
 		}
 	}
 
-	return &UEContext{}, errors.New("[5GC] UE with RanNgapId " + strconv.Itoa(int(id)) + "not found")
+	return nil, errors.New("[5GC] UE with RanNgapId " + strconv.Itoa(int(id)) + "not found")
 }
 
 func (c *AMFContext) NewSecurityContext(sub SecurityContext) error {

@@ -11,8 +11,8 @@ import (
 	"github.com/free5gc/nas"
 )
 
-func RegistrationComplete(nasMsg *nas.Message, fgc *context.Aio5gc, ue *context.UEContext) {
+func RegistrationComplete(nasMsg *nas.Message, gnb *context.GNBContext, ue *context.UEContext, amf context.AMFContext) {
 
-	nwName := fgc.GetAMFContext().GetNetworkName()
-	msg.SendConfigurationUpdateCommand(fgc, ue, &nwName)
+	nwName := amf.GetNetworkName()
+	msg.SendConfigurationUpdateCommand(gnb, ue, &nwName)
 }

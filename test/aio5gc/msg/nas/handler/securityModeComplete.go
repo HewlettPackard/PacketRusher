@@ -14,8 +14,7 @@ import (
 	"github.com/free5gc/nas/nasConvert"
 )
 
-func SecurityModeComplete(nasReq *nas.Message, fgc *context.Aio5gc, ue *context.UEContext) error {
-	amf := fgc.GetAMFContext()
+func SecurityModeComplete(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
 	securityModeComplete := nasReq.SecurityModeComplete
 	if securityModeComplete.IMEISV != nil {
 		if pei, err := nasConvert.PeiToStringWithError(securityModeComplete.IMEISV.Octet[:]); err != nil {
@@ -40,7 +39,7 @@ func SecurityModeComplete(nasReq *nas.Message, fgc *context.Aio5gc, ue *context.
 		ue.SetSecurityCapability(registrationRequest.UESecurityCapability)
 		ue.AllocateGuti(amf)
 		ue.GetSecurityContext().UpdateSecurityContext()
-		msg.SendRegistrationAccept(fgc, ue)
+		msg.SendRegistrationAccept(gnb, ue, amf)
 	default:
 		return errors.New("nas message container Iei type error")
 	}

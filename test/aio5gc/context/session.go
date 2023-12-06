@@ -6,7 +6,10 @@ package context
 
 import (
 	"errors"
+	"log"
+	"my5G-RANTester/internal/common/tools"
 	"net"
+	"sync"
 
 	"github.com/free5gc/openapi/models"
 )
@@ -16,6 +19,7 @@ type SessionContext struct {
 	sessionsRules   []*models.SessionRule
 	lastAllocatedIP net.IP
 	n3              net.IP
+	ipMtx           sync.Mutex
 }
 
 type DataNetwork struct {
@@ -82,4 +86,16 @@ func (s *SessionContext) GetDataNetwork(dnn string) (DataNetwork, error) {
 		}
 	}
 	return DataNetwork{}, errors.New("[5GC] Could not find requested datanetwork")
+}
+
+func (s *SessionContext) GetUnallocatedIP() net.IP {
+	s.ipMtx.Lock()
+	defer s.ipMtx.Unlock()
+	ip, err := tools.IncrementIP(s.lastAllocatedIP.String(), "10.0.0.0/8")
+	if err != nil {
+		log.Fatal("[5GC][NAS] Error while allocating ip for PDU session: " + err.Error())
+	}
+
+	s.lastAllocatedIP = net.ParseIP(ip)
+	return s.lastAllocatedIP
 }

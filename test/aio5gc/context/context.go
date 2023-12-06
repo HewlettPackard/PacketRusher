@@ -18,8 +18,8 @@ import (
 type Aio5gc struct {
 	amfContext AMFContext
 	session    SessionContext
-	nasHook    func(*nas.Message, *UEContext, *Aio5gc) (bool, error)
-	ngapHook   func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) (bool, error)
+	nasHook    []func(*nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error)
+	ngapHook   []func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) (bool, error)
 	conf       config.Config
 }
 
@@ -27,8 +27,8 @@ func (a *Aio5gc) GetAMFContext() *AMFContext {
 	return &a.amfContext
 }
 
-func (a *Aio5gc) GetSessionContext() SessionContext {
-	return a.session
+func (a *Aio5gc) GetSessionContext() *SessionContext {
+	return &a.session
 }
 
 func (a *Aio5gc) Init(conf config.Config, id string, name string) error {
@@ -73,18 +73,18 @@ func (a *Aio5gc) Init(conf config.Config, id string, name string) error {
 	return nil
 }
 
-func (a *Aio5gc) GetNasHook() func(*nas.Message, *UEContext, *Aio5gc) (bool, error) {
+func (a *Aio5gc) GetNasHooks() []func(*nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error) {
 	return a.nasHook
 }
 
-func (a *Aio5gc) SetNasHook(hook func(*nas.Message, *UEContext, *Aio5gc) (bool, error)) {
+func (a *Aio5gc) SetNasHooks(hook []func(*nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error)) {
 	a.nasHook = hook
 }
 
-func (a *Aio5gc) GetNgapHook() func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) (bool, error) {
+func (a *Aio5gc) GetNgapHooks() []func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) (bool, error) {
 	return a.ngapHook
 }
 
-func (a *Aio5gc) SetNgapHook(hook func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) (bool, error)) {
+func (a *Aio5gc) SetNgapHooks(hook []func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) (bool, error)) {
 	a.ngapHook = hook
 }

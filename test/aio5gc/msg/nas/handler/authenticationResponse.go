@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AuthenticationResponse(nasMsg *nas.Message, fgc *context.Aio5gc, ue *context.UEContext) error {
+func AuthenticationResponse(nasMsg *nas.Message, gnb *context.GNBContext, ue *context.UEContext) error {
 	if nasMsg.AuthenticationResponse.AuthenticationResponseParameter == nil {
 		return errors.New("AuthenticationResponseParameter is nil")
 	}
@@ -32,6 +32,6 @@ func AuthenticationResponse(nasMsg *nas.Message, fgc *context.Aio5gc, ue *contex
 		return errors.New(("5G AKA confirmation failed, expected res* " + xresStar + " but got " + resStar))
 	}
 
-	msg.SendSecurityModeCommand(fgc, ue)
+	msg.SendSecurityModeCommand(gnb, ue)
 	return nil
 }

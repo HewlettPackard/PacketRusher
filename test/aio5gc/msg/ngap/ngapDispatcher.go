@@ -24,17 +24,27 @@ func Dispatch(buf []byte, gnb *context.GNBContext, fgc *context.Aio5gc) {
 		os.Exit(1)
 	}
 
-	// Hook for changing 5GC behaviour
-	hook := fgc.GetNgapHook()
-	if hook != nil {
-		handled, err := hook(ngapMsg, gnb, fgc)
-		if err != nil {
-			log.Fatal(err.Error())
-		} else if handled {
-			return
+	// Hooks for changing 5GC behaviour
+	hooks := fgc.GetNgapHooks()
+	msgHandled := false
+	if hooks != nil && len(hooks) > 0 {
+		for i := range hooks {
+			handled, err := hooks[i](ngapMsg, gnb, fgc)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			if handled && msgHandled {
+				log.Warn("[5GC][NGAP] Message handled several times by hooks")
+			} else if handled {
+				msgHandled = true
+			}
 		}
 	}
+	if msgHandled {
+		return
+	}
 
+	// Default Dispacther
 	switch ngapMsg.Present {
 	case ngapType.NGAPPDUPresentInitiatingMessage:
 
@@ -50,7 +60,7 @@ func Dispatch(buf []byte, gnb *context.GNBContext, fgc *context.Aio5gc) {
 
 		case ngapType.ProcedureCodeUplinkNASTransport:
 			log.Info("[5GC][NGAP] Received uplink NAS Transport")
-			err = ngapHandler.UplinkNASTransport(ngapMsg.InitiatingMessage.Value.UplinkNASTransport, *gnb, fgc)
+			err = ngapHandler.UplinkNASTransport(ngapMsg.InitiatingMessage.Value.UplinkNASTransport, gnb, fgc)
 
 		default:
 			err = errors.New("[5GC][NGAP] Received unknown NGAP NGAPPDUPresentInitiatingMessage ProcedureCode")
@@ -61,11 +71,11 @@ func Dispatch(buf []byte, gnb *context.GNBContext, fgc *context.Aio5gc) {
 		switch ngapMsg.SuccessfulOutcome.ProcedureCode.Value {
 
 		case ngapType.ProcedureCodeInitialContextSetup:
-			log.Info("[5GC][NGAP] Received initial context setup response")
+			log.Info("[5GC][NGAP] Received Successful Initial Context Setup Response")
 			ngapHandler.InitialContextSetupResponse(ngapMsg.SuccessfulOutcome.Value.InitialContextSetupResponse, fgc)
 
 		case ngapType.ProcedureCodePDUSessionResourceSetup:
-			log.Info("[5GC][NGAP] Received PDU Session Resource Setup response")
+			log.Info("[5GC][NGAP] Received Successful PDU Session Resource Setup response")
 			ngapHandler.PDUSessionResourceSetup(ngapMsg.SuccessfulOutcome.Value.PDUSessionResourceSetupResponse, fgc)
 
 		default:

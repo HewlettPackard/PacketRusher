@@ -14,7 +14,7 @@ import (
 	"github.com/free5gc/openapi/models"
 )
 
-func UplinkNASTransport(req *ngapType.UplinkNASTransport, gnb context.GNBContext, fgc *context.Aio5gc) error {
+func UplinkNASTransport(req *ngapType.UplinkNASTransport, gnb *context.GNBContext, fgc *context.Aio5gc) error {
 
 	var ue *context.UEContext
 	var ranUe *context.UEContext
@@ -62,6 +62,6 @@ func UplinkNASTransport(req *ngapType.UplinkNASTransport, gnb context.GNBContext
 		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one registred for this UE")
 	}
 
-	nas.Dispatch(naspdu, ue, fgc)
+	nas.Dispatch(naspdu, ue, fgc, gnb)
 	return nil
 }

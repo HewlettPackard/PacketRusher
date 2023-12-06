@@ -17,9 +17,7 @@ import (
 	"github.com/free5gc/openapi/models"
 )
 
-func PDUSessionResourceSetup(nasPdu []byte, smContext context.SmContext, ue *context.UEContext, fgc *context.Aio5gc) ([]byte, error) {
-
-	session := fgc.GetSessionContext()
+func PDUSessionResourceSetup(nasPdu []byte, smContext context.SmContext, ue *context.UEContext, session *context.SessionContext) ([]byte, error) {
 	message, err := buildPDUSessionResourceSetupRequest(ue, smContext, nasPdu, session.GetN3())
 	if err != nil {
 		return []byte{}, err
