@@ -5,15 +5,11 @@
 package templates
 
 import (
-	"fmt"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
-	"my5G-RANTester/internal/control_test_engine/ue"
-	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"os"
 	"os/signal"
-	"strconv"
 	"sync"
 	"time"
 
@@ -24,7 +20,6 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 	if tunnelEnabled && !dedicatedGnb {
 		log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
 	}
-
 	if tunnelEnabled && timeBetweenRegistration < 500 {
 		log.Fatal("When using the --tunnel option, --timeBetweenRegistration must be equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
 	}
@@ -56,7 +51,6 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 	// TODO: We should wait for NGSetupResponse instead
 	time.Sleep(1 * time.Second)
 
-	msin := cfg.Ue.Msin
 	cfg.Ue.TunnelEnabled = tunnelEnabled
 
 	scenarioChans := make([]chan procedures.UeTesterMessage, numUes+1)
@@ -64,78 +58,22 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 	sigStop := make(chan os.Signal, 1)
 	signal.Notify(sigStop, os.Interrupt)
 
+	ueSimCfg := tools.UESimulationConfig{
+		Gnbs:                     gnbs,
+		Cfg:                      cfg,
+		TimeBeforeDeregistration: timeBeforeDeregistration,
+		TimeBeforeHandover:       timeBeforeHandover,
+		NumPduSessions:           numPduSessions,
+	}
+
 	stopSignal := true
 	for stopSignal {
 		// If CTRL-C signal has been received,
 		// stop creating new UEs, else we create numUes UEs
-		for ueId := 1; stopSignal && ueId <= numUes; ueId++ {
-			ueCfg := cfg
-			ueCfg.Ue.Msin = imsiGenerator(ueId, msin)
-			log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", ueCfg.Ue.Msin, " UE")
+		for ueSimCfg.UeId = 1; stopSignal && ueSimCfg.UeId <= numUes; ueSimCfg.UeId++ {
+			ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
 
-			ueCfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(ueId%numGnb + 1)
-
-			// If there is currently a coroutine handling current UE
-			// kill it, before creating a new coroutine with same UE
-			// Use case: Registration of N UEs in loop, when loop = true
-			if scenarioChans[ueId] != nil {
-				scenarioChans[ueId] <- procedures.UeTesterMessage{Type: procedures.Kill}
-				close(scenarioChans[ueId])
-			}
-
-			// Launch a coroutine to handle UE's individual scenario
-			go func(scenarioChan chan procedures.UeTesterMessage, ueId int) {
-				wg.Add(1)
-
-				ueRx := make(chan procedures.UeTesterMessage)
-
-				// Create a new UE coroutine
-				// ue.NewUE returns context of the new UE
-				ueTx := ue.NewUE(ueCfg, uint8(ueId), ueRx, gnbs[ueCfg.GNodeB.PlmnList.GnbId], &wg)
-
-				// We tell the UE to perform a registration
-				ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
-
-				var deregistrationChannel <-chan time.Time = nil
-				if timeBeforeDeregistration != 0 {
-					deregistrationChannel = time.After(time.Duration(timeBeforeDeregistration) * time.Millisecond)
-				}
-				var handoverChannel <-chan time.Time = nil
-				if timeBeforeHandover != 0 {
-					handoverChannel = time.After(time.Duration(timeBeforeHandover) * time.Millisecond)
-				}
-
-				loop := true
-				state := context.MM5G_NULL
-				for loop {
-					select {
-					case <-deregistrationChannel:
-						ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
-						ueRx = nil
-					case <-handoverChannel:
-						if ueRx != nil {
-							ueRx <- procedures.UeTesterMessage{Type: procedures.Handover, GnbChan: gnbs[gnbIdGenerator((ueId+1)%numGnb+1)].GetInboundChannel()}
-						}
-					case msg := <-scenarioChan:
-						if ueRx != nil {
-							ueRx <- msg
-						}
-					case msg := <-ueTx:
-						log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)
-						switch msg.StateChange {
-						case context.MM5G_REGISTERED:
-							if state != msg.StateChange {
-								for i := 0; i < numPduSessions; i++ {
-									ueRx <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
-								}
-							}
-						case context.MM5G_NULL:
-							loop = false
-						}
-						state = msg.StateChange
-					}
-				}
-			}(scenarioChans[ueId], ueId)
+			tools.SimulateSingleUE(ueSimCfg, &wg)
 
 			// Before creating a new UE, we wait for timeBetweenRegistration ms
 			time.Sleep(time.Duration(timeBetweenRegistration) * time.Millisecond)
@@ -154,16 +92,4 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 	}
 
 	wg.Wait()
-}
-
-func imsiGenerator(i int, msin string) string {
-
-	msin_int, err := strconv.Atoi(msin)
-	if err != nil {
-		log.Fatal("[UE][CONFIG] Given MSIN is invalid")
-	}
-	base := msin_int + (i - 1)
-
-	imsi := fmt.Sprintf("%010d", base)
-	return imsi
 }

@@ -35,4 +35,4 @@ jobs:
         run: go mod download
 
       - name: Launch tests
-        run: go test -v ./test/amf
+        run: go test -v ./test
