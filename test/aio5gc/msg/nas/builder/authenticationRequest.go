@@ -37,7 +37,7 @@ func AuthenticationRequest(ue *context.UEContext) ([]byte, error) {
 	}
 	ue.GetSecurityContext().SetKseaf(kseaf)
 
-	m, err := buildAuthenticationRequest(*ue, authCtx)
+	m, err := buildAuthenticationRequest(ue, authCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func AuthenticationRequest(ue *context.UEContext) ([]byte, error) {
 	return data.Bytes(), nil
 }
 
-func buildAuthenticationRequest(ue context.UEContext, authCtx models.UeAuthenticationCtx) (*nas.Message, error) {
+func buildAuthenticationRequest(ue *context.UEContext, authCtx models.UeAuthenticationCtx) (*nas.Message, error) {
 	m := nas.NewMessage()
 	m.GmmMessage = nas.NewGmmMessage()
 	m.GmmHeader.SetMessageType(nas.MsgTypeAuthenticationRequest)
