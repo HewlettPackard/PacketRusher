@@ -39,12 +39,8 @@ func UlNasTransport(nasReq *nas.Message, gnb *context.GNBContext, ue *context.UE
 
 func transport5GSMMessage(ue *context.UEContext, ulNasTransport *nasMessage.ULNASTransport, session *context.SessionContext, gnb *context.GNBContext) error {
 	requestType := ulNasTransport.RequestType
-	smMessage := ulNasTransport.PayloadContainer.GetPayloadContainerContents()
+	n1smContent := ulNasTransport.PayloadContainer.GetPayloadContainerContents()
 	var pduSessionID int32
-
-	if requestType == nil {
-		return errors.New("[5GC][NAS] ulNasTransport Request type is nil")
-	}
 
 	if id := ulNasTransport.PduSessionID2Value; id != nil {
 		pduSessionID = int32(id.GetPduSessionID2Value())
@@ -52,46 +48,76 @@ func transport5GSMMessage(ue *context.UEContext, ulNasTransport *nasMessage.ULNA
 		return errors.New("[5GC][NAS] PDU Session ID is nil")
 	}
 
-	switch requestType.GetRequestTypeValue() {
-	// case iii) if the AMF does not have a PDU session routing context for the PDU session ID and the UE
-	// and the Request type IE is included and is set to "initial request"
-	case nasMessage.ULNASTransportRequestTypeInitialRequest:
-		return ulNASTransportRequestTypeInitialRequest(ulNasTransport, ue, session, pduSessionID, smMessage, gnb)
-	default:
-		return errors.New("[5GC][NAS] Unimplemented ulNasTransport Request type")
+	if requestType == nil {
+		n1smContent := ulNasTransport.PayloadContainer.GetPayloadContainerContents()
+		return handleUnspecifiedRequest(n1smContent, ue, pduSessionID, gnb)
 	}
-}
-
-func ulNASTransportRequestTypeInitialRequest(initialRequest *nasMessage.ULNASTransport,
-	ue *context.UEContext,
-	session *context.SessionContext,
-	pduSessionID int32,
-	smMessage []uint8,
-	gnb *context.GNBContext) error {
 
 	var (
 		snssai models.Snssai
 		dnn    string
 	)
 	// If the S-NSSAI IE is not included, select a default snssai
-	if initialRequest.SNSSAI != nil {
-		snssai = nasConvert.SnssaiToModels(initialRequest.SNSSAI)
+	if ulNasTransport.SNSSAI != nil {
+		snssai = nasConvert.SnssaiToModels(ulNasTransport.SNSSAI)
 	} else {
 		snssai = ue.GetNssai()
 	}
 
 	dnnList := session.GetDnnList()
-	if initialRequest.DNN != nil {
-		if !slices.Contains(dnnList, initialRequest.DNN.GetDNN()) {
+	if ulNasTransport.DNN != nil {
+		if !slices.Contains(dnnList, ulNasTransport.DNN.GetDNN()) {
 			return errors.New("[5GC] Unknown DNN requested")
 		}
-		dnn = initialRequest.DNN.GetDNN()
+		dnn = ulNasTransport.DNN.GetDNN()
 
 	} else {
 		dnn = dnnList[0]
 	}
 
-	n1smContent := initialRequest.PayloadContainer.GetPayloadContainerContents()
+	switch requestType.GetRequestTypeValue() {
+	// case iii) if the AMF does not have a PDU session routing context for the PDU session ID and the UE
+	// and the Request type IE is included and is set to "initial request"
+	case nasMessage.ULNASTransportRequestTypeInitialRequest:
+		return handleInitialRequest(n1smContent, ue, session, pduSessionID, snssai, dnn, gnb)
+
+	default:
+		return errors.New("[5GC][NAS] Unimplemented ulNasTransport Request type")
+	}
+}
+
+func handleUnspecifiedRequest(n1smContent []uint8,
+	ue *context.UEContext,
+	pduSessionID int32,
+	gnb *context.GNBContext) error {
+
+	m := nas.NewMessage()
+	err := m.GsmMessageDecode(&n1smContent)
+	if err != nil {
+		return errors.New("[5GC][NAS] GsmMessageDecode Error: " + err.Error())
+	}
+	switch m.GsmHeader.GetMessageType() {
+	case nas.MsgTypePDUSessionReleaseRequest:
+		smContext, err := context.ReleasePDUSession(ue, pduSessionID)
+		if err != nil {
+			return err
+		}
+		msg.SendPDUSessionReleaseCommand(gnb, ue, smContext, nasMessage.Cause5GSMRegularDeactivation)
+
+	default:
+		return errors.New("[5GC][NAS] Unimplemented ulNasTransport Request type")
+	}
+	return nil
+}
+
+func handleInitialRequest(n1smContent []uint8,
+	ue *context.UEContext,
+	session *context.SessionContext,
+	pduSessionID int32,
+	snssai models.Snssai,
+	dnn string,
+	gnb *context.GNBContext) error {
+
 	m := nas.NewMessage()
 	err := m.GsmMessageDecode(&n1smContent)
 	if err != nil {

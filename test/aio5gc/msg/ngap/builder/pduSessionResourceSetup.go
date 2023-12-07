@@ -20,7 +20,7 @@ import (
 func PDUSessionResourceSetup(nasPdu []byte, smContext context.SmContext, ue *context.UEContext, session *context.SessionContext) ([]byte, error) {
 	message, err := buildPDUSessionResourceSetupRequest(ue, smContext, nasPdu, session.GetN3())
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
 	return ngap.Encoder(message)
 }

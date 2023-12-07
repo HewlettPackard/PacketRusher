@@ -96,3 +96,19 @@ func SendConfigurationUpdateCommand(gnb *context.GNBContext, ue *context.UEConte
 	log.Info("[5GC][NGAP] Send Downlink NAS Transport - Configuration Update Command")
 	gnb.SendMsg(msg)
 }
+
+func SendPDUSessionReleaseCommand(gnb *context.GNBContext, ue *context.UEContext, smContext context.SmContext, cause uint8) {
+	log.Info("[5GC][NAS] PDU Session Release Command")
+	nasRes, err := nasBuilder.PDUSessionReleaseCommand(ue, smContext, cause)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	msg, err := ngapBuilder.PDUSessionResourceRelease(nasRes, ue, smContext.GetPduSessionId())
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	log.Info("[5GC][NGAP] Send PDU Session Ressource Release - PDU Session Release Command")
+	gnb.SendMsg(msg)
+}

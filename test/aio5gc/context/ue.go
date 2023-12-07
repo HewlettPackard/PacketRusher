@@ -115,19 +115,33 @@ func (ue *UEContext) GetSecurityContext() *SecurityContext {
 func (ue *UEContext) AddSmContext(newContext *SmContext) error {
 	ue.SmContextMtx.Lock()
 	defer ue.SmContextMtx.Unlock()
-	
+
 	sessionId := newContext.GetPduSessionId()
-	if ue.smContexts == nil {
-		ue.smContexts = make(map[int32]*SmContext)
-	}
 	_, hasKey := ue.smContexts[sessionId]
 	if hasKey {
 		id := strconv.Itoa(int(sessionId))
-		return errors.New("[5GC] UE" + ue.guti + " already have a PDU Sessions with Id" + id)
+		return errors.New("[5GC] Could not create PDU Session " + id + " for UE " + ue.guti + ": already exist")
 	} else {
 		ue.smContexts[sessionId] = newContext
 	}
 	return nil
+}
+
+func (ue *UEContext) DeleteSmContext(sessionId int32) (SmContext, error) {
+	ue.SmContextMtx.Lock()
+	defer ue.SmContextMtx.Unlock()
+
+	var smContext SmContext
+	_, hasKey := ue.smContexts[sessionId]
+	if hasKey {
+		smContext = *ue.smContexts[sessionId]
+		delete(ue.smContexts, sessionId)
+	} else {
+		id := strconv.Itoa(int(sessionId))
+		return SmContext{}, errors.New("[5GC] Could not delete PDU Session " + id + " for UE " + ue.guti + ": not found")
+	}
+
+	return smContext, nil
 }
 
 // Kamf Derivation function defined in TS 33.501 Annex A.7

@@ -168,3 +168,7 @@ func CreatePDUSession(sessionRequest *nasMessage.PDUSessionEstablishmentRequest,
 	log.Infof("[5GC] Create smContext[pduSessionID: %d] Success", pduSessionID)
 	return newSmContext, nil
 }
+
+func ReleasePDUSession(ue *UEContext, pduSessionID int32) (SmContext, error) {
+	return ue.DeleteSmContext(pduSessionID)
+}

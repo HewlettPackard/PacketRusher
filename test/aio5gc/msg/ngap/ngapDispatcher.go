@@ -78,6 +78,9 @@ func Dispatch(buf []byte, gnb *context.GNBContext, fgc *context.Aio5gc) {
 			log.Info("[5GC][NGAP] Received Successful PDU Session Resource Setup response")
 			ngapHandler.PDUSessionResourceSetup(ngapMsg.SuccessfulOutcome.Value.PDUSessionResourceSetupResponse, fgc)
 
+		case ngapType.ProcedureCodePDUSessionResourceRelease:
+			log.Info("[5GC][NGAP] Received Successful Procedure Code PDU Session Resource Release")
+
 		default:
 			err = errors.New("[5GC][NGAP] Received unknown NGAP NGAPPDUPresentSuccessfulOutcome ProcedureCode")
 		}
