@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreatePDUSession(t *testing.T) {
+func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 
 	createdSessionCount := 0
 	validatePDUSessionCreation := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
@@ -39,6 +39,16 @@ func TestCreatePDUSession(t *testing.T) {
 		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
 			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodePDUSessionResourceRelease {
 				releasedSessionCount++
+			}
+		}
+		return false, nil
+	}
+
+	releasedCtxCount := 0
+	validateCtxRelease := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
+		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
+			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodeUEContextRelease {
+				releasedCtxCount++
 			}
 		}
 		return false, nil
@@ -65,6 +75,7 @@ func TestCreatePDUSession(t *testing.T) {
 		WithConfig(conf).
 		WithNGAPDispatcherHook(validatePDUSessionCreation).
 		WithNGAPDispatcherHook(validatePDUSessionRelease).
+		WithNGAPDispatcherHook(validateCtxRelease).
 		Build()
 	if err != nil {
 		log.Printf("[5GC] Error during 5GC creation  %v", err)

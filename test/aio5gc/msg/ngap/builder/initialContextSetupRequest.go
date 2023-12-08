@@ -14,9 +14,14 @@ import (
 func InitialContextSetupRequest(nasPdu []byte, ue *context.UEContext, amf context.AMFContext) ([]byte, error) {
 	message, err := buildInitialContextSetupRequest(nasPdu, ue, amf)
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
-	return ngap.Encoder(message)
+	pdu, err := ngap.Encoder(message)
+	if err != nil {
+		return nil, err
+	}
+	ue.SetInitialContextSetup(true)
+	return pdu, nil
 }
 
 func buildInitialContextSetupRequest(nasPdu []byte, ue *context.UEContext, amf context.AMFContext) (ngapType.NGAPPDU, error) {
