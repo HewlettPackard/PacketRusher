@@ -82,6 +82,9 @@ func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *contex
 	case nas.MsgTypeConfigurationUpdateComplete:
 		log.Info("[5GC][NAS] Received Configuration Update Complete")
 
+	case nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration:
+		log.Info("[5GC][NAS] Received Deregistration Request: UE Originating Deregistration (not handled yet)")
+
 	default:
 		err = errors.New("[5GC][NAS] unrecognised nas message type: " + strconv.Itoa(int(msg.GmmHeader.GetMessageType())))
 	}

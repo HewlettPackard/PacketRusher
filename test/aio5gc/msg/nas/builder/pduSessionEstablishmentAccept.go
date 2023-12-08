@@ -26,7 +26,7 @@ func PDUSessionEstablishmentAccept(ue *context.UEContext, smContext *context.SmC
 	if err != nil {
 		return nil, err
 	}
-	nasMsg, err = buildDLNASTransport(ue, nasPdu, 1)
+	nasMsg, err = buildDLNASTransport(ue, nasPdu, uint8(smContext.GetPduSessionId()))
 	if err != nil {
 		return nil, err
 	}

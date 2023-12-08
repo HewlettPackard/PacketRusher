@@ -128,6 +128,7 @@ func (c *AMFContext) NewUE(ueRanNgapId int64) *UEContext {
 	newUE.SetRanNgapId(ueRanNgapId)
 	newUE.SetAmfNgapId(c.getAmfUeId())
 	newUE.SecurityContextAvailable = false
+	newUE.smContexts = make(map[int32]*SmContext)
 	ueMutex.Lock()
 	c.ues = append(c.ues, &newUE)
 	ueMutex.Unlock()

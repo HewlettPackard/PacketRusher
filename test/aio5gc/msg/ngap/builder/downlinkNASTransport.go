@@ -12,14 +12,14 @@ import (
 
 func DownlinkNASTransport(nasPdu []byte, ue *context.UEContext) ([]byte, error) {
 
-	message, err := BuildDownlinkNASTransport(nasPdu, *ue)
+	message, err := BuildDownlinkNASTransport(nasPdu, ue)
 	if err != nil {
 		return []byte{}, err
 	}
 	return ngap.Encoder(message)
 }
 
-func BuildDownlinkNASTransport(nasPdu []byte, ue context.UEContext) (pdu ngapType.NGAPPDU, err error) {
+func BuildDownlinkNASTransport(nasPdu []byte, ue *context.UEContext) (pdu ngapType.NGAPPDU, err error) {
 
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)

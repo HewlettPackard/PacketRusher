@@ -34,6 +34,16 @@ func TestCreatePDUSession(t *testing.T) {
 		return false, nil
 	}
 
+	releasedSessionCount := 0
+	validatePDUSessionRelease := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
+		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
+			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodePDUSessionResourceRelease {
+				releasedSessionCount++
+			}
+		}
+		return false, nil
+	}
+
 	controlIFConfig := config.ControlIF{
 		Ip:   "127.0.0.1",
 		Port: 9489,
@@ -54,6 +64,7 @@ func TestCreatePDUSession(t *testing.T) {
 	fiveGC, err := builder.
 		WithConfig(conf).
 		WithNGAPDispatcherHook(validatePDUSessionCreation).
+		WithNGAPDispatcherHook(validatePDUSessionRelease).
 		Build()
 	if err != nil {
 		log.Printf("[5GC] Error during 5GC creation  %v", err)
@@ -79,7 +90,7 @@ func TestCreatePDUSession(t *testing.T) {
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
 		Cfg:                      conf,
-		TimeBeforeDeregistration: 0,
+		TimeBeforeDeregistration: 400,
 		TimeBeforeHandover:       0,
 		NumPduSessions:           1,
 	}
@@ -101,6 +112,6 @@ func TestCreatePDUSession(t *testing.T) {
 		time.Sleep(time.Duration(5) * time.Millisecond)
 	}
 
-	time.Sleep(time.Duration(5000) * time.Millisecond)
+	time.Sleep(time.Duration(10000) * time.Millisecond)
 	assert.Equalf(t, ueCount, createdSessionCount, "Expected %d PDU sessions created but was %d", ueCount, createdSessionCount)
 }

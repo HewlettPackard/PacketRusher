@@ -60,7 +60,7 @@ func (s *SessionContext) NewSessionContext() {
 	}}
 
 	s.lastAllocatedIP = net.ParseIP("10.0.0.1")
-	s.n3 = net.ParseIP("127.0.0.1")
+	s.n3 = net.ParseIP("127.0.0.1").To4()
 }
 
 func (s *SessionContext) GetN3() net.IP {
@@ -96,6 +96,6 @@ func (s *SessionContext) GetUnallocatedIP() net.IP {
 		log.Fatal("[5GC][NAS] Error while allocating ip for PDU session: " + err.Error())
 	}
 
-	s.lastAllocatedIP = net.ParseIP(ip)
+	s.lastAllocatedIP = net.ParseIP(ip).To4()
 	return s.lastAllocatedIP
 }
