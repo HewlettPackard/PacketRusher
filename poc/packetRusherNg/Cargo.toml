@@ -1,0 +1,25 @@
+[package]
+name = "packetRusherNg"
+version = "0.1.0"
+edition = "2021"
+build = "build/main.rs"
+authors = ["Valentin D'Emmanuele <valentin.demmanuele@hpe.com>"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+sctp-rs= "0.3.0"
+tokio = { version = "1.0" , features = ["net", "macros", "rt"]}
+asn1-codecs = {  version = "0.5.8" }
+asn1_codecs_derive = { version = "0.5.8" }
+trybuild = { version = "1.0" }
+hex = { version = "0.4" }
+bitvec = { version = "1.0" , features = ["serde"]}
+log = { version = "0.4" }
+criterion = { version = "0.4" , features = ["rayon"]}
+env_logger = { version = "0.9" }
+serde = { version = "1.0" , features = ["derive"]}
+
+[build-dependencies]
+asn1-compiler = "0.5.8"
+csv = "*"
+regex = "1"

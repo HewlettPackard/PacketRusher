@@ -1,0 +1,3 @@
+[submodule "poc/packetRusherNg/nas"]
+	path = poc/packetRusherNg/nas
+	url = https://github.com/free5gc/nas
