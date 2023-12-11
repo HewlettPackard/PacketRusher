@@ -112,6 +112,17 @@ func (c *AMFContext) FindUEByRanId(id int64) (*UEContext, error) {
 	return nil, errors.New("[5GC] UE with RanNgapId " + strconv.Itoa(int(id)) + "not found")
 }
 
+func (c *AMFContext) FindRegistredUEByMsin(msin string) (*UEContext, error) {
+	ueMutex.Lock()
+	defer ueMutex.Unlock()
+	for ue := range c.ues {
+		if c.ues[ue].securityContext.msin == msin && c.ues[ue].initialContextSetup {
+			return c.ues[ue], nil
+		}
+	}
+	return nil, errors.New("[5GC] Registred UE with msin " + msin + "not found")
+}
+
 func (c *AMFContext) NewSecurityContext(sub SecurityContext) error {
 	_, notExist := c.FindSecurityContextByMsin(sub.msin)
 	if notExist == nil {

@@ -16,7 +16,9 @@ import (
 
 func UEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFContext, ueContext *context.UEContext, gnb *context.GNBContext) error {
 	deregistrationRequest := nasReq.DeregistrationRequestUEOriginatingDeregistration
-
+	if !ueContext.GetInitialContextSetup() {
+		return errors.New("[5GC][NGAP] This UE has no security context set up")
+	}
 	context.ReleaseAllPDUSession(ueContext)
 
 	// if Deregistration type is not switch-off, send Deregistration Accept (need to implement)

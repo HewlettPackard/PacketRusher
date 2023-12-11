@@ -21,6 +21,9 @@ func UlNasTransport(nasReq *nas.Message, gnb *context.GNBContext, ue *context.UE
 
 	ulNasTransport := nasReq.ULNASTransport
 	var err error
+	if !ue.GetInitialContextSetup() {
+		return errors.New("[5GC][NGAP] This UE has no security context set up")
+	}
 
 	switch ulNasTransport.GetPayloadContainerType() {
 	// TS 24.501 5.4.5.2.3 case a)
