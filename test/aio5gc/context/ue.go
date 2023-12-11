@@ -32,7 +32,8 @@ type UEContext struct {
 	guti                     string
 	tmsi                     int32
 	smContexts               map[int32]*SmContext
-	SmContextMtx             sync.Mutex
+	smContextMtx             sync.Mutex
+	initialContextSetup      bool
 }
 
 func (ue *UEContext) AllocateGuti(a *AMFContext) {
@@ -113,8 +114,8 @@ func (ue *UEContext) GetSecurityContext() *SecurityContext {
 }
 
 func (ue *UEContext) AddSmContext(newContext *SmContext) error {
-	ue.SmContextMtx.Lock()
-	defer ue.SmContextMtx.Unlock()
+	ue.smContextMtx.Lock()
+	defer ue.smContextMtx.Unlock()
 
 	sessionId := newContext.GetPduSessionId()
 	_, hasKey := ue.smContexts[sessionId]
@@ -128,8 +129,8 @@ func (ue *UEContext) AddSmContext(newContext *SmContext) error {
 }
 
 func (ue *UEContext) DeleteSmContext(sessionId int32) (SmContext, error) {
-	ue.SmContextMtx.Lock()
-	defer ue.SmContextMtx.Unlock()
+	ue.smContextMtx.Lock()
+	defer ue.smContextMtx.Unlock()
 
 	var smContext SmContext
 	_, hasKey := ue.smContexts[sessionId]
@@ -142,6 +143,23 @@ func (ue *UEContext) DeleteSmContext(sessionId int32) (SmContext, error) {
 	}
 
 	return smContext, nil
+}
+
+func (ue *UEContext) DeleteAllSmContext() {
+	ue.smContextMtx.Lock()
+	defer ue.smContextMtx.Unlock()
+
+	for k := range ue.smContexts {
+		delete(ue.smContexts, k)
+	}
+}
+
+func (ue *UEContext) SetInitialContextSetup(hasContext bool) {
+	ue.initialContextSetup = hasContext
+}
+
+func (ue *UEContext) GetInitialContextSetup() bool {
+	return ue.initialContextSetup
 }
 
 // Kamf Derivation function defined in TS 33.501 Annex A.7
