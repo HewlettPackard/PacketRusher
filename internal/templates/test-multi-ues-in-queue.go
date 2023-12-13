@@ -106,5 +106,5 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 		}
 	}
 
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 1)
 }

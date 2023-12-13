@@ -16,7 +16,6 @@ import (
 	"my5G-RANTester/lib/ngap/ngapConvert"
 	"my5G-RANTester/lib/ngap/ngapType"
 	_ "net"
-	"time"
 )
 
 func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
@@ -595,9 +594,6 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 		log.Error("[GNB][AMF] AMF is trying to free the context of an unknown UE")
 		return
 	}
-	// Wait for all messages to be sent to UE before deleting context
-	// TODO: Better synchro
-	time.Sleep(1 * time.Second)
 	gnb.DeleteGnBUe(ue)
 
 	// Send UEContextReleaseComplete
