@@ -30,10 +30,7 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 
 	wg := sync.WaitGroup{}
 
-	cfg, err := config.GetConfig()
-	if err != nil {
-		log.Fatal("[TESTER][CONFIG] Unable to read configuration")
-	}
+	cfg := config.GetConfig()
 
 	var numGnb int
 	if dedicatedGnb {
@@ -109,5 +106,5 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 		}
 	}
 
-	time.Sleep(time.Second*2)
+	time.Sleep(time.Second * 2)
 }

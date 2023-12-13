@@ -5,10 +5,9 @@
 package config
 
 import (
-	"io/ioutil"
+	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
@@ -16,8 +15,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// Conf: Used for access to configuration
-var Data = getConfig()
+var config *Config
 
 type Config struct {
 	GNodeB GNodeB `yaml:"gnodeb"`
@@ -97,44 +95,66 @@ type Logs struct {
 	Level int `yaml:"level"`
 }
 
-func RootDir() string {
-	_, b, _, _ := runtime.Caller(0)
-	d := path.Join(path.Dir(b))
-	return filepath.Dir(d)
+func GetConfig() Config {
+	if config == nil {
+		LoadDefaultConfig()
+	}
+	return *config
 }
 
-func getConfig() Config {
+func LoadDefaultConfig() Config {
+	return Load(getDefautlConfigPath())
+}
+
+func Load(configPath string) Config {
+	c := readConfig(configPath)
+	config = &c
+
+	setLogLevel(*config)
+	log.Info("Loaded config at: ", configPath)
+	return *config
+}
+
+func readConfig(configPath string) Config {
 	var cfg = Config{}
-	Ddir := RootDir()
-	configPath, err := filepath.Abs(Ddir + "/config/config.yml")
-	log.Debug(configPath)
+	f, err := os.Open(configPath)
 	if err != nil {
-		log.Fatal("Could not find config in: ", configPath)
+		log.Fatal("Could not open config at \"", configPath, "\". ", err.Error())
 	}
-	file, err := ioutil.ReadFile(configPath)
-	err = yaml.Unmarshal([]byte(file), &cfg)
+	defer f.Close()
+
+	decoder := yaml.NewDecoder(f)
+	err = decoder.Decode(&cfg)
 	if err != nil {
-		log.Fatal("Could not read file in: ", configPath)
+		log.Fatal("Could not unmarshal yaml config at \"", configPath, "\". ", err.Error())
 	}
 
 	return cfg
 }
 
-func GetConfig() (Config, error) {
-	var cfg = Config{}
-	Ddir := RootDir()
-	configPath, err := filepath.Abs(Ddir + "/config/config.yml")
-	log.Debug(configPath)
+func getDefautlConfigPath() string {
+	b, err := os.Executable()
 	if err != nil {
-		return Config{}, nil
+		log.Fatal("Failed to get executable path. ", err.Error())
 	}
-	file, err := ioutil.ReadFile(configPath)
-	err = yaml.Unmarshal([]byte(file), &cfg)
+	dir := path.Dir(b)
+	configPath, err := filepath.Abs(dir + "/config/config.yml")
 	if err != nil {
-		return Config{}, nil
+		log.Fatal("Could not find defautl config at \"", configPath, "\". ", err.Error())
+	}
+	return configPath
+}
+
+func setLogLevel(cfg Config) {
+	// Output to stdout instead of the default stderr
+	log.SetOutput(os.Stdout)
+
+	if cfg.Logs.Level == 0 {
+		log.SetLevel(log.InfoLevel)
+	} else {
+		log.SetLevel(log.Level(cfg.Logs.Level))
 	}
 
-	return cfg, nil
 }
 
 func (config *Config) GetUESecurityCapability() *nasType.UESecurityCapability {
