@@ -5,22 +5,19 @@
 package templates
 
 import (
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
 	"my5G-RANTester/internal/monitoring"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func TestAvailability(interval int) {
 
 	monitor := monitoring.Monitor{}
 
-	conf, err := config.GetConfig()
-	if err != nil {
-		//return nil
-		log.Fatal("Error in get configuration")
-	}
+	conf := config.GetConfig()
 
 	ranPort := 1000
 	for y := 1; y <= interval; y++ {

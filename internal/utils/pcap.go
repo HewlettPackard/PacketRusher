@@ -5,12 +5,13 @@
 package pcap
 
 import (
-	log "github.com/sirupsen/logrus"
-	"github.com/urfave/cli/v2"
-	"github.com/vishvananda/netlink"
 	"my5G-RANTester/config"
 	"net"
 	"os"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/urfave/cli/v2"
+	"github.com/vishvananda/netlink"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -23,7 +24,7 @@ func CaptureTraffic(path cli.Path) {
 		log.Fatal(err)
 	}
 
-	config, err := config.GetConfig()
+	config := config.GetConfig()
 	ip := net.ParseIP(config.AMF.Ip)
 	route, err := netlink.RouteGet(ip)
 	if err != nil || len(route) <= 0 {

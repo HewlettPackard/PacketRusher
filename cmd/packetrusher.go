@@ -4,42 +4,29 @@ import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/templates"
 	pcap "my5G-RANTester/internal/utils"
+
 	// "fmt"
+	"os"
+
 	"github.com/davecgh/go-spew/spew"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
-	"os"
 )
 
 const version = "1.0.1"
 
 func init() {
 
-	cfg, err := config.GetConfig()
-	if err != nil {
-		//return nil
-		log.Fatal("Error in get configuration")
-	}
-
-	// Output to stdout instead of the default stderr
-	// Can be any io.Writer, see below for File example
-	log.SetOutput(os.Stdout)
-
-	// Only log the warning severity or above.
-	if cfg.Logs.Level == 0 {
-		log.SetLevel(log.InfoLevel)
-	} else {
-		log.SetLevel(log.Level(cfg.Logs.Level))
-	}
-
 	spew.Config.Indent = "\t"
 
-	log.Info("PacketRusher version " + version)
 }
 
 func main() {
 
 	app := &cli.App{
+		Flags: []cli.Flag{
+			&cli.PathFlag{Name: "config", Usage: "Configuration file path. (Default: ./config/config.yml)"},
+		},
 		Commands: []*cli.Command{
 			{
 				Name:    "ue",
@@ -51,9 +38,10 @@ func main() {
 				},
 				Action: func(c *cli.Context) error {
 					name := "Testing an ue attached with configuration"
-					cfg := config.Data
+					cfg := setConfig(*c)
 					tunnelEnabled := !c.Bool("disableTunnel")
 
+					log.Info("PacketRusher version " + version)
 					log.Info("---------------------------------------")
 					log.Info("[TESTER] Starting test function: ", name)
 					log.Info("[TESTER][UE] Number of UEs: ", 1)
@@ -77,8 +65,9 @@ func main() {
 				Usage:   "Launch only a gNB",
 				Action: func(c *cli.Context) error {
 					name := "Testing an gnb attached with configuration"
-					cfg := config.Data
+					cfg := setConfig(*c)
 
+					log.Info("PacketRusher version " + version)
 					log.Info("---------------------------------------")
 					log.Info("[TESTER] Starting test function: ", name)
 					log.Info("[TESTER][GNB] Number of GNBs: ", 1)
@@ -110,8 +99,7 @@ func main() {
 				Action: func(c *cli.Context) error {
 					var numUes int
 					name := "Testing registration of multiple UEs"
-					cfg := config.Data
-
+					cfg := setConfig(*c)
 					if c.IsSet("number-of-ues") {
 						numUes = c.Int("number-of-ues")
 					} else {
@@ -119,6 +107,7 @@ func main() {
 						return nil
 					}
 
+					log.Info("PacketRusher version " + version)
 					log.Info("---------------------------------------")
 					log.Info("[TESTER] Starting test function: ", name)
 					log.Info("[TESTER][UE] Number of UEs: ", numUes)
@@ -137,12 +126,14 @@ func main() {
 				},
 			},
 			{
-				Name: "custom-scenario",
+				Name:    "custom-scenario",
 				Aliases: []string{"c"},
 				Flags: []cli.Flag{
 					&cli.PathFlag{Name: "scenario", Usage: "Specify the scenario path in .wasm"},
 				},
 				Action: func(c *cli.Context) error {
+					setConfig(*c)
+
 					var scenarioPath string
 
 					if c.IsSet("scenario") {
@@ -171,11 +162,12 @@ func main() {
 					var numRqs int
 
 					name := "Test AMF responses in interval"
-					cfg := config.Data
+					cfg := setConfig(*c)
 
 					numRqs = c.Int("number-of-requests")
 					time = c.Int("time")
 
+					log.Info("PacketRusher version " + version)
 					log.Info("---------------------------------------")
 					log.Warn("[TESTER] Starting test function: ", name)
 					log.Warn("[TESTER][UE] Number of Requests per second: ", numRqs)
@@ -199,10 +191,10 @@ func main() {
 					var time int
 
 					name := "Test availability of AMF"
-					cfg := config.Data
-
+					cfg := setConfig(*c)
 					time = c.Int("time")
 
+					log.Info("PacketRusher version " + version)
 					log.Info("---------------------------------------")
 					log.Warn("[TESTER] Starting test function: ", name)
 					log.Warn("[TESTER][UE] Interval of test: ", time, " seconds")
@@ -220,4 +212,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func setConfig(c cli.Context) config.Config {
+	var cfg config.Config
+	if c.IsSet("config") {
+		cfg = config.Load(c.Path("config"))
+	} else {
+		cfg = config.LoadDefaultConfig()
+	}
+	return cfg
 }
