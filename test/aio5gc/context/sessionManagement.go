@@ -172,3 +172,7 @@ func CreatePDUSession(sessionRequest *nasMessage.PDUSessionEstablishmentRequest,
 func ReleasePDUSession(ue *UEContext, pduSessionID int32) (SmContext, error) {
 	return ue.DeleteSmContext(pduSessionID)
 }
+
+func ReleaseAllPDUSession(ue *UEContext) {
+	ue.DeleteAllSmContext()
+}

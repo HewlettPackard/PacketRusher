@@ -7,13 +7,12 @@ package templates
 import (
 	"strconv"
 	"sync"
-)
 
-import (
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
 	"my5G-RANTester/internal/monitoring"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // rajada de mensagens por segundo enviadas
@@ -28,11 +27,7 @@ func TestRqsLoop(numRqs int, interval int) int64 {
 		RqsG: 0,
 	}
 
-	cfg, err := config.GetConfig()
-	if err != nil {
-		//return nil
-		log.Fatal("Error in get configuration")
-	}
+	cfg := config.GetConfig()
 
 	ranPort := 1000
 	for y := 1; y <= interval; y++ {

@@ -5,8 +5,6 @@
 package templates
 
 import (
-	log "github.com/sirupsen/logrus"
-	"github.com/tetratelabs/wazero"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
 	"my5G-RANTester/internal/control_test_engine/procedures"
@@ -15,16 +13,15 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/tetratelabs/wazero"
 )
 
 func TestWithCustomScenario(scenarioPath string) {
 	wg := sync.WaitGroup{}
 
-	cfg, err := config.GetConfig()
-	if err != nil {
-		//return nil
-		log.Fatal("Error in get configuration")
-	}
+	cfg := config.GetConfig()
 
 	wg.Add(1)
 
@@ -40,7 +37,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	ctx, runtime := script.NewCustomScenario(scenarioPath)
 
-	_, err = runtime.NewHostModuleBuilder("env").
+	_, err := runtime.NewHostModuleBuilder("env").
 		NewFunctionBuilder().
 		WithFunc(func(ueId uint32) {
 			ueChan <- procedures.UeTesterMessage{Type: procedures.Registration}
@@ -53,12 +50,12 @@ func TestWithCustomScenario(scenarioPath string) {
 		Export("detach").
 		NewFunctionBuilder().
 		WithFunc(func(ueId uint32, pduSessionId uint8) {
-			ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession, Param: pduSessionId-1}
+			ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession, Param: pduSessionId - 1}
 		}).
 		Export("pduSessionRequest").
 		NewFunctionBuilder().
 		WithFunc(func(ueId uint32, pduSessionId uint8) {
-			ueChan <- procedures.UeTesterMessage{Type: procedures.DestroyPDUSession, Param: pduSessionId-1}
+			ueChan <- procedures.UeTesterMessage{Type: procedures.DestroyPDUSession, Param: pduSessionId - 1}
 		}).
 		Export("pduSessionRelease").
 		NewFunctionBuilder().

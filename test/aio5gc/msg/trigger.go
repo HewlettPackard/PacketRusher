@@ -5,6 +5,7 @@
 package msg
 
 import (
+	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/test/aio5gc/context"
 	nasBuilder "my5G-RANTester/test/aio5gc/msg/nas/builder"
 	ngapBuilder "my5G-RANTester/test/aio5gc/msg/ngap/builder"
@@ -110,5 +111,15 @@ func SendPDUSessionReleaseCommand(gnb *context.GNBContext, ue *context.UEContext
 	}
 
 	log.Info("[5GC][NGAP] Send PDU Session Ressource Release - PDU Session Release Command")
+	gnb.SendMsg(msg)
+}
+
+func SendUEContextReleaseCommand(gnb *context.GNBContext, ue *context.UEContext, causePresent int, cause aper.Enumerated) {
+	msg, err := ngapBuilder.UEContextReleaseCommand(ue, causePresent, cause)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	log.Info("[5GC][NGAP] UE Context Release Command")
 	gnb.SendMsg(msg)
 }

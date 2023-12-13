@@ -65,7 +65,7 @@ func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *contex
 
 	case nas.MsgTypeAuthenticationResponse:
 		log.Info("[5GC][NAS] Received Authentication Response")
-		err = nasHandler.AuthenticationResponse(msg, gnb, ueContext)
+		err = nasHandler.AuthenticationResponse(msg, gnb, ueContext, amf)
 
 	case nas.MsgTypeSecurityModeComplete:
 		log.Info("[5GC][NAS] Received Security Mode Complete")
@@ -73,7 +73,7 @@ func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *contex
 
 	case nas.MsgTypeRegistrationComplete:
 		log.Info("[5GC][NAS] Received Registration Complete")
-		nasHandler.RegistrationComplete(msg, gnb, ueContext, *amf)
+		err = nasHandler.RegistrationComplete(msg, gnb, ueContext, *amf)
 
 	case nas.MsgTypeULNASTransport:
 		log.Info("[5GC][NAS] Received UL NAS Transport")
@@ -83,7 +83,8 @@ func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *contex
 		log.Info("[5GC][NAS] Received Configuration Update Complete")
 
 	case nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration:
-		log.Info("[5GC][NAS] Received Deregistration Request: UE Originating Deregistration (not handled yet)")
+		log.Info("[5GC][NAS] Received Deregistration Request: UE Originating Deregistration")
+		err = nasHandler.UEOriginatingDeregistration(msg, amf, ueContext, gnb)
 
 	default:
 		err = errors.New("[5GC][NAS] unrecognised nas message type: " + strconv.Itoa(int(msg.GmmHeader.GetMessageType())))
