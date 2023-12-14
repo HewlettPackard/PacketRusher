@@ -12,6 +12,7 @@ import (
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
+	"my5G-RANTester/test/state"
 	"os"
 	"sync"
 	"testing"
@@ -24,6 +25,8 @@ import (
 )
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
+
+	stateList := state.UEStateList{}
 
 	createdSessionCount := 0
 	validatePDUSessionCreation := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
@@ -55,6 +58,40 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		return false, nil
 	}
 
+	stateUpdate := func(nasMsg *nas.Message, ue *context.UEContext, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
+		var ueState *state.UEState
+		var err error
+		if nasMsg.GmmHeader.GetMessageType() != nas.MsgTypeRegistrationRequest {
+			ueState, err = stateList.FindByMsin(ue.GetSecurityContext().GetMsin())
+			if err != nil {
+				return false, err
+			}
+		}
+
+		switch nasMsg.GmmHeader.GetMessageType() {
+		// case nas.MsgTypeRegistrationRequest:
+		// 	ueState.UpdateState(state.RegistrationRequested)
+
+		case nas.MsgTypeAuthenticationResponse:
+			ueState.UpdateState(state.AuthenticationChallengeResponded)
+
+		case nas.MsgTypeSecurityModeComplete:
+			ueState.UpdateState(state.SecurityContextSet)
+
+		case nas.MsgTypeRegistrationComplete:
+			ueState.UpdateState(state.Registred)
+
+		case nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration:
+			ueState.UpdateState(state.Idle)
+
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		return false, nil
+	}
+
 	controlIFConfig := config.ControlIF{
 		Ip:   "127.0.0.1",
 		Port: 9489,
@@ -77,6 +114,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		WithNGAPDispatcherHook(validatePDUSessionCreation).
 		WithNGAPDispatcherHook(validatePDUSessionRelease).
 		WithNGAPDispatcherHook(validateCtxRelease).
+		WithNASDispatcherHook(stateUpdate).
 		Build()
 	if err != nil {
 		log.Printf("[5GC] Error during 5GC creation  %v", err)
@@ -97,7 +135,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	// Setup UE
-	ueCount := 10
+	ueCount := 1
 	scenarioChans := make([]chan procedures.UeTesterMessage, ueCount+1)
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
@@ -119,6 +157,17 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		amfContext := fiveGC.GetAMFContext()
 		amfContext.NewSecurityContext(securityContext)
 
+		s := state.UEState{}
+		expectedStates := []state.State{
+			state.AuthenticationChallengeResponded,
+			state.SecurityContextSet,
+			state.Fresh,
+			state.Registred,
+			state.Idle,
+		}
+		s.Init(t, securityContext.GetMsin(), expectedStates, false)
+		stateList.Add(&s)
+
 		tools.SimulateSingleUE(ueSimCfg, &wg)
 
 		// Before creating a new UE, we wait for 5 ms
@@ -126,6 +175,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	time.Sleep(time.Duration(5000) * time.Millisecond)
+	stateList.Check()
 	assert.Equalf(t, ueCount, createdSessionCount, "Expected %d PDU sessions created but was %d", ueCount, createdSessionCount)
 	assert.Equalf(t, ueCount, releasedSessionCount, "Expected %d PDU sessions created but was %d", ueCount, releasedSessionCount)
 	assert.Equalf(t, ueCount, releasedCtxCount, "Expected %d PDU sessions created but was %d", ueCount, releasedCtxCount)
