@@ -14,6 +14,7 @@ import (
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
 	"my5G-RANTester/test/state"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -69,8 +70,16 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		}
 
 		switch nasMsg.GmmHeader.GetMessageType() {
-		// case nas.MsgTypeRegistrationRequest:
-		// 	ueState.UpdateState(state.RegistrationRequested)
+		case nas.MsgTypeRegistrationRequest:
+			gmm := nasMsg.GmmMessage
+
+			mobileId, _, _ := gmm.RegistrationRequest.MobileIdentity5GS.GetMobileIdentity()
+			suci := strings.Split(mobileId, "-")
+			ueState, err = stateList.FindByMsin(suci[len(suci)-1])
+			if err != nil {
+				return false, err
+			}
+			ueState.UpdateState(state.RegistrationRequested)
 
 		case nas.MsgTypeAuthenticationResponse:
 			ueState.UpdateState(state.AuthenticationChallengeResponded)
@@ -135,7 +144,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	// Setup UE
-	ueCount := 1
+	ueCount := 10
 	scenarioChans := make([]chan procedures.UeTesterMessage, ueCount+1)
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
@@ -159,9 +168,9 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 
 		s := state.UEState{}
 		expectedStates := []state.State{
+			state.RegistrationRequested,
 			state.AuthenticationChallengeResponded,
 			state.SecurityContextSet,
-			state.Fresh,
 			state.Registred,
 			state.Idle,
 		}
