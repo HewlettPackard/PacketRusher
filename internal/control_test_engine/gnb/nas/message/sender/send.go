@@ -5,8 +5,9 @@
 package sender
 
 import (
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func SendToUe(ue *context.GNBUe, message []byte) {
@@ -15,7 +16,7 @@ func SendToUe(ue *context.GNBUe, message []byte) {
 	if gnbTx == nil {
 		log.Warn("[GNB] Do not send NAS messages to UE as channel is closed")
 	} else {
-		gnbTx <- context.UEMessage{IsNas: true, Nas: message, AmfId: ue.GetAmfUeId()}
+		gnbTx <- context.UEMessage{IsNas: true, Nas: message}
 	}
 	ue.Unlock()
 }

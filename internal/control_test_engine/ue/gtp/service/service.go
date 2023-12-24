@@ -6,12 +6,13 @@ package service
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	"github.com/vishvananda/netlink"
 	gtpLink "my5G-RANTester/internal/cmd/gogtp5g-link"
 	gtpTunnel "my5G-RANTester/internal/cmd/gogtp5g-tunnel"
 	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 
 	"net"
 	"strconv"
@@ -38,60 +39,61 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		return
 	}
 
-    // get UE GNB IP.
+	// get UE GNB IP.
 	pduSession.SetGnbIp(net.ParseIP(msg.GnbIp))
 
 	ueGnbIp := pduSession.GetGnbIp()
-    ueIp := pduSession.GetIp()
-    msin := ue.GetMsin()
+	upfIp := pduSession.GnbPduSession.GetUpfIp()
+	ueIp := pduSession.GetIp()
+	msin := ue.GetMsin()
 	nameInf := fmt.Sprintf("val%s", msin)
 	vrfInf := fmt.Sprintf("vrf%s", msin)
 	stopSignal := make(chan bool)
 
-    _ = gtpLink.CmdDel(nameInf)
+	_ = gtpLink.CmdDel(nameInf)
 
-    go func() {
+	go func() {
 		// This function should not return as long as the GTP-U UDP socket is open
-        if err := gtpLink.CmdAdd(nameInf, 1, ueGnbIp.String(), stopSignal); err != nil {
-            log.Fatal("[GNB][GTP] Unable to create Kernel GTP interface: ", err, msin, nameInf)
-            return
-        }
-    }()
+		if err := gtpLink.CmdAdd(nameInf, 1, ueGnbIp.String(), stopSignal); err != nil {
+			log.Fatal("[GNB][GTP] Unable to create Kernel GTP interface: ", err, msin, nameInf)
+			return
+		}
+	}()
 
-    pduSession.SetStopSignal(stopSignal)
+	pduSession.SetStopSignal(stopSignal)
 
-    time.Sleep(time.Second)
+	time.Sleep(time.Second)
 
 	cmdAddFar := []string{nameInf, "1", "--action", "2"}
 	log.Debug("[UE][GTP] Setting up GTP Forwarding Action Rule for ", strings.Join(cmdAddFar, " "))
-    if err := gtpTunnel.CmdAddFAR(cmdAddFar); err != nil {
-        log.Fatal("[GNB][GTP] Unable to create FAR: ", err)
-        return
-    }
+	if err := gtpTunnel.CmdAddFAR(cmdAddFar); err != nil {
+		log.Fatal("[GNB][GTP] Unable to create FAR: ", err)
+		return
+	}
 
-    cmdAddFar = []string{nameInf, "2", "--action", "2", "--hdr-creation", "0", fmt.Sprint(gnbPduSession.GetTeidUplink()), msg.UpfIp, "2152"}
+	cmdAddFar = []string{nameInf, "2", "--action", "2", "--hdr-creation", "0", fmt.Sprint(gnbPduSession.GetTeidUplink()), upfIp, "2152"}
 	log.Debug("[UE][GTP] Setting up GTP Forwarding Action Rule for ", strings.Join(cmdAddFar, " "))
-    if err := gtpTunnel.CmdAddFAR(cmdAddFar); err != nil {
-        log.Fatal("[UE][GTP] Unable to create FAR ", err)
-        return
-    }
+	if err := gtpTunnel.CmdAddFAR(cmdAddFar); err != nil {
+		log.Fatal("[UE][GTP] Unable to create FAR ", err)
+		return
+	}
 
-    cmdAddPdr := []string{nameInf, "1", "--pcd", "1", "--hdr-rm", "0", "--ue-ipv4", ueIp, "--f-teid", fmt.Sprint(gnbPduSession.GetTeidDownlink()), msg.GnbIp, "--far-id", "1"}
-    log.Debug("[UE][GTP] Setting up GTP Packet Detection Rule for ", strings.Join(cmdAddPdr, " "))
+	cmdAddPdr := []string{nameInf, "1", "--pcd", "1", "--hdr-rm", "0", "--ue-ipv4", ueIp, "--f-teid", fmt.Sprint(gnbPduSession.GetTeidDownlink()), msg.GnbIp, "--far-id", "1"}
+	log.Debug("[UE][GTP] Setting up GTP Packet Detection Rule for ", strings.Join(cmdAddPdr, " "))
 
-    if err := gtpTunnel.CmdAddPDR(cmdAddPdr); err != nil {
-        log.Fatal("[GNB][GTP] Unable to create FAR: ", err)
-        return
-    }
+	if err := gtpTunnel.CmdAddPDR(cmdAddPdr); err != nil {
+		log.Fatal("[GNB][GTP] Unable to create FAR: ", err)
+		return
+	}
 
-    cmdAddPdr = []string{nameInf, "2", "--pcd", "2", "--ue-ipv4", ueIp, "--far-id", "2"}
+	cmdAddPdr = []string{nameInf, "2", "--pcd", "2", "--ue-ipv4", ueIp, "--far-id", "2"}
 	log.Debug("[UE][GTP] Setting Up GTP Packet Detection Rule for ", strings.Join(cmdAddPdr, " "))
-    if err := gtpTunnel.CmdAddPDR(cmdAddPdr); err != nil {
-        log.Fatal("[UE][GTP] Unable to create FAR ", err)
-        return
-    }
+	if err := gtpTunnel.CmdAddPDR(cmdAddPdr); err != nil {
+		log.Fatal("[UE][GTP] Unable to create FAR ", err)
+		return
+	}
 
-    netUeIp := net.ParseIP(ueIp)
+	netUeIp := net.ParseIP(ueIp)
 	// add an IP address to a link device.
 	addrTun := &netlink.Addr{
 		IPNet: &net.IPNet{
@@ -136,11 +138,11 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 
 	route := &netlink.Route{
 		Dst:       &net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)}, // default
-		LinkIndex: link.Attrs().Index,            // dev gtp-<ECI>
+		LinkIndex: link.Attrs().Index,                                      // dev gtp-<ECI>
 		Scope:     netlink.SCOPE_LINK,                                      // scope link
 		Protocol:  4,                                                       // proto static
 		Priority:  1,                                                       // metric 1
-		Table:     tableId,                                                    // table <ECI>
+		Table:     tableId,                                                 // table <ECI>
 	}
 
 	if err := netlink.RouteReplace(route); err != nil {

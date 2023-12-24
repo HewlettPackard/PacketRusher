@@ -6,10 +6,11 @@ package service
 
 import (
 	"fmt"
-	"github.com/ishidawataru/sctp"
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap"
+
+	"github.com/ishidawataru/sctp"
+	log "github.com/sirupsen/logrus"
 )
 
 func InitConn(amf *context.GNBAmf, gnb *context.GNBContext) error {
@@ -79,7 +80,7 @@ func GnbListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 		copy(forwardData, buf[:n])
 
 		// handling NGAP message.
-		go ngap.Dispatch(amf, gnb, forwardData)
+		ngap.Dispatch(amf, gnb, forwardData)
 
 	}
 

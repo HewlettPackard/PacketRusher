@@ -6,8 +6,10 @@ package context
 
 import (
 	"errors"
-	"github.com/ishidawataru/sctp"
+	"my5G-RANTester/lib/ngap/ngapType"
 	"sync"
+
+	"github.com/ishidawataru/sctp"
 )
 
 // UE main states in the GNB Context.
@@ -24,22 +26,24 @@ type GNBUe struct {
 	sctpConnection *sctp.SCTPConn // Sctp association in using by the UE.
 	gnbRx          chan UEMessage
 	gnbTx          chan UEMessage
-	msin           string
+	pRueId         int64 // PacketRusher unique UE ID
 	context        Context
 	lock           sync.Mutex
 }
 
 type Context struct {
-	mobilityInfo mobility
-	maskedIMEISV string
-	pduSession   [16]*GnbPDUSession
-	allowedSst   []string
-	allowedSd    []string
-	lenSlice     int
+	mobilityInfo           mobility
+	maskedIMEISV           string
+	pduSession             [16]*GnbPDUSession
+	allowedSst             []string
+	allowedSd              []string
+	lenSlice               int
+	ueSecurityCapabilities *ngapType.UESecurityCapabilities
 }
 
 type GnbPDUSession struct {
 	pduSessionId int64
+	upfIp        string
 	sst          string
 	sd           string
 	uplinkTeid   uint32
@@ -55,7 +59,7 @@ type mobility struct {
 	mnc string
 }
 
-func (ue *GNBUe) CreateUeContext(plmn string, imeisv string, sst []string, sd []string) {
+func (ue *GNBUe) CreateUeContext(plmn string, imeisv string, sst []string, sd []string, ueSecurityCapabilities *ngapType.UESecurityCapabilities) {
 	if plmn != "not informed" {
 		ue.context.mobilityInfo.mcc, ue.context.mobilityInfo.mnc = convertMccMnc(plmn)
 	} else {
@@ -66,10 +70,16 @@ func (ue *GNBUe) CreateUeContext(plmn string, imeisv string, sst []string, sd []
 	ue.context.maskedIMEISV = imeisv
 	ue.context.allowedSst = sst
 	ue.context.allowedSd = sd
+	ue.context.ueSecurityCapabilities = ueSecurityCapabilities
 }
 
-func (ue *GNBUe) CreatePduSession(pduSessionId int64, sst string, sd string, pduType uint64,
-	qosId int64, priArp int64, fiveQi int64, ulTeid uint32, dlTeid uint32)  (*GnbPDUSession, error) {
+func (ue *GNBUe) CopyFromPreviousContext(oldUeContext *GNBUe) {
+	ue.SetAmfUeId(oldUeContext.GetAmfUeId())
+	ue.context = oldUeContext.context
+}
+
+func (ue *GNBUe) CreatePduSession(pduSessionId int64, upfIp string, sst string, sd string, pduType uint64,
+	qosId int64, priArp int64, fiveQi int64, ulTeid uint32, dlTeid uint32) (*GnbPDUSession, error) {
 
 	if pduSessionId < 1 && pduSessionId > 16 {
 		return nil, errors.New("PDU Session Id must lies between 0 and 15, id: " + string(pduSessionId))
@@ -81,7 +91,7 @@ func (ue *GNBUe) CreatePduSession(pduSessionId int64, sst string, sd string, pdu
 
 	var pduSession = new(GnbPDUSession)
 	pduSession.pduSessionId = pduSessionId
-
+	pduSession.upfIp = upfIp
 	if !ue.isWantedNssai(sst, sd) {
 		return nil, errors.New("Unable to create PDU Session, slice " + string(sst) + string(sd) + " is not selected for current UE")
 	}
@@ -140,6 +150,10 @@ func (ue *GNBUe) GetSelectedNssai(pduSessionId int64) (string, string) {
 	}
 
 	return "NSSAI was not selected", "NSSAI was not selected"
+}
+
+func (ue *GNBUe) GetUESecurityCapabilities() *ngapType.UESecurityCapabilities {
+	return ue.context.ueSecurityCapabilities
 }
 
 func (ue *GNBUe) isWantedNssai(sst string, sd string) bool {
@@ -206,12 +220,12 @@ func (ue *GNBUe) SetGnbTx(gnbTx chan UEMessage) {
 	ue.gnbTx = gnbTx
 }
 
-func (ue *GNBUe) SetMsin(msin string) {
-	ue.msin = msin
+func (ue *GNBUe) SetPrUeId(pRueId int64) {
+	ue.pRueId = pRueId
 }
 
-func (ue *GNBUe) GetMsin() string {
-	return ue.msin
+func (ue *GNBUe) GetPrUeId() int64 {
+	return ue.pRueId
 }
 
 func (ue *GNBUe) Lock() {
@@ -224,6 +238,14 @@ func (ue *GNBUe) Unlock() {
 
 func (pduSession *GnbPDUSession) GetPduSessionId() int64 {
 	return pduSession.pduSessionId
+}
+
+func (pduSession *GnbPDUSession) GetUpfIp() string {
+	return pduSession.upfIp
+}
+
+func (pduSession *GnbPDUSession) SetUpfIp(upfIp string) {
+	pduSession.upfIp = upfIp
 }
 
 func (pduSession *GnbPDUSession) GetTeidUplink() uint32 {

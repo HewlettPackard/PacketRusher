@@ -5,14 +5,16 @@
 package trigger
 
 import (
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
+	ueSender "my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/interface_management"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/pdu_session_management"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_context_management"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_mobility_management"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/sender"
 	"my5G-RANTester/lib/ngap/ngapType"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func SendPduSessionResourceSetupResponse(pduSession *context.GnbPDUSession, ue *context.GNBUe, gnb *context.GNBContext) {
@@ -71,7 +73,6 @@ func SendInitialContextSetupResponse(ue *context.GNBUe) {
 	}
 }
 
-
 func SendUeContextReleaseComplete(ue *context.GNBUe) {
 	log.Info("[GNB] Initiating UE Context Complete")
 
@@ -106,7 +107,6 @@ func SendAmfConfigurationUpdateAcknowledge(amf *context.GNBAmf) {
 	}
 }
 
-
 func SendNgSetupRequest(gnb *context.GNBContext, amf *context.GNBAmf) {
 	log.Info("[GNB] Initiating NG Setup Request")
 
@@ -138,4 +138,21 @@ func SendPathSwitchRequest(gnb *context.GNBContext, ue *context.GNBUe) {
 	if err != nil {
 		log.Fatal("[GNB][NGAP] Error sending Path Switch Request.: ", err)
 	}
+}
+
+func TriggerHandover(oldGnb *context.GNBContext, newGnb *context.GNBContext, prUeId int64) {
+	log.Info("[GNB] Initiating UE Handover")
+
+	gnbUeContext, err := oldGnb.GetGnbUeByPrUeId(prUeId)
+	if err != nil {
+		log.Fatal("[GNB][NGAP] Error getting UE from PR UE ID: ", err)
+	}
+
+	newGnbRx := make(chan context.UEMessage, 1)
+	newGnbTx := make(chan context.UEMessage, 1)
+	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, UEContext: gnbUeContext}
+
+	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx}
+
+	ueSender.SendMessageToUe(gnbUeContext, msg)
 }
