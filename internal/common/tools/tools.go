@@ -77,13 +77,13 @@ func IncrementIP(origIP, cidr string) (string, error) {
 
 func gnbIdGenerator(i int, gnbId string) string {
 
-	gnbId_int, err := strconv.Atoi(gnbId)
+	gnbId_int, err := strconv.ParseInt(gnbId, 16, 0)
 	if err != nil {
 		log.Fatal("[UE][CONFIG] Given gnbId is invalid")
 	}
-	base := gnbId_int + i
+	base := int(gnbId_int) + i
 
-	gnbId = fmt.Sprintf("%06d", base)
+	gnbId = fmt.Sprintf("%06x", base)
 	return gnbId
 }
 
