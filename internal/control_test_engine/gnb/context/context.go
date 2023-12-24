@@ -18,6 +18,7 @@ type GNBContext struct {
 	dataInfo       DataInfo    // gnb data plane information
 	controlInfo    ControlInfo // gnb control plane information
 	uePool         sync.Map    // map[in64]*GNBUe, UeRanNgapId as key
+	prUePool       sync.Map    // map[in64]*GNBUe, PrUeId as key
 	amfPool        sync.Map    // map[int64]*GNBAmf, AmfId as key
 	teidPool       sync.Map    // map[uint32]*GNBUe, downlinkTeid as key
 	sliceInfo      Slice
@@ -74,7 +75,7 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipDat
 	gnb.dataInfo.gnbPort = portData
 }
 
-func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, msin string) *GNBUe {
+func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUeId int64) *GNBUe {
 
 	// TODO if necessary add more information for UE.
 	// TODO implement mutex
@@ -91,13 +92,14 @@ func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, msin
 	// Connect gNB and UE's channels
 	ue.SetGnbRx(gnbRx)
 	ue.SetGnbTx(gnbTx)
-	ue.SetMsin(msin)
+	ue.SetPrUeId(prUeId)
 
 	// set state to UE.
 	ue.SetStateInitialized()
 
 	// store UE in the UE Pool of GNB.
 	gnb.uePool.Store(ranId, ue)
+	gnb.prUePool.Store(prUeId, ue)
 
 	// select AMF with Capacity is more than 0.
 	amf := gnb.selectAmFByActive()
@@ -128,6 +130,7 @@ func (gnb *GNBContext) GetN3GnbIp() string {
 
 func (gnb *GNBContext) DeleteGnBUe(ue *GNBUe) {
 	gnb.uePool.Delete(ue.ranUeNgapId)
+	gnb.prUePool.Delete(ue.pRueId)
 	for _, pduSession := range ue.context.pduSession {
 		if pduSession != nil {
 			gnb.teidPool.Delete(pduSession.GetTeidDownlink())
@@ -145,6 +148,14 @@ func (gnb *GNBContext) GetGnbUe(ranUeId int64) (*GNBUe, error) {
 	ue, err := gnb.uePool.Load(ranUeId)
 	if !err {
 		return nil, fmt.Errorf("UE is not find in GNB UE POOL")
+	}
+	return ue.(*GNBUe), nil
+}
+
+func (gnb *GNBContext) GetGnbUeByPrUeId(pRUeId int64) (*GNBUe, error) {
+	ue, err := gnb.prUePool.Load(pRUeId)
+	if !err {
+		return nil, fmt.Errorf("UE is not find in GNB PR UE POOL")
 	}
 	return ue.(*GNBUe), nil
 }

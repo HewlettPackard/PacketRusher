@@ -7,8 +7,6 @@ package handler
 import (
 	"encoding/binary"
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	_ "github.com/vishvananda/netlink"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
@@ -16,6 +14,9 @@ import (
 	"my5G-RANTester/lib/ngap/ngapConvert"
 	"my5G-RANTester/lib/ngap/ngapType"
 	_ "net"
+
+	log "github.com/sirupsen/logrus"
+	_ "github.com/vishvananda/netlink"
 )
 
 func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
@@ -68,6 +69,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	var sd []string
 	var mobilityRestrict = "not informed"
 	var maskedImeisv string
+	var ueSecurityCapabilities *ngapType.UESecurityCapabilities
 	// var securityKey []byte
 
 	valueMessage := message.InitiatingMessage.Value.InitialContextSetupRequest
@@ -160,6 +162,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 			if ies.Value.UESecurityCapabilities == nil {
 				log.Fatal("[GNB][NGAP] UE Security Capabilities is missing")
 			}
+			ueSecurityCapabilities = ies.Value.UESecurityCapabilities
 		}
 
 	}
@@ -167,7 +170,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
 
 	// create UE context.
-	ue.CreateUeContext(mobilityRestrict, maskedImeisv, sst, sd)
+	ue.CreateUeContext(mobilityRestrict, maskedImeisv, sst, sd, ueSecurityCapabilities)
 
 	// show UE context.
 	log.Info("[GNB][UE] UE Context was created with successful")
@@ -300,8 +303,10 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
 
+	upfIp := fmt.Sprintf("%d.%d.%d.%d", upfAddress[0], upfAddress[1], upfAddress[2], upfAddress[3])
+
 	// create PDU Session for GNB UE.
-	pduSession, err := ue.CreatePduSession(pduSessionId, sst, sd, pduSType, qosId, priArp, fiveQi, ulTeid, gnb.GetUeTeid(ue))
+	pduSession, err := ue.CreatePduSession(pduSessionId, upfIp, sst, sd, pduSType, qosId, priArp, fiveQi, ulTeid, gnb.GetUeTeid(ue))
 	if err != nil {
 		log.Error("[GNB][NGAP] Error in Pdu Session Resource Setup Request.")
 		log.Error("[GNB][NGAP] ", err)
@@ -319,19 +324,12 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	log.Info("[GNB][NGAP][UE] Priority Level ARP: ", pduSession.GetPriorityARP())
 	log.Info("[GNB][NGAP][UE] UPF Address: ", fmt.Sprintf("%d.%d.%d.%d", upfAddress[0], upfAddress[1], upfAddress[2], upfAddress[3]), " :2152")
 
-
-	// get UPF ip.
-	if gnb.GetUpfIp() == "" {
-		upfIp := fmt.Sprintf("%d.%d.%d.%d", upfAddress[0], upfAddress[1], upfAddress[2], upfAddress[3])
-		gnb.SetUpfIp(upfIp)
-	}
-
 	// send NAS message to UE.
 	sender.SendToUe(ue, messageNas)
 
 	var pduSessions [16]*context.GnbPDUSession
 	pduSessions[0] = pduSession
-    msg := context.UEMessage{GnbIp: gnb.GetN3GnbIp(), UpfIp: gnb.GetUpfIp(), GNBPduSessions: pduSessions}
+	msg := context.UEMessage{GnbIp: gnb.GetN3GnbIp(), GNBPduSessions: pduSessions}
 
 	sender.SendMessageToUe(ue, msg)
 
@@ -602,7 +600,7 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 	log.Info("[GNB][NGAP] Releasing UE Context, cause: ", causeToString(cause))
 }
 
-func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU)  {
+func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 
 	// TODO: Implement update AMF Context from AMFConfigurationUpdate
 	_ = message.InitiatingMessage.Value.AMFConfigurationUpdate
@@ -612,7 +610,7 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 	trigger.SendAmfConfigurationUpdateAcknowledge(amf)
 }
 
-func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapType.NGAPPDU)  {
+func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 	var pduSessionResourceSwitchedList *ngapType.PDUSessionResourceSwitchedList
 	valueMessage := message.SuccessfulOutcome.Value.PathSwitchRequestAcknowledge
 
@@ -654,39 +652,41 @@ func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapT
 
 	for _, pduSessionResourceSwitchedItem := range pduSessionResourceSwitchedList.List {
 		pduSessionId := pduSessionResourceSwitchedItem.PDUSessionID.Value
-
-		pathSwitchRequestAcknowledgeTransferBytes := pduSessionResourceSwitchedItem.PathSwitchRequestAcknowledgeTransfer
-		pathSwitchRequestAcknowledgeTransfer := &ngapType.PathSwitchRequestAcknowledgeTransfer{}
-		err := aper.UnmarshalWithParams(pathSwitchRequestAcknowledgeTransferBytes, pathSwitchRequestAcknowledgeTransfer, "valueExt")
-		if err != nil {
-			log.Error("[GNB] Unable to unmarshall PathSwitchRequestAcknowledgeTransfer: ", err)
-			continue
-		}
-
-		gtpTunnel := pathSwitchRequestAcknowledgeTransfer.ULNGUUPTNLInformation.GTPTunnel
-		upfIpv4, _ := ngapConvert.IPAddressToString(gtpTunnel.TransportLayerAddress)
-		teidUplink := gtpTunnel.GTPTEID.Value
-
 		pduSession, err := ue.GetPduSession(pduSessionId)
 		if err != nil {
 			log.Error("[GNB] Trying to path switch an unknown PDU Session ID ", pduSessionId, ": ", err)
 			continue
 		}
-		// Set new Teid Uplink received in PathSwitchRequestAcknowledge
-		pduSession.SetTeidUplink(binary.BigEndian.Uint32(teidUplink))
 
+		pathSwitchRequestAcknowledgeTransferBytes := pduSessionResourceSwitchedItem.PathSwitchRequestAcknowledgeTransfer
+		pathSwitchRequestAcknowledgeTransfer := &ngapType.PathSwitchRequestAcknowledgeTransfer{}
+		err = aper.UnmarshalWithParams(pathSwitchRequestAcknowledgeTransferBytes, pathSwitchRequestAcknowledgeTransfer, "valueExt")
+		if err != nil {
+			log.Error("[GNB] Unable to unmarshall PathSwitchRequestAcknowledgeTransfer: ", err)
+			continue
+		}
+
+		if pathSwitchRequestAcknowledgeTransfer.ULNGUUPTNLInformation != nil {
+			gtpTunnel := pathSwitchRequestAcknowledgeTransfer.ULNGUUPTNLInformation.GTPTunnel
+			upfIpv4, _ := ngapConvert.IPAddressToString(gtpTunnel.TransportLayerAddress)
+			teidUplink := gtpTunnel.GTPTEID.Value
+
+			// Set new Teid Uplink received in PathSwitchRequestAcknowledge
+			pduSession.SetTeidUplink(binary.BigEndian.Uint32(teidUplink))
+			pduSession.SetUpfIp(upfIpv4)
+		}
 		var pduSessions [16]*context.GnbPDUSession
 		pduSessions[0] = pduSession
 
-		msg := context.UEMessage{GNBPduSessions: pduSessions, UpfIp: upfIpv4, GnbIp: gnb.GetN3GnbIp()}
+		msg := context.UEMessage{GNBPduSessions: pduSessions, GnbIp: gnb.GetN3GnbIp()}
 
 		sender.SendMessageToUe(ue, msg)
 	}
 
-	log.Info("[GNB] Handover completed successfully for UE ", ue.GetMsin())
+	log.Info("[GNB] Handover completed successfully for UE ", ue.GetRanUeId())
 }
 
-func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU)  {
+func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 
 	valueMessage := message.InitiatingMessage.Value.ErrorIndication
 
@@ -725,7 +725,7 @@ func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *co
 		// TODO SEND ERROR INDICATION
 	}
 
-		ue.SetAmfUeId(amfUeId)
+	ue.SetAmfUeId(amfUeId)
 
 	return ue
 }

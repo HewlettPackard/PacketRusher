@@ -44,6 +44,7 @@ const SM5G_PDU_SESSION_ACTIVE = 0x08
 
 type UEContext struct {
 	id         uint8
+	prUeId     int64
 	UeSecurity SECURITY
 	StateMM    int
 	gnbRx      chan context.UEMessage
@@ -66,7 +67,6 @@ type Amf struct {
 	amfRegionId uint8
 	amfSetId    uint16
 	amfPointer  uint8
-	amfUeId     int64
 	mcc         string
 	mnc         string
 }
@@ -80,8 +80,8 @@ type UEPDUSession struct {
 	routeTun      *netlink.Route
 	vrf           *netlink.Vrf
 	stopSignal    chan bool
-	Wait         chan bool
-	T3580Retries int
+	Wait          chan bool
+	T3580Retries  int
 
 	// TS 24.501 - 6.1.3.2.1.1 State Machine for Session Management
 	StateSM int
@@ -111,7 +111,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	ueSecurityCapability *nasType.UESecurityCapability,
 	k, opc, op, amf, sqn, mcc, mnc, routingIndicator, dnn string,
 	sst int32, sd string, tunnelEnabled bool, scenarioChan chan scenario.ScenarioMessage,
-	id uint8) {
+	id int) {
 
 	// added SUPI.
 	ue.UeSecurity.Msin = msin
@@ -143,7 +143,8 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	ue.UeSecurity.Supi = fmt.Sprintf("imsi-%s%s%s", mcc, mnc, msin)
 
 	// added UE id.
-	ue.id = id
+	ue.id = uint8(id)
+	ue.prUeId = int64(id)
 
 	// added network slice
 	ue.Snssai.Sd = sd
@@ -203,6 +204,10 @@ func (ue *UEContext) CreatePDUSession() (*UEPDUSession, error) {
 
 func (ue *UEContext) GetUeId() uint8 {
 	return ue.id
+}
+
+func (ue *UEContext) GetPrUeId() int64 {
+	return ue.prUeId
 }
 
 func (ue *UEContext) GetSuci() nasType.MobileIdentity5GS {
@@ -500,14 +505,6 @@ func (ue *UEContext) SetAmfSetId(amfSetId uint16) {
 
 func (ue *UEContext) GetAmfSetId() uint16 {
 	return ue.amfInfo.amfSetId
-}
-
-func (ue *UEContext) SetAmfUeId(id int64) {
-	ue.amfInfo.amfUeId = id
-}
-
-func (ue *UEContext) GetAmfUeId() int64 {
-	return ue.amfInfo.amfUeId
 }
 
 func (ue *UEContext) SetAmfMccAndMnc(mcc string, mnc string) {

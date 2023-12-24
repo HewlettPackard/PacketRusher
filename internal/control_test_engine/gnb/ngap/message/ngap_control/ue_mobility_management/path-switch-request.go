@@ -24,6 +24,8 @@ func PathSwitchRequest(gnb *context.GNBContext, ue *context.GNBUe) ([]byte, erro
 		SetSourceAmfUeNgapId(ue.GetAmfUeId()).
 		SetRanUeNgapId(ue.GetRanUeId()).
 		PathSwitchRequestTransfer(gnb.GetN3GnbIp(), ue.GetPduSessions()).
+		SetUserLocation(gnb.GetMccAndMncInOctets(), gnb.GetTacInBytes()).
+		SetUserSecurityCapabilities(ue.GetUESecurityCapabilities()).
 		Build()
 }
 
@@ -71,6 +73,46 @@ func (builder *PathSwitchRequestBuilder) SetRanUeNgapId(ranUeNgapID int64) *Path
 
 	rANUENGAPID := ie.Value.RANUENGAPID
 	rANUENGAPID.Value = ranUeNgapID
+
+	builder.ies.List = append(builder.ies.List, ie)
+
+	return builder
+}
+
+func (builder *PathSwitchRequestBuilder) SetUserLocation(plmn []byte, tac []byte) *PathSwitchRequestBuilder {
+	// User Location Information
+	ie := ngapType.PathSwitchRequestIEs{}
+	ie.Id.Value = ngapType.ProtocolIEIDUserLocationInformation
+	ie.Criticality.Value = ngapType.CriticalityPresentIgnore
+	ie.Value.Present = ngapType.PathSwitchRequestIEsPresentUserLocationInformation
+	ie.Value.UserLocationInformation = new(ngapType.UserLocationInformation)
+
+	userLocationInformation := ie.Value.UserLocationInformation
+	userLocationInformation.Present = ngapType.UserLocationInformationPresentUserLocationInformationNR
+	userLocationInformation.UserLocationInformationNR = new(ngapType.UserLocationInformationNR)
+
+	userLocationInformationNR := userLocationInformation.UserLocationInformationNR
+	userLocationInformationNR.NRCGI.PLMNIdentity.Value = plmn
+	userLocationInformationNR.NRCGI.NRCellIdentity.Value = aper.BitString{
+		Bytes:     []byte{0x00, 0x00, 0x00, 0x00, 0x10},
+		BitLength: 36,
+	}
+
+	userLocationInformationNR.TAI.PLMNIdentity.Value = plmn
+	userLocationInformationNR.TAI.TAC.Value = tac
+
+	builder.ies.List = append(builder.ies.List, ie)
+
+	return builder
+}
+
+func (builder *PathSwitchRequestBuilder) SetUserSecurityCapabilities(userSecurityCapabilities *ngapType.UESecurityCapabilities) *PathSwitchRequestBuilder {
+	// User Location Information
+	ie := ngapType.PathSwitchRequestIEs{}
+	ie.Id.Value = ngapType.ProtocolIEIDUESecurityCapabilities
+	ie.Criticality.Value = ngapType.CriticalityPresentIgnore
+	ie.Value.Present = ngapType.PathSwitchRequestIEsPresentUESecurityCapabilities
+	ie.Value.UESecurityCapabilities = userSecurityCapabilities
 
 	builder.ies.List = append(builder.ies.List, ie)
 

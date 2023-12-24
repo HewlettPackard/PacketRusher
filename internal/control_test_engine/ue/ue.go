@@ -5,7 +5,6 @@
 package ue
 
 import (
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	context2 "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/procedures"
@@ -19,9 +18,11 @@ import (
 	"os/signal"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
-func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMessage, gnb *context2.GNBContext, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
+func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnb *context2.GNBContext, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
 	// new UE instance.
 	ue := &context.UEContext{}
 	scenarioChan := make(chan scenario.ScenarioMessage)
@@ -80,12 +81,17 @@ func NewUE(conf config.Config, id uint8, ueMgrChannel chan procedures.UeTesterMe
 
 func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 	if msg.IsNas {
-		// handling NAS message.
-		ue.SetAmfUeId(msg.AmfId)
 		state.DispatchState(ue, msg.Nas)
 	} else if msg.GNBPduSessions[0] != nil {
 		// Setup PDU Session
 		serviceGtp.SetupGtpInterface(ue, msg)
+	} else if msg.GNBRx != nil && msg.GNBTx != nil {
+		log.Info("[UE] gNodeB is telling us to use another gNodeB")
+		previousGnbRx := ue.GetGnbRx()
+		ue.SetGnbRx(msg.GNBRx)
+		ue.SetGnbTx(msg.GNBTx)
+		previousGnbRx <- context2.UEMessage{ConnectionClosed: true}
+		close(previousGnbRx)
 	} else {
 		log.Error("[UE] Received unknown message from gNodeB", msg)
 	}
@@ -119,7 +125,7 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 			log.Error("[UE] Cannot handover / PathSwitchRequest to a new gNodeB without any PDU Sessions")
 			break
 		}
-		trigger.InitHandover(ue, msg.GnbChan)
+		//trigger.InitHandover(ue, msg.GnbChan)
 	case procedures.Terminate:
 		log.Info("[UE] Terminating UE as requested")
 		// If UE is registered

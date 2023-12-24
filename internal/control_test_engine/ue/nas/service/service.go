@@ -15,7 +15,7 @@ func InitConn(ue *context.UEContext, gnb *gnbContext.GNBContext) {
 	inboundChannel := gnb.GetInboundChannel()
 
 	// Send channels to gNB
-	inboundChannel <- gnbContext.UEMessage{GNBTx: ue.GetGnbTx(), GNBRx: ue.GetGnbRx(), Msin: ue.GetMsin()}
+	inboundChannel <- gnbContext.UEMessage{GNBTx: ue.GetGnbTx(), GNBRx: ue.GetGnbRx(), PrUeId: ue.GetPrUeId()}
 	msg := <-ue.GetGnbTx()
 	ue.SetAmfMccAndMnc(msg.Mcc, msg.Mnc)
 }

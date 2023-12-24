@@ -9,6 +9,7 @@ import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
 	gnbCxt "my5G-RANTester/internal/control_test_engine/gnb/context"
+	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue"
 	ueCtx "my5G-RANTester/internal/control_test_engine/ue/context"
@@ -122,7 +123,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 
 		// Create a new UE coroutine
 		// ue.NewUE returns context of the new UE
-		ueTx := ue.NewUE(ueCfg, uint8(ueId), ueRx, simConfig.Gnbs[gnbId], wg)
+		ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[gnbId], wg)
 
 		// We tell the UE to perform a registration
 		ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
@@ -146,9 +147,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 					ueRx = nil
 				}
 			case <-handoverChannel:
-				if ueRx != nil {
-					ueRx <- procedures.UeTesterMessage{Type: procedures.Handover, GnbChan: simConfig.Gnbs[gnbIdGenerator((ueId+1)%numGnb, ueCfg.GNodeB.PlmnList.GnbId)].GetInboundChannel()}
-				}
+				trigger.TriggerHandover(simConfig.Gnbs[gnbId], simConfig.Gnbs[gnbIdGenerator((ueId+1)%numGnb, ueCfg.GNodeB.PlmnList.GnbId)], int64(ueId))
 			case msg := <-scenarioChan:
 				if ueRx != nil {
 					ueRx <- msg
