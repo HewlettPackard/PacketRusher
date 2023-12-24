@@ -30,10 +30,11 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 	// gnb[0].n2_ip = 192.168.2.10, gnb[0].n3_ip = 192.168.3.10
 	// gnb[1].n2_ip = 192.168.2.11, gnb[1].n3_ip = 192.168.3.11
 	// ...
+	gnbId := cfg.GNodeB.PlmnList.GnbId
 	n2Ip := cfg.GNodeB.ControlIF.Ip
 	n3Ip := cfg.GNodeB.DataIF.Ip
 	for i := 1; i <= count; i++ {
-		cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(i)
+		cfg.GNodeB.PlmnList.GnbId = gnbId
 		cfg.GNodeB.ControlIF.Ip = n2Ip
 		cfg.GNodeB.DataIF.Ip = n3Ip
 
@@ -42,6 +43,7 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 
 		// TODO: We could find the interfaces where N2/N3 are
 		// and check that the generated IPs, still belong to the interfaces' subnet
+		gnbId = gnbIdGenerator(i, gnbId)
 		n2Ip, err = IncrementIP(n2Ip, "0.0.0.0/0")
 		if err != nil {
 			log.Fatal("[GNB][CONFIG] Error while allocating ip for N2: " + err.Error())
@@ -50,7 +52,6 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 		if err != nil {
 			log.Fatal("[GNB][CONFIG] Error while allocating ip for N3: " + err.Error())
 		}
-
 	}
 	return gnbs
 }
@@ -73,19 +74,15 @@ func IncrementIP(origIP, cidr string) (string, error) {
 	return ip.String(), nil
 }
 
-func gnbIdGenerator(i int) string {
+func gnbIdGenerator(i int, gnbId string) string {
 
-	var base string
-	switch true {
-	case i < 10:
-		base = "00000"
-	case i < 100:
-		base = "0000"
-	case i >= 100:
-		base = "000"
+	gnbId_int, err := strconv.ParseInt(gnbId, 16, 0)
+	if err != nil {
+		log.Fatal("[UE][CONFIG] Given gnbId is invalid")
 	}
+	base := int(gnbId_int) + i
 
-	gnbId := base + strconv.Itoa(i)
+	gnbId = fmt.Sprintf("%06x", base)
 	return gnbId
 }
 
@@ -115,7 +112,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 	ueCfg.Ue.Msin = IncrementMsin(simConfig.UeId, simConfig.Cfg.Ue.Msin)
 	log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", ueCfg.Ue.Msin, " UE")
 
-	ueCfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(simConfig.UeId%numGnb + 1)
+	gnbId := gnbIdGenerator(simConfig.UeId%numGnb, ueCfg.GNodeB.PlmnList.GnbId)
 
 	// Launch a coroutine to handle UE's individual scenario
 	go func(scenarioChan chan procedures.UeTesterMessage, ueId int) {
@@ -125,7 +122,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 
 		// Create a new UE coroutine
 		// ue.NewUE returns context of the new UE
-		ueTx := ue.NewUE(ueCfg, uint8(ueId), ueRx, simConfig.Gnbs[ueCfg.GNodeB.PlmnList.GnbId], wg)
+		ueTx := ue.NewUE(ueCfg, uint8(ueId), ueRx, simConfig.Gnbs[gnbId], wg)
 
 		// We tell the UE to perform a registration
 		ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
@@ -150,7 +147,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 				}
 			case <-handoverChannel:
 				if ueRx != nil {
-					ueRx <- procedures.UeTesterMessage{Type: procedures.Handover, GnbChan: simConfig.Gnbs[gnbIdGenerator((ueId+1)%numGnb+1)].GetInboundChannel()}
+					ueRx <- procedures.UeTesterMessage{Type: procedures.Handover, GnbChan: simConfig.Gnbs[gnbIdGenerator((ueId+1)%numGnb, ueCfg.GNodeB.PlmnList.GnbId)].GetInboundChannel()}
 				}
 			case msg := <-scenarioChan:
 				if ueRx != nil {
