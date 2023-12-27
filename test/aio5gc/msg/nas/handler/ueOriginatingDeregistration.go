@@ -6,12 +6,12 @@ package handler
 
 import (
 	"errors"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func UEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFContext, ueContext *context.UEContext, gnb *context.GNBContext) error {

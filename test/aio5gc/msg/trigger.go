@@ -5,10 +5,11 @@
 package msg
 
 import (
-	"my5G-RANTester/lib/aper"
 	"my5G-RANTester/test/aio5gc/context"
 	nasBuilder "my5G-RANTester/test/aio5gc/msg/nas/builder"
 	ngapBuilder "my5G-RANTester/test/aio5gc/msg/ngap/builder"
+
+	"github.com/free5gc/aper"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -33,6 +34,19 @@ func SendAuthenticationRequest(gnb *context.GNBContext, ue *context.UEContext) {
 	}
 
 	log.Info("[5GC][NGAP] Send Downlink NAS Transport - Authentication Request")
+	gnb.SendMsg(msg)
+}
+
+func SendIdentityRequest(gnb *context.GNBContext, ue *context.UEContext) {
+	log.Info("[5GC][NAS] Creating Identity Request")
+	nasRes, err := nasBuilder.IdentityRequest(ue)
+
+	msg, err := ngapBuilder.DownlinkNASTransport(nasRes, ue)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	log.Info("[5GC][NGAP] Send Downlink NAS Transport - Identity Request")
 	gnb.SendMsg(msg)
 }
 

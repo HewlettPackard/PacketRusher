@@ -6,13 +6,14 @@ package ngap
 
 import (
 	"errors"
-	"my5G-RANTester/lib/ngap"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc/context"
+
+	"github.com/free5gc/ngap"
 
 	ngapHandler "my5G-RANTester/test/aio5gc/msg/ngap/handler"
 	"os"
 
+	"github.com/free5gc/ngap/ngapType"
 	log "github.com/sirupsen/logrus"
 )
 

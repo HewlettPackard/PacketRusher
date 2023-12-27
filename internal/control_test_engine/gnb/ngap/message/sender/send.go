@@ -6,8 +6,9 @@ package sender
 
 import (
 	"fmt"
-	"github.com/ishidawataru/sctp"
 	"my5G-RANTester/lib/ngap/ngapSctp"
+
+	"github.com/ishidawataru/sctp"
 )
 
 func SendToAmF(message []byte, conn *sctp.SCTPConn) error {

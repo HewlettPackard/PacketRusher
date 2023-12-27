@@ -9,7 +9,6 @@ import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
@@ -19,6 +18,7 @@ import (
 	"time"
 
 	"github.com/free5gc/nas"
+	"github.com/free5gc/ngap/ngapType"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

@@ -6,12 +6,13 @@ package builder
 
 import (
 	"errors"
-	"my5G-RANTester/lib/ngap"
-	"my5G-RANTester/lib/ngap/ngapConvert"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/lib/types"
 
+	"github.com/free5gc/ngap"
+
+	"github.com/free5gc/ngap/ngapConvert"
+	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/openapi/models"
 	log "github.com/sirupsen/logrus"
 )

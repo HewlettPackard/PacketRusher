@@ -12,8 +12,8 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_context_management"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_mobility_management"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/sender"
-	"my5G-RANTester/lib/ngap/ngapType"
 
+	"github.com/free5gc/ngap/ngapType"
 	log "github.com/sirupsen/logrus"
 )
 

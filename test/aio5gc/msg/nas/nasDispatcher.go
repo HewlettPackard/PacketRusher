@@ -6,13 +6,13 @@ package nas
 
 import (
 	"errors"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/lib/tools"
 	nasHandler "my5G-RANTester/test/aio5gc/msg/nas/handler"
 	"strconv"
 
 	"github.com/free5gc/nas"
+	"github.com/free5gc/ngap/ngapType"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -62,6 +62,10 @@ func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *contex
 	case nas.MsgTypeRegistrationRequest:
 		log.Info("[5GC][NAS] Received Registration Request")
 		err = nasHandler.RegistrationRequest(msg, amf, ueContext, gnb)
+
+	case nas.MsgTypeIdentityResponse:
+		log.Info("[5GC][NAS] Received Identity Response")
+		err = nasHandler.IdentityResponse(msg, amf, ueContext, gnb)
 
 	case nas.MsgTypeAuthenticationResponse:
 		log.Info("[5GC][NAS] Received Authentication Response")

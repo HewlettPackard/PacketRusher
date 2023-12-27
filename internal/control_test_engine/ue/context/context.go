@@ -12,8 +12,6 @@ import (
 	"fmt"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/scenario"
-	"my5G-RANTester/lib/UeauCommon"
-	"my5G-RANTester/lib/milenage"
 	"net"
 	"reflect"
 	"regexp"
@@ -21,6 +19,9 @@ import (
 
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/nas/security"
+
+	"github.com/free5gc/util/milenage"
+	"github.com/free5gc/util/ueauth"
 
 	"my5G-RANTester/internal/common/auth"
 
@@ -569,13 +570,13 @@ func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscr
 	}
 
 	// Generate RES, CK, IK, AK, AKstar
-	milenage.F2345_Test(OPC, K, RAND, RES, CK, IK, AK, AKstar)
+	milenage.F2345(OPC, K, RAND, RES, CK, IK, AK, AKstar)
 
 	// Get SQN, MAC_A, AMF from AUTN
 	sqnHn, _, mac_aHn := ue.deriveAUTN(AUTN, AK)
 
 	// Generate MAC_A, MAC_S
-	milenage.F1_Test(OPC, K, RAND, sqnHn, AMF, mac_a, mac_s)
+	milenage.F1(OPC, K, RAND, sqnHn, AMF, mac_a, mac_s)
 
 	// MAC verification.
 	if !reflect.DeepEqual(mac_a, mac_aHn) {
@@ -586,13 +587,13 @@ func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscr
 	if bytes.Compare(sqnUe, sqnHn) > 0 {
 
 		// get AK*
-		milenage.F2345_Test(OPC, K, RAND, RES, CK, IK, AK, AKstar)
+		milenage.F2345(OPC, K, RAND, RES, CK, IK, AK, AKstar)
 
 		// From the standard, AMF(0x0000) should be used in the synch failure.
 		amfSynch, _ := hex.DecodeString("0000")
 
 		// get mac_s using sqn ue.
-		milenage.F1_Test(OPC, K, RAND, sqnUe, amfSynch, mac_a, mac_s)
+		milenage.F1(OPC, K, RAND, sqnUe, amfSynch, mac_a, mac_s)
 
 		sqnUeXorAK := make([]byte, 6)
 		for i := 0; i < len(sqnUe); i++ {
@@ -609,39 +610,50 @@ func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscr
 
 	// derive RES*
 	key := append(CK, IK...)
-	FC := UeauCommon.FC_FOR_RES_STAR_XRES_STAR_DERIVATION
+	FC := ueauth.FC_FOR_RES_STAR_XRES_STAR_DERIVATION
 	P0 := []byte(snNmae)
 	P1 := RAND
 	P2 := RES
 
 	ue.DerivateKamf(key, snNmae, sqnHn, AK)
 	ue.DerivateAlgKey()
-	kdfVal_for_resStar := UeauCommon.GetKDFValue(key, FC, P0, UeauCommon.KDFLen(P0), P1, UeauCommon.KDFLen(P1), P2, UeauCommon.KDFLen(P2))
+	kdfVal_for_resStar, err := ueauth.GetKDFValue(key, FC, P0, ueauth.KDFLen(P0), P1, ueauth.KDFLen(P1), P2, ueauth.KDFLen(P2))
+	if err != nil {
+		log.Fatal("[UE] Error while deriving KDF ", err)
+	}
 	return kdfVal_for_resStar[len(kdfVal_for_resStar)/2:], "successful"
 }
 
 func (ue *UEContext) DerivateKamf(key []byte, snName string, SQN, AK []byte) {
 
-	FC := UeauCommon.FC_FOR_KAUSF_DERIVATION
+	FC := ueauth.FC_FOR_KAUSF_DERIVATION
 	P0 := []byte(snName)
 	SQNxorAK := make([]byte, 6)
 	for i := 0; i < len(SQN); i++ {
 		SQNxorAK[i] = SQN[i] ^ AK[i]
 	}
 	P1 := SQNxorAK
-	Kausf := UeauCommon.GetKDFValue(key, FC, P0, UeauCommon.KDFLen(P0), P1, UeauCommon.KDFLen(P1))
+	Kausf, err := ueauth.GetKDFValue(key, FC, P0, ueauth.KDFLen(P0), P1, ueauth.KDFLen(P1))
+	if err != nil {
+		log.Fatal("[UE] Error while deriving Kausf ", err)
+	}
 	P0 = []byte(snName)
-	Kseaf := UeauCommon.GetKDFValue(Kausf, UeauCommon.FC_FOR_KSEAF_DERIVATION, P0, UeauCommon.KDFLen(P0))
-
+	Kseaf, err := ueauth.GetKDFValue(Kausf, ueauth.FC_FOR_KSEAF_DERIVATION, P0, ueauth.KDFLen(P0))
+	if err != nil {
+		log.Fatal("[UE] Error while deriving Kseaf ", err)
+	}
 	supiRegexp, _ := regexp.Compile("(?:imsi|supi)-([0-9]{5,15})")
 	groups := supiRegexp.FindStringSubmatch(ue.UeSecurity.Supi)
 
 	P0 = []byte(groups[1])
-	L0 := UeauCommon.KDFLen(P0)
+	L0 := ueauth.KDFLen(P0)
 	P1 = []byte{0x00, 0x00}
-	L1 := UeauCommon.KDFLen(P1)
+	L1 := ueauth.KDFLen(P1)
 
-	ue.UeSecurity.Kamf = UeauCommon.GetKDFValue(Kseaf, UeauCommon.FC_FOR_KAMF_DERIVATION, P0, L0, P1, L1)
+	ue.UeSecurity.Kamf, err = ueauth.GetKDFValue(Kseaf, ueauth.FC_FOR_KAMF_DERIVATION, P0, L0, P1, L1)
+	if err != nil {
+		log.Fatal("[UE] Error while deriving Kamf ", err)
+	}
 }
 
 func (ue *UEContext) DerivateAlgKey() {

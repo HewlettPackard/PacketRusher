@@ -8,10 +8,16 @@ github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ3
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/free5gc/aper v1.0.5-0.20230614030933-c73735898582 h1:IV9PXKo6MH62e7nngSqr+cwjuoffkouPMmyX3jHC9Ds=
+github.com/free5gc/aper v1.0.5-0.20230614030933-c73735898582/go.mod h1:ybHxhYnRqQ9wD4yB9r/3MZdbCYCjtqUyfLpSnJpwWd4=
 github.com/free5gc/go-gtp5gnl v1.4.5 h1:w4mHuEue4hwpnQdYc19C5sXmxvYLZ0s2vJyDNdmt2wk=
 github.com/free5gc/go-gtp5gnl v1.4.5/go.mod h1:TT5aXB90NuSPMehuIK9lV2yJFnq6Qjw37ZqNB1QAKh0=
 github.com/free5gc/nas v1.1.1 h1:xUsqOOrb3kH38TQCzwZY7WN6WJkIerjERNjORDtnCbo=
 github.com/free5gc/nas v1.1.1/go.mod h1:fjWwpyp7/wOyL72HTkjvIe9YTCfGyZosjITsI5sXyuU=
+github.com/free5gc/nas v1.1.2-0.20230828074825-175b09665828 h1:/gIlzF8hacxWa6hsx+HQlw9F8yEorTvZvS1VR5Iwpjc=
+github.com/free5gc/nas v1.1.2-0.20230828074825-175b09665828/go.mod h1:fjWwpyp7/wOyL72HTkjvIe9YTCfGyZosjITsI5sXyuU=
+github.com/free5gc/ngap v1.0.7-0.20230614061954-9c128114ab1f h1:wgXjoknZ7JJoZ72J15g/f2/0DgdCpfcTg189lnhUPuY=
+github.com/free5gc/ngap v1.0.7-0.20230614061954-9c128114ab1f/go.mod h1:lKA1sLTYM3CGEBhZVxkGGJIkai5+Bvy2yHIMhb7Vx/k=
 github.com/free5gc/openapi v1.0.6 h1:ytRjU/YZRI8UhKKyfajXSyGB6s1YDFkJ1weeAGJ8LXw=
 github.com/free5gc/openapi v1.0.6/go.mod h1:iw/N0E+FlX44EEx24IBi2EdZW8v+bkj3ETWPGnlK9DI=
 github.com/free5gc/util v1.0.4 h1:GxliLpjI3NHMrKck3PDfx4OLJUuBjU182sVj+zbZK50=

@@ -6,9 +6,9 @@ package context
 
 import (
 	"errors"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"sync"
 
+	"github.com/free5gc/ngap/ngapType"
 	"github.com/ishidawataru/sctp"
 )
 

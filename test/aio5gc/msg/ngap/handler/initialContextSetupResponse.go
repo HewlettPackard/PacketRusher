@@ -6,8 +6,9 @@ package handler
 
 import (
 	"errors"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc/context"
+
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func InitialContextSetupResponse(req *ngapType.InitialContextSetupResponse, fgc *context.Aio5gc) error {

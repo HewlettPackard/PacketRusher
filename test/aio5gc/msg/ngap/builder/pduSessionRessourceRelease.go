@@ -5,10 +5,13 @@
 package builder
 
 import (
-	"my5G-RANTester/lib/aper"
-	"my5G-RANTester/lib/ngap"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc/context"
+
+	"github.com/free5gc/ngap"
+
+	"github.com/free5gc/aper"
+
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func PDUSessionResourceRelease(nasPdu []byte, ue *context.UEContext, sessionId int32) ([]byte, error) {
