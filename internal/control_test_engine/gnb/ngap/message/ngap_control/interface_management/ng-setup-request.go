@@ -6,9 +6,12 @@ package interface_management
 
 import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
-	"my5G-RANTester/lib/aper"
-	"my5G-RANTester/lib/ngap"
-	"my5G-RANTester/lib/ngap/ngapType"
+
+	"github.com/free5gc/ngap"
+
+	"github.com/free5gc/aper"
+
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func BuildNGSetupRequest(gnb *context.GNBContext) (pdu ngapType.NGAPPDU) {

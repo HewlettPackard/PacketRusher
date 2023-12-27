@@ -6,9 +6,11 @@ package interface_management
 
 import (
 	"fmt"
+
+	"github.com/free5gc/ngap"
+	"github.com/free5gc/ngap/ngapType"
+
 	"github.com/ishidawataru/sctp"
-	"my5G-RANTester/lib/ngap"
-	"my5G-RANTester/lib/ngap/ngapType"
 )
 
 func NgSetupResponse(connN2 *sctp.SCTPConn) (*ngapType.NGAPPDU, error) {

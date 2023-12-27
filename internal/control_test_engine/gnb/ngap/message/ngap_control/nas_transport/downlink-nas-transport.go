@@ -6,11 +6,13 @@ package nas_transport
 
 import (
 	"fmt"
+	"time"
+
+	"github.com/free5gc/ngap"
+	"github.com/free5gc/ngap/ngapType"
+
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
-	"my5G-RANTester/lib/ngap"
-	"my5G-RANTester/lib/ngap/ngapType"
-	"time"
 )
 
 func DownlinkNasTransport(connN2 *sctp.SCTPConn, supi string) (*ngapType.NGAPPDU, error) {

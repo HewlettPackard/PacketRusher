@@ -6,10 +6,13 @@ package builder
 
 import (
 	"fmt"
-	"my5G-RANTester/lib/aper"
-	"my5G-RANTester/lib/ngap"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc/context"
+
+	"github.com/free5gc/ngap"
+
+	"github.com/free5gc/aper"
+
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func UEContextReleaseCommand(ue *context.UEContext, causePresent int, cause aper.Enumerated) ([]byte, error) {

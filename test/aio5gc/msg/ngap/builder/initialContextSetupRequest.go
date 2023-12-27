@@ -5,10 +5,12 @@
 package builder
 
 import (
-	"my5G-RANTester/lib/ngap"
-	"my5G-RANTester/lib/ngap/ngapConvert"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc/context"
+
+	"github.com/free5gc/ngap"
+
+	"github.com/free5gc/ngap/ngapConvert"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func InitialContextSetupRequest(nasPdu []byte, ue *context.UEContext, amf context.AMFContext) ([]byte, error) {

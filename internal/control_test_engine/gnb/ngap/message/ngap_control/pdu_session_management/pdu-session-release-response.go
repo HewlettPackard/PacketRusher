@@ -6,8 +6,10 @@ package pdu_session_management
 
 import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
-	"my5G-RANTester/lib/ngap"
-	"my5G-RANTester/lib/ngap/ngapType"
+
+	"github.com/free5gc/ngap"
+
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func PDUSessionReleaseResponse(pduSessionIds []ngapType.PDUSessionID, ue *context.GNBUe) ([]byte, error) {

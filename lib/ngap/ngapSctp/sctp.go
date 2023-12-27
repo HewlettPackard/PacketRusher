@@ -3,10 +3,11 @@ package ngapSctp
 import (
 	"encoding/binary"
 	"errors"
-	"github.com/ishidawataru/sctp"
 	"net"
 	"strings"
 	"unsafe"
+
+	"github.com/ishidawataru/sctp"
 )
 
 var clientNum int

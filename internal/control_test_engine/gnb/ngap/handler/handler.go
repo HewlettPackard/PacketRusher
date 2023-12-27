@@ -10,11 +10,12 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
-	"my5G-RANTester/lib/aper"
-	"my5G-RANTester/lib/ngap/ngapConvert"
-	"my5G-RANTester/lib/ngap/ngapType"
 	_ "net"
 
+	"github.com/free5gc/aper"
+
+	"github.com/free5gc/ngap/ngapConvert"
+	"github.com/free5gc/ngap/ngapType"
 	log "github.com/sirupsen/logrus"
 	_ "github.com/vishvananda/netlink"
 )

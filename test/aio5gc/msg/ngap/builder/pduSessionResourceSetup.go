@@ -7,13 +7,15 @@ package builder
 import (
 	"encoding/binary"
 	"fmt"
-	"my5G-RANTester/lib/aper"
-	"my5G-RANTester/lib/ngap"
-	"my5G-RANTester/lib/ngap/ngapConvert"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc/context"
 	"net"
 
+	"github.com/free5gc/ngap"
+
+	"github.com/free5gc/aper"
+
+	"github.com/free5gc/ngap/ngapConvert"
+	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/openapi/models"
 )
 

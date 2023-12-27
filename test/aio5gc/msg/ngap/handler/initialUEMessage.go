@@ -15,30 +15,22 @@ import (
 	"github.com/free5gc/openapi/models"
 )
 
-func UplinkNASTransport(req *ngapType.UplinkNASTransport, gnb *context.GNBContext, fgc *context.Aio5gc) error {
+func InitialUEMessage(req *ngapType.InitialUEMessage, gnb *context.GNBContext, fgc *context.Aio5gc) error {
 
-	var ue *context.UEContext
-	var ranUe *context.UEContext
-	var err error
-	var naspdu *ngapType.NASPDU
-	nrLocation := models.NrLocation{}
 	amf := fgc.GetAMFContext()
+	ue := &context.UEContext{}
+	var nasMsg *ngapType.NASPDU
 
+	nrLocation := models.NrLocation{}
+	var ueRanNgapId int64
 	for ie := range req.ProtocolIEs.List {
 		switch req.ProtocolIEs.List[ie].Id.Value {
 		case ngapType.ProtocolIEIDRANUENGAPID:
-			ranUe, err = amf.FindUEByRanId(req.ProtocolIEs.List[ie].Value.RANUENGAPID.Value)
-			if err != nil {
-				return err
-			}
-		case ngapType.ProtocolIEIDAMFUENGAPID:
-			ue, err = amf.FindUEById(req.ProtocolIEs.List[ie].Value.AMFUENGAPID.Value)
-			if err != nil {
-				return err
-			}
+			ueRanNgapId = req.ProtocolIEs.List[ie].Value.RANUENGAPID.Value
+			ue = amf.NewUE(ueRanNgapId)
 
 		case ngapType.ProtocolIEIDNASPDU:
-			naspdu = req.ProtocolIEs.List[ie].Value.NASPDU
+			nasMsg = req.ProtocolIEs.List[ie].Value.NASPDU
 
 		case ngapType.ProtocolIEIDUserLocationInformation:
 			UserLocationInformationNR := req.ProtocolIEs.List[ie].Value.UserLocationInformation.UserLocationInformationNR
@@ -56,13 +48,11 @@ func UplinkNASTransport(req *ngapType.UplinkNASTransport, gnb *context.GNBContex
 		case ngapType.ProtocolIEIDUEContextRequest:
 
 		default:
-			return errors.New("[5GC][NGAP] Received unknown ie for UplinkNASTransport")
+			return errors.New("[5GC][NGAP] Received unknown ie for InitialUEMessage")
 		}
 	}
-	if ue != ranUe {
-		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one registred for this UE")
-	}
+	ue.SetUserLocationInfo(&nrLocation)
 
-	nas.Dispatch(naspdu, ue, fgc, gnb)
+	nas.Dispatch(nasMsg, ue, fgc, gnb)
 	return nil
 }

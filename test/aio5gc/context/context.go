@@ -7,10 +7,10 @@ package context
 import (
 	"errors"
 	"my5G-RANTester/config"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"strconv"
 
 	"github.com/free5gc/nas"
+	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/openapi/models"
 )
 

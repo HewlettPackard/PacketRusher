@@ -7,9 +7,9 @@ package sm_5gs
 import (
 	"fmt"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
-	"my5G-RANTester/lib/ngap/ngapType"
 
 	"github.com/free5gc/nas"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func DecodeNasPduAccept(ngapMsg *ngapType.NGAPPDU) (*nas.Message, error) {

@@ -5,7 +5,9 @@ go 1.21
 require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/free5gc/go-gtp5gnl v1.4.5
-	github.com/free5gc/nas v1.1.1
+	github.com/free5gc/aper v1.0.5-0.20230614030933-c73735898582
+	github.com/free5gc/nas v1.1.2-0.20230828074825-175b09665828
+	github.com/free5gc/ngap v1.0.7-0.20230614061954-9c128114ab1f
 	github.com/free5gc/openapi v1.0.6
 	github.com/free5gc/util v1.0.4
 	github.com/google/gopacket v1.1.19

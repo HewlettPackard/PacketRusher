@@ -7,11 +7,11 @@ package aio5gc
 import (
 	"errors"
 	"my5G-RANTester/config"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/service"
 
 	"github.com/free5gc/nas"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 type FiveGCBuilder struct {

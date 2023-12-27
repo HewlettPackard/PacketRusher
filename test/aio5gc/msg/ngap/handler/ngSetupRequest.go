@@ -6,11 +6,12 @@ package handler
 
 import (
 	"errors"
-	"my5G-RANTester/lib/ngap/ngapConvert"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/lib/types"
 	"my5G-RANTester/test/aio5gc/msg"
+
+	"github.com/free5gc/ngap/ngapConvert"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func NGSetupRequest(req *ngapType.NGSetupRequest, gnb *context.GNBContext, fgc *context.Aio5gc) (err error) {

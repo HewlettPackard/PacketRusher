@@ -5,9 +5,11 @@
 package builder
 
 import (
-	"my5G-RANTester/lib/ngap"
-	"my5G-RANTester/lib/ngap/ngapType"
 	"my5G-RANTester/test/aio5gc/context"
+
+	"github.com/free5gc/ngap"
+
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func DownlinkNASTransport(nasPdu []byte, ue *context.UEContext) ([]byte, error) {
