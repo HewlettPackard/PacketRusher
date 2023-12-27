@@ -10,17 +10,15 @@ import (
 
 	"github.com/free5gc/ngap"
 
-	"github.com/free5gc/aper"
-
 	"github.com/free5gc/ngap/ngapType"
 )
 
-func getUplinkNASTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte, plmn []byte, tac []byte) ([]byte, error) {
-	message := buildUplinkNasTransport(amfUeNgapID, ranUeNgapID, nasPdu, plmn, tac)
+func getUplinkNASTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte, gnb *context.GNBContext) ([]byte, error) {
+	message := buildUplinkNasTransport(amfUeNgapID, ranUeNgapID, nasPdu, gnb)
 	return ngap.Encoder(message)
 }
 
-func buildUplinkNasTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte, plmn []byte, tac []byte) (pdu ngapType.NGAPPDU) {
+func buildUplinkNasTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte, gnb *context.GNBContext) (pdu ngapType.NGAPPDU) {
 
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -84,14 +82,11 @@ func buildUplinkNasTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte, plmn
 	userLocationInformation.UserLocationInformationNR = new(ngapType.UserLocationInformationNR)
 
 	userLocationInformationNR := userLocationInformation.UserLocationInformationNR
-	userLocationInformationNR.NRCGI.PLMNIdentity.Value = plmn
-	userLocationInformationNR.NRCGI.NRCellIdentity.Value = aper.BitString{
-		Bytes:     []byte{0x00, 0x00, 0x00, 0x00, 0x10},
-		BitLength: 36,
-	}
+	userLocationInformationNR.NRCGI.PLMNIdentity = gnb.GetPLMNIdentity()
+	userLocationInformationNR.NRCGI.NRCellIdentity = gnb.GetNRCellIdentity()
 
-	userLocationInformationNR.TAI.PLMNIdentity.Value = plmn
-	userLocationInformationNR.TAI.TAC.Value = tac
+	userLocationInformationNR.TAI.PLMNIdentity = gnb.GetPLMNIdentity()
+	userLocationInformationNR.TAI.TAC.Value = gnb.GetTacInBytes()
 
 	uplinkNasTransportIEs.List = append(uplinkNasTransportIEs.List, ie)
 
@@ -100,7 +95,7 @@ func buildUplinkNasTransport(amfUeNgapID, ranUeNgapID int64, nasPdu []byte, plmn
 
 func SendUplinkNasTransport(message []byte, ue *context.GNBUe, gnb *context.GNBContext) ([]byte, error) {
 
-	sendMsg, err := getUplinkNASTransport(ue.GetAmfUeId(), ue.GetRanUeId(), message, gnb.GetMccAndMncInOctets(), gnb.GetTacInBytes())
+	sendMsg, err := getUplinkNASTransport(ue.GetAmfUeId(), ue.GetRanUeId(), message, gnb)
 	if err != nil {
 		return nil, fmt.Errorf("Error getting UE Id %d NAS Authentication Response", ue.GetRanUeId())
 	}

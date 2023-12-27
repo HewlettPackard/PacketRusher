@@ -27,7 +27,7 @@ func PathSwitchRequest(gnb *context.GNBContext, ue *context.GNBUe) ([]byte, erro
 		SetSourceAmfUeNgapId(ue.GetAmfUeId()).
 		SetRanUeNgapId(ue.GetRanUeId()).
 		PathSwitchRequestTransfer(gnb.GetN3GnbIp(), ue.GetPduSessions()).
-		SetUserLocation(gnb.GetMccAndMncInOctets(), gnb.GetTacInBytes()).
+		SetUserLocation(gnb).
 		SetUserSecurityCapabilities(ue.GetUESecurityCapabilities()).
 		Build()
 }
@@ -82,7 +82,7 @@ func (builder *PathSwitchRequestBuilder) SetRanUeNgapId(ranUeNgapID int64) *Path
 	return builder
 }
 
-func (builder *PathSwitchRequestBuilder) SetUserLocation(plmn []byte, tac []byte) *PathSwitchRequestBuilder {
+func (builder *PathSwitchRequestBuilder) SetUserLocation(gnb *context.GNBContext) *PathSwitchRequestBuilder {
 	// User Location Information
 	ie := ngapType.PathSwitchRequestIEs{}
 	ie.Id.Value = ngapType.ProtocolIEIDUserLocationInformation
@@ -95,14 +95,11 @@ func (builder *PathSwitchRequestBuilder) SetUserLocation(plmn []byte, tac []byte
 	userLocationInformation.UserLocationInformationNR = new(ngapType.UserLocationInformationNR)
 
 	userLocationInformationNR := userLocationInformation.UserLocationInformationNR
-	userLocationInformationNR.NRCGI.PLMNIdentity.Value = plmn
-	userLocationInformationNR.NRCGI.NRCellIdentity.Value = aper.BitString{
-		Bytes:     []byte{0x00, 0x00, 0x00, 0x00, 0x10},
-		BitLength: 36,
-	}
+	userLocationInformationNR.NRCGI.PLMNIdentity = gnb.GetPLMNIdentity()
+	userLocationInformationNR.NRCGI.NRCellIdentity = gnb.GetNRCellIdentity()
 
-	userLocationInformationNR.TAI.PLMNIdentity.Value = plmn
-	userLocationInformationNR.TAI.TAC.Value = tac
+	userLocationInformationNR.TAI.PLMNIdentity = gnb.GetPLMNIdentity()
+	userLocationInformationNR.TAI.TAC.Value = gnb.GetTacInBytes()
 
 	builder.ies.List = append(builder.ies.List, ie)
 

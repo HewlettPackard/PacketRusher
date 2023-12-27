@@ -66,6 +66,11 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 			log.Info("[GNB][NGAP] Receive AMF Configuration Update")
 			handler.HandlerAmfConfigurationUpdate(amf, gnb, ngapMsg)
 
+		case ngapType.ProcedureCodeHandoverResourceAllocation:
+			// handler NGAP Handover REquest
+			log.Info("[GNB][NGAP] Receive Handover Request")
+			handler.HandlerHandoverRequest(amf, gnb, ngapMsg)
+
 		case ngapType.ProcedureCodeErrorIndication:
 			// handler Error Indicator
 			log.Error("[GNB][NGAP] Receive Error Indication")
@@ -88,6 +93,11 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 			// handler PathSwitchRequestAcknowledge
 			log.Info("[GNB][NGAP] Receive PathSwitchRequestAcknowledge")
 			handler.HandlerPathSwitchRequestAcknowledge(gnb, ngapMsg)
+
+		case ngapType.ProcedureCodeHandoverPreparation:
+			// handler NGAP AMF Handover Command
+			log.Info("[GNB][NGAP] Receive Handover Command")
+			handler.HandlerHandoverCommand(amf, gnb, ngapMsg)
 
 		default:
 			log.Info("[GNB][NGAP] Received unknown NGAP message")

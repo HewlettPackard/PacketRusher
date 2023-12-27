@@ -103,7 +103,8 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		Gnbs:                     gnbs,
 		Cfg:                      conf,
 		TimeBeforeDeregistration: 400,
-		TimeBeforeHandover:       0,
+		TimeBeforeNgapHandover:   0,
+		TimeBeforeXnHandover:     0,
 		NumPduSessions:           1,
 	}
 
@@ -198,7 +199,8 @@ func TestUERegistrationLoop(t *testing.T) {
 		Gnbs:                     gnbs,
 		Cfg:                      conf,
 		TimeBeforeDeregistration: 3000,
-		TimeBeforeHandover:       0,
+		TimeBeforeNgapHandover:   0,
+		TimeBeforeXnHandover:     0,
 		NumPduSessions:           1,
 	}
 

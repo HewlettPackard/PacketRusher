@@ -9,6 +9,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/free5gc/aper"
+	"github.com/free5gc/ngap/ngapConvert"
+	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/openapi/models"
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
 	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
@@ -99,7 +103,9 @@ func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUe
 
 	// store UE in the UE Pool of GNB.
 	gnb.uePool.Store(ranId, ue)
-	gnb.prUePool.Store(prUeId, ue)
+	if prUeId != 0 {
+		gnb.prUePool.Store(prUeId, ue)
+	}
 
 	// select AMF with Capacity is more than 0.
 	amf := gnb.selectAmFByActive()
@@ -397,6 +403,22 @@ func (gnb *GNBContext) GetSliceInBytes() ([]byte, []byte) {
 		return sstBytes, sdBytes
 	}
 	return sstBytes, nil
+}
+
+func (gnb *GNBContext) GetPLMNIdentity() ngapType.PLMNIdentity {
+	return ngapConvert.PlmnIdToNgap(models.PlmnId{Mcc: gnb.controlInfo.mcc, Mnc: gnb.controlInfo.mnc})
+}
+
+func (gnb *GNBContext) GetNRCellIdentity() ngapType.NRCellIdentity {
+	nci := gnb.GetGnbIdInBytes()
+	var slice = make([]byte, 2)
+
+	return ngapType.NRCellIdentity{
+		Value: aper.BitString{
+			Bytes:     append(nci, slice...),
+			BitLength: 36,
+		},
+	}
 }
 
 func (gnb *GNBContext) GetMccAndMnc() (string, string) {

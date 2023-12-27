@@ -29,6 +29,7 @@ type GNBUe struct {
 	pRueId         int64 // PacketRusher unique UE ID
 	context        Context
 	lock           sync.Mutex
+	newGnb         *GNBContext
 }
 
 type Context struct {
@@ -202,6 +203,14 @@ func (ue *GNBUe) SetStateReady() {
 
 func (ue *GNBUe) SetStateDown() {
 	ue.state = Down
+}
+
+func (ue *GNBUe) SetHandoverGnodeB(gnb *GNBContext) {
+	ue.newGnb = gnb
+}
+
+func (ue *GNBUe) GetHandoverGnodeB() *GNBContext {
+	return ue.newGnb
 }
 
 func (ue *GNBUe) GetGnbRx() chan UEMessage {

@@ -16,4 +16,5 @@ type UEMessage struct {
 	Mcc              string
 	Mnc              string
 	UEContext        *GNBUe
+	IsHandover       bool
 }

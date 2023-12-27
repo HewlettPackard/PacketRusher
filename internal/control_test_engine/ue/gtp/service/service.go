@@ -52,6 +52,10 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 
 	_ = gtpLink.CmdDel(nameInf)
 
+	if pduSession.GetStopSignal() != nil {
+		close(pduSession.GetStopSignal())
+	}
+
 	go func() {
 		// This function should not return as long as the GTP-U UDP socket is open
 		if err := gtpLink.CmdAdd(nameInf, 1, ueGnbIp.String(), stopSignal); err != nil {
