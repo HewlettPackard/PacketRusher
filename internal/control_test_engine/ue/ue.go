@@ -69,7 +69,7 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 					loop = false
 					break
 				}
-				loop = ueMgrHandler(msg, ue)
+				loop = ueMgrHandler(msg, ue, gnb)
 			}
 		}
 		ue.Terminate()
@@ -97,7 +97,7 @@ func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 	}
 }
 
-func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
+func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext, gnb *context2.GNBContext) bool {
 	loop := true
 	switch msg.Type {
 	case procedures.Registration:
@@ -113,19 +113,16 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 			return loop
 		}
 		trigger.InitPduSessionRelease(ue, pdu)
-	case procedures.Handover:
-		var pduSession *context.UEPDUSession
-		for i := uint8(1); i <= 16; i++ {
-			pduSession, _ = ue.GetPduSession(i)
-			if pduSession != nil {
-				break
-			}
-		}
-		if pduSession == nil {
-			log.Error("[UE] Cannot handover / PathSwitchRequest to a new gNodeB without any PDU Sessions")
-			break
-		}
-		//trigger.InitHandover(ue, msg.GnbChan)
+	case procedures.Idle:
+		// We switch UE to IDLE
+		ue.SetStateMM_IDLE()
+		trigger.SwitchToIdle(ue)
+
+		time.Sleep(1 * time.Second)
+		// Since gNodeB stopped communication after switching to Idle, we need to connect back to gNodeB
+		service.InitConn(ue, gnb)
+		trigger.InitServiceRequest(ue)
+
 	case procedures.Terminate:
 		log.Info("[UE] Terminating UE as requested")
 		// If UE is registered

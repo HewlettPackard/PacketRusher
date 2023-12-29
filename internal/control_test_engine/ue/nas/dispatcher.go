@@ -164,12 +164,39 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 		handleCause5GMM(m.DLNASTransport.Cause5GMM)
 		handler.HandlerDlNasTransportPduaccept(ue, m)
 
+	case nas.MsgTypeServiceAccept:
+		// handler service reject
+		log.Info("[UE][NAS] Receive Service Accept")
+		handler.HandlerServiceAccept(ue, m)
+
+	case nas.MsgTypeServiceReject:
+		// handler service reject
+		log.Error("[UE][NAS] Receive Service Reject")
+		handleCause5GMM(&m.ServiceReject.Cause5GMM)
+
 	case nas.MsgTypeRegistrationReject:
 		// handler registration reject
 		log.Error("[UE][NAS] Receive Registration Reject")
 		handleCause5GMM(&m.RegistrationReject.Cause5GMM)
+
+	case nas.MsgTypeStatus5GMM:
+		log.Error("[UE][NAS] Receive Status 5GMM")
+		handleCause5GMM(&m.Status5GMM.Cause5GMM)
+
+	case nas.MsgTypeStatus5GSM:
+		log.Error("[UE][NAS] Receive Status 5GSM")
+		handleCause5GSM(&m.Status5GSM.Cause5GSM)
+
+	default:
+		log.Warnf("[UE][NAS] Received unknown NAS message 0x%x", m.GmmHeader.GetMessageType())
 	}
 
+}
+
+func handleCause5GSM(cause5SMM *nasType.Cause5GSM) {
+	if cause5SMM != nil {
+		log.Error("[UE][NAS] UE received a 5GSM Failure, cause: ", cause5GMMToString(cause5SMM.Octet))
+	}
 }
 
 func handleCause5GMM(cause5GMM *nasType.Cause5GMM) {

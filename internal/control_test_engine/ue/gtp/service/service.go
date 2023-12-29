@@ -54,6 +54,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 
 	if pduSession.GetStopSignal() != nil {
 		close(pduSession.GetStopSignal())
+		time.Sleep(time.Second)
 	}
 
 	go func() {

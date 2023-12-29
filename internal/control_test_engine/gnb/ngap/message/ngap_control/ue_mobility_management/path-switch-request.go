@@ -10,6 +10,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 
 	"github.com/free5gc/ngap"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/free5gc/aper"
 
@@ -152,6 +153,11 @@ func (builder *PathSwitchRequestBuilder) PathSwitchRequestTransfer(gnbN3Ip strin
 
 		ie.Value.PDUSessionResourceToBeSwitchedDLList.List = append(ie.Value.PDUSessionResourceToBeSwitchedDLList.List, item)
 	}
+	if len(ie.Value.PDUSessionResourceToBeSwitchedDLList.List) == 0 {
+		log.Error("[GNB][NGAP] No PDU Session to hand over. Xn Handover requires at least a PDU Session.")
+		return builder
+	}
+
 	builder.ies.List = append(builder.ies.List, ie)
 
 	return builder

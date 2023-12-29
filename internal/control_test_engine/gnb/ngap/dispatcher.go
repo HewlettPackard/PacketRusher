@@ -77,7 +77,7 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 			handler.HandlerErrorIndication(gnb, ngapMsg)
 
 		default:
-			log.Info("[GNB][NGAP] Received unknown NGAP message")
+			log.Warnf("[GNB][NGAP] Received unknown NGAP message 0x%x", ngapMsg.InitiatingMessage.ProcedureCode.Value)
 		}
 
 	case ngapType.NGAPPDUPresentSuccessfulOutcome:
@@ -100,7 +100,7 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 			handler.HandlerHandoverCommand(amf, gnb, ngapMsg)
 
 		default:
-			log.Info("[GNB][NGAP] Received unknown NGAP message")
+			log.Warnf("[GNB][NGAP] Received unknown NGAP message 0x%x", ngapMsg.SuccessfulOutcome.ProcedureCode.Value)
 		}
 
 	case ngapType.NGAPPDUPresentUnsuccessfulOutcome:
@@ -113,7 +113,7 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 			handler.HandlerNgSetupFailure(amf, gnb, ngapMsg)
 
 		default:
-			log.Info("[GNB][NGAP] Received unknown NGAP message")
+			log.Warnf("[GNB][NGAP] Received unknown NGAP message 0x%x", ngapMsg.UnsuccessfulOutcome.ProcedureCode.Value)
 		}
 	}
 }

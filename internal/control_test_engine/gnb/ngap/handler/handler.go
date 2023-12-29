@@ -1,7 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
- * © Copyright 2023 Valentin D'Emmanuele
+ * © Copyright 2023-2024 Valentin D'Emmanuele
  */
 package handler
 
@@ -72,6 +72,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	var mobilityRestrict = "not informed"
 	var maskedImeisv string
 	var ueSecurityCapabilities *ngapType.UESecurityCapabilities
+	var pDUSessionResourceSetupListCxtReq *ngapType.PDUSessionResourceSetupListCxtReq
 	// var securityKey []byte
 
 	valueMessage := message.InitiatingMessage.Value.InitialContextSetupRequest
@@ -165,6 +166,12 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 				log.Fatal("[GNB][NGAP] UE Security Capabilities is missing")
 			}
 			ueSecurityCapabilities = ies.Value.UESecurityCapabilities
+
+		case ngapType.ProtocolIEIDPDUSessionResourceSetupListCxtReq:
+			if ies.Value.PDUSessionResourceSetupListCxtReq == nil {
+				log.Fatal("[GNB][NGAP] PDUSessionResourceSetupListCxtReq is missing")
+			}
+			pDUSessionResourceSetupListCxtReq = ies.Value.PDUSessionResourceSetupListCxtReq
 		}
 
 	}
@@ -183,13 +190,55 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	log.Info("[GNB][UE] UE Masked Imeisv: ", ue.GetUeMaskedImeiSv())
 	log.Info("[GNB][UE] Allowed Nssai-- Sst: ", sst, " Sd: ", sd)
 
+	if pDUSessionResourceSetupListCxtReq != nil {
+		log.Info("[GNB][NGAP] AMF is requesting some PDU Session to be setup during Initial Context Setup")
+		for _, pDUSessionResourceSetupItemCtxReq := range pDUSessionResourceSetupListCxtReq.List {
+			pduSessionId := pDUSessionResourceSetupItemCtxReq.PDUSessionID.Value
+			sst := fmt.Sprintf("%x", pDUSessionResourceSetupItemCtxReq.SNSSAI.SST.Value)
+			sd := "not informed"
+			if pDUSessionResourceSetupItemCtxReq.SNSSAI.SD != nil {
+				sd = fmt.Sprintf("%x", pDUSessionResourceSetupItemCtxReq.SNSSAI.SD.Value)
+			}
+
+			pDUSessionResourceSetupRequestTransferBytes := pDUSessionResourceSetupItemCtxReq.PDUSessionResourceSetupRequestTransfer
+			pDUSessionResourceSetupRequestTransfer := &ngapType.PDUSessionResourceSetupRequestTransfer{}
+			err := aper.UnmarshalWithParams(pDUSessionResourceSetupRequestTransferBytes, pDUSessionResourceSetupRequestTransfer, "valueExt")
+			if err != nil {
+				log.Error("[GNB] Unable to unmarshall PDUSessionResourceSetupRequestTransfer: ", err)
+				continue
+			}
+
+			var gtpTunnel *ngapType.GTPTunnel
+			var upfIp string
+			var teidUplink aper.OctetString
+			for _, ie := range pDUSessionResourceSetupRequestTransfer.ProtocolIEs.List {
+				switch ie.Id.Value {
+
+				case ngapType.ProtocolIEIDULNGUUPTNLInformation:
+					uLNGUUPTNLInformation := ie.Value.ULNGUUPTNLInformation
+
+					gtpTunnel = uLNGUUPTNLInformation.GTPTunnel
+					upfIp, _ = ngapConvert.IPAddressToString(gtpTunnel.TransportLayerAddress)
+					teidUplink = gtpTunnel.GTPTEID.Value
+				}
+			}
+
+			_, err = ue.CreatePduSession(pduSessionId, upfIp, sst, sd, 0, 1, 0, 0, binary.BigEndian.Uint32(teidUplink), gnb.GetUeTeid(ue))
+			if err != nil {
+				log.Error("[GNB] ", err)
+			}
+		}
+
+		msg := context.UEMessage{GNBPduSessions: ue.GetPduSessions(), GnbIp: gnb.GetN3GnbIp()}
+		sender.SendMessageToUe(ue, msg)
+	}
+
 	// send NAS message to UE.
-	log.Info("[GNB][NAS][UE] Send Registration Accept.")
 	sender.SendToUe(ue, messageNas)
 
 	// send Initial Context Setup Response.
 	log.Info("[GNB][NGAP][AMF] Send Initial Context Setup Response.")
-	trigger.SendInitialContextSetupResponse(ue)
+	trigger.SendInitialContextSetupResponse(ue, gnb)
 }
 
 func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *ngapType.NGAPPDU) {

@@ -20,7 +20,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-
 func HandlerAuthenticationReject(ue *context.UEContext, message *nas.Message) {
 
 	log.Info("[UE][NAS] Authentication of UE ", ue.GetUeId(), " failed")
@@ -109,7 +108,7 @@ func HandlerAuthenticationRequest(ue *context.UEContext, message *nas.Message) {
 	sender.SendToGnb(ue, authenticationResponse)
 }
 
-func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) {	// check the mandatory fields
+func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) { // check the mandatory fields
 	if reflect.ValueOf(message.SecurityModeCommand.ExtendedProtocolDiscriminator).IsZero() {
 		log.Fatal("[UE][NAS] Error in Security Mode Command, Extended Protocol is missing")
 	}
@@ -149,7 +148,7 @@ func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) {	/
 	if reflect.ValueOf(message.SecurityModeCommand.ReplayedUESecurityCapabilities).IsZero() {
 		log.Fatal("[UE][NAS] Error in Security Mode Command, Replayed UE Security Capabilities is missing")
 	}
-	
+
 	ue.UeSecurity.CipheringAlg = message.SecurityModeCommand.SelectedNASSecurityAlgorithms.GetTypeOfCipheringAlgorithm()
 	switch ue.UeSecurity.CipheringAlg {
 	case 0:
@@ -223,10 +222,7 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 	ue.SetStateMM_REGISTERED()
 
 	// saved 5g GUTI and others information.
-	ue.SetAmfRegionId(message.RegistrationAccept.GetAMFRegionID())
-	ue.SetAmfPointer(message.RegistrationAccept.GetAMFPointer())
-	ue.SetAmfSetId(message.RegistrationAccept.GetAMFSetID())
-	ue.Set5gGuti(message.RegistrationAccept.GetTMSI5G())
+	ue.Set5gGuti(message.RegistrationAccept.GUTI5G)
 
 	// use the slice allowed by the network
 	// in PDU session request
@@ -252,6 +248,11 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 
 	// sending to GNB
 	sender.SendToGnb(ue, registrationComplete)
+}
+
+func HandlerServiceAccept(ue *context.UEContext, message *nas.Message) {
+	// change the state of ue for registered
+	ue.SetStateMM_REGISTERED()
 }
 
 func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message) {
@@ -451,12 +452,11 @@ func HandlerIdentityRequest(ue *context.UEContext, message *nas.Message) {
 		log.Fatal("[UE][NAS] Error in Identity Request, Spare Half Octet And Identity Type is missing")
 	}
 
-
 	switch message.IdentityRequest.GetTypeOfIdentity() {
-		case 1:
-			log.Info("[UE][NAS] Requested SUCI 5GS type")
-		default:
-			log.Fatal("[UE][NAS] Only SUCI identity is supported for now inside PacketRusher")
+	case 1:
+		log.Info("[UE][NAS] Requested SUCI 5GS type")
+	default:
+		log.Fatal("[UE][NAS] Only SUCI identity is supported for now inside PacketRusher")
 	}
 
 	trigger.InitIdentifyResponse(ue)

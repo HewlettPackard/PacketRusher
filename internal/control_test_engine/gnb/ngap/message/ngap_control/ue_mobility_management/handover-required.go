@@ -179,6 +179,12 @@ func (builder *HandoverRequiredBuilder) SetPduSessionResourceList(pduSessions [1
 
 		pDUSessionResourceListHORqd.List = append(pDUSessionResourceListHORqd.List, pDUSessionResourceItem)
 	}
+
+	if len(pDUSessionResourceListHORqd.List) == 0 {
+		log.Error("[GNB][NGAP] No PDU Session to set up in InitialContextSetupResponse. NGAP Handover requires at least a PDU Session.")
+		return builder
+	}
+
 	builder.ies.List = append(builder.ies.List, ie)
 
 	return builder
@@ -227,6 +233,10 @@ func buildSourceToTargetTransparentTransfer(sourceGnb *context.GNBContext, targe
 		qosItem.QosFlowIdentifier.Value = 1
 		infoItem.QosFlowInformationList.List = append(infoItem.QosFlowInformationList.List, qosItem)
 		data.PDUSessionResourceInformationList.List = append(data.PDUSessionResourceInformationList.List, infoItem)
+	}
+	if len(data.PDUSessionResourceInformationList.List) == 0 {
+		log.Error("[GNB][NGAP] No PDU Session to set up in InitialContextSetupResponse. NGAP Handover requires at least a PDU Session.")
+		data.PDUSessionResourceInformationList = nil
 	}
 
 	// Target Cell ID

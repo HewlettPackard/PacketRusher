@@ -10,10 +10,13 @@
 package trigger
 
 import (
+	context2 "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
+	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
 
+	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
 	log "github.com/sirupsen/logrus"
 )
@@ -126,9 +129,30 @@ func InitIdentifyResponse(ue *context.UEContext) {
 func InitConfigurationUpdateComplete(ue *context.UEContext) {
 	log.Info("[UE] Initiating Configuration Update Complete")
 
-	// trigger identity response.
+	// trigger Configuration Update Complete.
 	identityResponse := mm_5gs.ConfigurationUpdateComplete(ue)
 
 	// send to GNB.
 	sender.SendToGnb(ue, identityResponse)
+}
+
+func InitServiceRequest(ue *context.UEContext) {
+	log.Info("[UE] Initiating Service Request")
+
+	// trigger ServiceRequest.
+	serviceRequest := mm_5gs.ServiceRequest(ue)
+	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, serviceRequest, nas.SecurityHeaderTypeIntegrityProtected, true, false)
+	if err != nil {
+		log.Fatalf("Error encoding %s IMSI UE PduSession Establishment Request Msg", ue.UeSecurity.Supi)
+	}
+
+	// send to GNB.
+	sender.SendToGnb(ue, pdu)
+}
+
+func SwitchToIdle(ue *context.UEContext) {
+	log.Info("[UE] Switching to 5GMM-IDLE")
+
+	// send to GNB.
+	sender.SendToGnbMsg(ue, context2.UEMessage{Idle: true})
 }
