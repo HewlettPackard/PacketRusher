@@ -23,11 +23,11 @@ import (
 func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	gnbPduSession := msg.GNBPduSessions[0]
 	pduSession, err := ue.GetPduSession(uint8(gnbPduSession.GetPduSessionId()))
-	pduSession.GnbPduSession = gnbPduSession
-	if err != nil {
-		log.Error("[GNB][GTP] ", err)
+	if pduSession == nil || err != nil {
+		log.Error("[GNB][GTP] Aborting the setup of PDU Session ", gnbPduSession.GetPduSessionId(), ", this PDU session was not succesfully configured on the UE's side.")
 		return
 	}
+	pduSession.GnbPduSession = gnbPduSession
 
 	if !ue.IsTunnelEnabled() {
 		log.Info(fmt.Sprintf("[UE][GTP] Interface for UE %s has not been created. Tunnel has been disabled.", ue.GetMsin()))

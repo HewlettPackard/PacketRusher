@@ -17,12 +17,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func SendPduSessionResourceSetupResponse(pduSession *context.GnbPDUSession, ue *context.GNBUe, gnb *context.GNBContext) {
+func SendPduSessionResourceSetupResponse(pduSessions []*context.GnbPDUSession, ue *context.GNBUe, gnb *context.GNBContext) {
 	log.Info("[GNB] Initiating PDU Session Resource Setup Response")
 
 	// send PDU Session Resource Setup Response.
-	gnbIp := gnb.GetGnbIpByData()
-	ngapMsg, err := pdu_session_management.PDUSessionResourceSetupResponse(pduSession, ue, gnbIp)
+	ngapMsg, err := pdu_session_management.PDUSessionResourceSetupResponse(pduSessions, ue, gnb)
 	if err != nil {
 		log.Fatal("[GNB][NGAP] Error sending PDU Session Resource Setup Response: ", err)
 	}

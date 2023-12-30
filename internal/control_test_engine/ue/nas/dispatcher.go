@@ -88,7 +88,7 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 
 		// check integrity
 		if !reflect.DeepEqual(mac32, macReceived) {
-			log.Info("[UE][NAS] NAS MAC verification failed(received:", macReceived, "expected:", mac32)
+			log.Error("[UE][NAS] NAS MAC verification failed(received:", macReceived, "expected:", mac32)
 			return
 		} else {
 			log.Info("[UE][NAS] successful NAS MAC verification")

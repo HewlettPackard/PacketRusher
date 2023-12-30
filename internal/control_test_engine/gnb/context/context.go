@@ -347,10 +347,6 @@ func (gnb *GNBContext) GetGnbId() string {
 	return gnb.controlInfo.gnbId
 }
 
-func (gnb *GNBContext) GetGnbIpByData() string {
-	return gnb.dataInfo.gnbIp
-}
-
 func (gnb *GNBContext) GetGnbPortByData() int {
 	return gnb.dataInfo.gnbPort
 }
