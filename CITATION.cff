@@ -11,3 +11,28 @@ version: 1.0.0
 doi: 10.5281/zenodo.10446651
 date-released: 2023-11-29
 url: "https://github.com/HewlettPackard/PacketRusher"
+references:
+  - type: article
+    authors:
+    - given-name: Lucas
+      family-name: Silveira
+      name-suffix: B.D.
+    - given-name: Henrique
+      family-name: de Resende
+    - given-name: Cristiano
+      family-name: Both
+      name-suffix: B.
+    - given-name: Johann
+      family-name: Marquez-Barja
+      name-suffix: M.
+    - given-name: Bruno
+      family-name: Silvestre
+    - given-name: Kleber
+      family-name: Cardoso
+      name-suffix: V.
+    title: "Tutorial on communication between access networks and the 5G core"
+    year: 2022
+    journal: Computer Networks
+    volume: 216
+    doi: 10.1016/j.comnet.2022.109301
+    url: https://doi.org/10.1016/j.comnet.2022.109301
