@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "D'Emmanuele"
+  given-names: "Valentin"
+  orcid: "https://orcid.org/0009-0008-5802-401X"
+title: "PacketRusher, a high performance 5G UE/gNB Simulator and CP/UP load tester"
+version: 1.0.0
+doi: 10.5281/zenodo.10446652
+date-released: 2023-11-29
+url: "https://github.com/HewlettPackard/PacketRusher"
