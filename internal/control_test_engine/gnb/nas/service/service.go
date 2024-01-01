@@ -93,7 +93,11 @@ func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
 		if message.ConnectionClosed {
 			log.Info("[GNB] Cleaning up context on current gNb")
 			gnbUeContext.SetStateDown()
-			gnb.DeleteGnBUe(ue)
+			if gnbUeContext.GetHandoverGnodeB() == nil {
+				// We do not clean the context if it's a NGAP Handover, as AMF will request the context clean-up
+				// Otherwise, we do clean the context
+				gnb.DeleteGnBUe(ue)
+			}
 		} else if message.IsNas {
 			nas.Dispatch(ue, message.Nas, gnb)
 		} else {
