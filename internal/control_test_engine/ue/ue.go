@@ -22,7 +22,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnb *context2.GNBContext, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
+func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnbInboundChannel chan context2.UEMessage, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
 	// new UE instance.
 	ue := &context.UEContext{}
 	scenarioChan := make(chan scenario.ScenarioMessage)
@@ -44,11 +44,12 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 		conf.Ue.Snssai.Sd,
 		conf.Ue.TunnelEnabled,
 		scenarioChan,
+		gnbInboundChannel,
 		id)
 
 	go func() {
 		// starting communication with GNB and listen.
-		service.InitConn(ue, gnb)
+		service.InitConn(ue, ue.GetGnbInboundChannel())
 		sigStop := make(chan os.Signal, 1)
 		signal.Notify(sigStop, os.Interrupt)
 
@@ -69,7 +70,7 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 					loop = false
 					break
 				}
-				loop = ueMgrHandler(msg, ue, gnb)
+				loop = ueMgrHandler(msg, ue)
 			}
 		}
 		ue.Terminate()
@@ -85,9 +86,10 @@ func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 	} else if msg.GNBPduSessions[0] != nil {
 		// Setup PDU Session
 		serviceGtp.SetupGtpInterface(ue, msg)
-	} else if msg.GNBRx != nil && msg.GNBTx != nil {
+	} else if msg.GNBRx != nil && msg.GNBTx != nil && msg.GNBInboundChannel != nil {
 		log.Info("[UE] gNodeB is telling us to use another gNodeB")
 		previousGnbRx := ue.GetGnbRx()
+		ue.SetGnbInboundChannel(msg.GNBInboundChannel)
 		ue.SetGnbRx(msg.GNBRx)
 		ue.SetGnbTx(msg.GNBTx)
 		previousGnbRx <- context2.UEMessage{ConnectionClosed: true}
@@ -97,7 +99,7 @@ func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 	}
 }
 
-func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext, gnb *context2.GNBContext) bool {
+func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 	loop := true
 	switch msg.Type {
 	case procedures.Registration:
@@ -120,7 +122,7 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext, gnb *co
 
 		time.Sleep(1 * time.Second)
 		// Since gNodeB stopped communication after switching to Idle, we need to connect back to gNodeB
-		service.InitConn(ue, gnb)
+		service.InitConn(ue, ue.GetGnbInboundChannel())
 		trigger.InitServiceRequest(ue)
 
 	case procedures.Terminate:

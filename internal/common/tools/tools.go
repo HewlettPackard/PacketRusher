@@ -127,7 +127,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 
 		// Create a new UE coroutine
 		// ue.NewUE returns context of the new UE
-		ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[gnbIdGen(0)], wg)
+		ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[gnbIdGen(0)].GetInboundChannel(), wg)
 
 		// We tell the UE to perform a registration
 		ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}

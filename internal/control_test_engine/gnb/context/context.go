@@ -136,7 +136,7 @@ func (gnb *GNBContext) GetN3GnbIp() string {
 
 func (gnb *GNBContext) DeleteGnBUe(ue *GNBUe) {
 	gnb.uePool.Delete(ue.ranUeNgapId)
-	gnb.prUePool.Delete(ue.pRueId)
+	gnb.prUePool.CompareAndDelete(ue.GetPrUeId(), ue)
 	for _, pduSession := range ue.context.pduSession {
 		if pduSession != nil {
 			gnb.teidPool.Delete(pduSession.GetTeidDownlink())

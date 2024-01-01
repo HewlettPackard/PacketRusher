@@ -922,7 +922,7 @@ func HandlerHandoverCommand(amf *context.GNBAmf, gnb *context.GNBContext, messag
 	newGnbTx := make(chan context.UEMessage, 1)
 	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, PrUeId: ue.GetPrUeId(), IsHandover: true}
 
-	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx}
+	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, GNBInboundChannel: newGnb.GetInboundChannel()}
 
 	sender.SendMessageToUe(ue, msg)
 }

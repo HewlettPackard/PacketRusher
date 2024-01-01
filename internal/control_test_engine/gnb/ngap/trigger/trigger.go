@@ -200,7 +200,7 @@ func TriggerXnHandover(oldGnb *context.GNBContext, newGnb *context.GNBContext, p
 	newGnbTx := make(chan context.UEMessage, 1)
 	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, PrUeId: gnbUeContext.GetPrUeId(), UEContext: gnbUeContext, IsHandover: true}
 
-	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx}
+	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, GNBInboundChannel: newGnb.GetInboundChannel()}
 
 	ueSender.SendMessageToUe(gnbUeContext, msg)
 }

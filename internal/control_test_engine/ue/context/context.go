@@ -45,14 +45,15 @@ const SM5G_PDU_SESSION_ACTIVE_PENDING = 0x01
 const SM5G_PDU_SESSION_ACTIVE = 0x02
 
 type UEContext struct {
-	id         uint8
-	prUeId     int64
-	UeSecurity SECURITY
-	StateMM    int
-	gnbRx      chan context.UEMessage
-	gnbTx      chan context.UEMessage
-	PduSession [16]*UEPDUSession
-	amfInfo    Amf
+	id                uint8
+	prUeId            int64
+	UeSecurity        SECURITY
+	StateMM           int
+	gnbInboundChannel chan context.UEMessage
+	gnbRx             chan context.UEMessage
+	gnbTx             chan context.UEMessage
+	PduSession        [16]*UEPDUSession
+	amfInfo           Amf
 
 	// TODO: Modify config so you can configure these parameters per PDUSession
 	Dnn           string
@@ -110,7 +111,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	ueSecurityCapability *nasType.UESecurityCapability,
 	k, opc, op, amf, sqn, mcc, mnc, routingIndicator, dnn string,
 	sst int32, sd string, tunnelEnabled bool, scenarioChan chan scenario.ScenarioMessage,
-	id int) {
+	gnbInboundChannel chan context.UEMessage, id int) {
 
 	// added SUPI.
 	ue.UeSecurity.Msin = msin
@@ -170,6 +171,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 		}
 	}
 
+	ue.gnbInboundChannel = gnbInboundChannel
 	ue.scenarioChan = scenarioChan
 
 	// added initial state for MM(NULL)
@@ -256,12 +258,20 @@ func (ue *UEContext) GetStateMM() int {
 	return ue.StateMM
 }
 
+func (ue *UEContext) SetGnbInboundChannel(gnbInboundChannel chan context.UEMessage) {
+	ue.gnbInboundChannel = gnbInboundChannel
+}
+
 func (ue *UEContext) SetGnbRx(gnbRx chan context.UEMessage) {
 	ue.gnbRx = gnbRx
 }
 
 func (ue *UEContext) SetGnbTx(gnbTx chan context.UEMessage) {
 	ue.gnbTx = gnbTx
+}
+
+func (ue *UEContext) GetGnbInboundChannel() chan context.UEMessage {
+	return ue.gnbInboundChannel
 }
 
 func (ue *UEContext) GetGnbRx() chan context.UEMessage {
