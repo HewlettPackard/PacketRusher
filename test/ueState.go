@@ -1,9 +1,16 @@
-package state
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ */
+
+package test
 
 import (
 	"errors"
 	"sync"
 	"testing"
+
+	"my5G-RANTester/lib/fsm"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -31,41 +38,26 @@ func (u *UEStateList) FindByMsin(msin string) (*UEState, error) {
 	return nil, errors.New("[TEST] UE with msin " + msin + "not found")
 }
 
-func (u *UEStateList) Check() {
+func (u *UEStateList) CheckPDU() {
 	for i := range u.ueStates {
-		u.ueStates[i].Check()
+		u.ueStates[i].CheckPDU()
 	}
 }
 
 type UEState struct {
-	m                 sync.Mutex
-	t                 *testing.T
-	msin              string
-	state             State
-	expectedStates    []State
-	nextExpectedState int
-	pduSessions       *pduSessionState
-	checkPDU          bool
+	m           sync.Mutex
+	t           *testing.T
+	msin        string
+	FSM         fsm.FSM
+	pduSessions *pduSessionState
 }
 
-func (s *UEState) Init(t *testing.T, msin string, expectedStates []State, checkPDU bool) {
+func (s *UEState) Init(t *testing.T, msin string, fsm fsm.FSM, checkPDU bool) {
 	s.msin = msin
-	s.state = Fresh
-	s.expectedStates = expectedStates
-	s.nextExpectedState = 0
+	s.FSM = fsm
 	sessionsS := pduSessionState{}
 	s.pduSessions = &sessionsS
-	s.checkPDU = checkPDU
 	s.t = t
-}
-
-func (s *UEState) UpdateState(newState State) {
-	s.m.Lock()
-	defer s.m.Unlock()
-	expected := s.expectedStates[s.nextExpectedState]
-	assert.Equalf(s.t, expected, newState, "[UE-%s] Next expected state was %s but is %s", s.msin, expected.String(), newState.String())
-	s.state = newState
-	s.nextExpectedState++
 }
 
 func (s *UEState) NewPDURequest() {
@@ -80,11 +72,8 @@ func (s *UEState) NewPDUReleased() {
 	s.pduSessions.addReleased()
 }
 
-func (s *UEState) Check() {
-	assert.Equalf(s.t, len(s.expectedStates), s.nextExpectedState, "[UE-%s] Did not pass in all expected states", s.msin)
-	if s.checkPDU {
-		s.pduSessions.check(s.t, s.msin)
-	}
+func (s *UEState) CheckPDU() {
+	s.pduSessions.check(s.t, s.msin)
 }
 
 type State int

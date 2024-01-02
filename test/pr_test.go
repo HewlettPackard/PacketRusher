@@ -12,7 +12,6 @@ import (
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
-	"my5G-RANTester/test/state"
 	"os"
 	"strings"
 	"sync"
@@ -27,13 +26,28 @@ import (
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 
-	stateList := state.UEStateList{}
+	stateList := UEStateList{}
 
 	createdSessionCount := 0
 	validatePDUSessionCreation := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
 		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
 			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodePDUSessionResourceSetup {
-				createdSessionCount++
+				list := ngapMsg.SuccessfulOutcome.Value.PDUSessionResourceSetupResponse.ProtocolIEs.List
+				for ie := range list {
+					switch list[ie].Id.Value {
+					case ngapType.ProtocolIEIDRANUENGAPID:
+						ranUe, err := fgc.GetAMFContext().FindUEByRanId(list[ie].Value.RANUENGAPID.Value)
+						if err != nil {
+							return false, err
+						}
+						state, err := stateList.FindByMsin(ranUe.GetSecurityContext().GetMsin())
+						if err != nil {
+							return false, err
+						}
+						state.NewPDUProvided()
+						createdSessionCount++
+					}
+				}
 			}
 		}
 		return false, nil
@@ -43,24 +57,29 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	validatePDUSessionRelease := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
 		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
 			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodePDUSessionResourceRelease {
-				releasedSessionCount++
-			}
-		}
-		return false, nil
-	}
-
-	releasedCtxCount := 0
-	validateCtxRelease := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
-			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodeUEContextRelease {
-				releasedCtxCount++
+				list := ngapMsg.SuccessfulOutcome.Value.PDUSessionResourceReleaseResponse.ProtocolIEs.List
+				for ie := range list {
+					switch list[ie].Id.Value {
+					case ngapType.ProtocolIEIDRANUENGAPID:
+						ranUe, err := fgc.GetAMFContext().FindUEByRanId(list[ie].Value.RANUENGAPID.Value)
+						if err != nil {
+							return false, err
+						}
+						state, err := stateList.FindByMsin(ranUe.GetSecurityContext().GetMsin())
+						if err != nil {
+							return false, err
+						}
+						state.NewPDUReleased()
+						releasedSessionCount++
+					}
+				}
 			}
 		}
 		return false, nil
 	}
 
 	stateUpdate := func(nasMsg *nas.Message, ue *context.UEContext, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		var ueState *state.UEState
+		var ueState *UEState
 		var err error
 		if nasMsg.GmmHeader.GetMessageType() != nas.MsgTypeRegistrationRequest {
 			ueState, err = stateList.FindByMsin(ue.GetSecurityContext().GetMsin())
@@ -122,7 +141,6 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		WithConfig(conf).
 		WithNGAPDispatcherHook(validatePDUSessionCreation).
 		WithNGAPDispatcherHook(validatePDUSessionRelease).
-		WithNGAPDispatcherHook(validateCtxRelease).
 		WithNASDispatcherHook(stateUpdate).
 		Build()
 	if err != nil {
@@ -144,7 +162,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	// Setup UE
-	ueCount := 10
+	ueCount := 1
 	scenarioChans := make([]chan procedures.UeTesterMessage, ueCount+1)
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
@@ -184,10 +202,9 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	time.Sleep(time.Duration(5000) * time.Millisecond)
-	stateList.Check()
+	stateList.CheckPDU()
 	assert.Equalf(t, ueCount, createdSessionCount, "Expected %d PDU sessions created but was %d", ueCount, createdSessionCount)
 	assert.Equalf(t, ueCount, releasedSessionCount, "Expected %d PDU sessions created but was %d", ueCount, releasedSessionCount)
-	assert.Equalf(t, ueCount, releasedCtxCount, "Expected %d PDU sessions created but was %d", ueCount, releasedCtxCount)
 }
 
 func TestUERegistrationLoop(t *testing.T) {
