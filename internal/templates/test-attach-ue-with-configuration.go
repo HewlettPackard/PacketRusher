@@ -5,5 +5,5 @@
 package templates
 
 func TestAttachUeWithConfiguration(tunnelEnabled bool) {
-	TestMultiUesInQueue(1, tunnelEnabled, true, false, 500, 0, 0, 0, 1)
+	TestMultiUesInQueue(1, tunnelEnabled, true, false, 500, 0, 0, 0, 0, 1)
 }

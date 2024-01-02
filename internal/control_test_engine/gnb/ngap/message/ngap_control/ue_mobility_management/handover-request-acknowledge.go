@@ -101,6 +101,11 @@ func (builder *HandoverRequestAcknowledgeBuilder) SetPduSessionResourceAdmittedL
 		pDUSessionResourceAdmittedList.List = append(pDUSessionResourceAdmittedList.List, pDUSessionResourceAdmittedItem)
 	}
 
+	if len(pDUSessionResourceAdmittedList.List) == 0 {
+		log.Info("[GNB][NGAP] No admitted PDU Session")
+		return builder
+	}
+
 	builder.ies.List = append(builder.ies.List, ie)
 
 	return builder

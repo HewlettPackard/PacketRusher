@@ -16,9 +16,12 @@ PacketRusher borrows libraries and data structures from the [free5gc project](ht
 * Supports both N2 (NGAP) and N1 (NAS) interfaces for stress testing
 * --pcap parameter to capture pcap of N1/N2 traffic
 * Implements main control plane procedures:
-  * Supports UE attach/detach (registration/authentifcation/security mode) procedures
-  * Supports Create/Delete PDU Sessions,  up to 15 PDU Sessions per UE
-  * Supports Xn handover: UE handover between simulated gNodeB (PathSwitchRequest)
+  * UE attach/detach (registration/identity request/authentification/security mode) procedures
+  * Create/Delete PDU Sessions, up to 15 PDU Sessions per UE
+  * Xn handover: UE handover between simulated gNodeB (PathSwitchRequest)
+  * N2 handover: UE handover between simulated gNodeB (HandoverRequired)
+  * UE Enter/Exit CM-IDLE procedures (Service Request) 
+  * GUTI Re-registration
   * Supports 5G roaming: Tested with new https://github.com/open5gs/open5gs/issues/2194 Roaming feature
 * Implements high-performant N3 (GTP-U) interface
   * Generic tunnel supporting all kind of traffic (TCP, UDP, Video…)
@@ -31,8 +34,8 @@ PacketRusher borrows libraries and data structures from the [free5gc project](ht
 The following is a quick start guide, for more details on the installation, configuration or usage, you may refer to the [wiki](https://github.com/HewlettPackard/PacketRusher/wiki).
 
 ### Requirements
-- Ubuntu 20.04 or RHEL 
-  - /!\ gtp5g kernel module does not work on Ubuntu 22.04 / RHEL 9, work is under way to fix that.
+- Ubuntu 20.04-22.04 or RHEL 8-9
+  - /!\ gtp5g kernel module does not work on Ubuntu 22.04 HWE kernel (or any distro with kernel later than 5.15.X)
 - Windows is not supported (Windows does not support SCTP)
 - Go 1.21.0 or more recent
 - Root privilege
@@ -89,8 +92,23 @@ To accept the DCO, simply add this line to each commit message with your name an
 
 For legal reasons, no anonymous or pseudonymous contributions are accepted.
 
+## Citation
+If you use this software, you may cite it as below:
+```latex
+@software{PacketRusher,
+  author = {D'Emmanuele, Valentin and Raguideau, Akiya},
+  doi = {10.5281/zenodo.10446651},
+  month = nov,
+  title = {{PacketRusher: High performance 5G UE/gNB Simulator and CP/UP load tester}},
+  url = {https://github.com/HewlettPackard/PacketRusher},
+  version = {1.0.0},
+  year = {2023}
+}
+```
+
 ## License
 © Copyright 2023 Hewlett Packard Enterprise Development LP
+© Copyright 2024 Valentin D'Emmanuele
 
 This project is under the [Apache 2.0 License](LICENSE) license.
 

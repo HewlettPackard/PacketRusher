@@ -30,7 +30,19 @@ func GetRegistrationRequest(registrationType uint8, requestedNSSAI *nasType.Requ
 	registrationRequest.NgksiAndRegistrationType5GS.SetTSC(nasMessage.TypeOfSecurityContextFlagNative)
 	registrationRequest.NgksiAndRegistrationType5GS.SetNasKeySetIdentifiler(ue.GetUeId())
 	registrationRequest.NgksiAndRegistrationType5GS.SetRegistrationType5GS(registrationType)
-	registrationRequest.MobileIdentity5GS = ue.GetSuci()
+	// If AMF previously assigned the UE a 5G-GUTI, reuses it
+	// If the 5G-GUTI is no longer valid, AMF will issue an Identity Request
+	// which we'll answer with the requested Mobility Identity (eg. SUCI)
+	if ue.Get5gGuti() != nil {
+		guti := ue.Get5gGuti()
+		registrationRequest.MobileIdentity5GS = nasType.MobileIdentity5GS{
+			Iei:    guti.Iei,
+			Len:    guti.Len,
+			Buffer: guti.Octet[:],
+		}
+	} else {
+		registrationRequest.MobileIdentity5GS = ue.GetSuci()
+	}
 	if capability {
 		registrationRequest.Capability5GMM = &nasType.Capability5GMM{
 			Iei:   nasMessage.RegistrationRequestCapability5GMMType,

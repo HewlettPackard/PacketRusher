@@ -105,6 +105,7 @@ type UESimulationConfig struct {
 	TimeBeforeDeregistration int
 	TimeBeforeNgapHandover   int
 	TimeBeforeXnHandover     int
+	TimeBeforeIdle           int
 	NumPduSessions           int
 }
 
@@ -126,7 +127,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 
 		// Create a new UE coroutine
 		// ue.NewUE returns context of the new UE
-		ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[gnbIdGen(0)], wg)
+		ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[gnbIdGen(0)].GetInboundChannel(), wg)
 
 		// We tell the UE to perform a registration
 		ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
@@ -146,7 +147,13 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 			xnHandoverChannel = time.After(time.Duration(simConfig.TimeBeforeXnHandover) * time.Millisecond)
 		}
 
+		var idleChannel <-chan time.Time = nil
+		if simConfig.TimeBeforeIdle != 0 {
+			idleChannel = time.After(time.Duration(simConfig.TimeBeforeIdle) * time.Millisecond)
+		}
+
 		loop := true
+		registered := false
 		state := ueCtx.MM5G_NULL
 		for loop {
 			select {
@@ -161,6 +168,10 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 			case <-xnHandoverChannel:
 				trigger.TriggerXnHandover(simConfig.Gnbs[gnbIdGen(nextHandoverId)], simConfig.Gnbs[gnbIdGen(nextHandoverId+1)], int64(ueId))
 				nextHandoverId++
+			case <-idleChannel:
+				if ueRx != nil {
+					ueRx <- procedures.UeTesterMessage{Type: procedures.Idle}
+				}
 			case msg := <-scenarioChan:
 				if ueRx != nil {
 					ueRx <- msg
@@ -172,10 +183,11 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 				log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)
 				switch msg.StateChange {
 				case ueCtx.MM5G_REGISTERED:
-					if state != msg.StateChange {
+					if !registered {
 						for i := 0; i < simConfig.NumPduSessions; i++ {
 							ueRx <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
 						}
+						registered = true
 					}
 				case ueCtx.MM5G_NULL:
 					loop = false

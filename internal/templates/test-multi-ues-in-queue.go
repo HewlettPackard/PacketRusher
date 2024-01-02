@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, numPduSessions int) {
+func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, numPduSessions int) {
 	if tunnelEnabled && !dedicatedGnb {
 		log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
 	}
@@ -61,6 +61,7 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 		TimeBeforeDeregistration: timeBeforeDeregistration,
 		TimeBeforeNgapHandover:   timeBeforeNgapHandover,
 		TimeBeforeXnHandover:     timeBeforeXnHandover,
+		TimeBeforeIdle:           timeBeforeIdle,
 		NumPduSessions:           numPduSessions,
 	}
 

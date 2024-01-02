@@ -22,7 +22,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnb *context2.GNBContext, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
+func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnbInboundChannel chan context2.UEMessage, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
 	// new UE instance.
 	ue := &context.UEContext{}
 	scenarioChan := make(chan scenario.ScenarioMessage)
@@ -44,11 +44,12 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 		conf.Ue.Snssai.Sd,
 		conf.Ue.TunnelEnabled,
 		scenarioChan,
+		gnbInboundChannel,
 		id)
 
 	go func() {
 		// starting communication with GNB and listen.
-		service.InitConn(ue, gnb)
+		service.InitConn(ue, ue.GetGnbInboundChannel())
 		sigStop := make(chan os.Signal, 1)
 		signal.Notify(sigStop, os.Interrupt)
 
@@ -58,7 +59,7 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 			select {
 			case msg, open := <-ue.GetGnbTx():
 				if !open {
-					log.Error("[UE][", ue.GetMsin(), "] Stopping UE as communication with gNB was closed")
+					log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with gNB was closed")
 					ue.SetGnbTx(nil)
 					break
 				}
@@ -85,9 +86,10 @@ func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 	} else if msg.GNBPduSessions[0] != nil {
 		// Setup PDU Session
 		serviceGtp.SetupGtpInterface(ue, msg)
-	} else if msg.GNBRx != nil && msg.GNBTx != nil {
+	} else if msg.GNBRx != nil && msg.GNBTx != nil && msg.GNBInboundChannel != nil {
 		log.Info("[UE] gNodeB is telling us to use another gNodeB")
 		previousGnbRx := ue.GetGnbRx()
+		ue.SetGnbInboundChannel(msg.GNBInboundChannel)
 		ue.SetGnbRx(msg.GNBRx)
 		ue.SetGnbTx(msg.GNBTx)
 		previousGnbRx <- context2.UEMessage{ConnectionClosed: true}
@@ -113,19 +115,16 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 			return loop
 		}
 		trigger.InitPduSessionRelease(ue, pdu)
-	case procedures.Handover:
-		var pduSession *context.UEPDUSession
-		for i := uint8(1); i <= 16; i++ {
-			pduSession, _ = ue.GetPduSession(i)
-			if pduSession != nil {
-				break
-			}
-		}
-		if pduSession == nil {
-			log.Error("[UE] Cannot handover / PathSwitchRequest to a new gNodeB without any PDU Sessions")
-			break
-		}
-		//trigger.InitHandover(ue, msg.GnbChan)
+	case procedures.Idle:
+		// We switch UE to IDLE
+		ue.SetStateMM_IDLE()
+		trigger.SwitchToIdle(ue)
+
+		time.Sleep(1 * time.Second)
+		// Since gNodeB stopped communication after switching to Idle, we need to connect back to gNodeB
+		service.InitConn(ue, ue.GetGnbInboundChannel())
+		trigger.InitServiceRequest(ue)
+
 	case procedures.Terminate:
 		log.Info("[UE] Terminating UE as requested")
 		// If UE is registered

@@ -17,14 +17,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func SendPduSessionResourceSetupResponse(pduSession *context.GnbPDUSession, ue *context.GNBUe, gnb *context.GNBContext) {
+func SendPduSessionResourceSetupResponse(pduSessions []*context.GnbPDUSession, ue *context.GNBUe, gnb *context.GNBContext) {
 	log.Info("[GNB] Initiating PDU Session Resource Setup Response")
 
 	// send PDU Session Resource Setup Response.
-	gnbIp := gnb.GetGnbIpByData()
-	ngapMsg, err := pdu_session_management.PDUSessionResourceSetupResponse(pduSession, ue, gnbIp)
+	ngapMsg, err := pdu_session_management.PDUSessionResourceSetupResponse(pduSessions, ue, gnb)
 	if err != nil {
-		log.Fatal("[GNB][NGAP] Error sending PDU Session Resource Setup Response.")
+		log.Fatal("[GNB][NGAP] Error sending PDU Session Resource Setup Response: ", err)
 	}
 
 	ue.SetStateReady()
@@ -56,13 +55,13 @@ func SendPduSessionReleaseResponse(pduSessionIds []ngapType.PDUSessionID, ue *co
 	}
 }
 
-func SendInitialContextSetupResponse(ue *context.GNBUe) {
+func SendInitialContextSetupResponse(ue *context.GNBUe, gnb *context.GNBContext) {
 	log.Info("[GNB] Initiating Initial Context Setup Response")
 
 	// send Initial Context Setup Response.
-	ngapMsg, err := ue_context_management.InitialContextSetupResponse(ue)
+	ngapMsg, err := ue_context_management.InitialContextSetupResponse(ue, gnb)
 	if err != nil {
-		log.Fatal("[GNB][NGAP] Error sending Initial Context Setup Response")
+		log.Fatal("[GNB][NGAP] Error sending Initial Context Setup Response: ", err)
 	}
 
 	// Send Initial Context Setup Response.
@@ -73,13 +72,30 @@ func SendInitialContextSetupResponse(ue *context.GNBUe) {
 	}
 }
 
+func SendUeContextReleaseRequest(ue *context.GNBUe) {
+	log.Info("[GNB] Initiating UE Context Release Request")
+
+	// send UE Context Release Complete
+	ngapMsg, err := ue_context_management.UeContextReleaseRequest(ue)
+	if err != nil {
+		log.Fatal("[GNB][NGAP] Error sending UE Context Release Request: ", err)
+	}
+
+	// Send UE Context Release Complete
+	conn := ue.GetSCTP()
+	err = sender.SendToAmF(ngapMsg, conn)
+	if err != nil {
+		log.Fatal("[GNB][AMF] Error sending UE Context Release Request: ", err)
+	}
+}
+
 func SendUeContextReleaseComplete(ue *context.GNBUe) {
 	log.Info("[GNB] Initiating UE Context Complete")
 
 	// send UE Context Release Complete
 	ngapMsg, err := ue_context_management.UeContextReleaseComplete(ue)
 	if err != nil {
-		log.Fatal("[GNB][NGAP] Error sending UE Context Complete")
+		log.Fatal("[GNB][NGAP] Error sending UE Context Complete: ", err)
 	}
 
 	// Send UE Context Release Complete
@@ -96,14 +112,14 @@ func SendAmfConfigurationUpdateAcknowledge(amf *context.GNBAmf) {
 	// send AMF Configure Update Acknowledge
 	ngapMsg, err := interface_management.AmfConfigurationUpdateAcknowledge()
 	if err != nil {
-		log.Fatal("[GNB][NGAP] Error sending AMF Configuration Update Acknowledge")
+		log.Fatal("[GNB][NGAP] Error sending AMF Configuration Update Acknowledge: ", err)
 	}
 
 	// Send AMF Configure Update Acknowledge
 	conn := amf.GetSCTPConn()
 	err = sender.SendToAmF(ngapMsg, conn)
 	if err != nil {
-		log.Fatal("[GNB][NGAP] Error sending AMF Configuration Update Acknowledge")
+		log.Fatal("[GNB][NGAP] Error sending AMF Configuration Update Acknowledge: ", err)
 	}
 }
 
@@ -113,7 +129,7 @@ func SendNgSetupRequest(gnb *context.GNBContext, amf *context.GNBAmf) {
 	// send NG setup response.
 	ngapMsg, err := interface_management.NGSetupRequest(gnb, "PacketRusher")
 	if err != nil {
-		log.Info("[GNB][NGAP] Error sending NG Setup Request")
+		log.Info("[GNB][NGAP] Error sending NG Setup Request: ", err)
 	}
 
 	conn := amf.GetSCTPConn()
@@ -184,7 +200,7 @@ func TriggerXnHandover(oldGnb *context.GNBContext, newGnb *context.GNBContext, p
 	newGnbTx := make(chan context.UEMessage, 1)
 	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, PrUeId: gnbUeContext.GetPrUeId(), UEContext: gnbUeContext, IsHandover: true}
 
-	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx}
+	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, GNBInboundChannel: newGnb.GetInboundChannel()}
 
 	ueSender.SendMessageToUe(gnbUeContext, msg)
 }

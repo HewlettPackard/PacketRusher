@@ -100,6 +100,8 @@ func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
 			}
 		} else if message.IsNas {
 			nas.Dispatch(ue, message.Nas, gnb)
+		} else if message.Idle {
+			trigger.SendUeContextReleaseRequest(ue)
 		} else {
 			log.Error("[GNB] Received unknown message from UE")
 		}

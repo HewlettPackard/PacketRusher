@@ -37,21 +37,23 @@ const MM5G_REGISTERED_INITIATED = 0x02
 const MM5G_REGISTERED = 0x03
 const MM5G_SERVICE_REQ_INIT = 0x04
 const MM5G_DEREGISTERED_INIT = 0x05
+const MM5G_IDLE = 0x06
 
 // 5GSM main states in the UE.
-const SM5G_PDU_SESSION_INACTIVE = 0x06
-const SM5G_PDU_SESSION_ACTIVE_PENDING = 0x07
-const SM5G_PDU_SESSION_ACTIVE = 0x08
+const SM5G_PDU_SESSION_INACTIVE = 0x00
+const SM5G_PDU_SESSION_ACTIVE_PENDING = 0x01
+const SM5G_PDU_SESSION_ACTIVE = 0x02
 
 type UEContext struct {
-	id         uint8
-	prUeId     int64
-	UeSecurity SECURITY
-	StateMM    int
-	gnbRx      chan context.UEMessage
-	gnbTx      chan context.UEMessage
-	PduSession [16]*UEPDUSession
-	amfInfo    Amf
+	id                uint8
+	prUeId            int64
+	UeSecurity        SECURITY
+	StateMM           int
+	gnbInboundChannel chan context.UEMessage
+	gnbRx             chan context.UEMessage
+	gnbTx             chan context.UEMessage
+	PduSession        [16]*UEPDUSession
+	amfInfo           Amf
 
 	// TODO: Modify config so you can configure these parameters per PDUSession
 	Dnn           string
@@ -65,11 +67,8 @@ type UEContext struct {
 }
 
 type Amf struct {
-	amfRegionId uint8
-	amfSetId    uint16
-	amfPointer  uint8
-	mcc         string
-	mnc         string
+	mcc string
+	mnc string
 }
 
 type UEPDUSession struct {
@@ -105,14 +104,14 @@ type SECURITY struct {
 	AuthenticationSubs   models.AuthenticationSubscription
 	Suci                 nasType.MobileIdentity5GS
 	RoutingIndicator     string
-	Guti                 [4]byte
+	Guti                 *nasType.GUTI5G
 }
 
 func (ue *UEContext) NewRanUeContext(msin string,
 	ueSecurityCapability *nasType.UESecurityCapability,
 	k, opc, op, amf, sqn, mcc, mnc, routingIndicator, dnn string,
 	sst int32, sd string, tunnelEnabled bool, scenarioChan chan scenario.ScenarioMessage,
-	id int) {
+	gnbInboundChannel chan context.UEMessage, id int) {
 
 	// added SUPI.
 	ue.UeSecurity.Msin = msin
@@ -155,9 +154,6 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	ue.Dnn = dnn
 	ue.TunnelEnabled = tunnelEnabled
 
-	ue.gnbRx = make(chan context.UEMessage, 1)
-	ue.gnbTx = make(chan context.UEMessage, 1)
-
 	// encode mcc and mnc for mobileIdentity5Gs.
 	resu := ue.GetMccAndMncInOctets()
 	encodedRoutingIndicator := ue.GetRoutingIndicatorInOctets()
@@ -175,6 +171,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 		}
 	}
 
+	ue.gnbInboundChannel = gnbInboundChannel
 	ue.scenarioChan = scenarioChan
 
 	// added initial state for MM(NULL)
@@ -252,8 +249,17 @@ func (ue *UEContext) SetStateMM_DEREGISTERED() {
 	ue.scenarioChan <- scenario.ScenarioMessage{StateChange: ue.StateMM}
 }
 
+func (ue *UEContext) SetStateMM_IDLE() {
+	ue.StateMM = MM5G_IDLE
+	ue.scenarioChan <- scenario.ScenarioMessage{StateChange: ue.StateMM}
+}
+
 func (ue *UEContext) GetStateMM() int {
 	return ue.StateMM
+}
+
+func (ue *UEContext) SetGnbInboundChannel(gnbInboundChannel chan context.UEMessage) {
+	ue.gnbInboundChannel = gnbInboundChannel
 }
 
 func (ue *UEContext) SetGnbRx(gnbRx chan context.UEMessage) {
@@ -262,6 +268,10 @@ func (ue *UEContext) SetGnbRx(gnbRx chan context.UEMessage) {
 
 func (ue *UEContext) SetGnbTx(gnbTx chan context.UEMessage) {
 	ue.gnbTx = gnbTx
+}
+
+func (ue *UEContext) GetGnbInboundChannel() chan context.UEMessage {
+	return ue.gnbInboundChannel
 }
 
 func (ue *UEContext) GetGnbRx() chan context.UEMessage {
@@ -484,28 +494,16 @@ func (ue *UEContext) EncodeUeSuci() (uint8, uint8, uint8, uint8, uint8) {
 	}
 }
 
-func (ue *UEContext) SetAmfRegionId(amfRegionId uint8) {
-	ue.amfInfo.amfRegionId = amfRegionId
-}
-
 func (ue *UEContext) GetAmfRegionId() uint8 {
-	return ue.amfInfo.amfRegionId
-}
-
-func (ue *UEContext) SetAmfPointer(amfPointer uint8) {
-	ue.amfInfo.amfPointer = amfPointer
+	return ue.UeSecurity.Guti.GetAMFRegionID()
 }
 
 func (ue *UEContext) GetAmfPointer() uint8 {
-	return ue.amfInfo.amfPointer
-}
-
-func (ue *UEContext) SetAmfSetId(amfSetId uint16) {
-	ue.amfInfo.amfSetId = amfSetId
+	return ue.UeSecurity.Guti.GetAMFPointer()
 }
 
 func (ue *UEContext) GetAmfSetId() uint16 {
-	return ue.amfInfo.amfSetId
+	return ue.UeSecurity.Guti.GetAMFSetID()
 }
 
 func (ue *UEContext) SetAmfMccAndMnc(mcc string, mnc string) {
@@ -514,12 +512,16 @@ func (ue *UEContext) SetAmfMccAndMnc(mcc string, mnc string) {
 	ue.UeSecurity.Snn = ue.deriveSNN()
 }
 
-func (ue *UEContext) Get5gGuti() [4]uint8 {
-	return ue.UeSecurity.Guti
+func (ue *UEContext) GetTMSI5G() [4]uint8 {
+	return ue.UeSecurity.Guti.GetTMSI5G()
 }
 
-func (ue *UEContext) Set5gGuti(guti [4]uint8) {
+func (ue *UEContext) Set5gGuti(guti *nasType.GUTI5G) {
 	ue.UeSecurity.Guti = guti
+}
+
+func (ue *UEContext) Get5gGuti() *nasType.GUTI5G {
+	return ue.UeSecurity.Guti
 }
 
 func (ue *UEContext) deriveAUTN(autn []byte, ak []uint8) ([]byte, []byte, []byte) {

@@ -15,11 +15,11 @@ const (
 	DestroyPDUSession UeTesterMessageType = 3
 	Terminate         UeTesterMessageType = 4
 	Kill              UeTesterMessageType = 5
-	Handover          UeTesterMessageType = 6
+	Idle              UeTesterMessageType = 6
 )
 
 type UeTesterMessage struct {
-	Type UeTesterMessageType
-	Param uint8
+	Type    UeTesterMessageType
+	Param   uint8
 	GnbChan chan context.UEMessage
 }
