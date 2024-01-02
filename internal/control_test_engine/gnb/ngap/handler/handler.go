@@ -953,7 +953,7 @@ func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU) 
 		}
 	}
 
-	log.Warn("[GNB][AMF] Received an Error Indication for UE with AMF UE ID: ", amfUeId, ", RAN UE ID: ", ranUeId)
+	log.Warn("[GNB][AMF] Received an Error Indication for UE with AMF UE ID: ", amfUeId, " RAN UE ID: ", ranUeId)
 }
 
 func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *context.GNBUe {
