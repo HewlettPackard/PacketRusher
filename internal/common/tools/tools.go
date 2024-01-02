@@ -103,7 +103,8 @@ type UESimulationConfig struct {
 	Cfg                      config.Config
 	ScenarioChan             chan procedures.UeTesterMessage
 	TimeBeforeDeregistration int
-	TimeBeforeHandover       int
+	TimeBeforeNgapHandover   int
+	TimeBeforeXnHandover     int
 	NumPduSessions           int
 }
 
@@ -113,7 +114,9 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 	ueCfg.Ue.Msin = IncrementMsin(simConfig.UeId, simConfig.Cfg.Ue.Msin)
 	log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", ueCfg.Ue.Msin, " UE")
 
-	gnbId := gnbIdGenerator(simConfig.UeId%numGnb, ueCfg.GNodeB.PlmnList.GnbId)
+	gnbIdGen := func(index int) string {
+		return gnbIdGenerator((simConfig.UeId+index)%numGnb, ueCfg.GNodeB.PlmnList.GnbId)
+	}
 
 	// Launch a coroutine to handle UE's individual scenario
 	go func(scenarioChan chan procedures.UeTesterMessage, ueId int) {
@@ -123,7 +126,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 
 		// Create a new UE coroutine
 		// ue.NewUE returns context of the new UE
-		ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[gnbId], wg)
+		ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[gnbIdGen(0)], wg)
 
 		// We tell the UE to perform a registration
 		ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
@@ -132,9 +135,15 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 		if simConfig.TimeBeforeDeregistration != 0 {
 			deregistrationChannel = time.After(time.Duration(simConfig.TimeBeforeDeregistration) * time.Millisecond)
 		}
-		var handoverChannel <-chan time.Time = nil
-		if simConfig.TimeBeforeHandover != 0 {
-			handoverChannel = time.After(time.Duration(simConfig.TimeBeforeHandover) * time.Millisecond)
+
+		nextHandoverId := 0
+		var ngapHandoverChannel <-chan time.Time = nil
+		if simConfig.TimeBeforeNgapHandover != 0 {
+			ngapHandoverChannel = time.After(time.Duration(simConfig.TimeBeforeNgapHandover) * time.Millisecond)
+		}
+		var xnHandoverChannel <-chan time.Time = nil
+		if simConfig.TimeBeforeXnHandover != 0 {
+			xnHandoverChannel = time.After(time.Duration(simConfig.TimeBeforeXnHandover) * time.Millisecond)
 		}
 
 		loop := true
@@ -146,8 +155,12 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 					ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
 					ueRx = nil
 				}
-			case <-handoverChannel:
-				trigger.TriggerHandover(simConfig.Gnbs[gnbId], simConfig.Gnbs[gnbIdGenerator((ueId+1)%numGnb, ueCfg.GNodeB.PlmnList.GnbId)], int64(ueId))
+			case <-ngapHandoverChannel:
+				trigger.TriggerNgapHandover(simConfig.Gnbs[gnbIdGen(nextHandoverId)], simConfig.Gnbs[gnbIdGen(nextHandoverId+1)], int64(ueId))
+				nextHandoverId++
+			case <-xnHandoverChannel:
+				trigger.TriggerXnHandover(simConfig.Gnbs[gnbIdGen(nextHandoverId)], simConfig.Gnbs[gnbIdGen(nextHandoverId+1)], int64(ueId))
+				nextHandoverId++
 			case msg := <-scenarioChan:
 				if ueRx != nil {
 					ueRx <- msg

@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2023 Valentin D'Emmanuele
  */
 package handler
 
@@ -685,6 +686,195 @@ func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapT
 	}
 
 	log.Info("[GNB] Handover completed successfully for UE ", ue.GetRanUeId())
+}
+
+func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+	var ueSecurityCapabilities *ngapType.UESecurityCapabilities
+	var sst []string
+	var sd []string
+	var maskedImeisv string
+	var sourceToTargetContainer *ngapType.SourceToTargetTransparentContainer
+	var pDUSessionResourceSetupListHOReq *ngapType.PDUSessionResourceSetupListHOReq
+	var amfUeId int64
+
+	valueMessage := message.InitiatingMessage.Value.HandoverRequest
+
+	for _, ies := range valueMessage.ProtocolIEs.List {
+		switch ies.Id.Value {
+
+		case ngapType.ProtocolIEIDAMFUENGAPID:
+			if ies.Value.AMFUENGAPID == nil {
+				log.Fatal("[GNB][NGAP] AMF UE ID is missing")
+			}
+			amfUeId = ies.Value.AMFUENGAPID.Value
+
+		case ngapType.ProtocolIEIDAllowedNSSAI:
+			if ies.Value.AllowedNSSAI == nil {
+				log.Fatal("[GNB][NGAP] Allowed NSSAI is missing")
+			}
+
+			valor := len(ies.Value.AllowedNSSAI.List)
+			sst = make([]string, valor)
+			sd = make([]string, valor)
+
+			// list S-NSSAI(Single – Network Slice Selection Assistance Information).
+			for i, items := range ies.Value.AllowedNSSAI.List {
+
+				if items.SNSSAI.SST.Value != nil {
+					sst[i] = fmt.Sprintf("%x", items.SNSSAI.SST.Value)
+				} else {
+					sst[i] = "not informed"
+				}
+
+				if items.SNSSAI.SD != nil {
+					sd[i] = fmt.Sprintf("%x", items.SNSSAI.SD.Value)
+				} else {
+					sd[i] = "not informed"
+				}
+			}
+
+		case ngapType.ProtocolIEIDMaskedIMEISV:
+			// that field is not mandatory.
+			// TODO using for mapping UE context
+			if ies.Value.MaskedIMEISV == nil {
+				log.Info("[GNB][NGAP] Masked IMEISV is missing")
+				maskedImeisv = "not informed"
+			} else {
+				maskedImeisv = fmt.Sprintf("%x", ies.Value.MaskedIMEISV.Value.Bytes)
+			}
+
+		case ngapType.ProtocolIEIDPDUSessionResourceSwitchedList:
+			ueSecurityCapabilities = ies.Value.UESecurityCapabilities
+			if ueSecurityCapabilities == nil {
+				log.Fatal("[GNB][NGAP] UESecurityCapabilities is missing")
+				// TODO SEND ERROR INDICATION
+			}
+
+		case ngapType.ProtocolIEIDSourceToTargetTransparentContainer:
+			sourceToTargetContainer = ies.Value.SourceToTargetTransparentContainer
+			if sourceToTargetContainer == nil {
+				log.Fatal("[GNB][NGAP] sourceToTargetContainer is missing")
+				// TODO SEND ERROR INDICATION
+			}
+
+		case ngapType.ProtocolIEIDPDUSessionResourceSetupListHOReq:
+			pDUSessionResourceSetupListHOReq = ies.Value.PDUSessionResourceSetupListHOReq
+			if pDUSessionResourceSetupListHOReq == nil {
+				log.Fatal("[GNB][NGAP] pDUSessionResourceSetupListHOReq is missing")
+				// TODO SEND ERROR INDICATION
+			}
+
+		case ngapType.ProtocolIEIDUESecurityCapabilities:
+			if ies.Value.UESecurityCapabilities == nil {
+				log.Fatal("[GNB][NGAP] UE Security Capabilities is missing")
+			}
+			ueSecurityCapabilities = ies.Value.UESecurityCapabilities
+		}
+	}
+
+	if sourceToTargetContainer == nil {
+		log.Error("[GNB] HandoverRequest message from AMF is missing mandatory SourceToTargetTransparentContainer")
+		return
+	}
+
+	sourceToTargetContainerBytes := sourceToTargetContainer.Value
+	sourceToTargetContainerNgap := &ngapType.SourceNGRANNodeToTargetNGRANNodeTransparentContainer{}
+	err := aper.UnmarshalWithParams(sourceToTargetContainerBytes, sourceToTargetContainerNgap, "valueExt")
+	if err != nil {
+		log.Error("[GNB] Unable to unmarshall SourceToTargetTransparentContainer: ", err)
+		return
+	}
+	if sourceToTargetContainerNgap.IndexToRFSP == nil {
+		log.Error("[GNB] SourceToTargetTransparentContainer from source gNodeB is missing IndexToRFSP")
+		return
+	}
+	prUeId := sourceToTargetContainerNgap.IndexToRFSP.Value
+
+	ue := gnb.NewGnBUe(nil, nil, prUeId)
+	ue.SetAmfUeId(amfUeId)
+
+	ue.CreateUeContext("not informed", maskedImeisv, sst, sd, ueSecurityCapabilities)
+
+	for _, pDUSessionResourceSetupItemHOReq := range pDUSessionResourceSetupListHOReq.List {
+		pduSessionId := pDUSessionResourceSetupItemHOReq.PDUSessionID.Value
+		sst := fmt.Sprintf("%x", pDUSessionResourceSetupItemHOReq.SNSSAI.SST.Value)
+		sd := "not informed"
+		if pDUSessionResourceSetupItemHOReq.SNSSAI.SD != nil {
+			sd = fmt.Sprintf("%x", pDUSessionResourceSetupItemHOReq.SNSSAI.SD.Value)
+		}
+
+		handOverRequestTransferBytes := pDUSessionResourceSetupItemHOReq.HandoverRequestTransfer
+		handOverRequestTransfer := &ngapType.PDUSessionResourceSetupRequestTransfer{}
+		err := aper.UnmarshalWithParams(handOverRequestTransferBytes, handOverRequestTransfer, "valueExt")
+		if err != nil {
+			log.Error("[GNB] Unable to unmarshall HandOverRequestTransfer: ", err)
+			continue
+		}
+
+		var gtpTunnel *ngapType.GTPTunnel
+		var upfIp string
+		var teidUplink aper.OctetString
+		for _, ie := range handOverRequestTransfer.ProtocolIEs.List {
+			switch ie.Id.Value {
+
+			case ngapType.ProtocolIEIDULNGUUPTNLInformation:
+				uLNGUUPTNLInformation := ie.Value.ULNGUUPTNLInformation
+
+				gtpTunnel = uLNGUUPTNLInformation.GTPTunnel
+				upfIp, _ = ngapConvert.IPAddressToString(gtpTunnel.TransportLayerAddress)
+				teidUplink = gtpTunnel.GTPTEID.Value
+			}
+		}
+
+		_, err = ue.CreatePduSession(pduSessionId, upfIp, sst, sd, 0, 1, 0, 0, binary.BigEndian.Uint32(teidUplink), gnb.GetUeTeid(ue))
+		if err != nil {
+			log.Error("[GNB] ", err)
+		}
+	}
+
+	trigger.SendHandoverRequestAcknowledge(gnb, ue)
+}
+
+func HandlerHandoverCommand(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+	valueMessage := message.SuccessfulOutcome.Value.HandoverCommand
+
+	var amfUeId, ranUeId int64
+
+	for _, ies := range valueMessage.ProtocolIEs.List {
+		switch ies.Id.Value {
+
+		case ngapType.ProtocolIEIDAMFUENGAPID:
+
+			if ies.Value.AMFUENGAPID == nil {
+				log.Fatal("[GNB][NGAP] AMF UE ID is missing")
+			}
+			amfUeId = ies.Value.AMFUENGAPID.Value
+
+		case ngapType.ProtocolIEIDRANUENGAPID:
+
+			if ies.Value.RANUENGAPID == nil {
+				log.Fatal("[GNB][NGAP] RAN UE ID is missing")
+				// TODO SEND ERROR INDICATION
+			}
+			ranUeId = ies.Value.RANUENGAPID.Value
+		}
+
+	}
+	ue := getUeFromContext(gnb, ranUeId, amfUeId)
+	newGnb := ue.GetHandoverGnodeB()
+	if newGnb == nil {
+		log.Error("[GNB] AMF is sending a Handover Command for an UE we did not send a Handover Required message")
+		// TODO SEND ERROR INDICATION
+		return
+	}
+
+	newGnbRx := make(chan context.UEMessage, 1)
+	newGnbTx := make(chan context.UEMessage, 1)
+	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, PrUeId: ue.GetPrUeId(), IsHandover: true}
+
+	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx}
+
+	sender.SendMessageToUe(ue, msg)
 }
 
 func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU) {

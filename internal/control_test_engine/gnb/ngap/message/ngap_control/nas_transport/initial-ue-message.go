@@ -23,12 +23,12 @@ func init() {
 	TestPlmn.Value = aper.OctetString("\x02\xf8\x39")
 }
 
-func GetInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, plmn []byte, tac []byte) ([]byte, error) {
-	message := BuildInitialUEMessage(ranUeNgapID, nasPdu, fiveGSTmsi, plmn, tac)
+func GetInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, gnb *context.GNBContext) ([]byte, error) {
+	message := BuildInitialUEMessage(ranUeNgapID, nasPdu, fiveGSTmsi, gnb)
 	return ngap.Encoder(message)
 }
 
-func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, plmn []byte, tac []byte) (pdu ngapType.NGAPPDU) {
+func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, gnb *context.GNBContext) (pdu ngapType.NGAPPDU) {
 
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -80,15 +80,11 @@ func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, 
 	userLocationInformation.UserLocationInformationNR = new(ngapType.UserLocationInformationNR)
 
 	userLocationInformationNR := userLocationInformation.UserLocationInformationNR
-	userLocationInformationNR.NRCGI.PLMNIdentity.Value = plmn
-	userLocationInformationNR.NRCGI.NRCellIdentity.Value = aper.BitString{
-		Bytes:     []byte{0x00, 0x00, 0x00, 0x00, 0x10},
-		BitLength: 36,
-	}
+	userLocationInformationNR.NRCGI.PLMNIdentity = gnb.GetPLMNIdentity()
+	userLocationInformationNR.NRCGI.NRCellIdentity = gnb.GetNRCellIdentity()
 
-	userLocationInformationNR.TAI.PLMNIdentity.Value = plmn
-	// userLocationInformationNR.TAI.TAC.Value = aper.OctetString("\x00\x00\x01")
-	userLocationInformationNR.TAI.TAC.Value = tac
+	userLocationInformationNR.TAI.PLMNIdentity.Value = gnb.GetMccAndMncInOctets()
+	userLocationInformationNR.TAI.TAC.Value = gnb.GetTacInBytes()
 
 	initialUEMessageIEs.List = append(initialUEMessageIEs.List, ie)
 
@@ -144,7 +140,7 @@ func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, 
 }
 
 func SendInitialUeMessage(registrationRequest []byte, ue *context.GNBUe, gnb *context.GNBContext) ([]byte, error) {
-	sendMsg, err := GetInitialUEMessage(ue.GetRanUeId(), registrationRequest, "", gnb.GetMccAndMncInOctets(), gnb.GetTacInBytes())
+	sendMsg, err := GetInitialUEMessage(ue.GetRanUeId(), registrationRequest, "", gnb)
 	if err != nil {
 		return nil, fmt.Errorf("Error in %d ue initial message", ue.GetRanUeId())
 	}

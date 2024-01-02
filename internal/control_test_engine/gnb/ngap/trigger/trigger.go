@@ -125,7 +125,7 @@ func SendNgSetupRequest(gnb *context.GNBContext, amf *context.GNBAmf) {
 }
 
 func SendPathSwitchRequest(gnb *context.GNBContext, ue *context.GNBUe) {
-	log.Info("[GNB] Initiating PDU Session Release Response")
+	log.Info("[GNB] Initiating Path Switch Request")
 
 	// send NG setup response.
 	ngapMsg, err := ue_mobility_management.PathSwitchRequest(gnb, ue)
@@ -136,12 +136,44 @@ func SendPathSwitchRequest(gnb *context.GNBContext, ue *context.GNBUe) {
 	conn := ue.GetSCTP()
 	err = sender.SendToAmF(ngapMsg, conn)
 	if err != nil {
-		log.Fatal("[GNB][NGAP] Error sending Path Switch Request.: ", err)
+		log.Fatal("[GNB][NGAP] Error sending Path Switch Request: ", err)
 	}
 }
 
-func TriggerHandover(oldGnb *context.GNBContext, newGnb *context.GNBContext, prUeId int64) {
-	log.Info("[GNB] Initiating UE Handover")
+func SendHandoverRequestAcknowledge(gnb *context.GNBContext, ue *context.GNBUe) {
+	log.Info("[GNB] Initiating Handover Request Acknowledge")
+
+	// send NG setup response.
+	ngapMsg, err := ue_mobility_management.HandoverRequestAcknowledge(gnb, ue)
+	if err != nil {
+		log.Info("[GNB][NGAP] Error sending Handover Request Acknowledge: ", err)
+	}
+
+	conn := ue.GetSCTP()
+	err = sender.SendToAmF(ngapMsg, conn)
+	if err != nil {
+		log.Fatal("[GNB][NGAP] Error sending Handover Request Acknowledge: ", err)
+	}
+}
+
+func SendHandoverNotify(gnb *context.GNBContext, ue *context.GNBUe) {
+	log.Info("[GNB] Initiating Handover Notify")
+
+	// send NG setup response.
+	ngapMsg, err := ue_mobility_management.HandoverNotify(gnb, ue)
+	if err != nil {
+		log.Info("[GNB][NGAP] Error sending Handover Notify: ", err)
+	}
+
+	conn := ue.GetSCTP()
+	err = sender.SendToAmF(ngapMsg, conn)
+	if err != nil {
+		log.Fatal("[GNB][NGAP] Error sending Handover Notify: ", err)
+	}
+}
+
+func TriggerXnHandover(oldGnb *context.GNBContext, newGnb *context.GNBContext, prUeId int64) {
+	log.Info("[GNB] Initiating Xn UE Handover")
 
 	gnbUeContext, err := oldGnb.GetGnbUeByPrUeId(prUeId)
 	if err != nil {
@@ -150,9 +182,32 @@ func TriggerHandover(oldGnb *context.GNBContext, newGnb *context.GNBContext, prU
 
 	newGnbRx := make(chan context.UEMessage, 1)
 	newGnbTx := make(chan context.UEMessage, 1)
-	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, UEContext: gnbUeContext}
+	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, PrUeId: gnbUeContext.GetPrUeId(), UEContext: gnbUeContext, IsHandover: true}
 
 	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx}
 
 	ueSender.SendMessageToUe(gnbUeContext, msg)
+}
+
+func TriggerNgapHandover(oldGnb *context.GNBContext, newGnb *context.GNBContext, prUeId int64) {
+	log.Info("[GNB] Initiating NGAP UE Handover")
+
+	gnbUeContext, err := oldGnb.GetGnbUeByPrUeId(prUeId)
+	if err != nil {
+		log.Fatal("[GNB][NGAP] Error getting UE from PR UE ID: ", err)
+	}
+
+	gnbUeContext.SetHandoverGnodeB(newGnb)
+
+	// send NG setup response.
+	ngapMsg, err := ue_mobility_management.HandoverRequired(oldGnb, newGnb, gnbUeContext)
+	if err != nil {
+		log.Info("[GNB][NGAP] Error sending Handover Required ", err)
+	}
+
+	conn := gnbUeContext.GetSCTP()
+	err = sender.SendToAmF(ngapMsg, conn)
+	if err != nil {
+		log.Fatal("[GNB][NGAP] Error sending Handover Required: ", err)
+	}
 }
