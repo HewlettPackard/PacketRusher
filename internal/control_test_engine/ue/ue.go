@@ -137,8 +137,8 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 					trigger.InitPduSessionRelease(ue, pduSession)
 					select {
 					case <-pduSession.Wait:
-					case <-time.After(5 * time.Millisecond):
-						// If still unregistered after 5 ms, continue
+					case <-time.After(500 * time.Millisecond):
+						// If still unregistered after 500 ms, continue
 					}
 				}
 			}

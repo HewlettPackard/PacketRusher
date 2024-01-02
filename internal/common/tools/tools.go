@@ -146,8 +146,6 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 			xnHandoverChannel = time.After(time.Duration(simConfig.TimeBeforeXnHandover) * time.Millisecond)
 		}
 
-		log.Error(simConfig.TimeBeforeNgapHandover)
-		log.Error(simConfig.TimeBeforeXnHandover)
 		loop := true
 		state := ueCtx.MM5G_NULL
 		for loop {
