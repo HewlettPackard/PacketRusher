@@ -61,7 +61,7 @@ func buildRegistrationAccept(ue *context.UEContext) (nasMsg *nas.Message, err er
 	registrationAccept.TAIList.SetLen(uint8(len(taiListNas)))
 	registrationAccept.TAIList.SetPartialTrackingAreaIdentityList(taiListNas)
 
-	nssai := ue.GetNssai()
+	nssai := ue.GetSecurityContext().GetDefaultSNssai()
 	var buf []uint8
 	buf = append(buf, nasConvert.SnssaiToNas(nssai)...)
 

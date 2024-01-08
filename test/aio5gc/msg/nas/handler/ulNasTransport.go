@@ -64,7 +64,7 @@ func transport5GSMMessage(ue *context.UEContext, ulNasTransport *nasMessage.ULNA
 	if ulNasTransport.SNSSAI != nil {
 		snssai = nasConvert.SnssaiToModels(ulNasTransport.SNSSAI)
 	} else {
-		snssai = ue.GetNssai()
+		snssai = ue.GetSecurityContext().GetDefaultSNssai()
 	}
 
 	dnnList := session.GetDnnList()
