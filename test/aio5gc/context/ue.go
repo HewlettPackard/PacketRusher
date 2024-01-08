@@ -25,7 +25,6 @@ type UEContext struct {
 	ueSecurityCapability     *nasType.UESecurityCapability
 	ngKsi                    models.NgKsi
 	Dnn                      string
-	snssai                   models.Snssai
 	pei                      string
 	securityContext          *SecurityContext
 	SecurityContextAvailable bool
@@ -55,14 +54,6 @@ func (ue *UEContext) SetRanNgapId(id int64) {
 
 func (ue *UEContext) GetRanNgapId() (id int64) {
 	return ue.ranNgapId
-}
-
-func (ue *UEContext) SetNssai(nssai models.Snssai) {
-	ue.snssai = nssai
-}
-
-func (ue *UEContext) GetNssai() models.Snssai {
-	return ue.snssai
 }
 
 func (ue *UEContext) SetAmfNgapId(id int64) {

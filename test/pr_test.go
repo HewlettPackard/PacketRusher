@@ -10,7 +10,6 @@ import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
-	"my5G-RANTester/lib/fsm"
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
@@ -19,9 +18,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/free5gc/util/fsm"
+
 	"github.com/free5gc/nas"
-	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/nas/nasMessage"
+	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/openapi/models"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -43,11 +45,8 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 			RegistrationRequested:            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
 			AuthenticationChallengeResponded: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
 			SecurityContextSet:               func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			Registred: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
-				fmt.Printf("event [%+v] at state [%+v]\n", event, state.Current())
-				//check ue context is aligned with wanted config by matching ismi
-			},
-			DeregistrationRequested: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			Registred:                        func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			DeregistrationRequested:          func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
 			Idle: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 				assert.Equal(t, args["requestedPduCount"], args["providedPduCount"], "Number of requested PDU Session count does not match the provided count")
 				assert.Equal(t, args["providedPduCount"], args["releasedPduCount"], "Number of provided PDU Session count does not match the released count")
@@ -55,6 +54,8 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	)
 	assert.Nil(t, err, "FSM creation failed")
 	stateList.Fsm = f
+
+	logEntry := log.NewEntry(log.StandardLogger())
 
 	validatePDUSessionCreation := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
 		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
@@ -99,7 +100,13 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 					case ngapType.ProtocolIEIDAMFUENGAPID:
 						ueState, err := stateList.FindByAmfId(list[ie].Value.AMFUENGAPID.Value)
 						assert.Nil(t, err, "Error while validating pdu session release")
-						err = stateList.Fsm.SendEvent(ueState.state, fsm.EventType(fmt.Sprint(ngapMsg.SuccessfulOutcome.ProcedureCode.Value)), fsm.ArgsType{"requestedPduCount": ueState.GetRequestedPDUCount(), "providedPduCount": ueState.GetProvidedPDUCount(), "releasedPduCount": ueState.GetReleasedPDUCount()})
+						err = stateList.Fsm.SendEvent(ueState.state, fsm.EventType(fmt.Sprint(ngapMsg.SuccessfulOutcome.ProcedureCode.Value)),
+							fsm.ArgsType{
+								"requestedPduCount": ueState.GetRequestedPDUCount(),
+								"providedPduCount":  ueState.GetProvidedPDUCount(),
+								"releasedPduCount":  ueState.GetReleasedPDUCount(),
+							},
+							logEntry)
 						if err != nil {
 							assert.Nil(t, err, "Wrong state transition: %v", err)
 						}
@@ -133,7 +140,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 
 		case nas.MsgTypeConfigurationUpdateComplete:
 		default:
-			err = stateList.Fsm.SendEvent(ueState.state, fsm.EventType(nasMsg.GmmHeader.GetMessageType()), fsm.ArgsType{})
+			err = stateList.Fsm.SendEvent(ueState.state, fsm.EventType(nasMsg.GmmHeader.GetMessageType()), fsm.ArgsType{}, logEntry)
 			if err != nil {
 				assert.Nil(t, err, "Wrong state transition: %v", err)
 			}
@@ -202,6 +209,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		securityContext.SetMsin(tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin))
 		securityContext.SetAuthSubscription(ueSimCfg.Cfg.Ue.Key, ueSimCfg.Cfg.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
 		securityContext.SetAbba([]uint8{0x00, 0x00})
+		securityContext.SetDefaultSNssai(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd})
 
 		amfContext := fiveGC.GetAMFContext()
 		amfContext.NewSecurityContext(securityContext)
@@ -305,6 +313,7 @@ func TestUERegistrationLoop(t *testing.T) {
 		securityContext.SetMsin(tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin))
 		securityContext.SetAuthSubscription(ueSimCfg.Cfg.Ue.Key, ueSimCfg.Cfg.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
 		securityContext.SetAbba([]uint8{0x00, 0x00})
+		securityContext.SetDefaultSNssai(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd})
 
 		amfContext := fiveGC.GetAMFContext()
 		amfContext.NewSecurityContext(securityContext)

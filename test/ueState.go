@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"sync"
 
-	"my5G-RANTester/lib/fsm"
+	"github.com/free5gc/util/fsm"
 )
 
 type UEStateList struct {
