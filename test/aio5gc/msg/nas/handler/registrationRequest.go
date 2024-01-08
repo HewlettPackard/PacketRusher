@@ -24,10 +24,6 @@ func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *conte
 		return errors.New("[5GC][NAS] Received unsupported registration type")
 	}
 
-	//Todo: check if snssai is supported by amf, add possibility to request several NSSAI
-	// snssai, err := nasConvert.RequestedNssaiToModels(gmm.RegistrationRequest.RequestedNSSAI)
-	// ue.SetNssai(snssai[0])
-
 	// NgKsi
 	ngKsi := models.NgKsi{}
 	switch nasReq.NgksiAndRegistrationType5GS.GetTSC() {
