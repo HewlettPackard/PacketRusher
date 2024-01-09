@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"my5G-RANTester/test/aio5gc/lib/state"
 	"regexp"
 	"strconv"
 	"sync"
@@ -33,6 +34,7 @@ type UEContext struct {
 	smContexts               map[int32]*SmContext
 	smContextMtx             sync.Mutex
 	initialContextSetup      bool
+	state                    *state.UEState
 }
 
 func (ue *UEContext) AllocateGuti(a *AMFContext) {
@@ -182,4 +184,8 @@ func (ue *UEContext) DerivateKamf() {
 		return
 	}
 	ue.securityContext.kamf = hex.EncodeToString(KamfBytes)
+}
+
+func (ue *UEContext) GetState() *state.UEState {
+	return ue.state
 }

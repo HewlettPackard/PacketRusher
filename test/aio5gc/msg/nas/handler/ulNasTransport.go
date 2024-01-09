@@ -82,6 +82,7 @@ func transport5GSMMessage(ue *context.UEContext, ulNasTransport *nasMessage.ULNA
 	// case iii) if the AMF does not have a PDU session routing context for the PDU session ID and the UE
 	// and the Request type IE is included and is set to "initial request"
 	case nasMessage.ULNASTransportRequestTypeInitialRequest:
+		ue.GetState().NewPDURequest()
 		return handleInitialRequest(n1smContent, ue, session, pduSessionID, snssai, dnn, gnb)
 
 	default:

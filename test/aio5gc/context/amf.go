@@ -7,6 +7,7 @@ package context
 import (
 	"errors"
 	"math"
+	"my5G-RANTester/test/aio5gc/lib/state"
 	"strconv"
 	"sync"
 
@@ -123,6 +124,14 @@ func (c *AMFContext) FindRegistredUEByMsin(msin string) (*UEContext, error) {
 	return nil, errors.New("[5GC] Registred UE with msin " + msin + "not found")
 }
 
+func (c *AMFContext) ExecuteForAllUe(function func(ue *UEContext)) {
+	ueMutex.Lock()
+	defer ueMutex.Unlock()
+	for ue := range c.ues {
+		function(c.ues[ue])
+	}
+}
+
 func (c *AMFContext) NewSecurityContext(sub SecurityContext) error {
 	_, notExist := c.FindSecurityContextByMsin(sub.msin)
 	if notExist == nil {
@@ -140,6 +149,8 @@ func (c *AMFContext) NewUE(ueRanNgapId int64) *UEContext {
 	newUE.SetAmfNgapId(c.getAmfUeId())
 	newUE.SecurityContextAvailable = false
 	newUE.smContexts = make(map[int32]*SmContext)
+	newUE.state = &state.UEState{}
+	newUE.state.Init()
 	ueMutex.Lock()
 	c.ues = append(c.ues, &newUE)
 	ueMutex.Unlock()

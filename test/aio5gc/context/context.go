@@ -12,6 +12,7 @@ import (
 	"github.com/free5gc/nas"
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 )
 
 // All in one 5GC for test purpose
@@ -20,6 +21,7 @@ type Aio5gc struct {
 	session    SessionContext
 	nasHook    []func(*nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error)
 	ngapHook   []func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) (bool, error)
+	fsm        *fsm.FSM
 	conf       config.Config
 }
 
@@ -31,7 +33,7 @@ func (a *Aio5gc) GetSessionContext() *SessionContext {
 	return &a.session
 }
 
-func (a *Aio5gc) Init(conf config.Config, id string, name string) error {
+func (a *Aio5gc) Init(conf config.Config, id string, name string, f *fsm.FSM) error {
 	plmn := models.PlmnId{
 		Mcc: conf.GNodeB.PlmnList.Mcc,
 		Mnc: conf.GNodeB.PlmnList.Mnc,
@@ -70,6 +72,7 @@ func (a *Aio5gc) Init(conf config.Config, id string, name string) error {
 	)
 
 	a.session.NewSessionContext()
+	a.fsm = f
 	return nil
 }
 
@@ -87,4 +90,12 @@ func (a *Aio5gc) GetNgapHooks() []func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) 
 
 func (a *Aio5gc) SetNgapHooks(hook []func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) (bool, error)) {
 	a.ngapHook = hook
+}
+
+func (a *Aio5gc) SetFSM(fsm *fsm.FSM) {
+	a.fsm = fsm
+}
+
+func (a *Aio5gc) GetFSM() *fsm.FSM {
+	return a.fsm
 }

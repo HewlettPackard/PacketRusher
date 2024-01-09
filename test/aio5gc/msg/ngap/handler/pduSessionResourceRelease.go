@@ -6,20 +6,17 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
 
 	"github.com/free5gc/ngap/ngapType"
-	"github.com/free5gc/util/fsm"
-	log "github.com/sirupsen/logrus"
 )
 
-func UEContextReleaseComplete(req *ngapType.UEContextReleaseComplete, fgc *context.Aio5gc) error {
+func PDUSessionResourceRelease(req *ngapType.PDUSessionResourceReleaseResponse, fgc *context.Aio5gc) error {
 
+	amf := fgc.GetAMFContext()
 	var ue *context.UEContext
 	var ranUe *context.UEContext
 	var err error
-	amf := fgc.GetAMFContext()
 
 	for ie := range req.ProtocolIEs.List {
 		switch req.ProtocolIEs.List[ie].Id.Value {
@@ -33,27 +30,16 @@ func UEContextReleaseComplete(req *ngapType.UEContextReleaseComplete, fgc *conte
 			if err != nil {
 				return err
 			}
-
-		case ngapType.ProtocolIEIDUserLocationInformation:
-
-		default:
-			return errors.New("[5GC][NGAP] Received unknown ie for UEContextReleaseComplete")
 		}
+	}
+	if !ue.GetInitialContextSetup() {
+		return errors.New("[5GC][NGAP] This UE has no security context set up")
 	}
 	if ue != ranUe {
 		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one registred for this UE")
 	}
-	f := fgc.GetFSM()
-	state := ue.GetState()
-	err = f.SendEvent(state.GetState(), fsm.EventType(fmt.Sprint(ngapType.ProcedureCodeUEContextRelease)),
-		fsm.ArgsType{
-			"requestedPduCount": state.GetRequestedPDUCount(),
-			"providedPduCount":  state.GetProvidedPDUCount(),
-			"releasedPduCount":  state.GetReleasedPDUCount(),
-		},
-		log.NewEntry(log.StandardLogger()))
-	if err != nil {
-		log.Warn("[5GC][NAS] Unexpected UE state transition: " + err.Error())
-	}
+
+	ue.GetState().NewPDUReleased()
+
 	return nil
 }

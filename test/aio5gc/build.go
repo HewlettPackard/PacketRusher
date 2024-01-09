@@ -12,16 +12,23 @@ import (
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/util/fsm"
 )
 
 type FiveGCBuilder struct {
 	config   config.Config
+	fsm      *fsm.FSM
 	nasHook  []func(*nas.Message, *context.UEContext, *context.GNBContext, *context.Aio5gc) (bool, error)
 	ngapHook []func(*ngapType.NGAPPDU, *context.GNBContext, *context.Aio5gc) (bool, error)
 }
 
 func (f *FiveGCBuilder) WithConfig(conf config.Config) *FiveGCBuilder {
 	f.config = conf
+	return f
+}
+
+func (f *FiveGCBuilder) WithFSM(fsm *fsm.FSM) *FiveGCBuilder {
+	f.fsm = fsm
 	return f
 }
 
@@ -43,7 +50,10 @@ func (f *FiveGCBuilder) Build() (*context.Aio5gc, error) {
 	if (f.config == config.Config{}) {
 		return &context.Aio5gc{}, errors.New("No configuration provided")
 	}
-	err := fgc.Init(f.config, amfId, amfName)
+	if f.fsm == nil {
+		return &context.Aio5gc{}, errors.New("No FSM provided")
+	}
+	err := fgc.Init(f.config, amfId, amfName, f.fsm)
 	if err != nil {
 		return &context.Aio5gc{}, err
 	}

@@ -12,6 +12,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
+	"my5G-RANTester/test/aio5gc/lib/state"
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
 	"os"
 	"sync"
@@ -21,7 +22,6 @@ import (
 	"github.com/free5gc/util/fsm"
 
 	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/openapi/models"
 	log "github.com/sirupsen/logrus"
@@ -30,123 +30,28 @@ import (
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 
-	stateList := UEStateList{}
 	f, err := fsm.NewFSM(
 		fsm.Transitions{
-			{Event: fsm.EventType(nas.MsgTypeRegistrationRequest), From: Fresh, To: RegistrationRequested},
-			{Event: fsm.EventType(nas.MsgTypeAuthenticationResponse), From: RegistrationRequested, To: AuthenticationChallengeResponded},
-			{Event: fsm.EventType(nas.MsgTypeSecurityModeComplete), From: AuthenticationChallengeResponded, To: SecurityContextSet},
-			{Event: fsm.EventType(nas.MsgTypeRegistrationComplete), From: SecurityContextSet, To: Registred},
-			{Event: fsm.EventType(nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration), From: Registred, To: DeregistrationRequested},
-			{Event: fsm.EventType(fmt.Sprint(ngapType.ProcedureCodeUEContextRelease)), From: DeregistrationRequested, To: Idle},
+			{Event: fsm.EventType(nas.MsgTypeRegistrationRequest), From: state.Fresh, To: state.RegistrationRequested},
+			{Event: fsm.EventType(nas.MsgTypeAuthenticationResponse), From: state.RegistrationRequested, To: state.AuthenticationChallengeResponded},
+			{Event: fsm.EventType(nas.MsgTypeSecurityModeComplete), From: state.AuthenticationChallengeResponded, To: state.SecurityContextSet},
+			{Event: fsm.EventType(nas.MsgTypeRegistrationComplete), From: state.SecurityContextSet, To: state.Registred},
+			{Event: fsm.EventType(nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration), From: state.Registred, To: state.DeregistrationRequested},
+			{Event: fsm.EventType(fmt.Sprint(ngapType.ProcedureCodeUEContextRelease)), From: state.DeregistrationRequested, To: state.Idle},
 		},
 		fsm.Callbacks{
-			Fresh:                            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			RegistrationRequested:            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			AuthenticationChallengeResponded: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			SecurityContextSet:               func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			Registred:                        func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			DeregistrationRequested:          func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			Idle: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			state.Fresh:                            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			state.RegistrationRequested:            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			state.AuthenticationChallengeResponded: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			state.SecurityContextSet:               func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			state.Registred:                        func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			state.DeregistrationRequested:          func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			state.Idle: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 				assert.Equal(t, args["requestedPduCount"], args["providedPduCount"], "Number of requested PDU Session count does not match the provided count")
 				assert.Equal(t, args["providedPduCount"], args["releasedPduCount"], "Number of provided PDU Session count does not match the released count")
 			}},
 	)
 	assert.Nil(t, err, "FSM creation failed")
-	stateList.Fsm = f
-
-	logEntry := log.NewEntry(log.StandardLogger())
-
-	validatePDUSessionCreation := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
-			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodePDUSessionResourceSetup {
-				list := ngapMsg.SuccessfulOutcome.Value.PDUSessionResourceSetupResponse.ProtocolIEs.List
-				for ie := range list {
-					switch list[ie].Id.Value {
-					case ngapType.ProtocolIEIDAMFUENGAPID:
-						state, err := stateList.FindByAmfId(list[ie].Value.AMFUENGAPID.Value)
-						assert.Nil(t, err, "Error while validating pdu session creation")
-						state.NewPDUProvided()
-					}
-				}
-			}
-		}
-		return false, nil
-	}
-
-	validatePDUSessionRelease := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
-			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodePDUSessionResourceRelease {
-				list := ngapMsg.SuccessfulOutcome.Value.PDUSessionResourceReleaseResponse.ProtocolIEs.List
-				for ie := range list {
-					switch list[ie].Id.Value {
-					case ngapType.ProtocolIEIDAMFUENGAPID:
-						state, err := stateList.FindByAmfId(list[ie].Value.AMFUENGAPID.Value)
-						assert.Nil(t, err, "Error while validating pdu session release")
-						state.NewPDUReleased()
-					}
-				}
-			}
-		}
-		return false, nil
-	}
-
-	validateContextRelease := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
-			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodeUEContextRelease {
-				list := ngapMsg.SuccessfulOutcome.Value.UEContextReleaseComplete.ProtocolIEs.List
-				for ie := range list {
-					switch list[ie].Id.Value {
-					case ngapType.ProtocolIEIDAMFUENGAPID:
-						ueState, err := stateList.FindByAmfId(list[ie].Value.AMFUENGAPID.Value)
-						assert.Nil(t, err, "Error while validating pdu session release")
-						err = stateList.Fsm.SendEvent(ueState.state, fsm.EventType(fmt.Sprint(ngapMsg.SuccessfulOutcome.ProcedureCode.Value)),
-							fsm.ArgsType{
-								"requestedPduCount": ueState.GetRequestedPDUCount(),
-								"providedPduCount":  ueState.GetProvidedPDUCount(),
-								"releasedPduCount":  ueState.GetReleasedPDUCount(),
-							},
-							logEntry)
-						if err != nil {
-							assert.Nil(t, err, "Wrong state transition: %v", err)
-						}
-					}
-				}
-			}
-		}
-		return false, nil
-	}
-
-	stateUpdate := func(nasMsg *nas.Message, ue *context.UEContext, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		var ueState *UEState
-		var err error
-		if nasMsg.GmmHeader.GetMessageType() == nas.MsgTypeRegistrationRequest {
-			ueState, err = stateList.New(ue.GetAmfNgapId())
-		} else {
-			ueState, err = stateList.FindByAmfId(ue.GetAmfNgapId())
-		}
-		if err != nil {
-			return false, err
-		}
-
-		switch nasMsg.GmmHeader.GetMessageType() {
-		case nas.MsgTypeULNASTransport:
-			ulNasTransport := nasMsg.ULNASTransport
-			if ue.GetInitialContextSetup() && ulNasTransport.GetPayloadContainerType() == nasMessage.PayloadContainerTypeN1SMInfo {
-				if ulNasTransport.RequestType != nil && ulNasTransport.RequestType.GetRequestTypeValue() == nasMessage.ULNASTransportRequestTypeInitialRequest {
-					ueState.NewPDURequest()
-				}
-			}
-
-		case nas.MsgTypeConfigurationUpdateComplete:
-		default:
-			err = stateList.Fsm.SendEvent(ueState.state, fsm.EventType(nasMsg.GmmHeader.GetMessageType()), fsm.ArgsType{}, logEntry)
-			if err != nil {
-				assert.Nil(t, err, "Wrong state transition: %v", err)
-			}
-		}
-		return false, nil
-	}
 
 	controlIFConfig := config.ControlIF{
 		Ip:   "127.0.0.1",
@@ -167,10 +72,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	builder := aio5gc.FiveGCBuilder{}
 	fiveGC, err := builder.
 		WithConfig(conf).
-		WithNGAPDispatcherHook(validatePDUSessionCreation).
-		WithNGAPDispatcherHook(validatePDUSessionRelease).
-		WithNGAPDispatcherHook(validateContextRelease).
-		WithNASDispatcherHook(stateUpdate).
+		WithFSM(f).
 		Build()
 	if err != nil {
 		log.Printf("[5GC] Error during 5GC creation  %v", err)
@@ -221,91 +123,36 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	time.Sleep(time.Duration(5000) * time.Millisecond)
-	uestates := stateList.UeStates
-	for s := range uestates {
-		assert.Equalf(t, Idle, uestates[s].state.Current(), "Expected all ue to be in Idle state but was not")
-	}
+	fiveGC.GetAMFContext().ExecuteForAllUe(
+		func(ue *context.UEContext) {
+			assert.Equalf(t, state.Idle, ue.GetState().GetState().Current(), "Expected all ue to be in Idle state but was not")
+		})
 }
 
 func TestUERegistrationLoop(t *testing.T) {
 
-	stateList := UEStateList{}
 	f, err := fsm.NewFSM(
 		fsm.Transitions{
-			{Event: fsm.EventType(nas.MsgTypeRegistrationRequest), From: Fresh, To: RegistrationRequested},
-			{Event: fsm.EventType(nas.MsgTypeAuthenticationResponse), From: RegistrationRequested, To: AuthenticationChallengeResponded},
-			{Event: fsm.EventType(nas.MsgTypeSecurityModeComplete), From: AuthenticationChallengeResponded, To: SecurityContextSet},
-			{Event: fsm.EventType(nas.MsgTypeRegistrationComplete), From: SecurityContextSet, To: Registred},
-			{Event: fsm.EventType(nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration), From: Registred, To: DeregistrationRequested},
-			{Event: fsm.EventType(fmt.Sprint(ngapType.ProcedureCodeUEContextRelease)), From: DeregistrationRequested, To: Idle},
-			{Event: fsm.EventType(fmt.Sprint(ngapType.ProcedureCodeUEContextRelease)), From: Registred, To: Idle},
+			{Event: fsm.EventType(nas.MsgTypeRegistrationRequest), From: state.Fresh, To: state.RegistrationRequested},
+			{Event: fsm.EventType(nas.MsgTypeAuthenticationResponse), From: state.RegistrationRequested, To: state.AuthenticationChallengeResponded},
+			{Event: fsm.EventType(nas.MsgTypeSecurityModeComplete), From: state.AuthenticationChallengeResponded, To: state.SecurityContextSet},
+			{Event: fsm.EventType(nas.MsgTypeRegistrationComplete), From: state.SecurityContextSet, To: state.Registred},
+			{Event: fsm.EventType(nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration), From: state.Registred, To: state.DeregistrationRequested},
+			{Event: fsm.EventType(fmt.Sprint(ngapType.ProcedureCodeUEContextRelease)), From: state.DeregistrationRequested, To: state.Idle},
+			{Event: fsm.EventType(fmt.Sprint(ngapType.ProcedureCodeUEContextRelease)), From: state.Registred, To: state.Idle},
 		},
 		fsm.Callbacks{
-			Fresh:                            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			RegistrationRequested:            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			AuthenticationChallengeResponded: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			SecurityContextSet:               func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			Registred:                        func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			DeregistrationRequested:          func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			Idle:                             func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {}},
+			state.Fresh:                            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			state.RegistrationRequested:            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			state.AuthenticationChallengeResponded: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			state.SecurityContextSet:               func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			state.Registred:                        func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			state.DeregistrationRequested:          func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
+			state.Idle: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+				assert.Equal(t, args["requestedPduCount"], args["providedPduCount"], "Number of requested PDU Session count does not match the provided count")
+			}},
 	)
 	assert.Nil(t, err, "FSM creation failed")
-	stateList.Fsm = f
-
-	logEntry := log.NewEntry(log.StandardLogger())
-
-	validateContextRelease := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
-			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodeUEContextRelease {
-				list := ngapMsg.SuccessfulOutcome.Value.UEContextReleaseComplete.ProtocolIEs.List
-				for ie := range list {
-					switch list[ie].Id.Value {
-					case ngapType.ProtocolIEIDAMFUENGAPID:
-						ueState, err := stateList.FindByAmfId(list[ie].Value.AMFUENGAPID.Value)
-						assert.Nil(t, err, "Error while validating pdu session release")
-						err = stateList.Fsm.SendEvent(ueState.state, fsm.EventType(fmt.Sprint(ngapMsg.SuccessfulOutcome.ProcedureCode.Value)),
-							fsm.ArgsType{},
-							logEntry)
-						if err != nil {
-							assert.Nil(t, err, "Wrong state transition: %v", err)
-						}
-					}
-				}
-			}
-		}
-		return false, nil
-	}
-
-	stateUpdate := func(nasMsg *nas.Message, ue *context.UEContext, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		var ueState *UEState
-		var err error
-		if nasMsg.GmmHeader.GetMessageType() == nas.MsgTypeRegistrationRequest {
-			ueState, err = stateList.New(ue.GetAmfNgapId())
-		} else {
-			ueState, err = stateList.FindByAmfId(ue.GetAmfNgapId())
-		}
-		if err != nil {
-			return false, err
-		}
-
-		switch nasMsg.GmmHeader.GetMessageType() {
-		case nas.MsgTypeULNASTransport:
-			ulNasTransport := nasMsg.ULNASTransport
-			if ue.GetInitialContextSetup() && ulNasTransport.GetPayloadContainerType() == nasMessage.PayloadContainerTypeN1SMInfo {
-				if ulNasTransport.RequestType != nil && ulNasTransport.RequestType.GetRequestTypeValue() == nasMessage.ULNASTransportRequestTypeInitialRequest {
-					ueState.NewPDURequest()
-				}
-			}
-
-		case nas.MsgTypeConfigurationUpdateComplete:
-		default:
-			err = stateList.Fsm.SendEvent(ueState.state, fsm.EventType(nasMsg.GmmHeader.GetMessageType()), fsm.ArgsType{}, logEntry)
-			if err != nil {
-				assert.Nil(t, err, "Wrong state transition: %v", err)
-			}
-		}
-		return false, nil
-	}
 
 	controlIFConfig := config.ControlIF{
 		Ip:   "127.0.0.1",
@@ -326,8 +173,7 @@ func TestUERegistrationLoop(t *testing.T) {
 	builder := aio5gc.FiveGCBuilder{}
 	fiveGC, err := builder.
 		WithConfig(conf).
-		WithNASDispatcherHook(stateUpdate).
-		WithNGAPDispatcherHook(validateContextRelease).
+		WithFSM(f).
 		Build()
 	if err != nil {
 		log.Printf("[5GC] Error during 5GC creation  %v", err)
@@ -385,8 +231,8 @@ func TestUERegistrationLoop(t *testing.T) {
 	}
 
 	time.Sleep(time.Duration(5000) * time.Millisecond)
-	uestates := stateList.UeStates
-	for s := range uestates {
-		assert.Equalf(t, Idle, uestates[s].state.Current(), "Expected all ue to be in Idle state but was not")
-	}
+	fiveGC.GetAMFContext().ExecuteForAllUe(
+		func(ue *context.UEContext) {
+			assert.Equalf(t, state.Idle, ue.GetState().GetState().Current(), "Expected all ue to be in Idle state but was not")
+		})
 }

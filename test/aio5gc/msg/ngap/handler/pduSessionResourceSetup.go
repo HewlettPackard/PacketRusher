@@ -39,5 +39,7 @@ func PDUSessionResourceSetup(req *ngapType.PDUSessionResourceSetupResponse, fgc 
 		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one registred for this UE")
 	}
 
+	ue.GetState().NewPDUProvided()
+
 	return nil
 }

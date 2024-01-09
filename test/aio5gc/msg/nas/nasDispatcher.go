@@ -13,6 +13,7 @@ import (
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/util/fsm"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -56,11 +57,17 @@ func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *contex
 
 	amf := fgc.GetAMFContext()
 	session := fgc.GetSessionContext()
+	f := fgc.GetFSM()
+	logEntry := log.NewEntry(log.StandardLogger())
 
 	// Default Dispacther
 	switch msg.GmmHeader.GetMessageType() {
 	case nas.MsgTypeRegistrationRequest:
 		log.Info("[5GC][NAS] Received Registration Request")
+		err = f.SendEvent(ueContext.GetState().GetState(), fsm.EventType(msg.GmmHeader.GetMessageType()), fsm.ArgsType{}, logEntry)
+		if err != nil {
+			log.Warn("[5GC][NAS] Unexpected UE state transition: " + err.Error())
+		}
 		err = nasHandler.RegistrationRequest(msg, amf, ueContext, gnb)
 
 	case nas.MsgTypeIdentityResponse:
@@ -69,14 +76,26 @@ func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *contex
 
 	case nas.MsgTypeAuthenticationResponse:
 		log.Info("[5GC][NAS] Received Authentication Response")
+		err = f.SendEvent(ueContext.GetState().GetState(), fsm.EventType(msg.GmmHeader.GetMessageType()), fsm.ArgsType{}, logEntry)
+		if err != nil {
+			log.Warn("[5GC][NAS] Unexpected UE state transition: " + err.Error())
+		}
 		err = nasHandler.AuthenticationResponse(msg, gnb, ueContext, amf)
 
 	case nas.MsgTypeSecurityModeComplete:
 		log.Info("[5GC][NAS] Received Security Mode Complete")
+		err = f.SendEvent(ueContext.GetState().GetState(), fsm.EventType(msg.GmmHeader.GetMessageType()), fsm.ArgsType{}, logEntry)
+		if err != nil {
+			log.Warn("[5GC][NAS] Unexpected UE state transition: " + err.Error())
+		}
 		err = nasHandler.SecurityModeComplete(msg, amf, ueContext, gnb)
 
 	case nas.MsgTypeRegistrationComplete:
 		log.Info("[5GC][NAS] Received Registration Complete")
+		err = f.SendEvent(ueContext.GetState().GetState(), fsm.EventType(msg.GmmHeader.GetMessageType()), fsm.ArgsType{}, logEntry)
+		if err != nil {
+			log.Warn("[5GC][NAS] Unexpected UE state transition: " + err.Error())
+		}
 		err = nasHandler.RegistrationComplete(msg, gnb, ueContext, *amf)
 
 	case nas.MsgTypeULNASTransport:
@@ -88,6 +107,10 @@ func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *contex
 
 	case nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration:
 		log.Info("[5GC][NAS] Received Deregistration Request: UE Originating Deregistration")
+		err = f.SendEvent(ueContext.GetState().GetState(), fsm.EventType(msg.GmmHeader.GetMessageType()), fsm.ArgsType{}, logEntry)
+		if err != nil {
+			log.Warn("[5GC][NAS] Unexpected UE state transition: " + err.Error())
+		}
 		err = nasHandler.UEOriginatingDeregistration(msg, amf, ueContext, gnb)
 
 	default:

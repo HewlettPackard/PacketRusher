@@ -3,21 +3,13 @@
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
  */
 
-package test
+package state
 
 import (
-	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/free5gc/util/fsm"
 )
-
-type UEStateList struct {
-	m        sync.Mutex
-	Fsm      *fsm.FSM
-	UeStates map[int64]*UEState
-}
 
 type State int
 
@@ -31,53 +23,20 @@ const (
 	Idle                             fsm.StateType = "Idle"
 )
 
-func (u *UEStateList) New(amfId int64) (*UEState, error) {
-	if u.UeStates == nil {
-		u.UeStates = make(map[int64]*UEState, 0)
-	}
-	_, exist := u.UeStates[amfId]
-	if exist {
-		return nil, fmt.Errorf("[TEST] UE with AMFID %d already assigned", amfId)
-	}
-	u.UeStates[amfId] = &UEState{
-		state:       fsm.NewState(Fresh),
-		pduSessions: &pduSessionCount{},
-	}
-	return u.UeStates[amfId], nil
-}
-
-func (u *UEStateList) FindByAmfId(amfId int64) (*UEState, error) {
-	u.m.Lock()
-	defer u.m.Unlock()
-	ue, exist := u.UeStates[amfId]
-	if exist {
-		return ue, nil
-	}
-	return nil, fmt.Errorf("[TEST] UE with AMFID %d not found", amfId)
-}
-
-func (u *UEStateList) FindByMsin(msin string) (*UEState, error) {
-	u.m.Lock()
-	defer u.m.Unlock()
-	for i := range u.UeStates {
-		if u.UeStates[i].msin == msin {
-			return u.UeStates[i], nil
-		}
-	}
-	return nil, errors.New("[TEST] UE with msin " + msin + "not found")
-}
-
 type UEState struct {
 	m           sync.Mutex
-	msin        string
 	state       *fsm.State
 	pduSessions *pduSessionCount
 }
 
-func (s *UEState) Init(msin string, state *fsm.State, checkPDU bool) {
-	s.state = state
+func (s *UEState) Init() {
+	s.state = fsm.NewState(Fresh)
 	sessions := pduSessionCount{}
 	s.pduSessions = &sessions
+}
+
+func (s *UEState) GetState() *fsm.State {
+	return s.state
 }
 
 func (s *UEState) NewPDURequest() {
