@@ -16,12 +16,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, numPduSessions int) {
-	if tunnelEnabled && !dedicatedGnb {
-		log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
-	}
-	if tunnelEnabled && timeBetweenRegistration < 500 {
-		log.Fatal("When using the --tunnel option, --timeBetweenRegistration must be equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
+func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb bool, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, numPduSessions int) {
+	if tunnelMode != config.TunnelDisabled {
+		if !dedicatedGnb {
+			log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
+		}
+		if timeBetweenRegistration < 500 {
+			log.Fatal("When using the --tunnel option, --timeBetweenRegistration must be equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
+		}
 	}
 
 	if numPduSessions > 16 {
@@ -48,7 +50,7 @@ func TestMultiUesInQueue(numUes int, tunnelEnabled bool, dedicatedGnb bool, loop
 	// TODO: We should wait for NGSetupResponse instead
 	time.Sleep(1 * time.Second)
 
-	cfg.Ue.TunnelEnabled = tunnelEnabled
+	cfg.Ue.TunnelMode = tunnelMode
 
 	scenarioChans := make([]chan procedures.UeTesterMessage, numUes+1)
 

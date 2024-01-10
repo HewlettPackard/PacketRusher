@@ -4,6 +4,12 @@
  */
 package templates
 
+import "my5G-RANTester/config"
+
 func TestAttachUeWithConfiguration(tunnelEnabled bool) {
-	TestMultiUesInQueue(1, tunnelEnabled, true, false, 500, 0, 0, 0, 0, 1)
+	tunnelMode := config.TunnelDisabled
+	if tunnelEnabled {
+		tunnelMode = config.TunnelVrf
+	}
+	TestMultiUesInQueue(1, tunnelMode, true, false, 500, 0, 0, 0, 0, 1)
 }
