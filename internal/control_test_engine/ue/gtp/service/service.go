@@ -6,6 +6,7 @@ package service
 
 import (
 	"fmt"
+	"my5G-RANTester/config"
 	gtpLink "my5G-RANTester/internal/cmd/gogtp5g-link"
 	gtpTunnel "my5G-RANTester/internal/cmd/gogtp5g-tunnel"
 	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
@@ -29,7 +30,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	}
 	pduSession.GnbPduSession = gnbPduSession
 
-	if !ue.IsTunnelEnabled() {
+	if ue.TunnelMode == config.TunnelDisabled {
 		log.Info(fmt.Sprintf("[UE][GTP] Interface for UE %s has not been created. Tunnel has been disabled.", ue.GetMsin()))
 		return
 	}
@@ -117,33 +118,48 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 
 	tableId, _ := strconv.Atoi(fmt.Sprint(gnbPduSession.GetTeidUplink()))
 
-	vrfDevice := &netlink.Vrf{
-		LinkAttrs: netlink.LinkAttrs{
-			Name: vrfInf,
-		},
-		Table: uint32(tableId),
-	}
-	_ = netlink.LinkDel(vrfDevice)
+	switch ue.TunnelMode {
+	case config.TunnelTun:
+		rule := netlink.NewRule()
+		rule.Priority = 100
+		rule.Table = tableId
+		rule.Src = addrTun.IPNet
+		_ = netlink.RuleDel(rule)
 
-	if err := netlink.LinkAdd(vrfDevice); err != nil {
-		log.Fatal("[UE][DATA] Unable to create VRF for UE", err)
-		return
-	}
+		if err := netlink.RuleAdd(rule); err != nil {
+			log.Fatal("[UE][DATA] Unable to create routing policy rule for UE", err)
+			return
+		}
+		pduSession.SetTunRule(rule)
+	case config.TunnelVrf:
+		vrfDevice := &netlink.Vrf{
+			LinkAttrs: netlink.LinkAttrs{
+				Name: vrfInf,
+			},
+			Table: uint32(tableId),
+		}
+		_ = netlink.LinkDel(vrfDevice)
 
-	if err := netlink.LinkSetMaster(link, vrfDevice); err != nil {
-		log.Fatal("[UE][DATA] Unable to set GTP tunnel as slave of VRF interface", err)
-		return
-	}
+		if err := netlink.LinkAdd(vrfDevice); err != nil {
+			log.Fatal("[UE][DATA] Unable to create VRF for UE", err)
+			return
+		}
 
-	if err := netlink.LinkSetUp(vrfDevice); err != nil {
-		log.Fatal("[UE][DATA] Unable to set interface VRF UP", err)
-		return
+		if err := netlink.LinkSetMaster(link, vrfDevice); err != nil {
+			log.Fatal("[UE][DATA] Unable to set GTP tunnel as slave of VRF interface", err)
+			return
+		}
+
+		if err := netlink.LinkSetUp(vrfDevice); err != nil {
+			log.Fatal("[UE][DATA] Unable to set interface VRF UP", err)
+			return
+		}
+		pduSession.SetVrfDevice(vrfDevice)
 	}
-	pduSession.SetVrfDevice(vrfDevice)
 
 	route := &netlink.Route{
 		Dst:       &net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)}, // default
-		LinkIndex: link.Attrs().Index,                                      // dev gtp-<ECI>
+		LinkIndex: link.Attrs().Index,                                      // dev val<MSIN>
 		Scope:     netlink.SCOPE_LINK,                                      // scope link
 		Protocol:  4,                                                       // proto static
 		Priority:  1,                                                       // metric 1
@@ -156,6 +172,12 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	pduSession.SetTunRoute(route)
 
 	log.Info(fmt.Sprintf("[UE][GTP] Interface %s has successfully been configured for UE %s", nameInf, ueIp))
-	log.Info(fmt.Sprintf("[UE][GTP] You can do traffic for this UE using VRF %s, eg:", vrfInf))
-	log.Info(fmt.Sprintf("[UE][GTP] sudo ip vrf exec %s iperf3 -c IPERF_SERVER -p PORT -t 9000", vrfInf))
+	switch ue.TunnelMode {
+	case config.TunnelTun:
+		log.Info(fmt.Sprintf("[UE][GTP] You can do traffic for this UE by binding to IP %s, eg:", ueIp))
+		log.Info(fmt.Sprintf("[UE][GTP] iperf3 -B %s -c IPERF_SERVER -p PORT -t 9000", ueIp))
+	case config.TunnelVrf:
+		log.Info(fmt.Sprintf("[UE][GTP] You can do traffic for this UE using VRF %s, eg:", vrfInf))
+		log.Info(fmt.Sprintf("[UE][GTP] sudo ip vrf exec %s iperf3 -c IPERF_SERVER -p PORT -t 9000", vrfInf))
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 	"net"
@@ -56,9 +57,9 @@ type UEContext struct {
 	amfInfo           Amf
 
 	// TODO: Modify config so you can configure these parameters per PDUSession
-	Dnn           string
-	Snssai        models.Snssai
-	TunnelEnabled bool
+	Dnn        string
+	Snssai     models.Snssai
+	TunnelMode config.TunnelMode
 
 	// Sync primitive
 	scenarioChan chan scenario.ScenarioMessage
@@ -77,6 +78,7 @@ type UEPDUSession struct {
 	ueIP          string
 	ueGnbIP       net.IP
 	tun           netlink.Link
+	rule          *netlink.Rule
 	routeTun      *netlink.Route
 	vrf           *netlink.Vrf
 	stopSignal    chan bool
@@ -110,7 +112,7 @@ type SECURITY struct {
 func (ue *UEContext) NewRanUeContext(msin string,
 	ueSecurityCapability *nasType.UESecurityCapability,
 	k, opc, op, amf, sqn, mcc, mnc, routingIndicator, dnn string,
-	sst int32, sd string, tunnelEnabled bool, scenarioChan chan scenario.ScenarioMessage,
+	sst int32, sd string, tunnelMode config.TunnelMode, scenarioChan chan scenario.ScenarioMessage,
 	gnbInboundChannel chan context.UEMessage, id int) {
 
 	// added SUPI.
@@ -152,7 +154,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 	// added Domain Network Name.
 	ue.Dnn = dnn
-	ue.TunnelEnabled = tunnelEnabled
+	ue.TunnelMode = tunnelMode
 
 	// encode mcc and mnc for mobileIdentity5Gs.
 	resu := ue.GetMccAndMncInOctets()
@@ -290,10 +292,6 @@ func (ue *UEContext) Unlock() {
 	ue.lock.Unlock()
 }
 
-func (ue *UEContext) IsTunnelEnabled() bool {
-	return ue.TunnelEnabled
-}
-
 func (ue *UEContext) GetPduSession(pduSessionid uint8) (*UEPDUSession, error) {
 	if pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil {
 		return nil, errors.New("Unable to find GnbPDUSession ID " + string(pduSessionid))
@@ -361,6 +359,14 @@ func (pduSession *UEPDUSession) SetTunInterface(tun netlink.Link) {
 
 func (pduSession *UEPDUSession) GetTunInterface() netlink.Link {
 	return pduSession.tun
+}
+
+func (pduSession *UEPDUSession) SetTunRule(rule *netlink.Rule) {
+	pduSession.rule = rule
+}
+
+func (pduSession *UEPDUSession) GetTunRule() *netlink.Rule {
+	return pduSession.rule
 }
 
 func (pduSession *UEPDUSession) SetTunRoute(route *netlink.Route) {
@@ -696,12 +702,17 @@ func (ue *UEContext) Terminate() {
 	for _, pduSession := range ue.PduSession {
 		if pduSession != nil {
 			ueTun := pduSession.GetTunInterface()
+			ueRule := pduSession.GetTunRule()
 			ueRoute := pduSession.GetTunRoute()
 			ueVrf := pduSession.GetVrfDevice()
 
 			if ueTun != nil {
 				_ = netlink.LinkSetDown(ueTun)
 				_ = netlink.LinkDel(ueTun)
+			}
+
+			if ueRule != nil {
+				_ = netlink.RuleDel(ueRule)
 			}
 
 			if ueRoute != nil {
