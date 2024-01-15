@@ -7,20 +7,37 @@ package handler
 import (
 	"errors"
 	"my5G-RANTester/test/aio5gc/context"
+	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/msg"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/util/fsm"
+	log "github.com/sirupsen/logrus"
 )
 
-func UEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFContext, ueContext *context.UEContext, gnb *context.GNBContext) error {
-	deregistrationRequest := nasReq.DeregistrationRequestUEOriginatingDeregistration
-	if !ueContext.GetInitialContextSetup() {
-		return errors.New("[5GC][NGAP] This UE has no security context set up")
+func UEOriginatingDeregistration(nasReq *nas.Message, ueContext *context.UEContext, gnb *context.GNBContext, fgc *context.Aio5gc) error {
+
+	// Hook for changing AuthenticationResponse behaviour
+	hook := fgc.GetNasHook(nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration)
+	if hook != nil {
+		handled, err := hook(nasReq, ueContext, gnb, fgc)
+		if err != nil {
+			return err
+		}
+		if handled {
+			return nil
+		}
 	}
+
+	deregistrationRequest := nasReq.DeregistrationRequestUEOriginatingDeregistration
 	context.ReleaseAllPDUSession(ueContext)
 
+	err := state.GetUeFsm().SendEvent(ueContext.GetState(), state.DeregistrationRequested, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
+	if err != nil {
+		return err
+	}
 	// if Deregistration type is not switch-off, send Deregistration Accept (need to implement)
 	if deregistrationRequest.GetSwitchOff() == 0 {
 		return errors.New("[5GC][NAS] Not switch-off deregistration not supported")

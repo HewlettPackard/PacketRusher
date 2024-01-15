@@ -72,7 +72,6 @@ func buildSecurityModeCommand(ue *context.UEContext) *nas.Message {
 	securityModeCommand.Additional5GSecurityInformation.SetRINMR(1)
 	securityModeCommand.Additional5GSecurityInformation.SetHDP(0)
 
-	ue.SecurityContextAvailable = true
 	m.GmmMessage.SecurityModeCommand = securityModeCommand
 
 	return m

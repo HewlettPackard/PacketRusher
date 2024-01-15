@@ -17,7 +17,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AuthenticationResponse(nasMsg *nas.Message, gnb *context.GNBContext, ue *context.UEContext, amf *context.AMFContext) error {
+func AuthenticationResponse(nasMsg *nas.Message, gnb *context.GNBContext, ue *context.UEContext, fgc *context.Aio5gc) error {
+
+	// Hook for changing AuthenticationResponse behaviour
+	hook := fgc.GetNasHook(nas.MsgTypeAuthenticationResponse)
+	if hook != nil {
+		handled, err := hook(nasMsg, ue, gnb, fgc)
+		if err != nil {
+			return err
+		}
+		if handled {
+			return nil
+		}
+	}
+
 	if nasMsg.AuthenticationResponse.AuthenticationResponseParameter == nil {
 		return errors.New("AuthenticationResponseParameter is nil")
 	}
@@ -29,7 +42,8 @@ func AuthenticationResponse(nasMsg *nas.Message, gnb *context.GNBContext, ue *co
 	if strings.EqualFold(resStar, xresStar) {
 		log.Info("[5GC] 5G AKA confirmation succeeded")
 		ue.DerivateKamf()
-		oldUe, err := amf.FindRegistredUEByMsin(ue.GetSecurityContext().GetMsin())
+
+		oldUe, err := fgc.GetAMFContext().FindRegistredUEByMsin(ue.GetSecurityContext().GetMsin())
 		if err == nil && oldUe.GetAmfNgapId() != ue.GetAmfNgapId() {
 			msg.SendUEContextReleaseCommand(gnb, oldUe, ngapType.CausePresentNas, ngapType.CauseNasPresentUnspecified)
 		}

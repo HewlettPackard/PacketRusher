@@ -14,7 +14,20 @@ import (
 	"github.com/free5gc/nas/nasConvert"
 )
 
-func SecurityModeComplete(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
+func SecurityModeComplete(nasReq *nas.Message, ue *context.UEContext, gnb *context.GNBContext, fgc *context.Aio5gc) error {
+
+	// Hook for changing AuthenticationResponse behaviour
+	hook := fgc.GetNasHook(nas.MsgTypeSecurityModeComplete)
+	if hook != nil {
+		handled, err := hook(nasReq, ue, gnb, fgc)
+		if err != nil {
+			return err
+		}
+		if handled {
+			return nil
+		}
+	}
+
 	securityModeComplete := nasReq.SecurityModeComplete
 	if securityModeComplete.IMEISV != nil {
 		if pei, err := nasConvert.PeiToStringWithError(securityModeComplete.IMEISV.Octet[:]); err != nil {
@@ -35,6 +48,7 @@ func SecurityModeComplete(nasReq *nas.Message, amf *context.AMFContext, ue *cont
 
 	switch m.GmmMessage.GmmHeader.GetMessageType() {
 	case nas.MsgTypeRegistrationRequest:
+		amf := fgc.GetAMFContext()
 		registrationRequest := m.GmmMessage.RegistrationRequest
 		ue.SetSecurityCapability(registrationRequest.UESecurityCapability)
 		ue.AllocateGuti(amf)

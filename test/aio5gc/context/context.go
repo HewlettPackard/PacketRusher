@@ -12,16 +12,14 @@ import (
 	"github.com/free5gc/nas"
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/openapi/models"
-	"github.com/free5gc/util/fsm"
 )
 
 // All in one 5GC for test purpose
 type Aio5gc struct {
 	amfContext AMFContext
 	session    SessionContext
-	nasHook    []func(*nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error)
+	nasHooks   map[uint8]func(*nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error)
 	ngapHook   []func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) (bool, error)
-	fsm        *fsm.FSM
 	conf       config.Config
 }
 
@@ -33,7 +31,7 @@ func (a *Aio5gc) GetSessionContext() *SessionContext {
 	return &a.session
 }
 
-func (a *Aio5gc) Init(conf config.Config, id string, name string, f *fsm.FSM) error {
+func (a *Aio5gc) Init(conf config.Config, id string, name string) error {
 	plmn := models.PlmnId{
 		Mcc: conf.GNodeB.PlmnList.Mcc,
 		Mnc: conf.GNodeB.PlmnList.Mnc,
@@ -72,16 +70,15 @@ func (a *Aio5gc) Init(conf config.Config, id string, name string, f *fsm.FSM) er
 	)
 
 	a.session.NewSessionContext()
-	a.fsm = f
 	return nil
 }
 
-func (a *Aio5gc) GetNasHooks() []func(*nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error) {
-	return a.nasHook
+func (a *Aio5gc) GetNasHook(msgType uint8) func(*nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error) {
+	return a.nasHooks[msgType]
 }
 
-func (a *Aio5gc) SetNasHooks(hook []func(*nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error)) {
-	a.nasHook = hook
+func (a *Aio5gc) SetNasHooks(hooks map[uint8]func(*nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error)) {
+	a.nasHooks = hooks
 }
 
 func (a *Aio5gc) GetNgapHooks() []func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) (bool, error) {
@@ -90,12 +87,4 @@ func (a *Aio5gc) GetNgapHooks() []func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) 
 
 func (a *Aio5gc) SetNgapHooks(hook []func(*ngapType.NGAPPDU, *GNBContext, *Aio5gc) (bool, error)) {
 	a.ngapHook = hook
-}
-
-func (a *Aio5gc) SetFSM(fsm *fsm.FSM) {
-	a.fsm = fsm
-}
-
-func (a *Aio5gc) GetFSM() *fsm.FSM {
-	return a.fsm
 }

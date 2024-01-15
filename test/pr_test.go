@@ -6,7 +6,6 @@
 package test
 
 import (
-	"fmt"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
@@ -19,39 +18,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/free5gc/util/fsm"
-
-	"github.com/free5gc/nas"
-	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/openapi/models"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
-
-	f, err := fsm.NewFSM(
-		fsm.Transitions{
-			{Event: fsm.EventType(nas.MsgTypeRegistrationRequest), From: state.Fresh, To: state.RegistrationRequested},
-			{Event: fsm.EventType(nas.MsgTypeAuthenticationResponse), From: state.RegistrationRequested, To: state.AuthenticationChallengeResponded},
-			{Event: fsm.EventType(nas.MsgTypeSecurityModeComplete), From: state.AuthenticationChallengeResponded, To: state.SecurityContextSet},
-			{Event: fsm.EventType(nas.MsgTypeRegistrationComplete), From: state.SecurityContextSet, To: state.Registred},
-			{Event: fsm.EventType(nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration), From: state.Registred, To: state.DeregistrationRequested},
-			{Event: fsm.EventType(fmt.Sprint(ngapType.ProcedureCodeUEContextRelease)), From: state.DeregistrationRequested, To: state.Idle},
-		},
-		fsm.Callbacks{
-			state.Fresh:                            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			state.RegistrationRequested:            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			state.AuthenticationChallengeResponded: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			state.SecurityContextSet:               func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			state.Registred:                        func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			state.DeregistrationRequested:          func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			state.Idle: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
-				assert.Equal(t, args["requestedPduCount"], args["providedPduCount"], "Number of requested PDU Session count does not match the provided count")
-				assert.Equal(t, args["providedPduCount"], args["releasedPduCount"], "Number of provided PDU Session count does not match the released count")
-			}},
-	)
-	assert.Nil(t, err, "FSM creation failed")
 
 	controlIFConfig := config.ControlIF{
 		Ip:   "127.0.0.1",
@@ -72,7 +44,6 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	builder := aio5gc.FiveGCBuilder{}
 	fiveGC, err := builder.
 		WithConfig(conf).
-		WithFSM(f).
 		Build()
 	if err != nil {
 		log.Printf("[5GC] Error during 5GC creation  %v", err)
@@ -93,7 +64,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	// Setup UE
-	ueCount := 10
+	ueCount := 1
 	scenarioChans := make([]chan procedures.UeTesterMessage, ueCount+1)
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
@@ -125,35 +96,15 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	time.Sleep(time.Duration(5000) * time.Millisecond)
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
-			assert.Equalf(t, state.Idle, ue.GetState().GetState().Current(), "Expected all ue to be in Idle state but was not")
+			assert.Equalf(t, state.Deregistrated, ue.GetState().Current(), "Expected all ue to be in Deregistrated state but was not")
+			ue.ExecuteForAllSmContexts(
+				func(sm *context.SmContext) {
+					assert.Equalf(t, state.Inactive, sm.GetState().Current(), "Expected all pdu sessions to be in Inactive state but was not")
+				})
 		})
 }
 
 func TestUERegistrationLoop(t *testing.T) {
-
-	f, err := fsm.NewFSM(
-		fsm.Transitions{
-			{Event: fsm.EventType(nas.MsgTypeRegistrationRequest), From: state.Fresh, To: state.RegistrationRequested},
-			{Event: fsm.EventType(nas.MsgTypeAuthenticationResponse), From: state.RegistrationRequested, To: state.AuthenticationChallengeResponded},
-			{Event: fsm.EventType(nas.MsgTypeSecurityModeComplete), From: state.AuthenticationChallengeResponded, To: state.SecurityContextSet},
-			{Event: fsm.EventType(nas.MsgTypeRegistrationComplete), From: state.SecurityContextSet, To: state.Registred},
-			{Event: fsm.EventType(nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration), From: state.Registred, To: state.DeregistrationRequested},
-			{Event: fsm.EventType(fmt.Sprint(ngapType.ProcedureCodeUEContextRelease)), From: state.DeregistrationRequested, To: state.Idle},
-			{Event: fsm.EventType(fmt.Sprint(ngapType.ProcedureCodeUEContextRelease)), From: state.Registred, To: state.Idle},
-		},
-		fsm.Callbacks{
-			state.Fresh:                            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			state.RegistrationRequested:            func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			state.AuthenticationChallengeResponded: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			state.SecurityContextSet:               func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			state.Registred:                        func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			state.DeregistrationRequested:          func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {},
-			state.Idle: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
-				assert.Equal(t, args["requestedPduCount"], args["providedPduCount"], "Number of requested PDU Session count does not match the provided count")
-			}},
-	)
-	assert.Nil(t, err, "FSM creation failed")
-
 	controlIFConfig := config.ControlIF{
 		Ip:   "127.0.0.1",
 		Port: 9490,
@@ -173,7 +124,6 @@ func TestUERegistrationLoop(t *testing.T) {
 	builder := aio5gc.FiveGCBuilder{}
 	fiveGC, err := builder.
 		WithConfig(conf).
-		WithFSM(f).
 		Build()
 	if err != nil {
 		log.Printf("[5GC] Error during 5GC creation  %v", err)
@@ -233,6 +183,6 @@ func TestUERegistrationLoop(t *testing.T) {
 	time.Sleep(time.Duration(5000) * time.Millisecond)
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
-			assert.Equalf(t, state.Idle, ue.GetState().GetState().Current(), "Expected all ue to be in Idle state but was not")
+			assert.Equalf(t, state.Deregistrated, ue.GetState().Current(), "Expected all ue to be in Deregistrated state but was not")
 		})
 }

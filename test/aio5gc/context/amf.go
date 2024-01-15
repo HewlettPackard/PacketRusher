@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 	"github.com/free5gc/util/idgenerator"
 	log "github.com/sirupsen/logrus"
 )
@@ -117,7 +118,7 @@ func (c *AMFContext) FindRegistredUEByMsin(msin string) (*UEContext, error) {
 	ueMutex.Lock()
 	defer ueMutex.Unlock()
 	for ue := range c.ues {
-		if c.ues[ue].securityContext.msin == msin && c.ues[ue].initialContextSetup {
+		if c.ues[ue].securityContext.msin == msin && c.ues[ue].GetState().Is(state.Registred) {
 			return c.ues[ue], nil
 		}
 	}
@@ -147,10 +148,8 @@ func (c *AMFContext) NewUE(ueRanNgapId int64) *UEContext {
 	newUE := UEContext{}
 	newUE.SetRanNgapId(ueRanNgapId)
 	newUE.SetAmfNgapId(c.getAmfUeId())
-	newUE.SecurityContextAvailable = false
 	newUE.smContexts = make(map[int32]*SmContext)
-	newUE.state = &state.UEState{}
-	newUE.state.Init()
+	newUE.state = fsm.NewState(state.Deregistrated)
 	ueMutex.Lock()
 	c.ues = append(c.ues, &newUE)
 	ueMutex.Unlock()

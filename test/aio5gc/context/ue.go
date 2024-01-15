@@ -8,33 +8,31 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"my5G-RANTester/test/aio5gc/lib/state"
 	"regexp"
 	"strconv"
 	"sync"
 
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 	"github.com/free5gc/util/ueauth"
 	log "github.com/sirupsen/logrus"
 )
 
 type UEContext struct {
-	ranNgapId                int64
-	amfNgapId                int64
-	location                 *models.NrLocation
-	ueSecurityCapability     *nasType.UESecurityCapability
-	ngKsi                    models.NgKsi
-	Dnn                      string
-	pei                      string
-	securityContext          *SecurityContext
-	SecurityContextAvailable bool
-	guti                     string
-	tmsi                     int32
-	smContexts               map[int32]*SmContext
-	smContextMtx             sync.Mutex
-	initialContextSetup      bool
-	state                    *state.UEState
+	ranNgapId            int64
+	amfNgapId            int64
+	location             *models.NrLocation
+	ueSecurityCapability *nasType.UESecurityCapability
+	ngKsi                models.NgKsi
+	Dnn                  string
+	pei                  string
+	securityContext      *SecurityContext
+	guti                 string
+	tmsi                 int32
+	smContexts           map[int32]*SmContext
+	smContextMtx         sync.Mutex
+	state                *fsm.State
 }
 
 func (ue *UEContext) AllocateGuti(a *AMFContext) {
@@ -122,17 +120,31 @@ func (ue *UEContext) AddSmContext(newContext *SmContext) error {
 }
 
 func (ue *UEContext) DeleteSmContext(sessionId int32) (SmContext, error) {
+
+	var smContext SmContext
+	sc, err := ue.GetSmContext(sessionId)
+	if err != nil {
+		return SmContext{}, err
+	}
+	smContext = *sc
+	ue.smContextMtx.Lock()
+	defer ue.smContextMtx.Unlock()
+	delete(ue.smContexts, sessionId)
+
+	return smContext, nil
+}
+
+func (ue *UEContext) GetSmContext(sessionId int32) (*SmContext, error) {
 	ue.smContextMtx.Lock()
 	defer ue.smContextMtx.Unlock()
 
-	var smContext SmContext
+	var smContext *SmContext
 	_, hasKey := ue.smContexts[sessionId]
 	if hasKey {
-		smContext = *ue.smContexts[sessionId]
-		delete(ue.smContexts, sessionId)
+		smContext = ue.smContexts[sessionId]
 	} else {
 		id := strconv.Itoa(int(sessionId))
-		return SmContext{}, errors.New("[5GC] Could not delete PDU Session " + id + " for UE " + ue.guti + ": not found")
+		return nil, errors.New("[5GC] Could not delete PDU Session " + id + " for UE " + ue.guti + ": not found")
 	}
 
 	return smContext, nil
@@ -147,12 +159,12 @@ func (ue *UEContext) DeleteAllSmContext() {
 	}
 }
 
-func (ue *UEContext) SetInitialContextSetup(hasContext bool) {
-	ue.initialContextSetup = hasContext
-}
-
-func (ue *UEContext) GetInitialContextSetup() bool {
-	return ue.initialContextSetup
+func (ue *UEContext) ExecuteForAllSmContexts(function func(ue *SmContext)) {
+	ue.smContextMtx.Lock()
+	defer ue.smContextMtx.Unlock()
+	for sm := range ue.smContexts {
+		function(ue.smContexts[sm])
+	}
 }
 
 // Kamf Derivation function defined in TS 33.501 Annex A.7
@@ -186,6 +198,6 @@ func (ue *UEContext) DerivateKamf() {
 	ue.securityContext.kamf = hex.EncodeToString(KamfBytes)
 }
 
-func (ue *UEContext) GetState() *state.UEState {
+func (ue *UEContext) GetState() *fsm.State {
 	return ue.state
 }

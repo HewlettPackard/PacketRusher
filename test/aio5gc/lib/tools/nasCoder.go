@@ -46,7 +46,8 @@ func Encode(ue *context.UEContext, msg *nas.Message) ([]byte, error) {
 	}
 
 	// Plain NAS message
-	if ue == nil || !ue.SecurityContextAvailable {
+
+	if ue == nil || !(ue.GetSecurityContext() != nil) {
 		if msg.GmmMessage == nil {
 			return nil, fmt.Errorf("msg.GmmMessage is nil")
 		}
@@ -184,11 +185,11 @@ func Decode(ue *context.UEContext, payload []byte, initialMessage bool) (msg *na
 		return nil, false, fmt.Errorf("[5GC][NAS] wrong security header type: 0x%0x", msg.SecurityHeader.SecurityHeaderType)
 	}
 
-	if ciphered && !ue.SecurityContextAvailable {
+	if ciphered && (ue.GetSecurityContext() == nil) {
 		return nil, false, fmt.Errorf("[5GC][NAS] message is ciphered, but UE Security Context is not Available")
 	}
 
-	if ue.SecurityContextAvailable {
+	if ue.GetSecurityContext() != nil {
 		if ulCountNew.SQN() > sequenceNumber {
 			ulCountNew.SetOverflow(ulCountNew.Overflow() + 1)
 		}
@@ -248,7 +249,7 @@ func Decode(ue *context.UEContext, payload []byte, initialMessage bool) (msg *na
 	}
 
 	if msg.GmmMessage == nil {
-		if !ue.SecurityContextAvailable {
+		if ue.GetSecurityContext() == nil {
 			return nil, false, errNoSecurityContext()
 		}
 		if msg.SecurityHeaderType != nas.SecurityHeaderTypeIntegrityProtectedAndCiphered {
@@ -266,7 +267,7 @@ func Decode(ue *context.UEContext, payload []byte, initialMessage bool) (msg *na
 					return nil, false, errWrongSecurityHeader()
 				}
 			} else {
-				if ue.SecurityContextAvailable {
+				if ue.GetSecurityContext() != nil {
 					if msg.SecurityHeaderType != nas.SecurityHeaderTypeIntegrityProtectedAndCiphered {
 						return nil, false, errWrongSecurityHeader()
 					}
@@ -281,7 +282,7 @@ func Decode(ue *context.UEContext, payload []byte, initialMessage bool) (msg *na
 					return nil, false, errWrongSecurityHeader()
 				}
 			} else {
-				if !ue.SecurityContextAvailable {
+				if ue.GetSecurityContext() == nil {
 					return nil, false, errNoSecurityContext()
 				}
 				if msg.SecurityHeaderType != nas.SecurityHeaderTypeIntegrityProtectedAndCiphered {
@@ -296,7 +297,7 @@ func Decode(ue *context.UEContext, payload []byte, initialMessage bool) (msg *na
 			if len(mobileIdentityContents) >= 1 &&
 				nasConvert.GetTypeOfIdentity(mobileIdentityContents[0]) == nasMessage.MobileIdentity5GSTypeSuci {
 				// Identity is SUCI
-				if ue.SecurityContextAvailable {
+				if ue.GetSecurityContext() != nil {
 					if msg.SecurityHeaderType != nas.SecurityHeaderTypeIntegrityProtectedAndCiphered {
 						return nil, false, errWrongSecurityHeader()
 					}
@@ -306,7 +307,7 @@ func Decode(ue *context.UEContext, payload []byte, initialMessage bool) (msg *na
 				}
 			} else {
 				// Identity is not SUCI
-				if !ue.SecurityContextAvailable {
+				if ue.GetSecurityContext() == nil {
 					return nil, false, errNoSecurityContext()
 				}
 				if msg.SecurityHeaderType != nas.SecurityHeaderTypeIntegrityProtectedAndCiphered {
@@ -320,7 +321,7 @@ func Decode(ue *context.UEContext, payload []byte, initialMessage bool) (msg *na
 			nas.MsgTypeAuthenticationFailure,
 			nas.MsgTypeSecurityModeReject,
 			nas.MsgTypeDeregistrationAcceptUETerminatedDeregistration:
-			if ue.SecurityContextAvailable {
+			if ue.GetSecurityContext() != nil {
 				if msg.SecurityHeaderType != nas.SecurityHeaderTypeIntegrityProtectedAndCiphered {
 					return nil, false, errWrongSecurityHeader()
 				}
@@ -329,7 +330,7 @@ func Decode(ue *context.UEContext, payload []byte, initialMessage bool) (msg *na
 				}
 			}
 		case nas.MsgTypeSecurityModeComplete:
-			if !ue.SecurityContextAvailable {
+			if ue.GetSecurityContext() == nil {
 				return nil, false, errNoSecurityContext()
 			}
 			if msg.SecurityHeaderType != nas.SecurityHeaderTypeIntegrityProtectedAndCipheredWithNew5gNasSecurityContext {
@@ -339,7 +340,7 @@ func Decode(ue *context.UEContext, payload []byte, initialMessage bool) (msg *na
 				return nil, false, errMacVerificationFailed()
 			}
 		default:
-			if !ue.SecurityContextAvailable {
+			if ue.GetSecurityContext() == nil {
 				return nil, false, errNoSecurityContext()
 			}
 			if msg.SecurityHeaderType != nas.SecurityHeaderTypeIntegrityProtectedAndCiphered {

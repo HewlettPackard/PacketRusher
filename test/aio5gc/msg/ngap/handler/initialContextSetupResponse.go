@@ -31,9 +31,6 @@ func InitialContextSetupResponse(req *ngapType.InitialContextSetupResponse, fgc 
 			}
 		}
 	}
-	if !ue.GetInitialContextSetup() {
-		return errors.New("[5GC][NGAP] This UE has no security context set up")
-	}
 	if ue != ranUe {
 		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one registred for this UE")
 	}

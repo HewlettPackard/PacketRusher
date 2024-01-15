@@ -7,18 +7,39 @@ package handler
 import (
 	"errors"
 	"my5G-RANTester/test/aio5gc/context"
+	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/msg"
 	"strings"
 
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 
 	"github.com/free5gc/nas"
 	log "github.com/sirupsen/logrus"
 )
 
-func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) (err error) {
+func RegistrationRequest(nasReq *nas.Message, ue *context.UEContext, gnb *context.GNBContext, fgc *context.Aio5gc) (err error) {
+
+	msgType := nas.MsgTypeRegistrationReject
+
+	// Hook for changing RegistrationReject behaviour
+	hook := fgc.GetNasHook(msgType)
+	if hook != nil {
+		handled, err := hook(nasReq, ue, gnb, fgc)
+		if err != nil {
+			return err
+		}
+		if handled {
+			return nil
+		}
+	}
+
+	err = state.GetUeFsm().SendEvent(ue.GetState(), state.InitialRegistrationRequested, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
+	if err != nil {
+		return err
+	}
 	regType := nasReq.RegistrationRequest.NgksiAndRegistrationType5GS.GetRegistrationType5GS()
 	if regType != nasMessage.RegistrationType5GSInitialRegistration {
 		return errors.New("[5GC][NAS] Received unsupported registration type")
@@ -41,7 +62,6 @@ func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *conte
 
 	gmm := nasReq.GmmMessage
 	ue.SetSecurityCapability(gmm.RegistrationRequest.UESecurityCapability)
-	log.Error(nasReq.RegistrationRequest)
 	ue.SetNgKsi(ngKsi)
 
 	mobileIdentity5GS := gmm.RegistrationRequest.MobileIdentity5GS
@@ -57,13 +77,22 @@ func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *conte
 		msg.SendIdentityRequest(gnb, ue)
 		return nil
 	}
-
-	err = SetMobileIdentity(amf, ue, mobileIdentity5GS, gnb)
-
-	return err
+	return SetMobileIdentity(fgc.GetAMFContext(), ue, mobileIdentity5GS, gnb)
 }
 
-func IdentityResponse(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) (err error) {
+func IdentityResponse(nasReq *nas.Message, fgc *context.Aio5gc, ue *context.UEContext, gnb *context.GNBContext) (err error) {
+	// Hook for changing AuthenticationResponse behaviour
+	hook := fgc.GetNasHook(nas.MsgTypeAuthenticationResponse)
+	if hook != nil {
+		handled, err := hook(nasReq, ue, gnb, fgc)
+		if err != nil {
+			return err
+		}
+		if handled {
+			return nil
+		}
+	}
+
 	identityResponse := nasReq.GmmMessage.IdentityResponse
 	if identityResponse == nil {
 		return errors.New("[5GC][NAS] Received Unexpected Message")
@@ -77,7 +106,7 @@ func IdentityResponse(nasReq *nas.Message, amf *context.AMFContext, ue *context.
 		Buffer: mobileIdentity.Buffer,
 	}
 
-	err = SetMobileIdentity(amf, ue, mobileIdentity5GS, gnb)
+	err = SetMobileIdentity(fgc.GetAMFContext(), ue, mobileIdentity5GS, gnb)
 
 	return err
 }

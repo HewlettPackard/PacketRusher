@@ -6,11 +6,14 @@ package context
 
 import (
 	"errors"
+	"fmt"
+	"my5G-RANTester/test/aio5gc/lib/state"
 	"net"
 
 	"github.com/free5gc/nas/nasConvert"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 	"github.com/mohae/deepcopy"
 	log "github.com/sirupsen/logrus"
 )
@@ -28,6 +31,7 @@ type SmContext struct {
 	ProtocolConfigurationOptions *ProtocolConfigurationOptions
 	sessionRule                  *models.SessionRule
 	defQosQFI                    uint8
+	state                        *fsm.State
 }
 
 type ProtocolConfigurationOptions struct {
@@ -40,6 +44,7 @@ type ProtocolConfigurationOptions struct {
 func NewSmContext(pduSessionID int32) *SmContext {
 	c := &SmContext{pduSessionID: pduSessionID}
 	c.ProtocolConfigurationOptions = &ProtocolConfigurationOptions{}
+	c.state = fsm.NewState(state.Inactive)
 	return c
 }
 
@@ -117,6 +122,10 @@ func (smContext *SmContext) PDUAddressToNAS() ([12]byte, uint8) {
 	return addr, addrLen
 }
 
+func (c *SmContext) GetState() *fsm.State {
+	return c.state
+}
+
 func CreatePDUSession(sessionRequest *nasMessage.PDUSessionEstablishmentRequest,
 	ue *UEContext,
 	session *SessionContext,
@@ -161,6 +170,10 @@ func CreatePDUSession(sessionRequest *nasMessage.PDUSessionEstablishmentRequest,
 		}
 	}
 
+	err = state.GetPduFSM().SendEvent(newSmContext.GetState(), state.EstablishmentAccept, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
+	if err != nil {
+		return nil, err
+	}
 	err = ue.AddSmContext(newSmContext)
 	if err != nil {
 		return nil, err
@@ -170,9 +183,30 @@ func CreatePDUSession(sessionRequest *nasMessage.PDUSessionEstablishmentRequest,
 }
 
 func ReleasePDUSession(ue *UEContext, pduSessionID int32) (SmContext, error) {
-	return ue.DeleteSmContext(pduSessionID)
+	sm, err := ue.GetSmContext(pduSessionID)
+	if err != nil {
+		return SmContext{}, err
+	}
+	err = state.GetPduFSM().SendEvent(sm.state, state.ReleaseCommand, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
+	if err != nil {
+		return SmContext{}, err
+	}
+	return *sm, nil
+}
+
+func ConfirmPDUSessionRelease(ue *UEContext, pduSessionID int32) error {
+	sm, err := ue.GetSmContext(pduSessionID)
+	if err != nil {
+		return err
+	}
+	return state.GetPduFSM().SendEvent(sm.state, state.ReleaseComplete, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
 }
 
 func ReleaseAllPDUSession(ue *UEContext) {
-	ue.DeleteAllSmContext()
+	ue.ExecuteForAllSmContexts(func(smCtx *SmContext) {
+		err := state.GetPduFSM().SendEvent(smCtx.state, state.ReleaseCommand, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
+		if err != nil {
+			log.Error("[5GC] Failed to release pdu session " + fmt.Sprint(smCtx.GetPduSessionId()) + " for ue " + ue.securityContext.msin + ": " + err.Error())
+		}
+	})
 }
