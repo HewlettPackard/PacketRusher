@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"my5G-RANTester/test/aio5gc/lib/state"
 	"regexp"
 	"strconv"
 	"sync"
@@ -109,13 +110,14 @@ func (ue *UEContext) AddSmContext(newContext *SmContext) error {
 	defer ue.smContextMtx.Unlock()
 
 	sessionId := newContext.GetPduSessionId()
-	_, hasKey := ue.smContexts[sessionId]
+	oldContext, hasKey := ue.smContexts[sessionId]
 	if hasKey {
-		id := strconv.Itoa(int(sessionId))
-		return errors.New("[5GC] Could not create PDU Session " + id + " for UE " + ue.guti + ": already exist")
-	} else {
-		ue.smContexts[sessionId] = newContext
+		if !oldContext.state.Is(state.Inactive) {
+			id := strconv.Itoa(int(sessionId))
+			return errors.New("[5GC] Could not create PDU Session " + id + " for UE " + ue.guti + ": already in use")
+		} 
 	}
+	ue.smContexts[sessionId] = newContext
 	return nil
 }
 

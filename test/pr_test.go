@@ -64,7 +64,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	// Setup UE
-	ueCount := 1
+	ueCount := 10
 	scenarioChans := make([]chan procedures.UeTesterMessage, ueCount+1)
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,

@@ -44,7 +44,7 @@ func Dispatch(nasPDU *ngapType.NASPDU, ueContext *context.UEContext, fgc *contex
 	case state.DeregistratedInitiated:
 		err = dispatchDeregistratedInitiated(msg, ueContext, fgc, gnb)
 	default:
-		err = errors.New("[5GC][NAS] ue in unkown state: " + string(ueContext.GetState().Current()))
+		err = errors.New("[5GC][NAS] ue in unknown state: " + string(ueContext.GetState().Current()))
 	}
 
 	if err != nil {

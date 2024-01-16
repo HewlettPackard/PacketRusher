@@ -12,6 +12,7 @@ import (
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/ngap/ngapType"
+	log "github.com/sirupsen/logrus"
 )
 
 type FiveGCBuilder struct {
@@ -25,8 +26,13 @@ func (f *FiveGCBuilder) WithConfig(conf config.Config) *FiveGCBuilder {
 	return f
 }
 
-func (f *FiveGCBuilder) WithNASDispatcherHook(hooks map[uint8]func(*nas.Message, *context.UEContext, *context.GNBContext, *context.Aio5gc) (bool, error)) *FiveGCBuilder {
-	f.nasHooks = hooks
+func (f *FiveGCBuilder) WithNASDispatcherHook(ProcedureCode uint8, hook func(*nas.Message, *context.UEContext, *context.GNBContext, *context.Aio5gc) (bool, error)) *FiveGCBuilder {
+	_, ok := f.nasHooks[ProcedureCode]
+	if ok {
+		log.Errorf("[5GC] Coudln't add NAS Hook with procedure code %d: already exist", ProcedureCode)
+		return f
+	}
+	f.nasHooks[ProcedureCode] = hook
 	return f
 }
 
