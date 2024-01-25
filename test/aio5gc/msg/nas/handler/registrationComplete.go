@@ -5,30 +5,37 @@
 package handler
 
 import (
+	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/msg"
 
 	"github.com/free5gc/nas"
-	"github.com/free5gc/util/fsm"
-	log "github.com/sirupsen/logrus"
 )
 
-func RegistrationComplete(nasMsg *nas.Message, gnb *context.GNBContext, ue *context.UEContext, fgc *context.Aio5gc) error {
-
-	// Hook for changing RegistrationComplete behaviour
-	hook := fgc.GetNasHook(nas.MsgTypeRegistrationComplete)
-	if hook != nil {
-		handled, err := hook(nasMsg, ue, gnb, fgc)
-		if err != nil {
-			return err
-		}
-		if handled {
-			return nil
-		}
+func RegistrationComplete(nasMsg *nas.Message, gnb *context.GNBContext, ue *context.UEContext, amf context.AMFContext) error {
+	var err error
+	switch ue.GetState().Current() {
+	case state.AuthenticationInitiated:
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received RegistrationComplete for AuthenticationInitiated UE")
+	case state.Deregistrated:
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received RegistrationComplete for Deregistrated UE")
+	case state.DeregistratedInitiated:
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received RegistrationComplete for DeregistratedInitiated UE")
+	case state.Registred:
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received RegistrationComplete for Registred UE")
+	case state.SecurityContextAvailable:
+		err = DefaultRegistrationComplete(nasMsg, gnb, ue, amf)
+	default:
+		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().ToString())
 	}
-	nwName := fgc.GetAMFContext().GetNetworkName()
-	err := state.GetUeFsm().SendEvent(ue.GetState(), state.InitialRegistrationAccepted, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
+	return err
+}
+
+func DefaultRegistrationComplete(nasMsg *nas.Message, gnb *context.GNBContext, ue *context.UEContext, amf context.AMFContext) error {
+
+	nwName := amf.GetNetworkName()
+	err := state.UpdateUE(ue.GetStatePointer(), state.Registred)
 	if err != nil {
 		return err
 	}

@@ -12,7 +12,6 @@ import (
 	"sync"
 
 	"github.com/free5gc/openapi/models"
-	"github.com/free5gc/util/fsm"
 	"github.com/free5gc/util/idgenerator"
 	log "github.com/sirupsen/logrus"
 )
@@ -149,7 +148,8 @@ func (c *AMFContext) NewUE(ueRanNgapId int64) *UEContext {
 	newUE.SetRanNgapId(ueRanNgapId)
 	newUE.SetAmfNgapId(c.getAmfUeId())
 	newUE.smContexts = make(map[int32]*SmContext)
-	newUE.state = fsm.NewState(state.Deregistrated)
+	state := state.GetNewDeregistrated()
+	newUE.state = &state
 	ueMutex.Lock()
 	c.ues = append(c.ues, &newUE)
 	ueMutex.Unlock()

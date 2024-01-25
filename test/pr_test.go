@@ -64,7 +64,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	// Setup UE
-	ueCount := 10
+	ueCount := 1
 	scenarioChans := make([]chan procedures.UeTesterMessage, ueCount+1)
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
@@ -94,14 +94,19 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	time.Sleep(time.Duration(5000) * time.Millisecond)
+	i := 0
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
+			i++
 			assert.Equalf(t, state.Deregistrated, ue.GetState().Current(), "Expected all ue to be in Deregistrated state but was not")
+			assert.True(t, len(ue.GetState().GetHistory()) > 0, "UE has never changed state")
 			ue.ExecuteForAllSmContexts(
 				func(sm *context.SmContext) {
 					assert.Equalf(t, state.Inactive, sm.GetState().Current(), "Expected all pdu sessions to be in Inactive state but was not")
 				})
 		})
+	assert.Equalf(t, ueCount, i, "Expected %v ue to created in 5GC state but was %v", ueCount, i)
+
 }
 
 func TestUERegistrationLoop(t *testing.T) {

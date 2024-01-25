@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
+	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/msg"
 	"slices"
 
@@ -18,6 +19,25 @@ import (
 )
 
 func UlNasTransport(nasReq *nas.Message, gnb *context.GNBContext, ue *context.UEContext, session *context.SessionContext) error {
+	var err error
+	switch ue.GetState().Current() {
+	case state.AuthenticationInitiated:
+		return fmt.Errorf("[5GC][NAS] Unexpected message: received UlNasTransport for AuthenticationInitiated UE")
+	case state.Deregistrated:
+		return fmt.Errorf("[5GC][NAS] Unexpected message: received UlNasTransport for Deregistrated UE")
+	case state.DeregistratedInitiated:
+		return fmt.Errorf("[5GC][NAS] Unexpected message: received UlNasTransport for DeregistratedInitiated UE")
+	case state.Registred:
+		return DefaultUlNasTransport(nasReq, gnb, ue, session)
+	case state.SecurityContextAvailable:
+		return fmt.Errorf("[5GC][NAS] Unexpected message: received UlNasTransport for SecurityContextAvailable UE")
+	default:
+		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().ToString())
+	}
+	return err
+}
+
+func DefaultUlNasTransport(nasReq *nas.Message, gnb *context.GNBContext, ue *context.UEContext, session *context.SessionContext) error {
 
 	ulNasTransport := nasReq.ULNASTransport
 	var err error

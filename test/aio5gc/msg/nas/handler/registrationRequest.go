@@ -6,6 +6,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/msg"
@@ -14,29 +15,34 @@ import (
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/openapi/models"
-	"github.com/free5gc/util/fsm"
 
 	"github.com/free5gc/nas"
 	log "github.com/sirupsen/logrus"
 )
 
-func RegistrationRequest(nasReq *nas.Message, ue *context.UEContext, gnb *context.GNBContext, fgc *context.Aio5gc) (err error) {
+func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
+	var err error
+	switch ue.GetState().Current() {
+	case state.AuthenticationInitiated:
+		err = errors.New("[5GC][NAS] Unexpected message: received RegistrationRequest for AuthenticationInitiated UE")
+	case state.Deregistrated:
+		err = DefaultRegistrationRequest(nasReq, amf, ue, gnb)
+	case state.DeregistratedInitiated:
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received SecurityModeComplete for DeregistratedInitiated UE")
+	case state.Registred:
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received RegistrationRequest for Registred UE")
+	case state.SecurityContextAvailable:
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received RegistrationRequest for SecurityContextAvailable UE")
 
-	msgType := nas.MsgTypeRegistrationReject
-
-	// Hook for changing RegistrationReject behaviour
-	hook := fgc.GetNasHook(msgType)
-	if hook != nil {
-		handled, err := hook(nasReq, ue, gnb, fgc)
-		if err != nil {
-			return err
-		}
-		if handled {
-			return nil
-		}
+	default:
+		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().ToString())
 	}
+	return err
+}
 
-	err = state.GetUeFsm().SendEvent(ue.GetState(), state.InitialRegistrationRequested, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
+func DefaultRegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) (err error) {
+
+	err = state.UpdateUE(ue.GetStatePointer(), state.AuthenticationInitiated)
 	if err != nil {
 		return err
 	}
@@ -77,21 +83,10 @@ func RegistrationRequest(nasReq *nas.Message, ue *context.UEContext, gnb *contex
 		msg.SendIdentityRequest(gnb, ue)
 		return nil
 	}
-	return SetMobileIdentity(fgc.GetAMFContext(), ue, mobileIdentity5GS, gnb)
+	return SetMobileIdentity(amf, ue, mobileIdentity5GS, gnb)
 }
 
-func IdentityResponse(nasReq *nas.Message, fgc *context.Aio5gc, ue *context.UEContext, gnb *context.GNBContext) (err error) {
-	// Hook for changing AuthenticationResponse behaviour
-	hook := fgc.GetNasHook(nas.MsgTypeAuthenticationResponse)
-	if hook != nil {
-		handled, err := hook(nasReq, ue, gnb, fgc)
-		if err != nil {
-			return err
-		}
-		if handled {
-			return nil
-		}
-	}
+func IdentityResponse(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) (err error) {
 
 	identityResponse := nasReq.GmmMessage.IdentityResponse
 	if identityResponse == nil {
@@ -106,7 +101,7 @@ func IdentityResponse(nasReq *nas.Message, fgc *context.Aio5gc, ue *context.UECo
 		Buffer: mobileIdentity.Buffer,
 	}
 
-	err = SetMobileIdentity(fgc.GetAMFContext(), ue, mobileIdentity5GS, gnb)
+	err = SetMobileIdentity(amf, ue, mobileIdentity5GS, gnb)
 
 	return err
 }

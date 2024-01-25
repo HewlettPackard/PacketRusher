@@ -1,0 +1,77 @@
+package ueState
+
+import (
+	"errors"
+	"my5G-RANTester/test/aio5gc/context"
+)
+
+func UpdateState(current *context.UeState, next context.UeState) error {
+	var updatable bool
+	c := *current
+	switch c.(type) {
+	case *AuthenticationInitiated:
+		updatable = updatableFromAuthenticationInitiated(next)
+	case *Deregistrated:
+		updatable = updatableFromDeregistrated(next)
+	case *DeregistratedInitiated:
+		updatable = updatableFromDeregistratedInitiated(next)
+	case *Registred:
+		updatable = updatableFromRegistred(next)
+	case *SecurityContextAvailable:
+		updatable = updatableFromSecurityContextAvailable(next)
+	default:
+	}
+	if !updatable {
+		return errors.New("Cannot change state from " + c.ToString() + "to" + next.ToString())
+	}
+	*current = next
+	return nil
+}
+
+func updatableFromAuthenticationInitiated(next context.UeState) bool {
+	switch next.(type) {
+	case *DeregistratedInitiated:
+	case *SecurityContextAvailable:
+	default:
+		return false
+	}
+	return true
+}
+
+func updatableFromDeregistrated(next context.UeState) bool {
+	switch next.(type) {
+	case *AuthenticationInitiated:
+	default:
+		return false
+	}
+	return true
+}
+
+func updatableFromDeregistratedInitiated(next context.UeState) bool {
+	switch next.(type) {
+	case *Deregistrated:
+	default:
+		return false
+	}
+	return true
+}
+
+func updatableFromRegistred(next context.UeState) bool {
+	switch next.(type) {
+	case *DeregistratedInitiated:
+	case *Deregistrated:
+	default:
+		return false
+	}
+	return true
+}
+
+func updatableFromSecurityContextAvailable(next context.UeState) bool {
+	switch next.(type) {
+	case *DeregistratedInitiated:
+	case *Registred:
+	default:
+		return false
+	}
+	return true
+}

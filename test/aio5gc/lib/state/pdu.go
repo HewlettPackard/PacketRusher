@@ -27,11 +27,11 @@ var pduLock = &sync.Mutex{}
 var PduFsm *fsm.FSM
 
 func GetPduFSM() *fsm.FSM {
-	if UeFsm == nil {
+	if PduFsm == nil {
 		pduLock.Lock()
 		defer pduLock.Unlock()
 		var err error
-		UeFsm, err = fsm.NewFSM(
+		PduFsm, err = fsm.NewFSM(
 			fsm.Transitions{
 				{Event: EstablishmentReject, From: Inactive, To: Inactive},
 				{Event: EstablishmentAccept, From: Inactive, To: Active},
@@ -51,5 +51,5 @@ func GetPduFSM() *fsm.FSM {
 		}
 	}
 
-	return UeFsm
+	return PduFsm
 }

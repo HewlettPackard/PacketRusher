@@ -10,7 +10,6 @@ import (
 	"my5G-RANTester/test/aio5gc/msg/nas"
 
 	"github.com/free5gc/ngap/ngapConvert"
-
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/openapi/models"
 )

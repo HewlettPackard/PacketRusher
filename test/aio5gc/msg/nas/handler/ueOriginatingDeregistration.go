@@ -6,6 +6,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/msg"
@@ -13,28 +14,33 @@ import (
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/ngap/ngapType"
-	"github.com/free5gc/util/fsm"
-	log "github.com/sirupsen/logrus"
 )
 
-func UEOriginatingDeregistration(nasReq *nas.Message, ueContext *context.UEContext, gnb *context.GNBContext, fgc *context.Aio5gc) error {
-
-	// Hook for changing AuthenticationResponse behaviour
-	hook := fgc.GetNasHook(nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration)
-	if hook != nil {
-		handled, err := hook(nasReq, ueContext, gnb, fgc)
-		if err != nil {
-			return err
-		}
-		if handled {
-			return nil
-		}
+func UEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
+	var err error
+	switch ue.GetState().Current() {
+	case state.AuthenticationInitiated:
+		err = DefaultUEOriginatingDeregistration(nasReq, amf, ue, gnb)
+	case state.Deregistrated:
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received UEOriginatingDeregistration for Deregistrated UE")
+	case state.DeregistratedInitiated:
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received UEOriginatingDeregistration for DeregistratedInitiated UE")
+	case state.Registred:
+		err = DefaultUEOriginatingDeregistration(nasReq, amf, ue, gnb)
+	case state.SecurityContextAvailable:
+		err = DefaultUEOriginatingDeregistration(nasReq, amf, ue, gnb)
+	default:
+		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().ToString())
 	}
+	return err
+}
+
+func DefaultUEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
 
 	deregistrationRequest := nasReq.DeregistrationRequestUEOriginatingDeregistration
-	context.ReleaseAllPDUSession(ueContext)
+	context.ReleaseAllPDUSession(ue)
 
-	err := state.GetUeFsm().SendEvent(ueContext.GetState(), state.DeregistrationRequested, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
+	err := state.UpdateUE(ue.GetStatePointer(), state.DeregistratedInitiated)
 	if err != nil {
 		return err
 	}
@@ -46,7 +52,7 @@ func UEOriginatingDeregistration(nasReq *nas.Message, ueContext *context.UEConte
 	// TS 23.502 4.2.6, 4.12.3
 	switch deregistrationRequest.GetAccessType() {
 	case nasMessage.AccessType3GPP:
-		msg.SendUEContextReleaseCommand(gnb, ueContext, ngapType.CausePresentNas, ngapType.CauseNasPresentDeregister)
+		msg.SendUEContextReleaseCommand(gnb, ue, ngapType.CausePresentNas, ngapType.CauseNasPresentDeregister)
 	default:
 		return errors.New("[5GC][NAS] Deregistration procedure: unsupported access type")
 	}
