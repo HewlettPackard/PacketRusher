@@ -11,14 +11,15 @@ import (
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/state"
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
+	"my5G-RANTester/test/aio5gc/state"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -40,6 +41,13 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 
 	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
 
+	type UECheck struct {
+		HasAuthOnce  bool
+		PduActivated map[int32]bool
+	}
+
+	ueChecks := map[string]*UECheck{}
+
 	// Setup 5GC
 	builder := aio5gc.FiveGCBuilder{}
 	fiveGC, err := builder.
@@ -50,6 +58,30 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		os.Exit(1)
 	}
 	time.Sleep(1 * time.Second)
+
+	state.InitUEFSM(fsm.Callbacks{
+		state.Authenticated: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			ue := args["ue"].(*context.UEContext)
+			check, ok := ueChecks[ue.GetSecurityContext().GetMsin()]
+			if !ok {
+				check = &UECheck{}
+				ueChecks[ue.GetSecurityContext().GetMsin()] = check
+			}
+			check.HasAuthOnce = true
+		},
+	})
+
+	state.InitPduFSM(fsm.Callbacks{
+		state.Active: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			ue := args["ue"].(*context.UEContext)
+			sm := args["sm"].(*context.SmContext)
+			check := ueChecks[ue.GetSecurityContext().GetMsin()]
+			if check.PduActivated == nil {
+				check.PduActivated = map[int32]bool{}
+			}
+			check.PduActivated[sm.GetPduSessionId()] = true
+		},
+	})
 
 	// Setup gNodeB
 	gnbCount := 1
@@ -64,7 +96,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	// Setup UE
-	ueCount := 1
+	ueCount := 10
 	scenarioChans := make([]chan procedures.UeTesterMessage, ueCount+1)
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
@@ -78,14 +110,15 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	for ueSimCfg.UeId = 1; ueSimCfg.UeId <= ueCount; ueSimCfg.UeId++ {
 		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
 
+		imsi := tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin)
+
 		securityContext := context.SecurityContext{}
-		securityContext.SetMsin(tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin))
+		securityContext.SetMsin(imsi)
 		securityContext.SetAuthSubscription(ueSimCfg.Cfg.Ue.Key, ueSimCfg.Cfg.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
 		securityContext.SetAbba([]uint8{0x00, 0x00})
-		securityContext.SetDefaultSNssai(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd})
 
 		amfContext := fiveGC.GetAMFContext()
-		amfContext.NewSecurityContext(securityContext)
+		amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
 
 		tools.SimulateSingleUE(ueSimCfg, &wg)
 
@@ -99,10 +132,12 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		func(ue *context.UEContext) {
 			i++
 			assert.Equalf(t, state.Deregistrated, ue.GetState().Current(), "Expected all ue to be in Deregistrated state but was not")
-			assert.True(t, len(ue.GetState().GetHistory()) > 0, "UE has never changed state")
+			check := ueChecks[ue.GetSecurityContext().GetMsin()]
+			assert.True(t, check.HasAuthOnce, "UE has never changed state")
 			ue.ExecuteForAllSmContexts(
 				func(sm *context.SmContext) {
 					assert.Equalf(t, state.Inactive, sm.GetState().Current(), "Expected all pdu sessions to be in Inactive state but was not")
+					assert.True(t, check.PduActivated[sm.GetPduSessionId()], "Expected all pdu to be activate once but was not")
 				})
 		})
 	assert.Equalf(t, ueCount, i, "Expected %v ue to created in 5GC state but was %v", ueCount, i)
@@ -174,10 +209,9 @@ func TestUERegistrationLoop(t *testing.T) {
 		securityContext.SetMsin(tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin))
 		securityContext.SetAuthSubscription(ueSimCfg.Cfg.Ue.Key, ueSimCfg.Cfg.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
 		securityContext.SetAbba([]uint8{0x00, 0x00})
-		securityContext.SetDefaultSNssai(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd})
 
 		amfContext := fiveGC.GetAMFContext()
-		amfContext.NewSecurityContext(securityContext)
+		amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
 
 		tools.SimulateSingleUE(ueSimCfg, &wg)
 

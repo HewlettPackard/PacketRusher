@@ -7,11 +7,12 @@ package context
 import (
 	"errors"
 	"math"
-	"my5G-RANTester/test/aio5gc/lib/state"
+	"my5G-RANTester/test/aio5gc/state"
 	"strconv"
 	"sync"
 
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 	"github.com/free5gc/util/idgenerator"
 	log "github.com/sirupsen/logrus"
 )
@@ -32,9 +33,9 @@ type AMFContext struct {
 	relativeCapacity    int64
 	gnbs                map[string]*GNBContext
 	ues                 []*UEContext
-	securityContext     []SecurityContext
 	idUeGenerator       int64
 	networkName         NetworkName
+	provisionedData     map[string]provisionedData
 }
 
 type NetworkName struct {
@@ -54,7 +55,7 @@ func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssa
 	c.relativeCapacity = relativeCapacity
 	c.gnbs = make(map[string]*GNBContext)
 	c.ues = []*UEContext{}
-	c.securityContext = []SecurityContext{}
+	c.provisionedData = map[string]provisionedData{}
 	c.idUeGenerator = 0
 	c.networkName = NetworkName{
 		Full:  "NtwFull",
@@ -79,15 +80,14 @@ func (c *AMFContext) GetId() string {
 	return c.id
 }
 
-func (c *AMFContext) FindSecurityContextByMsin(msin string) (SecurityContext, error) {
+func (c *AMFContext) FindProvisionedData(msin string) (provisionedData, error) {
 	scMutex.Lock()
 	defer scMutex.Unlock()
-	for sub := range c.securityContext {
-		if c.securityContext[sub].msin == msin {
-			return c.securityContext[sub], nil
-		}
+	data, ok := c.provisionedData[msin]
+	if !ok {
+		return provisionedData{}, errors.New("[5GC] UE with msin " + msin + "not found")
 	}
-	return SecurityContext{}, errors.New("[5GC] UE with msin " + msin + "not found")
+	return data, nil
 }
 
 func (c *AMFContext) FindUEById(id int64) (*UEContext, error) {
@@ -132,13 +132,13 @@ func (c *AMFContext) ExecuteForAllUe(function func(ue *UEContext)) {
 	}
 }
 
-func (c *AMFContext) NewSecurityContext(sub SecurityContext) error {
-	_, notExist := c.FindSecurityContextByMsin(sub.msin)
-	if notExist == nil {
-		return errors.New("[5GC] Cannot create new subscriber: subscriber with msin " + sub.msin + " already exist")
+func (c *AMFContext) Provision(nssai models.Snssai, securityContext SecurityContext) error {
+	_, ok := c.provisionedData[securityContext.msin]
+	if ok {
+		return errors.New("[5GC] Cannot create new subscriber: subscriber with msin " + securityContext.msin + " already exist")
 	}
 	scMutex.Lock()
-	c.securityContext = append(c.securityContext, sub)
+	c.provisionedData[securityContext.msin] = provisionedData{defaultSNssai: nssai, securityContext: securityContext}
 	scMutex.Unlock()
 	return nil
 }
@@ -148,8 +148,7 @@ func (c *AMFContext) NewUE(ueRanNgapId int64) *UEContext {
 	newUE.SetRanNgapId(ueRanNgapId)
 	newUE.SetAmfNgapId(c.getAmfUeId())
 	newUE.smContexts = make(map[int32]*SmContext)
-	state := state.GetNewDeregistrated()
-	newUE.state = &state
+	newUE.state = fsm.NewState(state.Deregistrated)
 	ueMutex.Lock()
 	c.ues = append(c.ues, &newUE)
 	ueMutex.Unlock()

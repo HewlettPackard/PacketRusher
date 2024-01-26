@@ -8,13 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/msg"
+	"my5G-RANTester/test/aio5gc/state"
 	"strings"
 
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 
 	"github.com/free5gc/nas"
 	log "github.com/sirupsen/logrus"
@@ -31,18 +32,18 @@ func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *conte
 		err = fmt.Errorf("[5GC][NAS] Unexpected message: received SecurityModeComplete for DeregistratedInitiated UE")
 	case state.Registred:
 		err = fmt.Errorf("[5GC][NAS] Unexpected message: received RegistrationRequest for Registred UE")
-	case state.SecurityContextAvailable:
+	case state.Authenticated:
 		err = fmt.Errorf("[5GC][NAS] Unexpected message: received RegistrationRequest for SecurityContextAvailable UE")
 
 	default:
-		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().ToString())
+		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().Current())
 	}
 	return err
 }
 
-func DefaultRegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) (err error) {
+func DefaultRegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
 
-	err = state.UpdateUE(ue.GetStatePointer(), state.AuthenticationInitiated)
+	err := state.GetUeFsm().SendEvent(ue.GetState(), state.RegistrationRequest, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		return err
 	}
@@ -112,13 +113,14 @@ func SetMobileIdentity(amf *context.AMFContext, ue *context.UEContext, mobileIde
 		return errors.New("[5GC][NAS] UE id uses IDType " + mobileIdType + " but is not yet supported by aio5gc.")
 	}
 	suci := strings.Split(mobileId, "-")
-	sub, err := amf.FindSecurityContextByMsin(suci[len(suci)-1])
+	prov, err := amf.FindProvisionedData(suci[len(suci)-1])
 	if err != nil {
 		return err
 	}
-	sub.SetSuci(mobileId)
-	sub.SetSupi("imsi-" + suci[2] + suci[3] + suci[len(suci)-1])
-	ue.SetSecurityContext(&sub)
+	sCtx := prov.GetSecurityContext()
+	sCtx.SetSuci(mobileId)
+	sCtx.SetSupi("imsi-" + suci[2] + suci[3] + suci[len(suci)-1])
+	ue.SetSecurityContext(&sCtx)
 
 	msg.SendAuthenticationRequest(gnb, ue)
 

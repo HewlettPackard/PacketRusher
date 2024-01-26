@@ -32,18 +32,9 @@ type SecurityContext struct {
 	kgnb               []uint8
 	abba               []uint8
 	NH                 []byte
-
-	// rework to separate security info and other provisioned data
-	defaultSNssai models.Snssai
 }
 
-func (s *SecurityContext) GetDefaultSNssai() models.Snssai {
-	return s.defaultSNssai
-}
 
-func (s *SecurityContext) SetDefaultSNssai(snssai models.Snssai) {
-	s.defaultSNssai = snssai
-}
 
 func (s *SecurityContext) GetAuthSubscription() models.AuthenticationSubscription {
 	return s.authenticationSubs

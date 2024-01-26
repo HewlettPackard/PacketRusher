@@ -8,13 +8,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	state "my5G-RANTester/test/aio5gc/lib/state"
+	state "my5G-RANTester/test/aio5gc/state"
 	"regexp"
 	"strconv"
 	"sync"
 
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 	"github.com/free5gc/util/ueauth"
 	log "github.com/sirupsen/logrus"
 )
@@ -28,11 +29,12 @@ type UEContext struct {
 	Dnn                  string
 	pei                  string
 	securityContext      *SecurityContext
+	defaultSNssai        models.Snssai
 	guti                 string
 	tmsi                 int32
 	smContexts           map[int32]*SmContext
 	smContextMtx         sync.Mutex
-	state                *state.UE
+	state                *fsm.State
 }
 
 func (ue *UEContext) AllocateGuti(a *AMFContext) {
@@ -199,10 +201,14 @@ func (ue *UEContext) DerivateKamf() {
 	ue.securityContext.kamf = hex.EncodeToString(KamfBytes)
 }
 
-func (ue *UEContext) GetState() state.UE {
-	return *ue.state
+func (ue *UEContext) GetState() *fsm.State {
+	return ue.state
 }
 
-func (ue *UEContext) GetStatePointer() *state.UE {
-	return ue.state
+func (ue *UEContext) GetDefaultSNssai() models.Snssai {
+	return ue.defaultSNssai
+}
+
+func (ue *UEContext) SetDefaultSNssai(snssai models.Snssai) {
+	ue.defaultSNssai = snssai
 }

@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/msg"
+	"my5G-RANTester/test/aio5gc/state"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasConvert"
@@ -26,10 +26,10 @@ func SecurityModeComplete(nasReq *nas.Message, amf *context.AMFContext, ue *cont
 		err = fmt.Errorf("[5GC][NAS] Unexpected message: received SecurityModeComplete for DeregistratedInitiated UE")
 	case state.Registred:
 		err = fmt.Errorf("[5GC][NAS] Unexpected message: received SecurityModeComplete for Registred UE")
-	case state.SecurityContextAvailable:
+	case state.Authenticated:
 		err = DefaultSecurityModeComplete(nasReq, ue, gnb, amf)
 	default:
-		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().ToString())
+		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().Current())
 	}
 	return err
 }

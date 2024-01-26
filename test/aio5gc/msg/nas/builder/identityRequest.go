@@ -6,8 +6,8 @@ package builder
 
 import (
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/lib/tools"
+	"my5G-RANTester/test/aio5gc/state"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"

@@ -7,7 +7,7 @@ package context
 import (
 	"errors"
 	"fmt"
-	"my5G-RANTester/test/aio5gc/lib/state"
+	"my5G-RANTester/test/aio5gc/state"
 	"net"
 
 	"github.com/free5gc/nas/nasConvert"
@@ -170,7 +170,7 @@ func CreatePDUSession(sessionRequest *nasMessage.PDUSessionEstablishmentRequest,
 		}
 	}
 
-	err = state.GetPduFSM().SendEvent(newSmContext.GetState(), state.EstablishmentAccept, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
+	err = state.GetPduFSM().SendEvent(newSmContext.GetState(), state.EstablishmentAccept, fsm.ArgsType{"ue": ue, "sm": newSmContext}, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func ReleasePDUSession(ue *UEContext, pduSessionID int32) (SmContext, error) {
 	if err != nil {
 		return SmContext{}, err
 	}
-	err = state.GetPduFSM().SendEvent(sm.state, state.ReleaseCommand, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
+	err = state.GetPduFSM().SendEvent(sm.state, state.ReleaseCommand, fsm.ArgsType{"ue": ue, "sm": sm}, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		return SmContext{}, err
 	}
@@ -199,14 +199,20 @@ func ConfirmPDUSessionRelease(ue *UEContext, pduSessionID int32) error {
 	if err != nil {
 		return err
 	}
-	return state.GetPduFSM().SendEvent(sm.state, state.ReleaseComplete, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
+	state.GetPduFSM().SendEvent(sm.state, state.ReleaseComplete, fsm.ArgsType{"ue": ue, "sm": sm}, log.NewEntry(log.StandardLogger()))
+	if err != nil {
+		return err
+	}
+	ue.DeleteAllSmContext()
+	return nil
 }
 
-func ReleaseAllPDUSession(ue *UEContext) {
+func ForceReleaseAllPDUSession(ue *UEContext) {
 	ue.ExecuteForAllSmContexts(func(smCtx *SmContext) {
-		err := state.GetPduFSM().SendEvent(smCtx.state, state.ReleaseCommand, fsm.ArgsType{}, log.NewEntry(log.StandardLogger()))
+		err := state.GetPduFSM().SendEvent(smCtx.state, state.ForceRelease, fsm.ArgsType{"ue": ue, "sm": smCtx}, log.NewEntry(log.StandardLogger()))
 		if err != nil {
 			log.Error("[5GC] Failed to release pdu session " + fmt.Sprint(smCtx.GetPduSessionId()) + " for ue " + ue.securityContext.msin + ": " + err.Error())
 		}
 	})
+	ue.DeleteAllSmContext()
 }

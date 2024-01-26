@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/msg"
+	"my5G-RANTester/test/aio5gc/state"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/util/fsm"
+	log "github.com/sirupsen/logrus"
 )
 
 func UEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
@@ -27,10 +29,10 @@ func UEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFContext, u
 		err = fmt.Errorf("[5GC][NAS] Unexpected message: received UEOriginatingDeregistration for DeregistratedInitiated UE")
 	case state.Registred:
 		err = DefaultUEOriginatingDeregistration(nasReq, amf, ue, gnb)
-	case state.SecurityContextAvailable:
+	case state.Authenticated:
 		err = DefaultUEOriginatingDeregistration(nasReq, amf, ue, gnb)
 	default:
-		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().ToString())
+		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().Current())
 	}
 	return err
 }
@@ -38,9 +40,10 @@ func UEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFContext, u
 func DefaultUEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
 
 	deregistrationRequest := nasReq.DeregistrationRequestUEOriginatingDeregistration
-	context.ReleaseAllPDUSession(ue)
+	context.ForceReleaseAllPDUSession(ue)
 
-	err := state.UpdateUE(ue.GetStatePointer(), state.DeregistratedInitiated)
+	err := state.GetUeFsm().SendEvent(ue.GetState(), state.DeregistrationRequest, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+
 	if err != nil {
 		return err
 	}

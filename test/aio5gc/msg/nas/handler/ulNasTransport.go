@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/msg"
+	"my5G-RANTester/test/aio5gc/state"
 	"slices"
 
 	"github.com/free5gc/nas"
@@ -29,10 +29,10 @@ func UlNasTransport(nasReq *nas.Message, gnb *context.GNBContext, ue *context.UE
 		return fmt.Errorf("[5GC][NAS] Unexpected message: received UlNasTransport for DeregistratedInitiated UE")
 	case state.Registred:
 		return DefaultUlNasTransport(nasReq, gnb, ue, session)
-	case state.SecurityContextAvailable:
+	case state.Authenticated:
 		return fmt.Errorf("[5GC][NAS] Unexpected message: received UlNasTransport for SecurityContextAvailable UE")
 	default:
-		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().ToString())
+		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().Current())
 	}
 	return err
 }
@@ -81,7 +81,7 @@ func transport5GSMMessage(ue *context.UEContext, ulNasTransport *nasMessage.ULNA
 	if ulNasTransport.SNSSAI != nil {
 		snssai = nasConvert.SnssaiToModels(ulNasTransport.SNSSAI)
 	} else {
-		snssai = ue.GetSecurityContext().GetDefaultSNssai()
+		snssai = ue.GetDefaultSNssai()
 	}
 
 	dnnList := session.GetDnnList()

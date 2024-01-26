@@ -7,10 +7,12 @@ package handler
 import (
 	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/msg"
+	"my5G-RANTester/test/aio5gc/state"
 
 	"github.com/free5gc/nas"
+	"github.com/free5gc/util/fsm"
+	log "github.com/sirupsen/logrus"
 )
 
 func RegistrationComplete(nasMsg *nas.Message, gnb *context.GNBContext, ue *context.UEContext, amf context.AMFContext) error {
@@ -24,10 +26,10 @@ func RegistrationComplete(nasMsg *nas.Message, gnb *context.GNBContext, ue *cont
 		err = fmt.Errorf("[5GC][NAS] Unexpected message: received RegistrationComplete for DeregistratedInitiated UE")
 	case state.Registred:
 		err = fmt.Errorf("[5GC][NAS] Unexpected message: received RegistrationComplete for Registred UE")
-	case state.SecurityContextAvailable:
+	case state.Authenticated:
 		err = DefaultRegistrationComplete(nasMsg, gnb, ue, amf)
 	default:
-		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().ToString())
+		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().Current())
 	}
 	return err
 }
@@ -35,7 +37,7 @@ func RegistrationComplete(nasMsg *nas.Message, gnb *context.GNBContext, ue *cont
 func DefaultRegistrationComplete(nasMsg *nas.Message, gnb *context.GNBContext, ue *context.UEContext, amf context.AMFContext) error {
 
 	nwName := amf.GetNetworkName()
-	err := state.UpdateUE(ue.GetStatePointer(), state.Registred)
+	err := state.GetUeFsm().SendEvent(ue.GetState(), state.RegistrationAccept, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		return err
 	}

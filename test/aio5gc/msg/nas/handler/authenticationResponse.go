@@ -8,14 +8,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/state"
 	"my5G-RANTester/test/aio5gc/msg"
+	"my5G-RANTester/test/aio5gc/state"
 	"strings"
 
 	"fmt"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/util/fsm"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -30,10 +31,10 @@ func AuthenticationResponse(nasMsg *nas.Message, gnb *context.GNBContext, ue *co
 		return fmt.Errorf("[5GC][NAS] Unexpected message: received AuthenticationResponse for DeregistratedInitiated UE")
 	case state.Registred:
 		return fmt.Errorf("[5GC][NAS] Unexpected message: received AuthenticationResponse for Registred UE")
-	case state.SecurityContextAvailable:
-		return fmt.Errorf("[5GC][NAS] Unexpected message: received AuthenticationResponse for SecurityContextAvailable UE")
+	case state.Authenticated:
+		return fmt.Errorf("[5GC][NAS] Unexpected message: received AuthenticationResponse for Authenticated UE")
 	default:
-		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().ToString())
+		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().Current())
 	}
 	return err
 }
@@ -59,11 +60,15 @@ func DefaultAuthenticationResponse(nasMsg *nas.Message, gnb *context.GNBContext,
 	} else {
 		return errors.New(("5G AKA confirmation failed, expected res* " + xresStar + " but got " + resStar))
 	}
-
-	err := state.UpdateUE(ue.GetStatePointer(), state.SecurityContextAvailable)
+	err := state.GetUeFsm().SendEvent(ue.GetState(), state.AuthenticationSuccess, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		return err
 	}
+	prov, err := amf.FindProvisionedData(ue.GetSecurityContext().GetMsin())
+	if err != nil {
+		return err
+	}
+	ue.SetDefaultSNssai(prov.GetDefaultSNssai())
 	msg.SendSecurityModeCommand(gnb, ue)
 	return nil
 }
