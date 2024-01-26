@@ -34,7 +34,7 @@ PacketRusher borrows libraries and data structures from the [free5gc project](ht
 The following is a quick start guide, for more details on the installation, configuration or usage, you may refer to the [wiki](https://github.com/HewlettPackard/PacketRusher/wiki).
 
 ### Requirements
-- Ubuntu 20.04-22.04 or RHEL 8-9
+- Ubuntu 20.04-22.04
   - /!\ gtp5g kernel module does not work on Ubuntu 22.04 HWE kernel (or any distro with kernel later than 5.15.X)
 - Windows is not supported (Windows does not support SCTP)
 - Go 1.21.0 or more recent
