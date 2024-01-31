@@ -7,7 +7,7 @@ package nas
 import (
 	"errors"
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/tools"
+	"my5G-RANTester/test/aio5gc/msg/nas/codec"
 	nasHandler "my5G-RANTester/test/aio5gc/msg/nas/handler"
 	"strconv"
 
@@ -23,15 +23,28 @@ func Dispatch(nasPDU *ngapType.NASPDU, ue *context.UEContext, fgc *context.Aio5g
 	var msg *nas.Message
 	var err error
 
-	if m.SecurityHeaderType != nas.SecurityHeaderTypePlainNas {
-		var integrityProtected bool
-		msg, integrityProtected, err = tools.Decode(ue, payload, false)
-		if !integrityProtected {
-			log.Fatal(errors.New("[5GC][NAS] message integrity could not be verified:" + err.Error()))
+	switch ue.GetState().Current() {
+	case context.Authenticated,
+		context.Registered:
+		if m.SecurityHeaderType != nas.SecurityHeaderTypePlainNas {
+			var integrityProtected bool
+			msg, integrityProtected, err = codec.Decode(ue, payload, false)
+			if !integrityProtected {
+				log.Error("[5GC][NAS] message integrity could not be verified:" + err.Error())
+				return
+			}
+		} else {
+			log.Error("[5GC][NAS] Received plain Nas message UE in state" + ue.GetState().Current())
+			return
 		}
 
-	} else {
-		msg, err = tools.DecodePlainNasNoIntegrityCheck(payload)
+	default:
+		if m.SecurityHeaderType == nas.SecurityHeaderTypePlainNas {
+			msg, err = codec.DecodePlainNasNoIntegrityCheck(payload)
+		} else {
+			log.Error("[5GC][NAS] Received non plain Nas message UE in state" + ue.GetState().Current())
+			return
+		}
 	}
 
 	// Hook for changing NASHandler behaviour

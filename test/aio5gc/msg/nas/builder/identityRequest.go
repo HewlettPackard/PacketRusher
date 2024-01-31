@@ -6,8 +6,7 @@ package builder
 
 import (
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/tools"
-	"my5G-RANTester/test/aio5gc/state"
+	"my5G-RANTester/test/aio5gc/msg/nas/codec"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
@@ -19,7 +18,7 @@ func IdentityRequest(ue *context.UEContext) (nasPdu []byte, err error) {
 		return nil, err
 	}
 
-	return tools.Encode(ue, nasMsg)
+	return codec.Encode(ue, nasMsg)
 }
 
 func buildIdentityRequest(ue *context.UEContext) (nasMsg *nas.Message, err error) {
@@ -27,7 +26,7 @@ func buildIdentityRequest(ue *context.UEContext) (nasMsg *nas.Message, err error
 	m.GmmMessage = nas.NewGmmMessage()
 	m.GmmHeader.SetMessageType(nas.MsgTypeIdentityRequest)
 
-	if ue.GetState().Is(state.Registred) {
+	if ue.GetState().Is(context.Registered) {
 		m.SecurityHeader = nas.SecurityHeader{
 			ProtocolDiscriminator: nasMessage.Epd5GSMobilityManagementMessage,
 			SecurityHeaderType:    nas.SecurityHeaderTypeIntegrityProtectedAndCiphered,

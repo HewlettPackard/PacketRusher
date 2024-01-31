@@ -7,7 +7,6 @@ package builder
 import (
 	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/state"
 
 	"github.com/free5gc/aper"
 	"github.com/free5gc/ngap"
@@ -27,7 +26,7 @@ func UEContextReleaseCommand(ue *context.UEContext, causePresent int, cause aper
 	if err != nil {
 		return nil, err
 	}
-	err = state.GetUeFsm().SendEvent(ue.GetState(), state.Deregistration, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+	err = ue.GetUeFsm().SendEvent(ue.GetState(), context.Deregistration, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		return nil, err
 	}

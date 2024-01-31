@@ -37,7 +37,7 @@ func PDUSessionResourceRelease(req *ngapType.PDUSessionResourceReleaseResponse, 
 		}
 	}
 	if ue != ranUe {
-		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one registred for this UE")
+		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one Registered for this UE")
 	}
 	for i := range releasedPdus {
 		pduSessionID := int32(releasedPdus[i].PDUSessionID.Value)

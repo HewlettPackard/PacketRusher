@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg"
-	"my5G-RANTester/test/aio5gc/state"
 	"strings"
 
 	"github.com/free5gc/nas/nasMessage"
@@ -24,26 +23,18 @@ import (
 func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
 	var err error
 	switch ue.GetState().Current() {
-	case state.AuthenticationInitiated:
-		err = errors.New("[5GC][NAS] Unexpected message: received RegistrationRequest for AuthenticationInitiated UE")
-	case state.Deregistrated:
+	case context.Deregistered:
 		err = DefaultRegistrationRequest(nasReq, amf, ue, gnb)
-	case state.DeregistratedInitiated:
-		err = fmt.Errorf("[5GC][NAS] Unexpected message: received SecurityModeComplete for DeregistratedInitiated UE")
-	case state.Registred:
-		err = fmt.Errorf("[5GC][NAS] Unexpected message: received RegistrationRequest for Registred UE")
-	case state.Authenticated:
-		err = fmt.Errorf("[5GC][NAS] Unexpected message: received RegistrationRequest for SecurityContextAvailable UE")
 
 	default:
-		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().Current())
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received %s for RegistrationRequest", ue.GetState().Current())
 	}
 	return err
 }
 
 func DefaultRegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
 
-	err := state.GetUeFsm().SendEvent(ue.GetState(), state.RegistrationRequest, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.RegistrationRequest, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		return err
 	}

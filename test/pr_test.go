@@ -12,7 +12,6 @@ import (
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
-	"my5G-RANTester/test/aio5gc/state"
 	"os"
 	"sync"
 	"testing"
@@ -52,27 +51,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	builder := aio5gc.FiveGCBuilder{}
 	fiveGC, err := builder.
 		WithConfig(conf).
-		Build()
-	if err != nil {
-		log.Printf("[5GC] Error during 5GC creation  %v", err)
-		os.Exit(1)
-	}
-	time.Sleep(1 * time.Second)
-
-	state.InitUEFSM(fsm.Callbacks{
-		state.Authenticated: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
-			ue := args["ue"].(*context.UEContext)
-			check, ok := ueChecks[ue.GetSecurityContext().GetMsin()]
-			if !ok {
-				check = &UECheck{}
-				ueChecks[ue.GetSecurityContext().GetMsin()] = check
-			}
-			check.HasAuthOnce = true
-		},
-	})
-
-	state.InitPduFSM(fsm.Callbacks{
-		state.Active: func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+		WithPDUCallback(context.Active, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 			ue := args["ue"].(*context.UEContext)
 			sm := args["sm"].(*context.SmContext)
 			check := ueChecks[ue.GetSecurityContext().GetMsin()]
@@ -80,8 +59,22 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 				check.PduActivated = map[int32]bool{}
 			}
 			check.PduActivated[sm.GetPduSessionId()] = true
-		},
-	})
+		}).
+		WithUeCallback(context.Authenticated, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			ue := args["ue"].(*context.UEContext)
+			check, ok := ueChecks[ue.GetSecurityContext().GetMsin()]
+			if !ok {
+				check = &UECheck{}
+				ueChecks[ue.GetSecurityContext().GetMsin()] = check
+			}
+			check.HasAuthOnce = true
+		}).
+		Build()
+	if err != nil {
+		log.Printf("[5GC] Error during 5GC creation  %v", err)
+		os.Exit(1)
+	}
+	time.Sleep(1 * time.Second)
 
 	// Setup gNodeB
 	gnbCount := 1
@@ -131,12 +124,12 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
 			i++
-			assert.Equalf(t, state.Deregistrated, ue.GetState().Current(), "Expected all ue to be in Deregistrated state but was not")
+			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
 			check := ueChecks[ue.GetSecurityContext().GetMsin()]
 			assert.True(t, check.HasAuthOnce, "UE has never changed state")
 			ue.ExecuteForAllSmContexts(
 				func(sm *context.SmContext) {
-					assert.Equalf(t, state.Inactive, sm.GetState().Current(), "Expected all pdu sessions to be in Inactive state but was not")
+					assert.Equalf(t, context.Inactive, sm.GetState().Current(), "Expected all pdu sessions to be in Inactive state but was not")
 					assert.True(t, check.PduActivated[sm.GetPduSessionId()], "Expected all pdu to be activate once but was not")
 				})
 		})
@@ -158,12 +151,26 @@ func TestUERegistrationLoop(t *testing.T) {
 		Port: 38415,
 	}
 
+	type UECheck struct {
+		HasAuthOnce bool
+	}
+	ueChecks := map[string]*UECheck{}
+
 	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
 
 	// Setup 5GC
 	builder := aio5gc.FiveGCBuilder{}
 	fiveGC, err := builder.
 		WithConfig(conf).
+		WithUeCallback(context.Authenticated, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			ue := args["ue"].(*context.UEContext)
+			check, ok := ueChecks[ue.GetSecurityContext().GetMsin()]
+			if !ok {
+				check = &UECheck{}
+				ueChecks[ue.GetSecurityContext().GetMsin()] = check
+			}
+			check.HasAuthOnce = true
+		}).
 		Build()
 	if err != nil {
 		log.Printf("[5GC] Error during 5GC creation  %v", err)
@@ -222,6 +229,7 @@ func TestUERegistrationLoop(t *testing.T) {
 	time.Sleep(time.Duration(5000) * time.Millisecond)
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
-			assert.Equalf(t, state.Deregistrated, ue.GetState().Current(), "Expected all ue to be in Deregistrated state but was not")
+			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
+			assert.True(t, ueChecks[ue.GetSecurityContext().GetMsin()].HasAuthOnce, "UE has never changed state")
 		})
 }

@@ -39,7 +39,7 @@ func UEContextReleaseComplete(req *ngapType.UEContextReleaseComplete, fgc *conte
 		}
 	}
 	if ue != ranUe {
-		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one registred for this UE")
+		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one Registered for this UE")
 	}
 	if err != nil {
 		log.Warn("[5GC][NAS] Unexpected UE state transition: " + err.Error())

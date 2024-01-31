@@ -7,7 +7,7 @@ package builder
 import (
 	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/tools"
+	"my5G-RANTester/test/aio5gc/msg/nas/codec"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasConvert"
@@ -22,7 +22,7 @@ func RegistrationAccept(ue *context.UEContext) (nasPdu []byte, err error) {
 		return nil, err
 	}
 
-	return tools.Encode(ue, nasMsg)
+	return codec.Encode(ue, nasMsg)
 }
 
 func buildRegistrationAccept(ue *context.UEContext) (nasMsg *nas.Message, err error) {

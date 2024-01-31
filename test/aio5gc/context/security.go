@@ -34,8 +34,6 @@ type SecurityContext struct {
 	NH                 []byte
 }
 
-
-
 func (s *SecurityContext) GetAuthSubscription() models.AuthenticationSubscription {
 	return s.authenticationSubs
 }

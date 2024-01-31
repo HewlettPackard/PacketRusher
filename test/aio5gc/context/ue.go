@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	state "my5G-RANTester/test/aio5gc/state"
 	"regexp"
 	"strconv"
 	"sync"
@@ -35,7 +34,26 @@ type UEContext struct {
 	smContexts           map[int32]*SmContext
 	smContextMtx         sync.Mutex
 	state                *fsm.State
+	ueFsm                *fsm.FSM
+	pduFsm               *fsm.FSM
 }
+
+const (
+	AuthenticationInitiated fsm.StateType = "AuthenticationInitiated"
+	Authenticated           fsm.StateType = "Authenticated"
+	Registered              fsm.StateType = "Registered"
+	DeregisteredInitiated   fsm.StateType = "DeregisteredInitiated"
+	Deregistered            fsm.StateType = "Deregistered"
+)
+
+const (
+	RegistrationRequest     fsm.EventType = "InitialRegistrationRequested"
+	AuthenticationSuccess   fsm.EventType = "InitialRegistrationAccepted"
+	RegistrationAccept      fsm.EventType = "InitialRegistrationAccepted"
+	DeregistrationRequest   fsm.EventType = "DeregistrationRequested"
+	Deregistration          fsm.EventType = "Deregistration"
+	ForceDeregistrationInit fsm.EventType = "ForceDeregistrationInit"
+)
 
 func (ue *UEContext) AllocateGuti(a *AMFContext) {
 	servedGuami := a.servedGuami[0]
@@ -112,11 +130,9 @@ func (ue *UEContext) AddSmContext(newContext *SmContext) error {
 
 	sessionId := newContext.GetPduSessionId()
 	oldContext, hasKey := ue.smContexts[sessionId]
-	if hasKey {
-		if !oldContext.state.Is(state.Inactive) {
-			id := strconv.Itoa(int(sessionId))
-			return errors.New("[5GC] Could not create PDU Session " + id + " for UE " + ue.guti + ": already in use")
-		}
+	if hasKey && !oldContext.state.Is(Inactive) {
+		id := strconv.Itoa(int(sessionId))
+		return errors.New("[5GC] Could not create PDU Session " + id + " for UE " + ue.guti + ": already in use")
 	}
 	ue.smContexts[sessionId] = newContext
 	return nil
@@ -141,11 +157,9 @@ func (ue *UEContext) GetSmContext(sessionId int32) (*SmContext, error) {
 	ue.smContextMtx.Lock()
 	defer ue.smContextMtx.Unlock()
 
-	var smContext *SmContext
-	_, hasKey := ue.smContexts[sessionId]
-	if hasKey {
-		smContext = ue.smContexts[sessionId]
-	} else {
+	smContext, hasKey := ue.smContexts[sessionId]
+
+	if !hasKey {
 		id := strconv.Itoa(int(sessionId))
 		return nil, errors.New("[5GC] Could not delete PDU Session " + id + " for UE " + ue.guti + ": not found")
 	}
@@ -211,4 +225,12 @@ func (ue *UEContext) GetDefaultSNssai() models.Snssai {
 
 func (ue *UEContext) SetDefaultSNssai(snssai models.Snssai) {
 	ue.defaultSNssai = snssai
+}
+
+func (ue *UEContext) GetUeFsm() *fsm.FSM {
+	return ue.ueFsm
+}
+
+func (ue *UEContext) GetPduFsm() *fsm.FSM {
+	return ue.pduFsm
 }

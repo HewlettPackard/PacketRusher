@@ -9,7 +9,6 @@ import (
 	"errors"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg"
-	"my5G-RANTester/test/aio5gc/state"
 	"strings"
 
 	"fmt"
@@ -23,18 +22,10 @@ import (
 func AuthenticationResponse(nasMsg *nas.Message, gnb *context.GNBContext, ue *context.UEContext, amf *context.AMFContext) error {
 	var err error
 	switch ue.GetState().Current() {
-	case state.AuthenticationInitiated:
+	case context.AuthenticationInitiated:
 		err = DefaultAuthenticationResponse(nasMsg, gnb, ue, amf)
-	case state.Deregistrated:
-		return fmt.Errorf("[5GC][NAS] Unexpected message: received AuthenticationResponse for Deregistrated UE")
-	case state.DeregistratedInitiated:
-		return fmt.Errorf("[5GC][NAS] Unexpected message: received AuthenticationResponse for DeregistratedInitiated UE")
-	case state.Registred:
-		return fmt.Errorf("[5GC][NAS] Unexpected message: received AuthenticationResponse for Registred UE")
-	case state.Authenticated:
-		return fmt.Errorf("[5GC][NAS] Unexpected message: received AuthenticationResponse for Authenticated UE")
 	default:
-		err = fmt.Errorf("Unknown UE state: %v ", ue.GetState().Current())
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received %s for AuthenticationResponse", ue.GetState().Current())
 	}
 	return err
 }
@@ -53,14 +44,18 @@ func DefaultAuthenticationResponse(nasMsg *nas.Message, gnb *context.GNBContext,
 		log.Info("[5GC] 5G AKA confirmation succeeded")
 		ue.DerivateKamf()
 
-		oldUe, err := amf.FindRegistredUEByMsin(ue.GetSecurityContext().GetMsin())
+		oldUe, err := amf.FindRegisteredUEByMsin(ue.GetSecurityContext().GetMsin())
 		if err == nil && oldUe.GetAmfNgapId() != ue.GetAmfNgapId() {
+			err := ue.GetUeFsm().SendEvent(oldUe.GetState(), context.ForceDeregistrationInit, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+			if err != nil {
+				log.Error(err)
+			}
 			msg.SendUEContextReleaseCommand(gnb, oldUe, ngapType.CausePresentNas, ngapType.CauseNasPresentUnspecified)
 		}
 	} else {
 		return errors.New(("5G AKA confirmation failed, expected res* " + xresStar + " but got " + resStar))
 	}
-	err := state.GetUeFsm().SendEvent(ue.GetState(), state.AuthenticationSuccess, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.AuthenticationSuccess, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		return err
 	}

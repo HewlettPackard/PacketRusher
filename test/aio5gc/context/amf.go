@@ -7,7 +7,6 @@ package context
 import (
 	"errors"
 	"math"
-	"my5G-RANTester/test/aio5gc/state"
 	"strconv"
 	"sync"
 
@@ -36,6 +35,8 @@ type AMFContext struct {
 	idUeGenerator       int64
 	networkName         NetworkName
 	provisionedData     map[string]provisionedData
+	ueFsm               *fsm.FSM
+	pduFsm              *fsm.FSM
 }
 
 type NetworkName struct {
@@ -47,7 +48,7 @@ func init() {
 	tmsiGenerator = idgenerator.NewGenerator(1, math.MaxInt32)
 }
 
-func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssai []models.PlmnSnssai, servedGuami []models.Guami, relativeCapacity int64) {
+func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssai []models.PlmnSnssai, servedGuami []models.Guami, relativeCapacity int64, ueFsm *fsm.FSM, pduFsm *fsm.FSM) {
 	c.amfName = amfName
 	c.id = id
 	c.supportedPlmnSnssai = supportedPlmnSnssai
@@ -61,6 +62,8 @@ func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssa
 		Full:  "NtwFull",
 		Short: "Ntwshrt",
 	}
+	c.ueFsm = ueFsm
+	c.pduFsm = pduFsm
 }
 
 func (c *AMFContext) TmsiAllocate() int32 {
@@ -113,15 +116,15 @@ func (c *AMFContext) FindUEByRanId(id int64) (*UEContext, error) {
 	return nil, errors.New("[5GC] UE with RanNgapId " + strconv.Itoa(int(id)) + "not found")
 }
 
-func (c *AMFContext) FindRegistredUEByMsin(msin string) (*UEContext, error) {
+func (c *AMFContext) FindRegisteredUEByMsin(msin string) (*UEContext, error) {
 	ueMutex.Lock()
 	defer ueMutex.Unlock()
 	for ue := range c.ues {
-		if c.ues[ue].securityContext.msin == msin && c.ues[ue].GetState().Is(state.Registred) {
+		if c.ues[ue].securityContext.msin == msin && c.ues[ue].GetState().Is(Registered) {
 			return c.ues[ue], nil
 		}
 	}
-	return nil, errors.New("[5GC] Registred UE with msin " + msin + "not found")
+	return nil, errors.New("[5GC] Registered UE with msin " + msin + "not found")
 }
 
 func (c *AMFContext) ExecuteForAllUe(function func(ue *UEContext)) {
@@ -148,7 +151,9 @@ func (c *AMFContext) NewUE(ueRanNgapId int64) *UEContext {
 	newUE.SetRanNgapId(ueRanNgapId)
 	newUE.SetAmfNgapId(c.getAmfUeId())
 	newUE.smContexts = make(map[int32]*SmContext)
-	newUE.state = fsm.NewState(state.Deregistrated)
+	newUE.state = fsm.NewState(Deregistered)
+	newUE.ueFsm = c.ueFsm
+	newUE.pduFsm = c.pduFsm
 	ueMutex.Lock()
 	c.ues = append(c.ues, &newUE)
 	ueMutex.Unlock()

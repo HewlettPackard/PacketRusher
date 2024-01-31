@@ -60,7 +60,7 @@ func UplinkNASTransport(req *ngapType.UplinkNASTransport, gnb *context.GNBContex
 		}
 	}
 	if ue != ranUe {
-		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one registred for this UE")
+		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one Registered for this UE")
 	}
 
 	nas.Dispatch(naspdu, ue, fgc, gnb)

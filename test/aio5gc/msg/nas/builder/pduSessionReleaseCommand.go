@@ -6,7 +6,7 @@ package builder
 
 import (
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/tools"
+	"my5G-RANTester/test/aio5gc/msg/nas/codec"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
@@ -22,7 +22,7 @@ func PDUSessionReleaseCommand(ue *context.UEContext, smContext context.SmContext
 	if err != nil {
 		return nil, err
 	}
-	return tools.Encode(ue, nasMsg)
+	return codec.Encode(ue, nasMsg)
 }
 
 func buildPDUSessionReleaseCommand(ue *context.UEContext, smContext context.SmContext, cause uint8) *nas.Message {
