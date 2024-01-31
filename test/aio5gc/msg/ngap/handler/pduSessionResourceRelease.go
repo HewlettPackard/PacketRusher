@@ -12,12 +12,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func UEContextReleaseComplete(req *ngapType.UEContextReleaseComplete, fgc *context.Aio5gc) error {
+func PDUSessionResourceRelease(req *ngapType.PDUSessionResourceReleaseResponse, fgc *context.Aio5gc) error {
 
+	amf := fgc.GetAMFContext()
 	var ue *context.UEContext
 	var ranUe *context.UEContext
 	var err error
-	amf := fgc.GetAMFContext()
+	var releasedPdus []ngapType.PDUSessionResourceReleasedItemRelRes
 
 	for ie := range req.ProtocolIEs.List {
 		switch req.ProtocolIEs.List[ie].Id.Value {
@@ -31,18 +32,19 @@ func UEContextReleaseComplete(req *ngapType.UEContextReleaseComplete, fgc *conte
 			if err != nil {
 				return err
 			}
-
-		case ngapType.ProtocolIEIDUserLocationInformation:
-
-		default:
-			return errors.New("[5GC][NGAP] Received unknown ie for UEContextReleaseComplete")
+		case ngapType.ProtocolIEIDPDUSessionResourceReleasedListRelRes:
+			releasedPdus = req.ProtocolIEs.List[ie].Value.PDUSessionResourceReleasedListRelRes.List
 		}
 	}
 	if ue != ranUe {
 		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one Registered for this UE")
 	}
-	if err != nil {
-		log.Warn("[5GC][NAS] Unexpected UE state transition: " + err.Error())
+	for i := range releasedPdus {
+		pduSessionID := int32(releasedPdus[i].PDUSessionID.Value)
+		err := context.ConfirmPDUSessionRelease(ue, pduSessionID)
+		if err != nil {
+			log.Errorf("[5GC][NGAP] Error in PDU session resource release response handle: " + err.Error())
+		}
 	}
 	return nil
 }

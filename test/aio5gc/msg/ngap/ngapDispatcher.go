@@ -81,6 +81,7 @@ func Dispatch(buf []byte, gnb *context.GNBContext, fgc *context.Aio5gc) {
 
 		case ngapType.ProcedureCodePDUSessionResourceRelease:
 			log.Info("[5GC][NGAP] Received Successful PDU Session Resource Release")
+			ngapHandler.PDUSessionResourceRelease(ngapMsg.SuccessfulOutcome.Value.PDUSessionResourceReleaseResponse, fgc)
 
 		case ngapType.ProcedureCodeUEContextRelease:
 			log.Info("[5GC][NGAP] Received Successful UEContext Release")

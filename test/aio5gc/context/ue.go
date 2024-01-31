@@ -14,27 +14,46 @@ import (
 
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 	"github.com/free5gc/util/ueauth"
 	log "github.com/sirupsen/logrus"
 )
 
 type UEContext struct {
-	ranNgapId                int64
-	amfNgapId                int64
-	location                 *models.NrLocation
-	ueSecurityCapability     *nasType.UESecurityCapability
-	ngKsi                    models.NgKsi
-	Dnn                      string
-	snssai                   models.Snssai
-	pei                      string
-	securityContext          *SecurityContext
-	SecurityContextAvailable bool
-	guti                     string
-	tmsi                     int32
-	smContexts               map[int32]*SmContext
-	smContextMtx             sync.Mutex
-	initialContextSetup      bool
+	ranNgapId            int64
+	amfNgapId            int64
+	location             *models.NrLocation
+	ueSecurityCapability *nasType.UESecurityCapability
+	ngKsi                models.NgKsi
+	Dnn                  string
+	pei                  string
+	securityContext      *SecurityContext
+	defaultSNssai        models.Snssai
+	guti                 string
+	tmsi                 int32
+	smContexts           map[int32]*SmContext
+	smContextMtx         sync.Mutex
+	state                *fsm.State
+	ueFsm                *fsm.FSM
+	pduFsm               *fsm.FSM
 }
+
+const (
+	AuthenticationInitiated fsm.StateType = "AuthenticationInitiated"
+	Authenticated           fsm.StateType = "Authenticated"
+	Registered              fsm.StateType = "Registered"
+	DeregisteredInitiated   fsm.StateType = "DeregisteredInitiated"
+	Deregistered            fsm.StateType = "Deregistered"
+)
+
+const (
+	RegistrationRequest     fsm.EventType = "InitialRegistrationRequested"
+	AuthenticationSuccess   fsm.EventType = "InitialRegistrationAccepted"
+	RegistrationAccept      fsm.EventType = "InitialRegistrationAccepted"
+	DeregistrationRequest   fsm.EventType = "DeregistrationRequested"
+	Deregistration          fsm.EventType = "Deregistration"
+	ForceDeregistrationInit fsm.EventType = "ForceDeregistrationInit"
+)
 
 func (ue *UEContext) AllocateGuti(a *AMFContext) {
 	servedGuami := a.servedGuami[0]
@@ -55,14 +74,6 @@ func (ue *UEContext) SetRanNgapId(id int64) {
 
 func (ue *UEContext) GetRanNgapId() (id int64) {
 	return ue.ranNgapId
-}
-
-func (ue *UEContext) SetNssai(nssai models.Snssai) {
-	ue.snssai = nssai
-}
-
-func (ue *UEContext) GetNssai() models.Snssai {
-	return ue.snssai
 }
 
 func (ue *UEContext) SetAmfNgapId(id int64) {
@@ -118,28 +129,39 @@ func (ue *UEContext) AddSmContext(newContext *SmContext) error {
 	defer ue.smContextMtx.Unlock()
 
 	sessionId := newContext.GetPduSessionId()
-	_, hasKey := ue.smContexts[sessionId]
-	if hasKey {
+	oldContext, hasKey := ue.smContexts[sessionId]
+	if hasKey && !oldContext.state.Is(Inactive) {
 		id := strconv.Itoa(int(sessionId))
-		return errors.New("[5GC] Could not create PDU Session " + id + " for UE " + ue.guti + ": already exist")
-	} else {
-		ue.smContexts[sessionId] = newContext
+		return errors.New("[5GC] Could not create PDU Session " + id + " for UE " + ue.guti + ": already in use")
 	}
+	ue.smContexts[sessionId] = newContext
 	return nil
 }
 
 func (ue *UEContext) DeleteSmContext(sessionId int32) (SmContext, error) {
+
+	var smContext SmContext
+	sc, err := ue.GetSmContext(sessionId)
+	if err != nil {
+		return SmContext{}, err
+	}
+	smContext = *sc
+	ue.smContextMtx.Lock()
+	defer ue.smContextMtx.Unlock()
+	delete(ue.smContexts, sessionId)
+
+	return smContext, nil
+}
+
+func (ue *UEContext) GetSmContext(sessionId int32) (*SmContext, error) {
 	ue.smContextMtx.Lock()
 	defer ue.smContextMtx.Unlock()
 
-	var smContext SmContext
-	_, hasKey := ue.smContexts[sessionId]
-	if hasKey {
-		smContext = *ue.smContexts[sessionId]
-		delete(ue.smContexts, sessionId)
-	} else {
+	smContext, hasKey := ue.smContexts[sessionId]
+
+	if !hasKey {
 		id := strconv.Itoa(int(sessionId))
-		return SmContext{}, errors.New("[5GC] Could not delete PDU Session " + id + " for UE " + ue.guti + ": not found")
+		return nil, errors.New("[5GC] Could not delete PDU Session " + id + " for UE " + ue.guti + ": not found")
 	}
 
 	return smContext, nil
@@ -154,12 +176,12 @@ func (ue *UEContext) DeleteAllSmContext() {
 	}
 }
 
-func (ue *UEContext) SetInitialContextSetup(hasContext bool) {
-	ue.initialContextSetup = hasContext
-}
-
-func (ue *UEContext) GetInitialContextSetup() bool {
-	return ue.initialContextSetup
+func (ue *UEContext) ExecuteForAllSmContexts(function func(ue *SmContext)) {
+	ue.smContextMtx.Lock()
+	defer ue.smContextMtx.Unlock()
+	for sm := range ue.smContexts {
+		function(ue.smContexts[sm])
+	}
 }
 
 // Kamf Derivation function defined in TS 33.501 Annex A.7
@@ -191,4 +213,24 @@ func (ue *UEContext) DerivateKamf() {
 		return
 	}
 	ue.securityContext.kamf = hex.EncodeToString(KamfBytes)
+}
+
+func (ue *UEContext) GetState() *fsm.State {
+	return ue.state
+}
+
+func (ue *UEContext) GetDefaultSNssai() models.Snssai {
+	return ue.defaultSNssai
+}
+
+func (ue *UEContext) SetDefaultSNssai(snssai models.Snssai) {
+	ue.defaultSNssai = snssai
+}
+
+func (ue *UEContext) GetUeFsm() *fsm.FSM {
+	return ue.ueFsm
+}
+
+func (ue *UEContext) GetPduFsm() *fsm.FSM {
+	return ue.pduFsm
 }

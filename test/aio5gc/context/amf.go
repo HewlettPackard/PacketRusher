@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 	"github.com/free5gc/util/idgenerator"
 	log "github.com/sirupsen/logrus"
 )
@@ -31,9 +32,11 @@ type AMFContext struct {
 	relativeCapacity    int64
 	gnbs                map[string]*GNBContext
 	ues                 []*UEContext
-	securityContext     []SecurityContext
 	idUeGenerator       int64
 	networkName         NetworkName
+	provisionedData     map[string]provisionedData
+	ueFsm               *fsm.FSM
+	pduFsm              *fsm.FSM
 }
 
 type NetworkName struct {
@@ -45,7 +48,7 @@ func init() {
 	tmsiGenerator = idgenerator.NewGenerator(1, math.MaxInt32)
 }
 
-func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssai []models.PlmnSnssai, servedGuami []models.Guami, relativeCapacity int64) {
+func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssai []models.PlmnSnssai, servedGuami []models.Guami, relativeCapacity int64, ueFsm *fsm.FSM, pduFsm *fsm.FSM) {
 	c.amfName = amfName
 	c.id = id
 	c.supportedPlmnSnssai = supportedPlmnSnssai
@@ -53,12 +56,14 @@ func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssa
 	c.relativeCapacity = relativeCapacity
 	c.gnbs = make(map[string]*GNBContext)
 	c.ues = []*UEContext{}
-	c.securityContext = []SecurityContext{}
+	c.provisionedData = map[string]provisionedData{}
 	c.idUeGenerator = 0
 	c.networkName = NetworkName{
 		Full:  "NtwFull",
 		Short: "Ntwshrt",
 	}
+	c.ueFsm = ueFsm
+	c.pduFsm = pduFsm
 }
 
 func (c *AMFContext) TmsiAllocate() int32 {
@@ -78,15 +83,14 @@ func (c *AMFContext) GetId() string {
 	return c.id
 }
 
-func (c *AMFContext) FindSecurityContextByMsin(msin string) (SecurityContext, error) {
+func (c *AMFContext) FindProvisionedData(msin string) (provisionedData, error) {
 	scMutex.Lock()
 	defer scMutex.Unlock()
-	for sub := range c.securityContext {
-		if c.securityContext[sub].msin == msin {
-			return c.securityContext[sub], nil
-		}
+	data, ok := c.provisionedData[msin]
+	if !ok {
+		return provisionedData{}, errors.New("[5GC] UE with msin " + msin + "not found")
 	}
-	return SecurityContext{}, errors.New("[5GC] UE with msin " + msin + "not found")
+	return data, nil
 }
 
 func (c *AMFContext) FindUEById(id int64) (*UEContext, error) {
@@ -112,24 +116,32 @@ func (c *AMFContext) FindUEByRanId(id int64) (*UEContext, error) {
 	return nil, errors.New("[5GC] UE with RanNgapId " + strconv.Itoa(int(id)) + "not found")
 }
 
-func (c *AMFContext) FindRegistredUEByMsin(msin string) (*UEContext, error) {
+func (c *AMFContext) FindRegisteredUEByMsin(msin string) (*UEContext, error) {
 	ueMutex.Lock()
 	defer ueMutex.Unlock()
 	for ue := range c.ues {
-		if c.ues[ue].securityContext.msin == msin && c.ues[ue].initialContextSetup {
+		if c.ues[ue].securityContext.msin == msin && c.ues[ue].GetState().Is(Registered) {
 			return c.ues[ue], nil
 		}
 	}
-	return nil, errors.New("[5GC] Registred UE with msin " + msin + "not found")
+	return nil, errors.New("[5GC] Registered UE with msin " + msin + "not found")
 }
 
-func (c *AMFContext) NewSecurityContext(sub SecurityContext) error {
-	_, notExist := c.FindSecurityContextByMsin(sub.msin)
-	if notExist == nil {
-		return errors.New("[5GC] Cannot create new subscriber: subscriber with msin " + sub.msin + " already exist")
+func (c *AMFContext) ExecuteForAllUe(function func(ue *UEContext)) {
+	ueMutex.Lock()
+	defer ueMutex.Unlock()
+	for ue := range c.ues {
+		function(c.ues[ue])
+	}
+}
+
+func (c *AMFContext) Provision(nssai models.Snssai, securityContext SecurityContext) error {
+	_, ok := c.provisionedData[securityContext.msin]
+	if ok {
+		return errors.New("[5GC] Cannot create new subscriber: subscriber with msin " + securityContext.msin + " already exist")
 	}
 	scMutex.Lock()
-	c.securityContext = append(c.securityContext, sub)
+	c.provisionedData[securityContext.msin] = provisionedData{defaultSNssai: nssai, securityContext: securityContext}
 	scMutex.Unlock()
 	return nil
 }
@@ -138,8 +150,10 @@ func (c *AMFContext) NewUE(ueRanNgapId int64) *UEContext {
 	newUE := UEContext{}
 	newUE.SetRanNgapId(ueRanNgapId)
 	newUE.SetAmfNgapId(c.getAmfUeId())
-	newUE.SecurityContextAvailable = false
 	newUE.smContexts = make(map[int32]*SmContext)
+	newUE.state = fsm.NewState(Deregistered)
+	newUE.ueFsm = c.ueFsm
+	newUE.pduFsm = c.pduFsm
 	ueMutex.Lock()
 	c.ues = append(c.ues, &newUE)
 	ueMutex.Unlock()

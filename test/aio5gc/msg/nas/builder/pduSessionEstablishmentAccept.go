@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/tools"
+	"my5G-RANTester/test/aio5gc/msg/nas/codec"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasConvert"
@@ -30,7 +30,7 @@ func PDUSessionEstablishmentAccept(ue *context.UEContext, smContext *context.SmC
 	if err != nil {
 		return nil, err
 	}
-	return tools.Encode(ue, nasMsg)
+	return codec.Encode(ue, nasMsg)
 }
 
 func buildDLNASTransport(ue *context.UEContext, nasPdu []byte, pduSessionId uint8) (msg *nas.Message, err error) {

@@ -18,12 +18,20 @@ import (
 )
 
 func UlNasTransport(nasReq *nas.Message, gnb *context.GNBContext, ue *context.UEContext, session *context.SessionContext) error {
+	var err error
+	switch ue.GetState().Current() {
+	case context.Registered:
+		return DefaultUlNasTransport(nasReq, gnb, ue, session)
+	default:
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received %s for UlNasTransport", ue.GetState().Current())
+	}
+	return err
+}
+
+func DefaultUlNasTransport(nasReq *nas.Message, gnb *context.GNBContext, ue *context.UEContext, session *context.SessionContext) error {
 
 	ulNasTransport := nasReq.ULNASTransport
 	var err error
-	if !ue.GetInitialContextSetup() {
-		return errors.New("[5GC][NGAP] This UE has no security context set up")
-	}
 
 	switch ulNasTransport.GetPayloadContainerType() {
 	// TS 24.501 5.4.5.2.3 case a)
@@ -64,7 +72,7 @@ func transport5GSMMessage(ue *context.UEContext, ulNasTransport *nasMessage.ULNA
 	if ulNasTransport.SNSSAI != nil {
 		snssai = nasConvert.SnssaiToModels(ulNasTransport.SNSSAI)
 	} else {
-		snssai = ue.GetNssai()
+		snssai = ue.GetDefaultSNssai()
 	}
 
 	dnnList := session.GetDnnList()

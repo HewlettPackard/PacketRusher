@@ -8,14 +8,16 @@ import (
 	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
 
-	"github.com/free5gc/ngap"
-
 	"github.com/free5gc/aper"
+	"github.com/free5gc/ngap"
+	"github.com/free5gc/util/fsm"
 
 	"github.com/free5gc/ngap/ngapType"
+	log "github.com/sirupsen/logrus"
 )
 
 func UEContextReleaseCommand(ue *context.UEContext, causePresent int, cause aper.Enumerated) ([]byte, error) {
+
 	msg, err := buildUEContextReleaseCommand(ue, causePresent, cause)
 	if err != nil {
 		return nil, err
@@ -24,7 +26,10 @@ func UEContextReleaseCommand(ue *context.UEContext, causePresent int, cause aper
 	if err != nil {
 		return nil, err
 	}
-	ue.SetInitialContextSetup(false)
+	err = ue.GetUeFsm().SendEvent(ue.GetState(), context.Deregistration, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+	if err != nil {
+		return nil, err
+	}
 	return pdu, nil
 }
 

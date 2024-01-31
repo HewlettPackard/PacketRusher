@@ -107,7 +107,10 @@ func InitDeregistration(ue *context.UEContext) {
 	log.Info("[UE] Initiating Deregistration")
 
 	// registration procedure started.
-	deregistrationRequest := mm_5gs.GetDeregistrationRequest(ue)
+	deregistrationRequest, err := mm_5gs.DeregistrationRequest(ue)
+	if err != nil {
+		log.Fatal("[UE][NAS] Error sending deregistration request: ", err)
+	}
 
 	// send to GNB.
 	sender.SendToGnb(ue, deregistrationRequest)

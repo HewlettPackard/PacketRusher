@@ -6,7 +6,7 @@ package builder
 
 import (
 	"my5G-RANTester/test/aio5gc/context"
-	"my5G-RANTester/test/aio5gc/lib/tools"
+	"my5G-RANTester/test/aio5gc/msg/nas/codec"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasConvert"
@@ -17,7 +17,7 @@ import (
 func ConfigurationUpdateCommand(ue *context.UEContext, nwName *context.NetworkName) ([]byte, error) {
 
 	nasMsg := buildConfigurationUpdateCommand(nwName)
-	return tools.Encode(ue, nasMsg)
+	return codec.Encode(ue, nasMsg)
 }
 
 func buildConfigurationUpdateCommand(networkName *context.NetworkName) *nas.Message {

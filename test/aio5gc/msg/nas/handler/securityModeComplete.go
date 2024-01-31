@@ -15,6 +15,18 @@ import (
 )
 
 func SecurityModeComplete(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
+	var err error
+	switch ue.GetState().Current() {
+	case context.Authenticated:
+		err = DefaultSecurityModeComplete(nasReq, ue, gnb, amf)
+	default:
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received %s for SecurityModeComplete", ue.GetState().Current())
+	}
+	return err
+}
+
+func DefaultSecurityModeComplete(nasReq *nas.Message, ue *context.UEContext, gnb *context.GNBContext, amf *context.AMFContext) error {
+
 	securityModeComplete := nasReq.SecurityModeComplete
 	if securityModeComplete.IMEISV != nil {
 		if pei, err := nasConvert.PeiToStringWithError(securityModeComplete.IMEISV.Octet[:]); err != nil {

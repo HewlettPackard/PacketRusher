@@ -22,7 +22,6 @@ func InitialContextSetupRequest(nasPdu []byte, ue *context.UEContext, amf contex
 	if err != nil {
 		return nil, err
 	}
-	ue.SetInitialContextSetup(true)
 	return pdu, nil
 }
 

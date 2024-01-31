@@ -17,43 +17,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/free5gc/nas"
-	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
-
-	createdSessionCount := 0
-	validatePDUSessionCreation := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
-			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodePDUSessionResourceSetup {
-				createdSessionCount++
-			}
-		}
-		return false, nil
-	}
-
-	releasedSessionCount := 0
-	validatePDUSessionRelease := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
-			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodePDUSessionResourceRelease {
-				releasedSessionCount++
-			}
-		}
-		return false, nil
-	}
-
-	releasedCtxCount := 0
-	validateCtxRelease := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
-			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodeUEContextRelease {
-				releasedCtxCount++
-			}
-		}
-		return false, nil
-	}
 
 	controlIFConfig := config.ControlIF{
 		Ip:   "127.0.0.1",
@@ -70,13 +40,35 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 
 	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
 
+	type UECheck struct {
+		HasAuthOnce  bool
+		PduActivated map[int32]bool
+	}
+
+	ueChecks := map[string]*UECheck{}
+
 	// Setup 5GC
 	builder := aio5gc.FiveGCBuilder{}
 	fiveGC, err := builder.
 		WithConfig(conf).
-		WithNGAPDispatcherHook(validatePDUSessionCreation).
-		WithNGAPDispatcherHook(validatePDUSessionRelease).
-		WithNGAPDispatcherHook(validateCtxRelease).
+		WithPDUCallback(context.Active, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			ue := args["ue"].(*context.UEContext)
+			sm := args["sm"].(*context.SmContext)
+			check := ueChecks[ue.GetSecurityContext().GetMsin()]
+			if check.PduActivated == nil {
+				check.PduActivated = map[int32]bool{}
+			}
+			check.PduActivated[sm.GetPduSessionId()] = true
+		}).
+		WithUeCallback(context.Authenticated, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			ue := args["ue"].(*context.UEContext)
+			check, ok := ueChecks[ue.GetSecurityContext().GetMsin()]
+			if !ok {
+				check = &UECheck{}
+				ueChecks[ue.GetSecurityContext().GetMsin()] = check
+			}
+			check.HasAuthOnce = true
+		}).
 		Build()
 	if err != nil {
 		log.Printf("[5GC] Error during 5GC creation  %v", err)
@@ -111,13 +103,15 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	for ueSimCfg.UeId = 1; ueSimCfg.UeId <= ueCount; ueSimCfg.UeId++ {
 		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
 
+		imsi := tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin)
+
 		securityContext := context.SecurityContext{}
-		securityContext.SetMsin(tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin))
+		securityContext.SetMsin(imsi)
 		securityContext.SetAuthSubscription(ueSimCfg.Cfg.Ue.Key, ueSimCfg.Cfg.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
 		securityContext.SetAbba([]uint8{0x00, 0x00})
 
 		amfContext := fiveGC.GetAMFContext()
-		amfContext.NewSecurityContext(securityContext)
+		amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
 
 		tools.SimulateSingleUE(ueSimCfg, &wg)
 
@@ -126,31 +120,24 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	time.Sleep(time.Duration(5000) * time.Millisecond)
-	assert.Equalf(t, ueCount, createdSessionCount, "Expected %d PDU sessions created but was %d", ueCount, createdSessionCount)
-	assert.Equalf(t, ueCount, releasedSessionCount, "Expected %d PDU sessions created but was %d", ueCount, releasedSessionCount)
-	assert.Equalf(t, ueCount, releasedCtxCount, "Expected %d PDU sessions created but was %d", ueCount, releasedCtxCount)
+	i := 0
+	fiveGC.GetAMFContext().ExecuteForAllUe(
+		func(ue *context.UEContext) {
+			i++
+			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
+			check := ueChecks[ue.GetSecurityContext().GetMsin()]
+			assert.True(t, check.HasAuthOnce, "UE has never changed state")
+			ue.ExecuteForAllSmContexts(
+				func(sm *context.SmContext) {
+					assert.Equalf(t, context.Inactive, sm.GetState().Current(), "Expected all pdu sessions to be in Inactive state but was not")
+					assert.True(t, check.PduActivated[sm.GetPduSessionId()], "Expected all pdu to be activate once but was not")
+				})
+		})
+	assert.Equalf(t, ueCount, i, "Expected %v ue to created in 5GC state but was %v", ueCount, i)
+
 }
 
 func TestUERegistrationLoop(t *testing.T) {
-
-	completedRegistrationCount := 0
-	validateRegistrationComplete := func(nasMsg *nas.Message, ue *context.UEContext, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		if nasMsg.GmmHeader.GetMessageType() == nas.MsgTypeRegistrationComplete {
-			completedRegistrationCount++
-		}
-		return false, nil
-	}
-
-	releasedCtxCount := 0
-	validateCtxRelease := func(ngapMsg *ngapType.NGAPPDU, gnb *context.GNBContext, fgc *context.Aio5gc) (bool, error) {
-		if ngapMsg.Present == ngapType.NGAPPDUPresentSuccessfulOutcome {
-			if ngapMsg.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodeUEContextRelease {
-				releasedCtxCount++
-			}
-		}
-		return false, nil
-	}
-
 	controlIFConfig := config.ControlIF{
 		Ip:   "127.0.0.1",
 		Port: 9490,
@@ -164,14 +151,26 @@ func TestUERegistrationLoop(t *testing.T) {
 		Port: 38415,
 	}
 
+	type UECheck struct {
+		HasAuthOnce bool
+	}
+	ueChecks := map[string]*UECheck{}
+
 	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
 
 	// Setup 5GC
 	builder := aio5gc.FiveGCBuilder{}
 	fiveGC, err := builder.
 		WithConfig(conf).
-		WithNASDispatcherHook(validateRegistrationComplete).
-		WithNGAPDispatcherHook(validateCtxRelease).
+		WithUeCallback(context.Authenticated, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			ue := args["ue"].(*context.UEContext)
+			check, ok := ueChecks[ue.GetSecurityContext().GetMsin()]
+			if !ok {
+				check = &UECheck{}
+				ueChecks[ue.GetSecurityContext().GetMsin()] = check
+			}
+			check.HasAuthOnce = true
+		}).
 		Build()
 	if err != nil {
 		log.Printf("[5GC] Error during 5GC creation  %v", err)
@@ -219,7 +218,7 @@ func TestUERegistrationLoop(t *testing.T) {
 		securityContext.SetAbba([]uint8{0x00, 0x00})
 
 		amfContext := fiveGC.GetAMFContext()
-		amfContext.NewSecurityContext(securityContext)
+		amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
 
 		tools.SimulateSingleUE(ueSimCfg, &wg)
 
@@ -228,6 +227,9 @@ func TestUERegistrationLoop(t *testing.T) {
 	}
 
 	time.Sleep(time.Duration(5000) * time.Millisecond)
-	assert.Equalf(t, loopCount, completedRegistrationCount, "Expected %d completed registrations but was %d", loopCount, completedRegistrationCount)
-	assert.Equalf(t, loopCount, releasedCtxCount, "Expected %d contexts releases but was %d", loopCount, releasedCtxCount)
+	fiveGC.GetAMFContext().ExecuteForAllUe(
+		func(ue *context.UEContext) {
+			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
+			assert.True(t, ueChecks[ue.GetSecurityContext().GetMsin()].HasAuthOnce, "UE has never changed state")
+		})
 }

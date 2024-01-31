@@ -6,6 +6,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg"
 	"strings"
@@ -13,20 +14,34 @@ import (
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 
 	"github.com/free5gc/nas"
 	log "github.com/sirupsen/logrus"
 )
 
-func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) (err error) {
+func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
+	var err error
+	switch ue.GetState().Current() {
+	case context.Deregistered:
+		err = DefaultRegistrationRequest(nasReq, amf, ue, gnb)
+
+	default:
+		err = fmt.Errorf("[5GC][NAS] Unexpected message: received %s for RegistrationRequest", ue.GetState().Current())
+	}
+	return err
+}
+
+func DefaultRegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
+
+	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.RegistrationRequest, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+	if err != nil {
+		return err
+	}
 	regType := nasReq.RegistrationRequest.NgksiAndRegistrationType5GS.GetRegistrationType5GS()
 	if regType != nasMessage.RegistrationType5GSInitialRegistration {
 		return errors.New("[5GC][NAS] Received unsupported registration type")
 	}
-
-	//Todo: check if snssai is supported by amf, add possibility to request several NSSAI
-	// snssai, err := nasConvert.RequestedNssaiToModels(gmm.RegistrationRequest.RequestedNSSAI)
-	// ue.SetNssai(snssai[0])
 
 	// NgKsi
 	ngKsi := models.NgKsi{}
@@ -45,7 +60,6 @@ func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *conte
 
 	gmm := nasReq.GmmMessage
 	ue.SetSecurityCapability(gmm.RegistrationRequest.UESecurityCapability)
-	log.Error(nasReq.RegistrationRequest)
 	ue.SetNgKsi(ngKsi)
 
 	mobileIdentity5GS := gmm.RegistrationRequest.MobileIdentity5GS
@@ -61,13 +75,11 @@ func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *conte
 		msg.SendIdentityRequest(gnb, ue)
 		return nil
 	}
-
-	err = SetMobileIdentity(amf, ue, mobileIdentity5GS, gnb)
-
-	return err
+	return SetMobileIdentity(amf, ue, mobileIdentity5GS, gnb)
 }
 
 func IdentityResponse(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) (err error) {
+
 	identityResponse := nasReq.GmmMessage.IdentityResponse
 	if identityResponse == nil {
 		return errors.New("[5GC][NAS] Received Unexpected Message")
@@ -92,13 +104,14 @@ func SetMobileIdentity(amf *context.AMFContext, ue *context.UEContext, mobileIde
 		return errors.New("[5GC][NAS] UE id uses IDType " + mobileIdType + " but is not yet supported by aio5gc.")
 	}
 	suci := strings.Split(mobileId, "-")
-	sub, err := amf.FindSecurityContextByMsin(suci[len(suci)-1])
+	prov, err := amf.FindProvisionedData(suci[len(suci)-1])
 	if err != nil {
 		return err
 	}
-	sub.SetSuci(mobileId)
-	sub.SetSupi("imsi-" + suci[2] + suci[3] + suci[len(suci)-1])
-	ue.SetSecurityContext(&sub)
+	sCtx := prov.GetSecurityContext()
+	sCtx.SetSuci(mobileId)
+	sCtx.SetSupi("imsi-" + suci[2] + suci[3] + suci[len(suci)-1])
+	ue.SetSecurityContext(&sCtx)
 
 	msg.SendAuthenticationRequest(gnb, ue)
 
