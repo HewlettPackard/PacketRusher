@@ -6,7 +6,7 @@ FROM $BASE_IMAGE as builder
 
 RUN apt-get update && apt install wget -y
 
-RUN wget https://go.dev/dl/go1.21.3.linux-amd64.tar.gz && sudo tar -C /usr/local -xzf go1.21.3.linux-amd64.tar.gz
+RUN wget https://go.dev/dl/go1.21.3.linux-amd64.tar.gz && tar -C /usr/local -xzf go1.21.3.linux-amd64.tar.gz
 ENV GOROOT=/usr/local/go
 RUN mkdir goproject
 ENV GOPATH=/goproject
