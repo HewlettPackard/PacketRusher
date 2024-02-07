@@ -13,6 +13,7 @@ import (
 	"net"
 	"os/exec"
 	"strconv"
+	"time"
 	"unsafe"
 
 	"github.com/cilium/ebpf/link"
@@ -154,6 +155,8 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		log.Fatal("[GNB][GTP] Unable to create Kernel Route ", err)
 	}
 
+	time.Sleep(time.Duration(100) * time.Millisecond) // Wait for MAC address to be attributed to ueVrfDevice
+
 	links, err := netlink.LinkList()
 	var n3Device netlink.Link
 	for _, link := range links {
@@ -164,6 +167,19 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		for _, ip := range list {
 			if ip.Contains(gnbIp) {
 				n3Device = link
+			}
+			if ip.Contains(netUeIp) {
+
+				neigh := &netlink.Neigh{
+					LinkIndex:    ueVrfDevice.Attrs().Index,
+					HardwareAddr: link.Attrs().HardwareAddr,
+					IP:           netUeIp,
+					State:        netlink.NUD_PERMANENT,
+				}
+
+				if err := netlink.NeighAdd(neigh); err != nil {
+					log.Fatal("[GNB][GTP] Unable to add vrf to neighbour", err)
+				}
 			}
 		}
 	}
