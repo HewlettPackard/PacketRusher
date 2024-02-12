@@ -5,6 +5,7 @@
 package config
 
 import (
+	"net"
 	"os"
 	"path"
 	"path/filepath"
@@ -141,7 +142,29 @@ func readConfig(configPath string) Config {
 		log.Fatal("Could not unmarshal yaml config at \"", configPath, "\". ", err.Error())
 	}
 
+	cfg.AMF.Ip = resolvHost("AMF's IP address", cfg.AMF.Ip)
+	cfg.GNodeB.DataIF.Ip = resolvHost("gNodeB's N3/Data IP address", cfg.GNodeB.DataIF.Ip)
+	cfg.GNodeB.ControlIF.Ip = resolvHost("gNodeB's N2/Control IP address", cfg.GNodeB.ControlIF.Ip)
+
 	return cfg
+}
+
+func resolvHost(hostType string, hostOrIp string) string {
+	ips, err := net.LookupIP(hostOrIp)
+	if err != nil {
+		log.Errorf("Unable to resolve %s in configuration for %s, make sure it is an IP address or a domain that can be resolved to an IPv4", hostOrIp, hostType)
+		log.Fatal(err)
+	}
+	for _, ip := range ips {
+		if ip.To4() == nil {
+			log.Warnf("Skipping %s for host %s as %s, as it is not an IPv4", ip, hostOrIp, hostType)
+		} else {
+			log.Infof("Selecting %s for host %s as %s", ip, hostOrIp, hostType)
+			return ip.String()
+		}
+	}
+	log.Fatalf("No suitable IP address found as host %s, for %s", hostOrIp, hostType)
+	return ""
 }
 
 func getDefautlConfigPath() string {
