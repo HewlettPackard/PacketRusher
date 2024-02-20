@@ -11,6 +11,7 @@ import (
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/security"
+	log "github.com/sirupsen/logrus"
 )
 
 func EncodeNasPduWithSecurity(ue *context.UEContext, pdu []byte, securityHeaderType uint8, securityContextAvailable, newSecurityContext bool) ([]byte, error) {
@@ -51,11 +52,14 @@ func NASEncode(ue *context.UEContext, msg *nas.Message, securityContextAvailable
 			return
 		}
 
-		// TODO: Support for ue has nas connection in both accessType
-		// make ciphering of NAS message.
-		if err = security.NASEncrypt(ue.UeSecurity.CipheringAlg, ue.UeSecurity.KnasEnc, ue.UeSecurity.ULCount.Get(), security.Bearer3GPP,
-			security.DirectionUplink, payload); err != nil {
-			return
+		if msg.SecurityHeaderType != nas.SecurityHeaderTypeIntegrityProtected && msg.SecurityHeaderType != nas.SecurityHeaderTypeIntegrityProtectedWithNew5gNasSecurityContext {
+			// TODO: Support for ue has nas connection in both accessType
+			// make ciphering of NAS message.
+			if err = security.NASEncrypt(ue.UeSecurity.CipheringAlg, ue.UeSecurity.KnasEnc, ue.UeSecurity.ULCount.Get(), security.Bearer3GPP,
+				security.DirectionUplink, payload); err != nil {
+				log.Errorf("[UE][NAS] Error while encrypting NAS Message: %s", err)
+				return
+			}
 		}
 
 		// add sequence number
@@ -64,6 +68,7 @@ func NASEncode(ue *context.UEContext, msg *nas.Message, securityContextAvailable
 
 		mac32, err = security.NASMacCalculate(ue.UeSecurity.IntegrityAlg, ue.UeSecurity.KnasInt, ue.UeSecurity.ULCount.Get(), security.Bearer3GPP, security.DirectionUplink, payload)
 		if err != nil {
+			log.Errorf("[UE][NAS] Error while calculating MAC of NAS Message: %s", err)
 			return
 		}
 

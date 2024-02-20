@@ -154,6 +154,7 @@ func InitServiceRequest(ue *context.UEContext) {
 	// trigger ServiceRequest.
 	serviceRequest := mm_5gs.ServiceRequest(ue)
 	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, serviceRequest, nas.SecurityHeaderTypeIntegrityProtected, true, false)
+
 	if err != nil {
 		log.Fatalf("Error encoding %s IMSI UE PduSession Establishment Request Msg", ue.UeSecurity.Supi)
 	}

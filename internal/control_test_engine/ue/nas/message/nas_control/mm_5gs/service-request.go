@@ -13,6 +13,8 @@ import (
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
+	"github.com/free5gc/nas/security"
+	log "github.com/sirupsen/logrus"
 )
 
 func ServiceRequest(ue *context.UEContext) (nasPdu []byte) {
@@ -58,13 +60,17 @@ func ServiceRequest(ue *context.UEContext) (nasPdu []byte) {
 	}
 
 	nasPdu = data.Bytes()
-
-	serviceRequest.UplinkDataStatus = nil
-	serviceRequest.PDUSessionStatus = nil
-
+	if err = security.NASEncrypt(ue.UeSecurity.CipheringAlg, ue.UeSecurity.KnasEnc, ue.UeSecurity.ULCount.Get(), security.Bearer3GPP,
+		security.DirectionUplink, nasPdu); err != nil {
+		log.Errorf("[UE][NAS] Error while encrypting NAS Message: %s", err)
+		return
+	}
 	serviceRequest.NASMessageContainer = nasType.NewNASMessageContainer(nasMessage.ServiceRequestNASMessageContainerType)
 	serviceRequest.NASMessageContainer.SetLen(uint16(len(nasPdu)))
 	serviceRequest.NASMessageContainer.Buffer = nasPdu
+
+	serviceRequest.UplinkDataStatus = nil
+	serviceRequest.PDUSessionStatus = nil
 
 	data = new(bytes.Buffer)
 	err = m.GmmMessageEncode(data)

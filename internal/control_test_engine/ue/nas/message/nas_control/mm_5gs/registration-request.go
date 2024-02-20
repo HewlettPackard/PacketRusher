@@ -13,6 +13,8 @@ import (
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
+	"github.com/free5gc/nas/security"
+	log "github.com/sirupsen/logrus"
 )
 
 func GetRegistrationRequest(registrationType uint8, requestedNSSAI *nasType.RequestedNSSAI, uplinkDataStatus *nasType.UplinkDataStatus, capability bool, ue *context.UEContext) (nasPdu []byte) {
@@ -86,12 +88,18 @@ func GetRegistrationRequest(registrationType uint8, requestedNSSAI *nasType.Requ
 	nasPdu = data.Bytes()
 
 	if pduFlag != 0 {
-		registrationRequest.UplinkDataStatus = nil
-		registrationRequest.PDUSessionStatus = nil
+		if err = security.NASEncrypt(ue.UeSecurity.CipheringAlg, ue.UeSecurity.KnasEnc, ue.UeSecurity.ULCount.Get(), security.Bearer3GPP,
+			security.DirectionUplink, nasPdu); err != nil {
+			log.Errorf("[UE][NAS] Error while encrypting NAS Message: %s", err)
+			return
+		}
 
 		registrationRequest.NASMessageContainer = nasType.NewNASMessageContainer(nasMessage.RegistrationRequestNASMessageContainerType)
 		registrationRequest.NASMessageContainer.SetLen(uint16(len(nasPdu)))
 		registrationRequest.NASMessageContainer.Buffer = nasPdu
+
+		registrationRequest.UplinkDataStatus = nil
+		registrationRequest.PDUSessionStatus = nil
 
 		data = new(bytes.Buffer)
 		err = m.GmmMessageEncode(data)
