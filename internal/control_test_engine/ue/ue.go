@@ -123,8 +123,13 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 		time.Sleep(1 * time.Second)
 		// Since gNodeB stopped communication after switching to Idle, we need to connect back to gNodeB
 		service.InitConn(ue, ue.GetGnbInboundChannel())
-		trigger.InitServiceRequest(ue)
-
+		if ue.Get5gGuti() != nil {
+			trigger.InitServiceRequest(ue)
+		} else {
+			// If AMF did not assign us a GUTI, we have to fallback to the usual Registration/Authentification process
+			// PDU Sessions will still be recovered
+			trigger.InitRegistration(ue)
+		}
 	case procedures.Terminate:
 		log.Info("[UE] Terminating UE as requested")
 		// If UE is registered

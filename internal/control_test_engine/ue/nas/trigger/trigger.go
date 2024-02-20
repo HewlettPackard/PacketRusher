@@ -32,6 +32,13 @@ func InitRegistration(ue *context.UEContext) {
 		false,
 		ue)
 
+	var err error
+	if len(ue.UeSecurity.Kamf) != 0 {
+		registrationRequest, err = nas_control.EncodeNasPduWithSecurity(ue, registrationRequest, nas.SecurityHeaderTypeIntegrityProtected, true, false)
+		if err != nil {
+			log.Fatalf("[UE][NAS] Unable to encode with integrity protection Registration Request: %s", err)
+		}
+	}
 	// send to GNB.
 	sender.SendToGnb(ue, registrationRequest)
 
