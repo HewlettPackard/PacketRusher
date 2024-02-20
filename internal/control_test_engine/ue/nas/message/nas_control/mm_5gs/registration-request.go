@@ -6,6 +6,7 @@ package mm_5gs
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 
@@ -53,9 +54,26 @@ func GetRegistrationRequest(registrationType uint8, requestedNSSAI *nasType.Requ
 	}
 	registrationRequest.UESecurityCapability = ueSecurityCapability
 	registrationRequest.RequestedNSSAI = requestedNSSAI
-	registrationRequest.UplinkDataStatus = uplinkDataStatus
-
 	registrationRequest.SetFOR(1)
+
+	pduFlag := uint16(0)
+	for i, pduSession := range ue.PduSession {
+		pduFlag = pduFlag + (boolToUint16(pduSession != nil) << (i + 1))
+	}
+
+	if pduFlag != 0 {
+		registrationRequest.UplinkDataStatus = new(nasType.UplinkDataStatus)
+		registrationRequest.UplinkDataStatus.SetIei(nasMessage.RegistrationRequestUplinkDataStatusType)
+		registrationRequest.UplinkDataStatus.SetLen(2)
+
+		registrationRequest.UplinkDataStatus.Buffer = make([]byte, 2)
+		binary.LittleEndian.PutUint16(registrationRequest.UplinkDataStatus.Buffer, pduFlag)
+
+		registrationRequest.PDUSessionStatus = new(nasType.PDUSessionStatus)
+		registrationRequest.PDUSessionStatus.SetIei(nasMessage.RegistrationRequestPDUSessionStatusType)
+		registrationRequest.PDUSessionStatus.SetLen(2)
+		registrationRequest.PDUSessionStatus.Buffer = registrationRequest.UplinkDataStatus.Buffer
+	}
 
 	m.GmmMessage.RegistrationRequest = registrationRequest
 
@@ -66,5 +84,22 @@ func GetRegistrationRequest(registrationType uint8, requestedNSSAI *nasType.Requ
 	}
 
 	nasPdu = data.Bytes()
+
+	if pduFlag != 0 {
+		registrationRequest.UplinkDataStatus = nil
+		registrationRequest.PDUSessionStatus = nil
+
+		registrationRequest.NASMessageContainer = nasType.NewNASMessageContainer(nasMessage.RegistrationRequestNASMessageContainerType)
+		registrationRequest.NASMessageContainer.SetLen(uint16(len(nasPdu)))
+		registrationRequest.NASMessageContainer.Buffer = nasPdu
+
+		data = new(bytes.Buffer)
+		err = m.GmmMessageEncode(data)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+
+		nasPdu = data.Bytes()
+	}
 	return
 }

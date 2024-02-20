@@ -234,7 +234,11 @@ func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
 	ue.SetStateMM_REGISTERED()
 
 	// saved 5g GUTI and others information.
-	ue.Set5gGuti(message.RegistrationAccept.GUTI5G)
+	if message.RegistrationAccept.GUTI5G != nil {
+		ue.Set5gGuti(message.RegistrationAccept.GUTI5G)
+	} else {
+		log.Warn("[UE][NAS] UE was not assigned a 5G-GUTI by AMF")
+	}
 
 	// use the slice allowed by the network
 	// in PDU session request
