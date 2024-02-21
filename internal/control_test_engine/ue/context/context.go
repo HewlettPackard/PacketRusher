@@ -99,6 +99,7 @@ type SECURITY struct {
 	UeSecurityCapability *nasType.UESecurityCapability
 	IntegrityAlg         uint8
 	CipheringAlg         uint8
+	NgKsi                models.NgKsi
 	Snn                  string
 	KnasEnc              [16]uint8
 	KnasInt              [16]uint8
@@ -127,6 +128,10 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	ue.UeSecurity.IntegrityAlg = integAlg
 	// set the algorithms of ciphering
 	ue.UeSecurity.CipheringAlg = cipherAlg
+
+	// No KSI at first start
+	ue.UeSecurity.NgKsi.Ksi = 7
+	ue.UeSecurity.NgKsi.Tsc = models.ScType_NATIVE
 
 	// added key, AuthenticationManagementField and opc or op.
 	ue.SetAuthSubscription(k, opc, op, amf, sqn)

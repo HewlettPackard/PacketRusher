@@ -27,8 +27,7 @@ func GetRegistrationRequest(registrationType uint8, requestedNSSAI *nasType.Requ
 	registrationRequest.SpareHalfOctetAndSecurityHeaderType.SetSecurityHeaderType(nas.SecurityHeaderTypePlainNas)
 	registrationRequest.SpareHalfOctetAndSecurityHeaderType.SetSpareHalfOctet(0x00)
 	registrationRequest.RegistrationRequestMessageIdentity.SetMessageType(nas.MsgTypeRegistrationRequest)
-	registrationRequest.NgksiAndRegistrationType5GS.SetTSC(nasMessage.TypeOfSecurityContextFlagNative)
-	registrationRequest.NgksiAndRegistrationType5GS.SetNasKeySetIdentifiler(7)
+	registrationRequest.NgksiAndRegistrationType5GS.SetNasKeySetIdentifiler(uint8(ue.UeSecurity.NgKsi.Ksi))
 	registrationRequest.NgksiAndRegistrationType5GS.SetRegistrationType5GS(registrationType)
 	// If AMF previously assigned the UE a 5G-GUTI, reuses it
 	// If the 5G-GUTI is no longer valid, AMF will issue an Identity Request

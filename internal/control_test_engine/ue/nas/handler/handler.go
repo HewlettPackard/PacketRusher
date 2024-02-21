@@ -17,6 +17,7 @@ import (
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
+	"github.com/free5gc/openapi/models"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -174,6 +175,17 @@ func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) { /
 		// checking BIT RINMR that triggered registration request in security mode complete.
 		rinmr = message.SecurityModeCommand.Additional5GSecurityInformation.GetRINMR()
 	}
+
+	ue.UeSecurity.NgKsi.Ksi = int32(message.SecurityModeCommand.SpareHalfOctetAndNgksi.GetNasKeySetIdentifiler())
+
+	// NgKsi: TS 24.501 9.11.3.32
+	switch message.SecurityModeCommand.SpareHalfOctetAndNgksi.GetTSC() {
+	case nasMessage.TypeOfSecurityContextFlagNative:
+		ue.UeSecurity.NgKsi.Tsc = models.ScType_NATIVE
+	case nasMessage.TypeOfSecurityContextFlagMapped:
+		ue.UeSecurity.NgKsi.Tsc = models.ScType_MAPPED
+	}
+
 	// getting NAS Security Mode Complete.
 	securityModeComplete, err := mm_5gs.SecurityModeComplete(ue, rinmr)
 	if err != nil {
