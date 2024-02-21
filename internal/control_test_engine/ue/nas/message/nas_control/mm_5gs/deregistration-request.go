@@ -39,7 +39,7 @@ func getDeregistrationRequest(ue *context.UEContext) (nasPdu []byte) {
 	deregistrationRequest.SetAccessType(1)
 	deregistrationRequest.DeregistrationRequestMessageIdentity.SetMessageType(nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration)
 	deregistrationRequest.NgksiAndDeregistrationType.SetTSC(nasMessage.TypeOfSecurityContextFlagNative)
-	deregistrationRequest.NgksiAndDeregistrationType.SetNasKeySetIdentifiler(ue.GetUeId())
+	deregistrationRequest.NgksiAndDeregistrationType.SetNasKeySetIdentifiler(uint8(ue.UeSecurity.NgKsi.Ksi))
 	deregistrationRequest.MobileIdentity5GS = ue.GetSuci()
 
 	m.GmmMessage.DeregistrationRequestUEOriginatingDeregistration = deregistrationRequest

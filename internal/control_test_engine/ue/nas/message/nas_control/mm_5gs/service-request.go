@@ -25,7 +25,7 @@ func ServiceRequest(ue *context.UEContext) (nasPdu []byte) {
 	serviceRequest.SetSecurityHeaderType(nas.SecurityHeaderTypePlainNas)
 	serviceRequest.SetMessageType(nas.MsgTypeServiceRequest)
 	serviceRequest.SetServiceTypeValue(0x01)
-	serviceRequest.SetNasKeySetIdentifiler(0x01)
+	serviceRequest.SetNasKeySetIdentifiler(uint8(ue.UeSecurity.NgKsi.Ksi))
 	serviceRequest.SetAMFSetID(ue.GetAmfSetId())
 	serviceRequest.SetAMFPointer(ue.GetAmfPointer())
 	serviceRequest.SetTypeOfIdentity(4) // 5G-S-TMSI
