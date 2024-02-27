@@ -422,29 +422,19 @@ func (ue *UEContext) GetUeSecurityCapability() *nasType.UESecurityCapability {
 }
 
 func (ue *UEContext) GetMccAndMncInOctets() []byte {
+	var res string
 
 	// reverse mcc and mnc
 	mcc := reverse(ue.UeSecurity.mcc)
 	mnc := reverse(ue.UeSecurity.mnc)
 
-	// include mcc and mnc in octets
-	oct5 := mcc[1:3]
-	var oct6 string
-	var oct7 string
-	if len(ue.UeSecurity.mnc) == 2 {
-		oct6 = "f" + string(mcc[0])
-		oct7 = mnc
+	if len(mnc) == 2 {
+		res = fmt.Sprintf("%c%cf%c%c%c", mcc[1], mcc[2], mcc[0], mnc[0], mnc[1])
 	} else {
-		oct6 = string(mnc[0]) + string(mcc[0])
-		oct7 = mnc[1:3]
+		res = fmt.Sprintf("%c%c%c%c%c%c", mcc[1], mcc[2], mnc[2], mcc[0], mnc[0], mnc[1])
 	}
 
-	// changed for bytes.
-	resu, err := hex.DecodeString(oct5 + oct6 + oct7)
-	if err != nil {
-		fmt.Println(err)
-	}
-
+	resu, _ := hex.DecodeString(res)
 	return resu
 }
 
