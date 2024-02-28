@@ -96,7 +96,7 @@ func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, 
 	ie.Value.RRCEstablishmentCause = new(ngapType.RRCEstablishmentCause)
 
 	rRCEstablishmentCause := ie.Value.RRCEstablishmentCause
-	rRCEstablishmentCause.Value = ngapType.RRCEstablishmentCausePresentMtAccess
+	rRCEstablishmentCause.Value = ngapType.RRCEstablishmentCausePresentMoSignalling
 
 	initialUEMessageIEs.List = append(initialUEMessageIEs.List, ie)
 
