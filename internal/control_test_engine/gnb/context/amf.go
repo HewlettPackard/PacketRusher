@@ -5,6 +5,8 @@
 package context
 
 import (
+	"fmt"
+
 	"github.com/ishidawataru/sctp"
 )
 
@@ -72,30 +74,12 @@ func (amf *GNBAmf) GetPlmnSupport(index int) (string, string) {
 }
 
 func convertMccMnc(plmn string) (mcc string, mnc string) {
-
-	// mcc digit 1 e 2 -- invert 0 1 string
-	mcc12 := string(plmn[0:2])
-
-	// mnc digit 3
-	mnc3 := string(plmn[2])
-
-	// mcc digit 3
-	mcc3 := string(plmn[3])
-
-	// mnc digit 1 2.
-	mnc12 := string(plmn[4:])
-
-	// make mcc and mnc.
-	if mcc3 != "f" {
-		mcc = reverse(mcc12) + mcc3
+	if plmn[2] == 'f' {
+		mcc = fmt.Sprintf("%c%c%c", plmn[3], plmn[0], plmn[1])
+		mnc = fmt.Sprintf("%c%c", plmn[5], plmn[4])
 	} else {
-		mcc = reverse(mcc12)
-	}
-
-	if mnc3 != "f" {
-		mnc = reverse(mnc12) + mnc3
-	} else {
-		mnc = reverse(mnc12)
+		mcc = fmt.Sprintf("%c%c%c", plmn[3], plmn[0], plmn[1])
+		mnc = fmt.Sprintf("%c%c%c", plmn[2], plmn[5], plmn[4])
 	}
 
 	return mcc, mnc
