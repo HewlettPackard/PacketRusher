@@ -8,6 +8,7 @@ package test
 import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
+	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/sender"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
@@ -24,6 +25,8 @@ import (
 )
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
+
+	sender.Init(0)
 
 	controlIFConfig := config.ControlIF{
 		Ip:   "127.0.0.1",
@@ -156,6 +159,7 @@ func TestUERegistrationLoop(t *testing.T) {
 	}
 	ueChecks := map[string]*UECheck{}
 
+	sender.Init(0)
 	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
 
 	// Setup 5GC

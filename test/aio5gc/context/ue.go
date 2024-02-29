@@ -149,7 +149,6 @@ func (ue *UEContext) DeleteSmContext(sessionId int32) (SmContext, error) {
 	ue.smContextMtx.Lock()
 	defer ue.smContextMtx.Unlock()
 	delete(ue.smContexts, sessionId)
-
 	return smContext, nil
 }
 
@@ -163,7 +162,6 @@ func (ue *UEContext) GetSmContext(sessionId int32) (*SmContext, error) {
 		id := strconv.Itoa(int(sessionId))
 		return nil, errors.New("[5GC] Could not delete PDU Session " + id + " for UE " + ue.guti + ": not found")
 	}
-
 	return smContext, nil
 }
 

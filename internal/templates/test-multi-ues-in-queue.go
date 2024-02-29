@@ -7,6 +7,7 @@ package templates
 import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
+	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/sender"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"os"
 	"os/signal"
@@ -16,7 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb bool, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int) {
+func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb bool, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int, maxRequestRate int) {
 	if tunnelMode != config.TunnelDisabled {
 		if !dedicatedGnb {
 			log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
@@ -29,6 +30,8 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	if numPduSessions > 16 {
 		log.Fatal("You can't have more than 16 PDU Sessions per UE as per spec.")
 	}
+
+	sender.Init(maxRequestRate)
 
 	wg := sync.WaitGroup{}
 
@@ -48,7 +51,7 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 
 	// Wait for gNB to be connected before registering UEs
 	// TODO: We should wait for NGSetupResponse instead
-	time.Sleep(1 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	cfg.Ue.TunnelMode = tunnelMode
 

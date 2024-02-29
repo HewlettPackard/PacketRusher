@@ -29,25 +29,34 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
-				Name:    "ue",
-				Aliases: []string{"ue"},
-				Usage:   "Launch a gNB and a UE with a PDU Session\nFor more complex scenario and features, use instead packetrusher multi-ue\n",
+				Name:    "single-ue-pdu",
+				Aliases: []string{"single-ue"},
+				Usage: "\nLoad endurance stress tests.\n" +
+					"Example for testing UE: single-ue\n" +
+					"This test case will launch one UE. See packetrusher single-ue --help\n",
 				Flags: []cli.Flag{
-					&cli.BoolFlag{Name: "disableTunnel", Aliases: []string{"t"}, Usage: "Disable the creation of the GTP-U tunnel interface."},
+					&cli.IntFlag{Name: "timeBetweenRegistration", Value: 500, Aliases: []string{"tr"}, Usage: "The time in ms, between UE registration."},
+					&cli.IntFlag{Name: "timeBeforeDeregistration", Value: 0, Aliases: []string{"td"}, Usage: "The time in ms, before UE deregisters once it has been registered. 0 to disable auto-deregistration."},
+					&cli.IntFlag{Name: "timeBeforeNgapHandover", Value: 0, Aliases: []string{"ngh"}, Usage: "The time in ms, before triggering a UE handover using NGAP Handover. 0 to disable handover. This requires at least two gNodeB, eg: two N2/N3 IPs."},
+					&cli.IntFlag{Name: "timeBeforeXnHandover", Value: 0, Aliases: []string{"xnh"}, Usage: "The time in ms, before triggering a UE handover using Xn Handover. 0 to disable handover. This requires at least two gNodeB, eg: two N2/N3 IPs."},
+					&cli.IntFlag{Name: "timeBeforeIdle", Value: 0, Aliases: []string{"idl"}, Usage: "The time in ms, before switching UE to Idle. 0 to disable Idling."},
+					&cli.IntFlag{Name: "numPduSessions", Value: 1, Aliases: []string{"nPdu"}, Usage: "The number of PDU Sessions to create"},
+					&cli.BoolFlag{Name: "loop", Aliases: []string{"l"}, Usage: "Register UE in a loop."},
+					&cli.BoolFlag{Name: "tunnel", Aliases: []string{"t"}, Usage: "Enable the creation of the GTP-U tunnel interface."},
+					&cli.BoolFlag{Name: "tunnel-vrf", Value: true, Usage: "Enable/disable VRP usage of the GTP-U tunnel interface."},
 					&cli.PathFlag{Name: "pcap", Usage: "Capture traffic to given PCAP file when a path is given", Value: "./dump.pcap"},
 				},
 				Action: func(c *cli.Context) error {
-					name := "Testing an ue attached with configuration"
+					var numUes int
+					name := "Testing registration of single UE"
 					cfg := setConfig(*c)
-					tunnelEnabled := !c.Bool("disableTunnel")
 
 					log.Info("PacketRusher version " + version)
 					log.Info("---------------------------------------")
 					log.Info("[TESTER] Starting test function: ", name)
-					log.Info("[TESTER][UE] Number of UEs: ", 1)
-					log.Info("[TESTER][UE] disableTunnel is ", !tunnelEnabled)
-					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
-					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
+					log.Info("[TESTER][UE] Number of UEs: ", numUes)
+					log.Info("[TESTER][GNB] gNodeB control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
+					log.Info("[TESTER][GNB] gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
 					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
 					log.Info("---------------------------------------")
 
@@ -55,27 +64,16 @@ func main() {
 						pcap.CaptureTraffic(c.Path("pcap"))
 					}
 
-					templates.TestAttachUeWithConfiguration(tunnelEnabled)
-					return nil
-				},
-			},
-			{
-				Name:    "gnb",
-				Aliases: []string{"gnb"},
-				Usage:   "Launch only a gNB",
-				Action: func(c *cli.Context) error {
-					name := "Testing an gnb attached with configuration"
-					cfg := setConfig(*c)
+					tunnelMode := config.TunnelDisabled
+					if c.Bool("tunnel") {
+						if c.Bool("tunnel-vrf") {
+							tunnelMode = config.TunnelVrf
+						} else {
+							tunnelMode = config.TunnelTun
+						}
+					}
+					templates.TestMultiUesInQueue(1, tunnelMode, true, c.Bool("loop"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("numPduSessions"), 0)
 
-					log.Info("PacketRusher version " + version)
-					log.Info("---------------------------------------")
-					log.Info("[TESTER] Starting test function: ", name)
-					log.Info("[TESTER][GNB] Number of GNBs: ", 1)
-					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
-					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
-					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
-					log.Info("---------------------------------------")
-					templates.TestAttachGnbWithConfiguration()
 					return nil
 				},
 			},
@@ -98,6 +96,7 @@ func main() {
 					&cli.BoolFlag{Name: "tunnel", Aliases: []string{"t"}, Usage: "Enable the creation of the GTP-U tunnel interface."},
 					&cli.BoolFlag{Name: "tunnel-vrf", Value: true, Usage: "Enable/disable VRP usage of the GTP-U tunnel interface."},
 					&cli.BoolFlag{Name: "dedicatedGnb", Aliases: []string{"d"}, Usage: "Enable the creation of a dedicated gNB per UE. Require one IP on N2/N3 per gNB."},
+					&cli.IntFlag{Name: "requestRate", Value: 0, Aliases: []string{"rate"}, Usage: "The number of max requests sent by seconds. 0 for unlimited"},
 					&cli.PathFlag{Name: "pcap", Usage: "Capture traffic to given PCAP file when a path is given", Value: "./dump.pcap"},
 				},
 				Action: func(c *cli.Context) error {
@@ -132,7 +131,7 @@ func main() {
 							tunnelMode = config.TunnelTun
 						}
 					}
-					templates.TestMultiUesInQueue(numUes, tunnelMode, c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("timeBeforeReconnecting"), c.Int("numPduSessions"))
+					templates.TestMultiUesInQueue(numUes, tunnelMode, c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("timeBeforeReconnecting"), c.Int("numPduSessions"), c.Int("rate"))
 
 					return nil
 				},
