@@ -192,7 +192,7 @@ func setLogLevel(cfg Config) {
 
 }
 
-func (config *Config) GetUESecurityCapability() *nasType.UESecurityCapability {
+func (ue *Ue) GetUESecurityCapability() *nasType.UESecurityCapability {
 	UESecurityCapability := &nasType.UESecurityCapability{
 		Iei:    nasMessage.RegistrationRequestUESecurityCapabilityType,
 		Len:    8,
@@ -200,16 +200,16 @@ func (config *Config) GetUESecurityCapability() *nasType.UESecurityCapability {
 	}
 
 	// Ciphering algorithms
-	UESecurityCapability.SetEA0_5G(boolToUint8(config.Ue.Ciphering.Nea0))
-	UESecurityCapability.SetEA1_128_5G(boolToUint8(config.Ue.Ciphering.Nea1))
-	UESecurityCapability.SetEA2_128_5G(boolToUint8(config.Ue.Ciphering.Nea2))
-	UESecurityCapability.SetEA3_128_5G(boolToUint8(config.Ue.Ciphering.Nea3))
+	UESecurityCapability.SetEA0_5G(boolToUint8(ue.Ciphering.Nea0))
+	UESecurityCapability.SetEA1_128_5G(boolToUint8(ue.Ciphering.Nea1))
+	UESecurityCapability.SetEA2_128_5G(boolToUint8(ue.Ciphering.Nea2))
+	UESecurityCapability.SetEA3_128_5G(boolToUint8(ue.Ciphering.Nea3))
 
 	// Integrity algorithms
-	UESecurityCapability.SetIA0_5G(boolToUint8(config.Ue.Integrity.Nia0))
-	UESecurityCapability.SetIA1_128_5G(boolToUint8(config.Ue.Integrity.Nia1))
-	UESecurityCapability.SetIA2_128_5G(boolToUint8(config.Ue.Integrity.Nia2))
-	UESecurityCapability.SetIA3_128_5G(boolToUint8(config.Ue.Integrity.Nia3))
+	UESecurityCapability.SetIA0_5G(boolToUint8(ue.Integrity.Nia0))
+	UESecurityCapability.SetIA1_128_5G(boolToUint8(ue.Integrity.Nia1))
+	UESecurityCapability.SetIA2_128_5G(boolToUint8(ue.Integrity.Nia2))
+	UESecurityCapability.SetIA3_128_5G(boolToUint8(ue.Integrity.Nia3))
 
 	return UESecurityCapability
 }

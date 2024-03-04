@@ -22,27 +22,27 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnbInboundChannel chan context2.UEMessage, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
+func NewUE(conf config.Ue, id int, ueMgrChannel chan procedures.UeTesterMessage, gnbInboundChannel chan context2.UEMessage, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
 	// new UE instance.
 	ue := &context.UEContext{}
 	scenarioChan := make(chan scenario.ScenarioMessage)
 
 	// new UE context
 	ue.NewRanUeContext(
-		conf.Ue.Msin,
+		conf.Msin,
 		conf.GetUESecurityCapability(),
-		conf.Ue.Key,
-		conf.Ue.Opc,
+		conf.Key,
+		conf.Opc,
 		"c9e8763286b5b9ffbdf56e1297d0887b",
-		conf.Ue.Amf,
-		conf.Ue.Sqn,
-		conf.Ue.Hplmn.Mcc,
-		conf.Ue.Hplmn.Mnc,
-		conf.Ue.RoutingIndicator,
-		conf.Ue.Dnn,
-		int32(conf.Ue.Snssai.Sst),
-		conf.Ue.Snssai.Sd,
-		conf.Ue.TunnelMode,
+		conf.Amf,
+		conf.Sqn,
+		conf.Hplmn.Mcc,
+		conf.Hplmn.Mnc,
+		conf.RoutingIndicator,
+		conf.Dnn,
+		int32(conf.Snssai.Sst),
+		conf.Snssai.Sd,
+		conf.TunnelMode,
 		scenarioChan,
 		gnbInboundChannel,
 		id)

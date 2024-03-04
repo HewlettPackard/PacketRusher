@@ -57,7 +57,6 @@ func (s *senderWithRate) start() {
 		}
 	}()
 }
-
 func Init(debit int) {
 	if debit > 0 {
 		sender := senderWithRate{

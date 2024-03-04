@@ -5,7 +5,6 @@
 package gnb
 
 import (
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	serviceNas "my5G-RANTester/internal/control_test_engine/gnb/nas/service"
@@ -16,6 +15,8 @@ import (
 	"os/signal"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
@@ -40,6 +41,56 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 
 	// new AMF context.
 	amf := gnb.NewGnBAmf(conf.AMF.Ip, conf.AMF.Port)
+
+	// start communication with AMF(SCTP).
+	if err := serviceNgap.InitConn(amf, gnb); err != nil {
+		log.Fatal("Error in", err)
+	} else {
+		log.Info("[GNB] SCTP/NGAP service is running")
+		// wg.Add(1)
+	}
+
+	// start communication with UE (server UNIX sockets).
+	serviceNas.InitServer(gnb)
+
+	trigger.SendNgSetupRequest(gnb, amf)
+
+	go func() {
+		// control the signals
+		sigGnb := make(chan os.Signal, 1)
+		signal.Notify(sigGnb, os.Interrupt)
+
+		// Block until a signal is received.
+		<-sigGnb
+		//gnb.Terminate()
+		wg.Done()
+	}()
+
+	return gnb
+}
+
+func InitGnb2(gnbConf config.GNodeB, amfConf config.AMF, wg *sync.WaitGroup) *context.GNBContext {
+
+	// instance new gnb.
+	gnb := &context.GNBContext{}
+
+	// new gnb context.
+	gnb.NewRanGnbContext(
+		gnbConf.PlmnList.GnbId,
+		gnbConf.PlmnList.Mcc,
+		gnbConf.PlmnList.Mnc,
+		gnbConf.PlmnList.Tac,
+		gnbConf.SliceSupportList.Sst,
+		gnbConf.SliceSupportList.Sd,
+		gnbConf.ControlIF.Ip,
+		gnbConf.DataIF.Ip,
+		gnbConf.ControlIF.Port,
+		gnbConf.DataIF.Port)
+
+	// start communication with AMF (server SCTP).
+
+	// new AMF context.
+	amf := gnb.NewGnBAmf(amfConf.Ip, amfConf.Port)
 
 	// start communication with AMF(SCTP).
 	if err := serviceNgap.InitConn(amf, gnb); err != nil {

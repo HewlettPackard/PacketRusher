@@ -10,6 +10,7 @@ import (
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/sender"
 	"my5G-RANTester/internal/control_test_engine/procedures"
+	"my5G-RANTester/internal/scenario"
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
@@ -23,6 +24,71 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestSingleUe(t *testing.T) {
+	controlIFConfig := config.ControlIF{
+		Ip:   "127.0.0.1",
+		Port: 9489,
+	}
+	dataIFConfig := config.DataIF{
+		Ip:   "127.0.0.1",
+		Port: 2154,
+	}
+	amfConfig := config.AMF{
+		Ip:   "127.0.0.1",
+		Port: 38414,
+	}
+
+	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
+
+	// Setup 5GC
+	builder := aio5gc.FiveGCBuilder{}
+	fiveGC, err := builder.
+		WithConfig(conf).
+		Build()
+	if err != nil {
+		log.Printf("[5GC] Error during 5GC creation  %v", err)
+		os.Exit(1)
+	}
+	time.Sleep(1 * time.Second)
+
+	securityContext := context.SecurityContext{}
+	securityContext.SetMsin(conf.Ue.Msin)
+	securityContext.SetAuthSubscription(conf.Ue.Key, conf.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
+	securityContext.SetAbba([]uint8{0x00, 0x00})
+
+	amfContext := fiveGC.GetAMFContext()
+	amfContext.Provision(models.Snssai{Sst: int32(conf.Ue.Snssai.Sst), Sd: conf.Ue.Snssai.Sd}, securityContext)
+
+	gnbs := []config.GNodeB{conf.GNodeB}
+	ueScenario := scenario.UEScenario{
+		Config: conf.Ue,
+		Tasks: []scenario.Task{
+			{
+				TaskType: scenario.AttachToGNB,
+				Parameters: struct {
+					GnbId string
+				}{conf.GNodeB.PlmnList.GnbId},
+			},
+			{
+				TaskType: scenario.Registration,
+			},
+			{
+				TaskType: scenario.NewPDUSession,
+			},
+			{
+				TaskType: scenario.Deregistration,
+				Delay:    10000,
+			},
+		},
+	}
+	ueScenarios := []scenario.UEScenario{ueScenario}
+
+	r := scenario.Runner{}
+	r.Start(gnbs, conf.AMF, ueScenarios, 0)
+
+	assert.True(t, true)
+}
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 
@@ -137,7 +203,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 				})
 		})
 	assert.Equalf(t, ueCount, i, "Expected %v ue to created in 5GC state but was %v", ueCount, i)
-
+	
 }
 
 func TestUERegistrationLoop(t *testing.T) {
