@@ -14,7 +14,7 @@ gnodeb:
     sst: "01"
     sd: "000001" # optional, can be removed if not used
 ue:
-  msin: "0000000120"
+  msin: "0000001000"
   key: "00112233445566778899AABBCCDDEEFF"
   opc: "00112233445566778899AABBCCDDEEFF"
   amf: "8000"
