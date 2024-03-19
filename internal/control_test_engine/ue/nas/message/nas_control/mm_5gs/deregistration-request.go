@@ -17,9 +17,9 @@ import (
 func DeregistrationRequest(ue *context.UEContext) ([]byte, error) {
 
 	pdu := getDeregistrationRequest(ue)
-	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCipheredWithNew5gNasSecurityContext, true, false)
+	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)
 	if err != nil {
-		return nil, fmt.Errorf("Error encoding %s IMSI UE  NAS Security Mode Complete message", ue.UeSecurity.Supi)
+		return nil, fmt.Errorf("error encoding %s IMSI UE  NAS Security Mode Complete message", ue.UeSecurity.Supi)
 	}
 	return pdu, nil
 }
