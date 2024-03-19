@@ -133,8 +133,10 @@ func InitConfigurationUpdateComplete(ue *context.UEContext) {
 	log.Info("[UE] Initiating Configuration Update Complete")
 
 	// trigger Configuration Update Complete.
-	identityResponse := mm_5gs.ConfigurationUpdateComplete(ue)
-
+	identityResponse, err := mm_5gs.ConfigurationUpdateComplete(ue)
+	if err != nil {
+		log.Fatal("[UE][NAS] Error sending Configuration Update Complete: ", err)
+	}
 	// send to GNB.
 	sender.SendToGnb(ue, identityResponse)
 }

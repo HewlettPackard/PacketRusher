@@ -20,7 +20,7 @@ func RegistrationComplete(ue *context.UEContext) ([]byte, error) {
 	pdu := getRegistrationComplete(nil)
 	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCiphered, true, false)
 	if err != nil {
-		return nil, fmt.Errorf("Error encoding %s IMSI UE NAS Registration Complete Msg", ue.UeSecurity.Supi)
+		return nil, fmt.Errorf("error encoding %s IMSI UE NAS Registration Complete Msg", ue.UeSecurity.Supi)
 	}
 
 	return pdu, nil
