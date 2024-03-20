@@ -40,11 +40,24 @@ func TestSingleUe(t *testing.T) {
 	}
 
 	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
+	type UECheck struct {
+		HasAuthOnce bool
+	}
+	ueChecks := map[string]*UECheck{}
 
 	// Setup 5GC
 	builder := aio5gc.FiveGCBuilder{}
 	fiveGC, err := builder.
 		WithConfig(conf).
+		WithUeCallback(context.Authenticated, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			ue := args["ue"].(*context.UEContext)
+			check, ok := ueChecks[ue.GetSecurityContext().GetMsin()]
+			if !ok {
+				check = &UECheck{}
+				ueChecks[ue.GetSecurityContext().GetMsin()] = check
+			}
+			check.HasAuthOnce = true
+		}).
 		Build()
 	if err != nil {
 		log.Printf("[5GC] Error during 5GC creation  %v", err)
@@ -62,7 +75,9 @@ func TestSingleUe(t *testing.T) {
 
 	gnbs := []config.GNodeB{conf.GNodeB}
 	ueScenario := scenario.UEScenario{
-		Config: conf.Ue,
+		Config:    conf.Ue,
+		Loop:      500,
+		ForceStop: 20000,
 		Tasks: []scenario.Task{
 			{
 				TaskType: scenario.AttachToGNB,
@@ -78,16 +93,22 @@ func TestSingleUe(t *testing.T) {
 			},
 			{
 				TaskType: scenario.Deregistration,
-				Delay:    10000,
+				Delay:    2000,
 			},
 		},
 	}
 	ueScenarios := []scenario.UEScenario{ueScenario}
 
-	r := scenario.Runner{}
+	r := scenario.ScenarioManager{}
 	r.Start(gnbs, conf.AMF, ueScenarios, 0)
 
-	assert.True(t, true)
+	time.Sleep(time.Duration(1000) * time.Millisecond)
+
+	fiveGC.GetAMFContext().ExecuteForAllUe(
+		func(ue *context.UEContext) {
+			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
+			assert.True(t, ueChecks[ue.GetSecurityContext().GetMsin()].HasAuthOnce, "UE has never changed state")
+		})
 }
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
@@ -203,7 +224,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 				})
 		})
 	assert.Equalf(t, ueCount, i, "Expected %v ue to created in 5GC state but was %v", ueCount, i)
-	
+
 }
 
 func TestUERegistrationLoop(t *testing.T) {
