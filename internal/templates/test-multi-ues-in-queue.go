@@ -8,7 +8,6 @@ import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
-	"my5G-RANTester/internal/scenario"
 	"os"
 	"os/signal"
 	"sync"
@@ -113,71 +112,4 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	}
 
 	time.Sleep(time.Second * 1)
-}
-
-func TestSingleUe(tunnelMode config.TunnelMode, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, numPduSessions int) {
-	if tunnelMode != config.TunnelDisabled && timeBetweenRegistration < 500 {
-		log.Fatal("When using the --tunnel option, --timeBetweenRegistration must be equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
-	}
-
-	if numPduSessions > 16 {
-		log.Fatal("You can't have more than 16 PDU Sessions per UE as per spec.")
-	}
-
-	cfg := config.GetConfig()
-
-	tasks := []scenario.Task{
-		{
-			TaskType: scenario.AttachToGNB,
-			Parameters: struct {
-				GnbId string
-			}{cfg.GNodeB.PlmnList.GnbId},
-		},
-		{
-			TaskType: scenario.Registration,
-		},
-	}
-
-	for i := 0; i < numPduSessions; i++ {
-		tasks = append(tasks, scenario.Task{
-			TaskType: scenario.NewPDUSession,
-		})
-	}
-
-	if timeBeforeNgapHandover != 0 {
-		tasks = append(tasks, scenario.Task{
-			TaskType: scenario.NGAPHandover,
-			Delay:    timeBeforeNgapHandover,
-		})
-	}
-
-	if timeBeforeXnHandover != 0 {
-		tasks = append(tasks, scenario.Task{
-			TaskType: scenario.XNHandover,
-			Delay:    timeBeforeXnHandover,
-		})
-	}
-	if timeBeforeIdle != 0 {
-		tasks = append(tasks, scenario.Task{
-			TaskType: scenario.Idle,
-			Delay:    timeBeforeIdle,
-		})
-	}
-
-	if timeBeforeDeregistration != 0 {
-		tasks = append(tasks, scenario.Task{
-			TaskType: scenario.Deregistration,
-			Delay:    timeBeforeDeregistration,
-		})
-	}
-
-	gnbs := []config.GNodeB{cfg.GNodeB}
-	ueScenario := scenario.UEScenario{
-		Config: cfg.Ue,
-		Tasks:  tasks,
-	}
-	ueScenarios := []scenario.UEScenario{ueScenario}
-
-	r := scenario.Runner{}
-	r.Start(gnbs, cfg.AMF, ueScenarios, 0)
 }

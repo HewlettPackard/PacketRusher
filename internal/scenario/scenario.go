@@ -22,21 +22,27 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type Runner struct {
+type ScenarioManager struct {
 	gnbs map[string]*context.GNBContext
-	ues  map[int]*ueSim
+	ues  map[int]*ueScenarioCtx
 }
 
-type ueSim struct {
+// Description of the scenario to be run for one UE
+type UEScenario struct {
+	Config    config.Ue
+	Tasks     []Task
+	Loop      int // Time between two loops
+	ForceStop int // Time before forcefully stoping scenario (0 to desactivate)
+}
+
+// Context of running ue scenario
+type ueScenarioCtx struct {
 	ongoingTask bool
 	nextTasks   []Task
 	taskChan    chan Task
 	reportChan  chan report
-}
-
-type UEScenario struct {
-	Config config.Ue
-	Tasks  []Task
+	loopTicker  *time.Ticker
+	endTicker   *time.Ticker
 }
 
 type report struct {
@@ -44,7 +50,7 @@ type report struct {
 	reason  string
 }
 
-func (s *Runner) Start(gnbConfs []config.GNodeB, amfConf config.AMF, ueScenarios []UEScenario, maxRequestRate int) {
+func (s *ScenarioManager) Start(gnbConfs []config.GNodeB, amfConf config.AMF, ueScenarios []UEScenario, maxRequestRate int) {
 
 	wg := sync.WaitGroup{}
 
@@ -59,7 +65,7 @@ func (s *Runner) Start(gnbConfs []config.GNodeB, amfConf config.AMF, ueScenarios
 	// TODO: We should wait for NGSetupResponse instead
 	time.Sleep(2 * time.Second)
 
-	s.ues = make(map[int]*ueSim)
+	s.ues = make(map[int]*ueScenarioCtx)
 
 	sigStop := make(chan os.Signal, 1)
 	signal.Notify(sigStop, os.Interrupt)
@@ -68,14 +74,29 @@ func (s *Runner) Start(gnbConfs []config.GNodeB, amfConf config.AMF, ueScenarios
 		done := true
 		for ueId := 1; !stopSignal && ueId <= len(ueScenarios); ueId++ {
 			if s.ues[ueId] == nil {
-				ue := ueSim{
+				ue := ueScenarioCtx{
 					ongoingTask: false,
 					nextTasks:   ueScenarios[ueId-1].Tasks,
 					taskChan:    make(chan Task, 1),
 					reportChan:  make(chan report, 1),
 				}
 
-				go simulateSingleUE(ueId, ueScenarios[ueId-1].Config, ue.taskChan, ue.reportChan, s.gnbs, &wg)
+				if ueScenarios[ueId-1].Loop > 0 {
+					ue.loopTicker = time.NewTicker(time.Duration(ueScenarios[ueId-1].Loop) * time.Millisecond)
+				}
+				if ueScenarios[ueId-1].ForceStop > 0 {
+					ue.endTicker = time.NewTicker(time.Duration(ueScenarios[ueId-1].ForceStop) * time.Millisecond)
+				}
+
+				executer := ueTaskExecuter{
+					UeId:       ueId,
+					UeCfg:      ueScenarios[ueId-1].Config,
+					TaskChan:   ue.taskChan,
+					ReportChan: ue.reportChan,
+					Gnbs:       s.gnbs,
+					Wg:         &wg,
+				}
+				executer.Run()
 
 				s.ues[ueId] = &ue
 			}
@@ -85,11 +106,33 @@ func (s *Runner) Start(gnbConfs []config.GNodeB, amfConf config.AMF, ueScenarios
 
 				if !report.success {
 					s.ues[ueId].nextTasks = []Task{}
+					log.Debug("------------------------------------------- Got report: " + report.reason + " ------------------------------------------- ")
 				}
 				s.ues[ueId].ongoingTask = false
 			case <-sigStop:
 				stopSignal = true
 			default:
+			}
+			if ueScenarios[ueId-1].ForceStop > 0 {
+				select {
+				case <-s.ues[ueId].endTicker.C:
+					done = true
+					log.Debugf("[UE-%d]Force end of scenario", ueId)
+					continue
+				default:
+				}
+			}
+			if ueScenarios[ueId-1].Loop > 0 {
+				done = false
+				select {
+				case <-s.ues[ueId].loopTicker.C:
+					log.Debugf("[UE-%d] starting new loop", ueId)
+					s.ues[ueId].taskChan <- Task{TaskType: Kill}
+					s.ues[ueId].nextTasks = ueScenarios[ueId-1].Tasks
+					s.ues[ueId].ongoingTask = true
+					continue
+				default:
+				}
 			}
 
 			if s.ues[ueId].ongoingTask {
@@ -114,110 +157,205 @@ func (s *Runner) Start(gnbConfs []config.GNodeB, amfConf config.AMF, ueScenarios
 		}
 	}
 
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second * 3)
 }
 
-func simulateSingleUE(ueId int, ueCfg config.Ue, taskChan chan Task, reportChan chan report, gnbs map[string]*context.GNBContext, wg *sync.WaitGroup) {
-	log.Infof("simulation started for ue %d", ueId)
+type ueTaskExecuter struct {
+	UeId       int
+	UeCfg      config.Ue
+	TaskChan   chan Task
+	ReportChan chan report
+	Gnbs       map[string]*context.GNBContext
+	Wg         *sync.WaitGroup
 
-	wg.Add(1)
+	running     bool
+	ueRx        chan procedures.UeTesterMessage
+	ueTx        chan scenario.ScenarioMessage
+	attachedGnb string
+	timedTasks  map[Task]*time.Timer
+	state       int
+	targetState int
+	lock        sync.Mutex
+	toBeKilled  chan procedures.UeTesterMessage
+}
 
-	ueRx := make(chan procedures.UeTesterMessage)
-	var ueTx chan scenario.ScenarioMessage
+func (e *ueTaskExecuter) Run() {
+	if e.running {
+		log.Errorf("simulation for ue %d failed: already running", e.UeId)
+		return
+	}
+	if e.UeCfg == (config.Ue{}) {
+		log.Errorf("simulation for ue %d failed: no config", e.UeId)
+		return
+	}
+	if e.TaskChan == nil {
+		log.Errorf("simulation for ue %d failed: no taskChan", e.UeId)
+		return
+	}
+	if e.ReportChan == nil {
+		log.Errorf("simulation for ue %d failed: no reportChan", e.UeId)
+		return
+	}
+	if e.Gnbs == nil {
+		log.Errorf("simulation for ue %d failed: no gnbs", e.UeId)
+		return
+	}
+	if e.Wg == nil {
+		log.Errorf("simulation for ue %d failed: no WaitGroup is given", e.UeId)
+		return
+	}
 
+	e.running = true
+	e.timedTasks = map[Task]*time.Timer{}
+	e.state = ueCtx.MM5G_NULL
+	e.targetState = ueCtx.MM5G_NULL
+	go e.listen()
+}
+
+func (e *ueTaskExecuter) listen() {
+	log.Infof("simulation started for ue %d", e.UeId)
 	loop := true
-	var attachedGnb string
-	state := ueCtx.MM5G_NULL
-	targetState := ueCtx.MM5G_NULL
 	for loop {
 		select {
-		case task := <-taskChan:
-			if attachedGnb == "" && task.TaskType != AttachToGNB {
-				msg := fmt.Sprintf("UE %d is not attached to a GNB", ueId)
+		case task := <-e.TaskChan:
+			log.Debugf("------------------------------------------- received task: %s -------------------------------------------  ", task.TaskType.ToStr())
+			if e.attachedGnb == "" && task.TaskType != AttachToGNB {
+				msg := fmt.Sprintf("UE %d is not attached to a GNB", e.UeId)
 				log.Error(msg)
-				reportChan <- report{success: false, reason: msg}
+				e.ReportChan <- report{success: false, reason: msg}
 			}
 			switch task.TaskType {
 			case AttachToGNB:
-				if gnbs[task.Parameters.GnbId] != nil {
+				if e.Gnbs[task.Parameters.GnbId] != nil {
 					// Create a new UE coroutine
 					// ue.NewUE returns context of the new UE
-					ueTx = ue.NewUE(ueCfg, ueId, ueRx, gnbs[task.Parameters.GnbId].GetInboundChannel(), wg)
-					attachedGnb = task.Parameters.GnbId
-					reportChan <- report{success: true}
+					e.lock.Lock()
+					e.ueRx = make(chan procedures.UeTesterMessage)
+					e.ueTx = ue.NewUE(e.UeCfg, e.UeId, e.ueRx, e.Gnbs[task.Parameters.GnbId].GetInboundChannel(), e.Wg)
+					e.Wg.Add(1)
+					e.attachedGnb = task.Parameters.GnbId
+					e.lock.Unlock()
+					e.ReportChan <- report{success: true}
 				} else {
 					msg := fmt.Sprintf("GNB %s not found", task.Parameters.GnbId)
 					log.Error(msg)
-					reportChan <- report{success: false, reason: msg}
+					e.ReportChan <- report{success: false, reason: msg}
 				}
 			case Registration:
-				time.AfterFunc(time.Duration(task.Delay)*time.Millisecond, func() { ueRx <- procedures.UeTesterMessage{Type: procedures.Registration} })
-				targetState = ueCtx.MM5G_REGISTERED
+				if e.toBeKilled != nil {
+					e.toBeKilled <- procedures.UeTesterMessage{Type: procedures.Kill}
+				}
+				e.sendProcedureToUE(task, procedures.Registration)
+				e.targetState = ueCtx.MM5G_REGISTERED
 			case Deregistration:
-				time.AfterFunc(time.Duration(task.Delay)*time.Millisecond, func() { ueRx <- procedures.UeTesterMessage{Type: procedures.Deregistration} })
-				targetState = ueCtx.MM5G_DEREGISTERED
+				e.sendProcedureToUE(task, procedures.Deregistration)
+				e.targetState = ueCtx.MM5G_DEREGISTERED
 			case Idle:
-				time.AfterFunc(time.Duration(task.Delay)*time.Millisecond, func() { ueRx <- procedures.UeTesterMessage{Type: procedures.Idle} })
-				targetState = ueCtx.MM5G_IDLE
+				e.sendProcedureToUE(task, procedures.Idle)
+				e.targetState = ueCtx.MM5G_IDLE
 			case NewPDUSession:
-				if state == ueCtx.MM5G_REGISTERED { // TODO: check if it's possible to send pdu req without being registrated (for negative tests)
-					time.AfterFunc(time.Duration(task.Delay)*time.Millisecond, func() { ueRx <- procedures.UeTesterMessage{Type: procedures.NewPDUSession} })
+				if e.state == ueCtx.MM5G_REGISTERED {
+					e.sendProcedureToUE(task, procedures.NewPDUSession)
 					if !task.Hang {
-						reportChan <- report{success: true, reason: "Need to implement way to check if pduSession is successful"}
+						// TODO: Implement way to check if pduSession is successful
+						e.ReportChan <- report{success: true, reason: "sent PDU session request"}
 					}
 				} else {
-					msg := fmt.Sprintf("UE %d is not registered", ueId)
+					msg := fmt.Sprintf("UE %d is not registered", e.UeId)
 					log.Error(msg)
-					reportChan <- report{success: false, reason: msg}
+					e.ReportChan <- report{success: false, reason: msg}
 				}
 			case XNHandover:
-				if gnbs[task.Parameters.GnbId] != nil {
+				if e.Gnbs[task.Parameters.GnbId] != nil {
 					time.AfterFunc(time.Duration(task.Delay)*time.Millisecond, func() {
-						trigger.TriggerXnHandover(gnbs[attachedGnb], gnbs[task.Parameters.GnbId], int64(ueId))
+						trigger.TriggerXnHandover(e.Gnbs[e.attachedGnb], e.Gnbs[task.Parameters.GnbId], int64(e.UeId))
+						e.attachedGnb = task.Parameters.GnbId
+						// Wait for succesful handover
+						// TODO: We should wait for confimation from gnb instead of timer
+						time.Sleep(2 * time.Second)
+						e.ReportChan <- report{success: true, reason: "succesful XNHandover"}
 					})
-					targetState = ueCtx.MM5G_REGISTERED
+					e.targetState = ueCtx.MM5G_REGISTERED
 				} else {
 					msg := fmt.Sprintf("GNB %s not found", task.Parameters.GnbId)
 					log.Error(msg)
-					reportChan <- report{success: false, reason: msg}
+					e.ReportChan <- report{success: false, reason: msg}
 				}
 			case NGAPHandover:
-				if gnbs[task.Parameters.GnbId] != nil {
+				if e.Gnbs[task.Parameters.GnbId] != nil {
 					time.AfterFunc(time.Duration(task.Delay)*time.Millisecond, func() {
-						trigger.TriggerNgapHandover(gnbs[attachedGnb], gnbs[task.Parameters.GnbId], int64(ueId))
+						trigger.TriggerNgapHandover(e.Gnbs[e.attachedGnb], e.Gnbs[task.Parameters.GnbId], int64(e.UeId))
+						e.attachedGnb = task.Parameters.GnbId
+						// Wait for succesful handover
+						// TODO: We should wait for confimation from gnb instead of timer
+						time.Sleep(2 * time.Second)
+						e.ReportChan <- report{success: true, reason: "succesful NGAPHandover"}
 					})
-					targetState = ueCtx.MM5G_REGISTERED
+					e.targetState = ueCtx.MM5G_REGISTERED
 				} else {
 					msg := fmt.Sprintf("GNB %s not found", task.Parameters.GnbId)
 					log.Error(msg)
-					reportChan <- report{success: false, reason: msg}
+					e.ReportChan <- report{success: false, reason: msg}
 				}
 			case Terminate:
-				time.AfterFunc(time.Duration(task.Delay)*time.Millisecond, func() {
-					ueRx <- procedures.UeTesterMessage{Type: procedures.
-						Terminate}
-					ueRx = nil
+				e.timedTasks[task] = time.AfterFunc(time.Duration(task.Delay)*time.Millisecond, func() {
+					e.lock.Lock()
+					defer e.lock.Unlock()
+					if e.toBeKilled != nil {
+						e.toBeKilled <- procedures.UeTesterMessage{Type: procedures.Terminate}
+					}
+					e.ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
+					e.ueRx = nil
+					e.ueTx = nil
+					e.state = ueCtx.MM5G_NULL
+					e.attachedGnb = ""
+					for t := range e.timedTasks {
+						e.timedTasks[t].Stop()
+						delete(e.timedTasks, t)
+					}
+					e.ReportChan <- report{success: true, reason: "UE Terminated"}
 				})
 			case Kill:
-				time.AfterFunc(time.Duration(task.Delay)*time.Millisecond, func() {
-					ueRx <- procedures.UeTesterMessage{Type: procedures.
-						Kill}
-					ueRx = nil
-					state = ueCtx.MM5G_NULL
-					attachedGnb = ""
+				e.timedTasks[task] = time.AfterFunc(time.Duration(task.Delay)*time.Millisecond, func() {
+					e.lock.Lock()
+					defer e.lock.Unlock()
+					e.toBeKilled = e.ueRx
+					e.ueRx = nil
+					e.ueTx = nil
+					e.state = ueCtx.MM5G_NULL
+					e.attachedGnb = ""
+					for t := range e.timedTasks {
+						e.timedTasks[t].Stop()
+						delete(e.timedTasks, t)
+					}
+					e.ReportChan <- report{success: true, reason: "UE Killed"}
 				})
 			}
 
-		case ueMsg := <-ueTx:
-			msg := fmt.Sprint("[UE] Switched from state ", state, " to state ", ueMsg.StateChange)
-			log.Info(msg)
-			if ueMsg.StateChange == targetState {
-				reportChan <- report{success: true, reason: msg}
+		case ueMsg, open := <-e.ueTx:
+			if open {
+				msg := fmt.Sprintf("[UE-%d] Switched from state %d to state %d ", e.UeId, e.state, ueMsg.StateChange)
+				log.Info(msg)
+				if ueMsg.StateChange == e.targetState {
+					e.ReportChan <- report{success: true, reason: msg}
+				}
+				e.state = ueMsg.StateChange
 			}
-			if ueMsg.StateChange == ueCtx.MM5G_NULL {
-				loop = false
-			}
-			state = ueMsg.StateChange
 		}
+	}
+	e.running = false
+}
+
+func (e *ueTaskExecuter) sendProcedureToUE(task Task, procedure procedures.UeTesterMessageType) {
+	if task.Delay > 0 {
+		e.timedTasks[task] = time.AfterFunc(time.Duration(task.Delay)*time.Millisecond, func() {
+			e.ueRx <- procedures.UeTesterMessage{Type: procedure}
+			e.lock.Lock()
+			e.timedTasks[task].Stop()
+			delete(e.timedTasks, task)
+			e.lock.Unlock()
+		})
+	} else {
+		e.ueRx <- procedures.UeTesterMessage{Type: procedure}
 	}
 }
