@@ -37,7 +37,6 @@ var multiUePduCmd = &cobra.Command{
 		log.Info("---------------------------------------")
 
 		pcapPath, _ := cmd.Flags().GetString("pcap")
-
 		if cmd.Flags().Lookup("pcap").Changed {
 			pcap.CaptureTraffic(pcapPath)
 		}
@@ -46,9 +45,6 @@ var multiUePduCmd = &cobra.Command{
 
 		tunnel, _ := cmd.Flags().GetBool("tunnel")
 
-		if cmd.Flags().Lookup("pcap").Changed {
-			pcap.CaptureTraffic(pcapPath)
-		}
 		if tunnel {
 			vrf, _ := cmd.Flags().GetBool("tunnel-vrf")
 			if vrf {

@@ -10,8 +10,8 @@ import (
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/scenario"
 	pcap "my5G-RANTester/internal/utils"
+	"sort"
 	"strconv"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -19,22 +19,20 @@ import (
 
 // singleUePduCmd represents the singleUePdu command
 var singleUePduCmd = &cobra.Command{
-	Use:   "single-ue",
+	Use:   "single-ue-pdu",
 	Short: "Load endurance stress tests.",
 	Long: `Load endurance stress tests.
-	This test case will launch one UE. See packetrusher single-ue --help,
-	Example for testing multiple UEs: single-ue`,
-	Aliases: []string{"multi-ue"},
+	This test case will launch one UE. See packetrusher single-ue-pdu --help,
+	Example for testing single UE: single-ue`,
+	Aliases: []string{"single"},
 	Run: func(cmd *cobra.Command, args []string) {
-		numUes, _ := cmd.Flags().GetInt("number-of-ues")
-		name := "Testing registration of multiple UEs"
+		name := "Testing registration of single UE"
 		cfgPath, _ := cmd.Flags().GetString("config")
 		cfg := setConfig(cfgPath)
 
-		log.Info("PacketRusher version " + version)
 		log.Info("---------------------------------------")
 		log.Info("[TESTER] Starting test function: ", name)
-		log.Info("[TESTER][UE] Number of UEs: ", numUes)
+		log.Info("[TESTER][UE] Number of UEs: ", 1)
 		log.Info("[TESTER][GNB] gNodeB control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
 		log.Info("[TESTER][GNB] gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
 		log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
@@ -71,9 +69,7 @@ var singleUePduCmd = &cobra.Command{
 		numPduSessions, _ := cmd.Flags().GetInt("numPduSessions")
 		timeBeforeIdle, _ := cmd.Flags().GetInt("timeBeforeIdle")
 
-		fmt.Println("Echo: " + strings.Join(args, " "))
-
-		testSingleUe(tunnelMode, loop, timeBetweenRegistration, timeBeforeDeregistration, timeBeforeNgapHandover, timeBeforeXnHandover, timeBeforeIdle, numPduSessions)
+		testsingleUePdu(tunnelMode, loop, timeBetweenRegistration, timeBeforeDeregistration, timeBeforeNgapHandover, timeBeforeXnHandover, timeBeforeIdle, numPduSessions)
 
 	},
 }
@@ -88,13 +84,13 @@ func init() {
 	singleUePduCmd.Flags().IntP("timeBeforeIdle", "I", 0, "The time in ms, before switching UE to Idle. 0 to disable Idling.")
 	singleUePduCmd.Flags().IntP("timeBeforeServiceRequest", "S", 1000, "The time in ms, before reconnecting to gNodeB after switching to Idle state. Default is 1000 ms. Only work in conjunction with timeBeforeIdle.")
 	singleUePduCmd.Flags().IntP("numPduSessions", "p", 1, "The number of PDU Sessions to create")
-	singleUePduCmd.Flags().BoolP("loop", "l", false, "")
+	singleUePduCmd.Flags().BoolP("loop", "l", false, "Register UE in a loop.")
 	singleUePduCmd.Flags().BoolP("tunnel", "t", false, "Disable the creation of the GTP-U tunnel interface")
 	singleUePduCmd.Flags().Bool("tunnel-vrf", true, "Enable/disable VRP usage of the GTP-U tunnel interface.")
 	singleUePduCmd.Flags().String("pcap", "./dump.pcap", "Capture traffic to given PCAP file when a path is given")
 }
 
-func testSingleUe(tunnelMode config.TunnelMode, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, numPduSessions int) {
+func testsingleUePdu(tunnelMode config.TunnelMode, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, numPduSessions int) {
 	if tunnelMode != config.TunnelDisabled && timeBetweenRegistration < 500 {
 		log.Fatal("When using the --tunnel option, --timeBetweenRegistration must be equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
 	}
@@ -139,26 +135,17 @@ func testSingleUe(tunnelMode config.TunnelMode, loop bool, timeBetweenRegistrati
 		})
 	}
 
-	// TODO: use arg position to determine order of procedures
 	if timeBeforeNgapHandover != 0 {
-		nextgnb = (nextgnb + 1) % 2
 		tasks = append(tasks, scenario.Task{
 			TaskType: scenario.NGAPHandover,
 			Delay:    timeBeforeNgapHandover,
-			Parameters: struct {
-				GnbId string
-			}{gnbs[nextgnb].PlmnList.GnbId},
 		})
 	}
 
 	if timeBeforeXnHandover != 0 {
-		nextgnb = (nextgnb + 1) % 2
 		tasks = append(tasks, scenario.Task{
 			TaskType: scenario.XNHandover,
 			Delay:    timeBeforeXnHandover,
-			Parameters: struct {
-				GnbId string
-			}{gnbs[nextgnb].PlmnList.GnbId},
 		})
 	}
 	if timeBeforeIdle != 0 {
@@ -173,6 +160,21 @@ func testSingleUe(tunnelMode config.TunnelMode, loop bool, timeBetweenRegistrati
 			TaskType: scenario.Deregistration,
 			Delay:    timeBeforeDeregistration,
 		})
+	}
+
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].Delay < tasks[j].Delay
+	})
+
+	sumDelay := 0
+	for i := 0; i < len(tasks); i++ {
+		tasks[i].Delay = tasks[i].Delay - sumDelay
+		sumDelay += tasks[i].Delay
+
+		if tasks[i].TaskType == scenario.NGAPHandover || tasks[i].TaskType == scenario.XNHandover {
+			nextgnb = (nextgnb + 1) % 2
+			tasks[i].Parameters.GnbId = gnbs[nextgnb].PlmnList.GnbId
+		}
 	}
 
 	ueScenario := scenario.UEScenario{
