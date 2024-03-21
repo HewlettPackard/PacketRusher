@@ -138,7 +138,8 @@ func main() {
 							tunnelMode = config.TunnelTun
 						}
 					}
-					templates.TestMultiUesInQueue(numUes, tunnelMode, c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("timeBeforeReconnecting"), c.Int("numPduSessions"))
+					// templates.TestMultiUesInQueue(numUes, tunnelMode, c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("timeBeforeReconnecting"), c.Int("numPduSessions"))
+					templates.TestsingleUePdu(tunnelMode, c.Bool("loop"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("numPduSessions"))
 
 					return nil
 				},

@@ -81,7 +81,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	module, err := runtime.InstantiateWithConfig(ctx, addWasm, config)
 	if err != nil {
-		log.Fatal("failed to instantiate module: %v", err)
+		log.Fatalf("failed to instantiate module: %v", err)
 	}
 
 	// Call the `add` function and print the results to the console.

@@ -168,15 +168,16 @@ type ueTaskExecuter struct {
 	Gnbs       map[string]*context.GNBContext
 	Wg         *sync.WaitGroup
 
-	running     bool
-	ueRx        chan procedures.UeTesterMessage
-	ueTx        chan scenario.ScenarioMessage
-	attachedGnb string
-	timedTasks  map[Task]*time.Timer
-	state       int
-	targetState int
-	lock        sync.Mutex
-	toBeKilled  chan procedures.UeTesterMessage
+	running              bool
+	ueRx                 chan procedures.UeTesterMessage
+	ueTx                 chan scenario.ScenarioMessage
+	attachedGnb          string
+	timedTasks           map[Task]*time.Timer
+	lastReceivedTaskTime time.Time
+	state                int
+	targetState          int
+	lock                 sync.Mutex
+	toBeKilled           chan procedures.UeTesterMessage
 }
 
 func (e *ueTaskExecuter) Run() {
@@ -209,6 +210,7 @@ func (e *ueTaskExecuter) Run() {
 	e.timedTasks = map[Task]*time.Timer{}
 	e.state = ueCtx.MM5G_NULL
 	e.targetState = ueCtx.MM5G_NULL
+	e.lastReceivedTaskTime = time.Now()
 	go e.listen()
 }
 
@@ -224,6 +226,12 @@ func (e *ueTaskExecuter) listen() {
 				log.Error(msg)
 				e.ReportChan <- report{success: false, reason: msg}
 			}
+			if task.Delay > 0 {
+				since := time.Since(e.lastReceivedTaskTime).Milliseconds()
+				log.Info(since)
+				task.Delay = max(0, task.Delay-int(time.Since(e.lastReceivedTaskTime).Milliseconds()))
+			}
+			e.lastReceivedTaskTime = time.Now()
 			switch task.TaskType {
 			case AttachToGNB:
 				if e.Gnbs[task.Parameters.GnbId] != nil {
@@ -258,6 +266,7 @@ func (e *ueTaskExecuter) listen() {
 					e.sendProcedureToUE(task, procedures.NewPDUSession)
 					if !task.Hang {
 						// TODO: Implement way to check if pduSession is successful
+						time.Sleep(2 * time.Second)
 						e.ReportChan <- report{success: true, reason: "sent PDU session request"}
 					}
 				} else {
