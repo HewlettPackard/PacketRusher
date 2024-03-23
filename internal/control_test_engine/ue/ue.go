@@ -119,8 +119,7 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 		// We switch UE to IDLE
 		ue.SetStateMM_IDLE()
 		trigger.SwitchToIdle(ue)
-
-		time.Sleep(1 * time.Second)
+	case procedures.ServiceRequest:
 		// Since gNodeB stopped communication after switching to Idle, we need to connect back to gNodeB
 		service.InitConn(ue, ue.GetGnbInboundChannel())
 		if ue.Get5gGuti() != nil {

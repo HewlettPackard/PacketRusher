@@ -106,6 +106,7 @@ type UESimulationConfig struct {
 	TimeBeforeNgapHandover   int
 	TimeBeforeXnHandover     int
 	TimeBeforeIdle           int
+	TimeBeforeReconnecting   int
 	NumPduSessions           int
 }
 
@@ -148,6 +149,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 		}
 
 		var idleChannel <-chan time.Time = nil
+		var reconnectChannel <-chan time.Time = nil
 		if simConfig.TimeBeforeIdle != 0 {
 			idleChannel = time.After(time.Duration(simConfig.TimeBeforeIdle) * time.Millisecond)
 		}
@@ -171,6 +173,14 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 			case <-idleChannel:
 				if ueRx != nil {
 					ueRx <- procedures.UeTesterMessage{Type: procedures.Idle}
+					// Channel creation to be transformed into a task ;-)
+					if simConfig.TimeBeforeReconnecting != 0 {
+						reconnectChannel = time.After(time.Duration(simConfig.TimeBeforeReconnecting) * time.Millisecond)
+					}
+				}
+			case <-reconnectChannel:
+				if ueRx != nil {
+					ueRx <- procedures.UeTesterMessage{Type: procedures.ServiceRequest}
 				}
 			case msg := <-scenarioChan:
 				if ueRx != nil {
