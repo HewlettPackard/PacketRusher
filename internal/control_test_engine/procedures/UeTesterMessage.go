@@ -16,6 +16,7 @@ const (
 	Terminate         UeTesterMessageType = 4
 	Kill              UeTesterMessageType = 5
 	Idle              UeTesterMessageType = 6
+	ServiceRequest    UeTesterMessageType = 7
 )
 
 type UeTesterMessage struct {

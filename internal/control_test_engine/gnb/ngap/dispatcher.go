@@ -67,9 +67,14 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 			handler.HandlerAmfConfigurationUpdate(amf, gnb, ngapMsg)
 
 		case ngapType.ProcedureCodeHandoverResourceAllocation:
-			// handler NGAP Handover REquest
+			// handler NGAP Handover Request
 			log.Info("[GNB][NGAP] Receive Handover Request")
 			handler.HandlerHandoverRequest(amf, gnb, ngapMsg)
+
+		case ngapType.ProcedureCodePaging:
+			// handler NGAP Paging
+			log.Info("[GNB][NGAP] Receive Paging")
+			handler.HandlerPaging(gnb, ngapMsg)
 
 		case ngapType.ProcedureCodeErrorIndication:
 			// handler Error Indicator

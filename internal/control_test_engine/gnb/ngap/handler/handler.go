@@ -57,6 +57,10 @@ func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAP
 	}
 
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
+	if ue == nil {
+		log.Errorf("[GNB][NGAP] Cannot send DownlinkNASTransport message to UE with RANUEID %d as it does not know this UE", ranUeId)
+		return
+	}
 
 	// send NAS message to UE.
 	sender.SendToUe(ue, messageNas)
@@ -177,7 +181,10 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	}
 
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
-
+	if ue == nil {
+		log.Errorf("[GNB][NGAP] Cannot setup context for unknown UE	with RANUEID %d", ranUeId)
+		return
+	}
 	// create UE context.
 	ue.CreateUeContext(mobilityRestrict, maskedImeisv, sst, sd, ueSecurityCapabilities)
 
@@ -284,6 +291,10 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	}
 
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
+	if ue == nil {
+		log.Errorf("[GNB][NGAP] Cannot setup PDU Session for unknown UE With RANUEID %d", ranUeId)
+		return
+	}
 
 	var configuredPduSessions []*context.GnbPDUSession
 	for _, item := range pDUSessionResourceSetupList.List {
@@ -445,6 +456,10 @@ func HandlerPduSessionReleaseCommand(gnb *context.GNBContext, message *ngapType.
 	}
 
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
+	if ue == nil {
+		log.Errorf("[GNB][NGAP] Cannot release PDU Session for unknown UE With RANUEID %d", ranUeId)
+		return
+	}
 
 	for _, pduSessionId := range pduSessionIds {
 		pduSession, err := ue.GetPduSession(pduSessionId.Value)
@@ -703,6 +718,10 @@ func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapT
 
 	}
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
+	if ue == nil {
+		log.Errorf("[GNB][NGAP] Cannot Xn Handover unknown UE With RANUEID %d", ranUeId)
+		return
+	}
 
 	if pduSessionResourceSwitchedList == nil || len(pduSessionResourceSwitchedList.List) == 0 {
 		log.Warn("[GNB] No PDU Sessions to be switched")
@@ -911,6 +930,10 @@ func HandlerHandoverCommand(amf *context.GNBAmf, gnb *context.GNBContext, messag
 
 	}
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
+	if ue == nil {
+		log.Errorf("[GNB][NGAP] Cannot NGAP  Handover unknown UE With RANUEID %d", ranUeId)
+		return
+	}
 	newGnb := ue.GetHandoverGnodeB()
 	if newGnb == nil {
 		log.Error("[GNB] AMF is sending a Handover Command for an UE we did not send a Handover Required message")
@@ -925,6 +948,41 @@ func HandlerHandoverCommand(amf *context.GNBAmf, gnb *context.GNBContext, messag
 	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, GNBInboundChannel: newGnb.GetInboundChannel()}
 
 	sender.SendMessageToUe(ue, msg)
+}
+
+func HandlerPaging(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+
+	valueMessage := message.InitiatingMessage.Value.Paging
+
+	var uEPagingIdentity *ngapType.UEPagingIdentity
+	var tAIListForPaging *ngapType.TAIListForPaging
+
+	for _, ies := range valueMessage.ProtocolIEs.List {
+		switch ies.Id.Value {
+
+		case ngapType.ProtocolIEIDUEPagingIdentity:
+
+			if ies.Value.UEPagingIdentity == nil {
+				log.Fatal("[GNB][NGAP] UE Paging Identity is missing")
+			}
+			uEPagingIdentity = ies.Value.UEPagingIdentity
+
+		case ngapType.ProtocolIEIDTAIListForPaging:
+
+			if ies.Value.TAIListForPaging == nil {
+				log.Fatal("[GNB][NGAP] TAI List For Paging is missing")
+			}
+			tAIListForPaging = ies.Value.TAIListForPaging
+		}
+	}
+	_ = uEPagingIdentity
+	_ = tAIListForPaging
+	// TODO: Implement Paging
+	// Upon reception of the Paging with its TMSI, the UE must send a Service Request
+	// as in UE-initiated Service Request
+	// But: we need to figure out how the gNodeB may contact the UE when it's not in its context
+	// While avoiding adding a new channel, deadlock / sending to closed channels, having to jungle too much between channels when doing handover
+	log.Warnf("[GNB][AMF] UE Paging is not implemented, please manually reconnect UE with --timeBeforeReconnecting")
 }
 
 func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
@@ -960,7 +1018,8 @@ func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *co
 	// check RanUeId and get UE.
 	ue, err := gnb.GetGnbUe(ranUeId)
 	if err != nil || ue == nil {
-		log.Fatal("[GNB][NGAP] RAN UE NGAP ID is incorrect, found: ", ranUeId)
+		log.Error("[GNB][NGAP] RAN UE NGAP ID is incorrect, found: ", ranUeId)
+		return nil
 		// TODO SEND ERROR INDICATION
 	}
 
@@ -974,19 +1033,14 @@ func causeToString(cause *ngapType.Cause) string {
 		switch cause.Present {
 		case ngapType.CausePresentRadioNetwork:
 			return "radioNetwork: " + causeRadioNetworkToString(cause.RadioNetwork)
-			break
 		case ngapType.CausePresentTransport:
 			return "transport: " + causeTransportToString(cause.Transport)
-			break
 		case ngapType.CausePresentNas:
 			return "nas: " + causeNasToString(cause.Nas)
-			break
 		case ngapType.CausePresentProtocol:
 			return "protocol: " + causeProtocolToString(cause.Protocol)
-			break
 		case ngapType.CausePresentMisc:
 			return "misc: " + causeMiscToString(cause.Misc)
-			break
 		}
 	}
 	return "Cause not found"
