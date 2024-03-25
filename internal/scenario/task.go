@@ -24,6 +24,7 @@ const (
 	Terminate
 	Kill
 	Idle
+	ServiceRequest
 	NGAPHandover
 	XNHandover
 )
@@ -46,6 +47,8 @@ func (t TaskType) ToStr() string {
 		return "Kill"
 	case Idle:
 		return "Idle"
+	case ServiceRequest:
+		return "ServiceRequest"
 	case NGAPHandover:
 		return "NGAPHandover"
 	case XNHandover:

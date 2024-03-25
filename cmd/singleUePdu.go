@@ -19,7 +19,7 @@ import (
 
 // singleUePduCmd represents the singleUePdu command
 var singleUePduCmd = &cobra.Command{
-	Use:   "single-ue-pdu",
+	Use:   "single-ue",
 	Short: "Load endurance stress tests.",
 	Long: `Load endurance stress tests.
 	This test case will launch one UE. See packetrusher single-ue-pdu --help,
@@ -68,8 +68,9 @@ var singleUePduCmd = &cobra.Command{
 		timeBetweenRegistration, _ := cmd.Flags().GetInt("timeBetweenRegistration")
 		numPduSessions, _ := cmd.Flags().GetInt("numPduSessions")
 		timeBeforeIdle, _ := cmd.Flags().GetInt("timeBeforeIdle")
+		timeBeforeServiceRequest, _ := cmd.Flags().GetInt("timeBeforeServiceRequest")
 
-		testsingleUePdu(tunnelMode, loop, timeBetweenRegistration, timeBeforeDeregistration, timeBeforeNgapHandover, timeBeforeXnHandover, timeBeforeIdle, numPduSessions)
+		testsingleUePdu(tunnelMode, loop, timeBetweenRegistration, timeBeforeDeregistration, timeBeforeNgapHandover, timeBeforeXnHandover, timeBeforeIdle, timeBeforeServiceRequest, numPduSessions)
 
 	},
 }
@@ -82,7 +83,7 @@ func init() {
 	singleUePduCmd.Flags().IntP("timeBeforeNgapHandover", "N", 0, "The time in ms, before triggering a UE handover using NGAP Handover. 0 to disable handover. This requires at least two gNodeB, eg: two N2/N3 IPs.")
 	singleUePduCmd.Flags().IntP("timeBeforeXnHandover", "X", 0, "The time in ms, before triggering a UE handover using Xn Handover. 0 to disable handover. This requires at least two gNodeB, eg: two N2/N3 IPs.")
 	singleUePduCmd.Flags().IntP("timeBeforeIdle", "I", 0, "The time in ms, before switching UE to Idle. 0 to disable Idling.")
-	singleUePduCmd.Flags().IntP("timeBeforeServiceRequest", "S", 1000, "The time in ms, before reconnecting to gNodeB after switching to Idle state. Default is 1000 ms. Only work in conjunction with timeBeforeIdle.")
+	singleUePduCmd.Flags().IntP("timeBeforeServiceRequest", "S", 10000, "The time in ms, before reconnecting to gNodeB after switching to Idle state. Default is 1000 ms. Only work in conjunction with timeBeforeIdle.")
 	singleUePduCmd.Flags().IntP("numPduSessions", "p", 1, "The number of PDU Sessions to create")
 	singleUePduCmd.Flags().BoolP("loop", "l", false, "Register UE in a loop.")
 	singleUePduCmd.Flags().BoolP("tunnel", "t", false, "Disable the creation of the GTP-U tunnel interface")
@@ -90,7 +91,7 @@ func init() {
 	singleUePduCmd.Flags().String("pcap", "./dump.pcap", "Capture traffic to given PCAP file when a path is given")
 }
 
-func testsingleUePdu(tunnelMode config.TunnelMode, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, numPduSessions int) {
+func testsingleUePdu(tunnelMode config.TunnelMode, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeServiceRequest int, numPduSessions int) {
 	if tunnelMode != config.TunnelDisabled && timeBetweenRegistration < 500 {
 		log.Fatal("When using the --tunnel option, --timeBetweenRegistration must be equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
 	}
@@ -153,6 +154,12 @@ func testsingleUePdu(tunnelMode config.TunnelMode, loop bool, timeBetweenRegistr
 			TaskType: scenario.Idle,
 			Delay:    timeBeforeIdle,
 		})
+		if timeBeforeServiceRequest != 0 {
+			tasks = append(tasks, scenario.Task{
+				TaskType: scenario.ServiceRequest,
+				Delay:    timeBeforeIdle + timeBeforeServiceRequest,
+			})
+		}
 	}
 
 	if timeBeforeDeregistration != 0 {
