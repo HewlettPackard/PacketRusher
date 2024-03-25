@@ -99,7 +99,7 @@ func TestSingleUe(t *testing.T) {
 	ueScenarios := []scenario.UEScenario{ueScenario}
 
 	r := scenario.ScenarioManager{}
-	r.Start(gnbs, conf.AMF, ueScenarios, 0)
+	r.Start(gnbs, conf.AMF, ueScenarios)
 
 	time.Sleep(time.Duration(1000) * time.Millisecond)
 
