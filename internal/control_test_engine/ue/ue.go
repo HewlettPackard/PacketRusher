@@ -71,6 +71,8 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 					break
 				}
 				loop = ueMgrHandler(msg, ue)
+			case <-ue.GetDRX():
+				verifyPaging(ue)
 			}
 		}
 		ue.Terminate()
@@ -99,6 +101,19 @@ func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 	}
 }
 
+func verifyPaging(ue *context.UEContext) {
+	gnbTx := make(chan context2.UEMessage, 1)
+
+	ue.GetGnbInboundChannel() <- context2.UEMessage{GNBTx: gnbTx, FetchPagedUEs: true}
+	msg := <-gnbTx
+	for _, pagedUE := range msg.PagedUEs {
+		if ue.Get5gGuti() != nil && pagedUE.FiveGSTMSI != nil && [4]uint8(pagedUE.FiveGSTMSI.FiveGTMSI.Value) == ue.GetTMSI5G() {
+			ueMgrHandler(procedures.UeTesterMessage{Type: procedures.ServiceRequest}, ue)
+			return
+		}
+	}
+}
+
 func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 	loop := true
 	switch msg.Type {
@@ -119,15 +134,20 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 		// We switch UE to IDLE
 		ue.SetStateMM_IDLE()
 		trigger.SwitchToIdle(ue)
+		ue.CreateDRX(25 * time.Millisecond)
 	case procedures.ServiceRequest:
-		// Since gNodeB stopped communication after switching to Idle, we need to connect back to gNodeB
-		service.InitConn(ue, ue.GetGnbInboundChannel())
-		if ue.Get5gGuti() != nil {
-			trigger.InitServiceRequest(ue)
-		} else {
-			// If AMF did not assign us a GUTI, we have to fallback to the usual Registration/Authentification process
-			// PDU Sessions will still be recovered
-			trigger.InitRegistration(ue)
+		if ue.GetStateMM() == context.MM5G_IDLE {
+			ue.StopDRX()
+
+			// Since gNodeB stopped communication after switching to Idle, we need to connect back to gNodeB
+			service.InitConn(ue, ue.GetGnbInboundChannel())
+			if ue.Get5gGuti() != nil {
+				trigger.InitServiceRequest(ue)
+			} else {
+				// If AMF did not assign us a GUTI, we have to fallback to the usual Registration/Authentification process
+				// PDU Sessions will still be recovered
+				trigger.InitRegistration(ue)
+			}
 		}
 	case procedures.Terminate:
 		log.Info("[UE] Terminating UE as requested")
