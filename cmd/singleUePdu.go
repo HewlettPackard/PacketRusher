@@ -5,13 +5,8 @@
 package cmd
 
 import (
-	"fmt"
 	"my5G-RANTester/config"
-	"my5G-RANTester/internal/common/tools"
-	"my5G-RANTester/internal/scenario"
 	pcap "my5G-RANTester/internal/utils"
-	"sort"
-	"strconv"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -70,7 +65,7 @@ var singleUePduCmd = &cobra.Command{
 		timeBeforeIdle, _ := cmd.Flags().GetInt("timeBeforeIdle")
 		timeBeforeServiceRequest, _ := cmd.Flags().GetInt("timeBeforeServiceRequest")
 
-		testsingleUePdu(tunnelMode, loop, timeBetweenRegistration, timeBeforeDeregistration, timeBeforeNgapHandover, timeBeforeXnHandover, timeBeforeIdle, timeBeforeServiceRequest, numPduSessions)
+		testMultiUesInQueue(1, tunnelMode, false, loop, timeBetweenRegistration, timeBeforeDeregistration, timeBeforeNgapHandover, timeBeforeXnHandover, timeBeforeIdle, timeBeforeServiceRequest, numPduSessions, 0)
 
 	},
 }
@@ -89,123 +84,4 @@ func init() {
 	singleUePduCmd.Flags().BoolP("tunnel", "t", false, "Disable the creation of the GTP-U tunnel interface")
 	singleUePduCmd.Flags().Bool("tunnel-vrf", true, "Enable/disable VRP usage of the GTP-U tunnel interface.")
 	singleUePduCmd.Flags().String("pcap", "./dump.pcap", "Capture traffic to given PCAP file when a path is given")
-}
-
-func testsingleUePdu(tunnelMode config.TunnelMode, loop bool, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeServiceRequest int, numPduSessions int) {
-	if tunnelMode != config.TunnelDisabled && timeBetweenRegistration < 500 {
-		log.Fatal("When using the --tunnel option, --timeBetweenRegistration must be equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
-	}
-
-	if numPduSessions > 16 {
-		log.Fatal("You can't have more than 16 PDU Sessions per UE as per spec.")
-	}
-
-	cfg := config.GetConfig()
-
-	var err error
-	gnb2 := cfg.GNodeB
-	gnb2.PlmnList.GnbId = genereateGnbId(1, cfg.GNodeB.PlmnList.GnbId)
-
-	gnb2.ControlIF.Ip, err = tools.IncrementIP(cfg.GNodeB.ControlIF.Ip, "0.0.0.0/0")
-	if err != nil {
-		log.Fatal("[GNB][CONFIG] Error while allocating ip for N2: " + err.Error())
-	}
-	gnb2.DataIF.Ip, err = tools.IncrementIP(cfg.GNodeB.DataIF.Ip, "0.0.0.0/0")
-	if err != nil {
-		log.Fatal("[GNB][CONFIG] Error while allocating ip for N3: " + err.Error())
-	}
-
-	gnbs := []config.GNodeB{cfg.GNodeB, gnb2}
-	nextgnb := 0
-
-	tasks := []scenario.Task{
-		{
-			TaskType: scenario.AttachToGNB,
-			Parameters: struct {
-				GnbId string
-			}{gnbs[nextgnb].PlmnList.GnbId},
-		},
-		{
-			TaskType: scenario.Registration,
-		},
-	}
-
-	for i := 0; i < numPduSessions; i++ {
-		tasks = append(tasks, scenario.Task{
-			TaskType: scenario.NewPDUSession,
-		})
-	}
-
-	if timeBeforeNgapHandover != 0 {
-		tasks = append(tasks, scenario.Task{
-			TaskType: scenario.NGAPHandover,
-			Delay:    timeBeforeNgapHandover,
-		})
-	}
-
-	if timeBeforeXnHandover != 0 {
-		tasks = append(tasks, scenario.Task{
-			TaskType: scenario.XNHandover,
-			Delay:    timeBeforeXnHandover,
-		})
-	}
-	if timeBeforeIdle != 0 {
-		tasks = append(tasks, scenario.Task{
-			TaskType: scenario.Idle,
-			Delay:    timeBeforeIdle,
-		})
-		if timeBeforeServiceRequest != 0 {
-			tasks = append(tasks, scenario.Task{
-				TaskType: scenario.ServiceRequest,
-				Delay:    timeBeforeIdle + timeBeforeServiceRequest,
-			})
-		}
-	}
-
-	if timeBeforeDeregistration != 0 {
-		tasks = append(tasks, scenario.Task{
-			TaskType: scenario.Deregistration,
-			Delay:    timeBeforeDeregistration,
-		})
-	}
-
-	sort.Slice(tasks, func(i, j int) bool {
-		return tasks[i].Delay < tasks[j].Delay
-	})
-
-	sumDelay := 0
-	for i := 0; i < len(tasks); i++ {
-		tasks[i].Delay = tasks[i].Delay - sumDelay
-		sumDelay += tasks[i].Delay
-
-		if tasks[i].TaskType == scenario.NGAPHandover || tasks[i].TaskType == scenario.XNHandover {
-			nextgnb = (nextgnb + 1) % 2
-			tasks[i].Parameters.GnbId = gnbs[nextgnb].PlmnList.GnbId
-		}
-	}
-
-	ueScenario := scenario.UEScenario{
-		Config: cfg.Ue,
-		Tasks:  tasks,
-	}
-	ueScenarios := []scenario.UEScenario{ueScenario}
-
-	if loop {
-		ueScenario.Loop = timeBetweenRegistration
-	}
-
-	r := scenario.ScenarioManager{}
-	r.Start(gnbs, cfg.AMF, ueScenarios, 0)
-}
-
-func genereateGnbId(i int, gnbId string) string {
-
-	gnbId_int, err := strconv.ParseInt(gnbId, 16, 0)
-	if err != nil {
-		log.Fatal("[UE][CONFIG] Given gnbId is invalid")
-	}
-	base := int(gnbId_int) + i
-
-	gnbId = fmt.Sprintf("%06x", base)
-	return gnbId
 }
