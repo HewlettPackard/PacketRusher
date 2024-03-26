@@ -75,7 +75,7 @@ func TestSingleUe(t *testing.T) {
 	gnbs := []config.GNodeB{conf.GNodeB}
 	ueScenario := scenario.UEScenario{
 		Config:    conf.Ue,
-		Loop:      500,
+		Loop:      false,
 		ForceStop: 20000,
 		Tasks: []scenario.Task{
 			{
@@ -99,7 +99,7 @@ func TestSingleUe(t *testing.T) {
 	ueScenarios := []scenario.UEScenario{ueScenario}
 
 	r := scenario.ScenarioManager{}
-	r.Start(gnbs, conf.AMF, ueScenarios)
+	r.StartScenario(gnbs, conf.AMF, ueScenarios, 500)
 
 	time.Sleep(time.Duration(1000) * time.Millisecond)
 

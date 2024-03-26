@@ -102,16 +102,14 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 		})
 
 		sumDelay := 0
-		for j := 2; j < len(tasks); j++ {
-			tasks[j].Delay = max(0, tasks[j].Delay-sumDelay)
+		for j := 0; j < len(tasks); j++ {
+			tasks[j].Delay = tasks[j].Delay - sumDelay
 			sumDelay += tasks[j].Delay
 
 			if tasks[j].TaskType == scenario.NGAPHandover || tasks[j].TaskType == scenario.XNHandover {
 				tasks[j].Parameters.GnbId = gnbs[(len(gnbs)-2)+(nextgnb+1)%2].PlmnList.GnbId
 			}
 		}
-
-		tasks[1].Delay = i * timeBetweenRegistration
 
 		ueCfg := cfg.Ue
 		ueCfg.Msin = tools.IncrementMsin(i+1, cfg.Ue.Msin)
@@ -121,14 +119,14 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 		}
 
 		if loop {
-			ueScenario.Loop = timeBetweenRegistration // TODO: change this!
+			ueScenario.Loop = loop
 		}
 
 		ueScenarios = append(ueScenarios, ueScenario)
 	}
 
 	r := scenario.ScenarioManager{}
-	r.Start(gnbs, cfg.AMF, ueScenarios)
+	r.StartScenario(gnbs, cfg.AMF, ueScenarios, timeBetweenRegistration)
 }
 
 func nextGnbConf(gnb config.GNodeB, i int, baseId string) config.GNodeB {

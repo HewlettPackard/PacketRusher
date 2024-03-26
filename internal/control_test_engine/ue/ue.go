@@ -59,7 +59,7 @@ func NewUE(conf config.Ue, id int, ueMgrChannel chan procedures.UeTesterMessage,
 			select {
 			case msg, open := <-ue.GetGnbTx():
 				if !open {
-					log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with gNB was closed")
+					log.Warn("[UE][", ue.GetMsin(), "] communication with gNB was closed")
 					ue.SetGnbTx(nil)
 					break
 				}
