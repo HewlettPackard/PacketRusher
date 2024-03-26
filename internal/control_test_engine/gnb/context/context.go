@@ -7,7 +7,9 @@ package context
 import (
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"sync"
+	"time"
 
 	"github.com/free5gc/aper"
 	"github.com/free5gc/ngap/ngapConvert"
@@ -30,6 +32,8 @@ type GNBContext struct {
 	idAmfGenerator int64  // ran amf id
 	teidGenerator  uint32 // ran UE downlink Teid
 	ueIpGenerator  uint8  // ran ue ip.
+	pagedUEs       []PagedUE
+	pagedUELock    sync.Mutex
 }
 
 type DataInfo struct {
@@ -55,6 +59,11 @@ type ControlInfo struct {
 	gnbPort        int
 	inboundChannel chan UEMessage
 	n2             *sctp.SCTPConn
+}
+
+type PagedUE struct {
+	FiveGSTMSI *ngapType.FiveGSTMSI
+	Timestamp  time.Time
 }
 
 func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipData string, port, portData int) {
@@ -357,6 +366,35 @@ func (gnb *GNBContext) GetGnbIp() string {
 
 func (gnb *GNBContext) GetGnbPort() int {
 	return gnb.controlInfo.gnbPort
+}
+
+func (gnb *GNBContext) AddPagedUE(tmsi *ngapType.FiveGSTMSI) {
+	gnb.pagedUELock.Lock()
+	defer gnb.pagedUELock.Unlock()
+
+	pagedUE := PagedUE{
+		FiveGSTMSI: tmsi,
+		Timestamp:  time.Now(),
+	}
+	gnb.pagedUEs = append(gnb.pagedUEs, pagedUE)
+
+	go func() {
+		time.Sleep(time.Second)
+		gnb.pagedUELock.Lock()
+		i := slices.Index(gnb.pagedUEs, pagedUE)
+		if i == -1 {
+			return
+		}
+		gnb.pagedUEs = slices.Delete(gnb.pagedUEs, i, i)
+		gnb.pagedUELock.Unlock()
+	}()
+}
+
+func (gnb *GNBContext) GetPagedUEs() []PagedUE {
+	gnb.pagedUELock.Lock()
+	defer gnb.pagedUELock.Unlock()
+
+	return gnb.pagedUEs[:]
 }
 
 func (gnb *GNBContext) GetGnbIdInBytes() []byte {

@@ -19,4 +19,6 @@ type UEMessage struct {
 	UEContext         *GNBUe
 	IsHandover        bool
 	Idle              bool
+	FetchPagedUEs     bool
+	PagedUEs          []PagedUE
 }

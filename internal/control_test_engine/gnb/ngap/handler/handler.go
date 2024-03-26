@@ -975,14 +975,11 @@ func HandlerPaging(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 			tAIListForPaging = ies.Value.TAIListForPaging
 		}
 	}
-	_ = uEPagingIdentity
 	_ = tAIListForPaging
-	// TODO: Implement Paging
-	// Upon reception of the Paging with its TMSI, the UE must send a Service Request
-	// as in UE-initiated Service Request
-	// But: we need to figure out how the gNodeB may contact the UE when it's not in its context
-	// While avoiding adding a new channel, deadlock / sending to closed channels, having to jungle too much between channels when doing handover
-	log.Warnf("[GNB][AMF] UE Paging is not implemented, please manually reconnect UE with --timeBeforeReconnecting")
+
+	gnb.AddPagedUE(uEPagingIdentity.FiveGSTMSI)
+
+	log.Info("[GNB][AMF] Paging UE")
 }
 
 func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU) {

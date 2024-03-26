@@ -24,6 +24,16 @@ func gnbListen(gnb *context.GNBContext) {
 	for {
 		message := <-ln
 
+		if message.FetchPagedUEs {
+			if message.GNBTx != nil {
+				message.GNBTx <- context.UEMessage{PagedUEs: gnb.GetPagedUEs()}
+				close(message.GNBTx)
+			} else {
+				log.Info("[GNB] Unable to give PagedUEs to UE, GNBTx is nill")
+			}
+			continue
+		}
+
 		// TODO this region of the code may induces race condition.
 
 		// new instance GNB UE context

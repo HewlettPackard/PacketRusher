@@ -17,6 +17,7 @@ import (
 	"reflect"
 	"regexp"
 	"sync"
+	"time"
 
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/nas/security"
@@ -53,6 +54,7 @@ type UEContext struct {
 	gnbInboundChannel chan context.UEMessage
 	gnbRx             chan context.UEMessage
 	gnbTx             chan context.UEMessage
+	drx               *time.Ticker
 	PduSession        [16]*UEPDUSession
 	amfInfo           Amf
 
@@ -287,6 +289,23 @@ func (ue *UEContext) GetGnbRx() chan context.UEMessage {
 
 func (ue *UEContext) GetGnbTx() chan context.UEMessage {
 	return ue.gnbTx
+}
+
+func (ue *UEContext) GetDRX() <-chan time.Time {
+	if ue.drx == nil {
+		return nil
+	}
+	return ue.drx.C
+}
+
+func (ue *UEContext) StopDRX() {
+	if ue.drx != nil {
+		ue.drx.Stop()
+	}
+}
+
+func (ue *UEContext) CreateDRX(d time.Duration) {
+	ue.drx = time.NewTicker(d)
 }
 
 func (ue *UEContext) Lock() {
@@ -725,6 +744,9 @@ func (ue *UEContext) Terminate() {
 	if ue.gnbRx != nil {
 		close(ue.gnbRx)
 		ue.gnbRx = nil
+	}
+	if ue.drx != nil {
+		ue.drx.Stop()
 	}
 	ue.Unlock()
 	close(ue.scenarioChan)
