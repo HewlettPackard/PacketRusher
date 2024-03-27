@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/nas/security"
 
@@ -138,9 +139,6 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	// added key, AuthenticationManagementField and opc or op.
 	ue.SetAuthSubscription(k, opc, op, amf, sqn)
 
-	// added suci
-	suciV1, suciV2, suciV3, suciV4, suciV5 := ue.EncodeUeSuci()
-
 	// added mcc and mnc
 	ue.UeSecurity.mcc = mcc
 	ue.UeSecurity.mnc = mnc
@@ -163,22 +161,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 	ue.Dnn = dnn
 	ue.TunnelMode = tunnelMode
 
-	// encode mcc and mnc for mobileIdentity5Gs.
-	resu := ue.GetMccAndMncInOctets()
-	encodedRoutingIndicator := ue.GetRoutingIndicatorInOctets()
-
-	// added suci to mobileIdentity5GS
-	if len(ue.UeSecurity.Msin) == 8 {
-		ue.UeSecurity.Suci = nasType.MobileIdentity5GS{
-			Len:    12,
-			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], encodedRoutingIndicator[0], encodedRoutingIndicator[1], 0x00, 0x00, suciV4, suciV3, suciV2, suciV1},
-		}
-	} else if len(ue.UeSecurity.Msin) == 10 {
-		ue.UeSecurity.Suci = nasType.MobileIdentity5GS{
-			Len:    13,
-			Buffer: []uint8{0x01, resu[0], resu[1], resu[2], encodedRoutingIndicator[0], encodedRoutingIndicator[1], 0x00, 0x00, suciV5, suciV4, suciV3, suciV2, suciV1},
-		}
-	}
+	ue.UeSecurity.Suci = ue.EncodeSuci()
 
 	ue.gnbInboundChannel = gnbInboundChannel
 	ue.scenarioChan = scenarioChan
@@ -450,7 +433,7 @@ func (ue *UEContext) GetMccAndMncInOctets() []byte {
 	if len(mnc) == 2 {
 		res = fmt.Sprintf("%c%cf%c%c%c", mcc[1], mcc[2], mcc[0], mnc[0], mnc[1])
 	} else {
-		res = fmt.Sprintf("%c%c%c%c%c%c", mcc[1], mcc[2], mnc[2], mcc[0], mnc[0], mnc[1])
+		res = fmt.Sprintf("%c%c%c%c%c%c", mcc[1], mcc[2], mnc[0], mcc[0], mnc[1], mnc[2])
 	}
 
 	resu, _ := hex.DecodeString(res)
@@ -494,24 +477,33 @@ func (ue *UEContext) GetRoutingIndicatorInOctets() []byte {
 	return encodedRoutingIndicator
 }
 
-func (ue *UEContext) EncodeUeSuci() (uint8, uint8, uint8, uint8, uint8) {
-
-	// reverse imsi string.
-	aux := reverse(ue.UeSecurity.Msin)
-
-	// calculate decimal value.
-	suci, error := hex.DecodeString(aux)
-	if error != nil {
-		return 0, 0, 0, 0, 0
+func (ue *UEContext) EncodeSuci() nasType.MobileIdentity5GS {
+	msin := ue.GetMsin()
+	suci := nasType.MobileIdentity5GS{
+		Buffer: []uint8{nasMessage.SupiFormatImsi<<4 |
+			nasMessage.MobileIdentity5GSTypeSuci, 0x0, 0x0, 0x0, 0xf0, 0xff, 0x00, 0x00},
 	}
 
-	// return decimal value
-	// Function worked fine.
-	if len(ue.UeSecurity.Msin) == 8 {
-		return uint8(suci[0]), uint8(suci[1]), uint8(suci[2]), uint8(suci[3]), 0
-	} else {
-		return uint8(suci[0]), uint8(suci[1]), uint8(suci[2]), uint8(suci[3]), uint8(suci[4])
+	//mcc & mnc
+	mccmnc := ue.GetMccAndMncInOctets()
+	copy(suci.Buffer[1:], mccmnc)
+
+	routingIndicator := ue.GetRoutingIndicatorInOctets()
+	suci.Buffer[4] = routingIndicator[0]
+	suci.Buffer[5] = routingIndicator[1]
+
+	for i := 0; i < len(msin); i += 2 {
+		suci.Buffer = append(suci.Buffer, 0x0)
+		j := len(suci.Buffer) - 1
+		if i+1 == len(msin) {
+			suci.Buffer[j] = 0xf<<4 | hexCharToByte(msin[i])
+		} else {
+			suci.Buffer[j] = hexCharToByte(msin[i+1])<<4 | hexCharToByte(msin[i])
+		}
 	}
+
+	suci.Len = uint16(len(suci.Buffer))
+	return suci
 }
 
 func (ue *UEContext) GetAmfRegionId() uint8 {
@@ -761,5 +753,17 @@ func reverse(s string) string {
 		aux = string(valor) + aux
 	}
 	return aux
+}
 
+func hexCharToByte(c byte) byte {
+	switch {
+	case '0' <= c && c <= '9':
+		return c - '0'
+	case 'a' <= c && c <= 'f':
+		return c - 'a' + 10
+	case 'A' <= c && c <= 'F':
+		return c - 'A' + 10
+	}
+
+	return 0
 }

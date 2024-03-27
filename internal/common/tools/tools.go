@@ -216,6 +216,11 @@ func IncrementMsin(i int, msin string) string {
 	}
 	base := msin_int + (i - 1)
 
-	imsi := fmt.Sprintf("%010d", base)
+	var imsi string
+	if len(msin) == 9 {
+		imsi = fmt.Sprintf("%09d", base)
+	} else {
+		imsi = fmt.Sprintf("%010d", base)
+	}
 	return imsi
 }
