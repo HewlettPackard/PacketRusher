@@ -2,12 +2,11 @@
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
  */
-package service
+package ngap
 
 import (
 	"fmt"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
-	"my5G-RANTester/internal/control_test_engine/gnb/ngap"
 
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
@@ -19,7 +18,7 @@ func InitConn(amf *context.GNBAmf, gnb *context.GNBContext) error {
 
 	// check AMF IP and AMF port.
 	remote := fmt.Sprintf("%s:%d", amf.GetAmfIp(), amf.GetAmfPort())
-	local := fmt.Sprintf("%s:%d", gnb.GetGnbIp(), gnb.GetGnbPort() + ConnCount)
+	local := fmt.Sprintf("%s:%d", gnb.GetGnbIp(), gnb.GetGnbPort()+ConnCount)
 	ConnCount++
 
 	rem, err := sctp.ResolveSCTPAddr("sctp", remote)
@@ -83,7 +82,7 @@ func GnbListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 		copy(forwardData, buf[:n])
 
 		// handling NGAP message.
-		go ngap.Dispatch(amf, gnb, forwardData)
+		go Dispatch(amf, gnb, forwardData)
 
 	}
 

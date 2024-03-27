@@ -3,7 +3,7 @@
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
  * © Copyright 2023-2024 Valentin D'Emmanuele
  */
-package handler
+package ngap
 
 import (
 	"encoding/binary"
@@ -11,6 +11,9 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
+
+	"strconv"
+
 	_ "net"
 
 	"github.com/free5gc/aper"
@@ -674,13 +677,120 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 	log.Info("[GNB][NGAP] Releasing UE Context, cause: ", causeToString(cause))
 }
 
+func bytesToIpv4String(bs []byte) string {
+	var s string
+	for i, b := range bs {
+		if i > 3 {
+			break
+		}
+		s += strconv.FormatInt(int64(b), 10)
+		s += "."
+	}
+	return s[:len(s)-1]
+}
+
 func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 
 	// TODO: Implement update AMF Context from AMFConfigurationUpdate
 	_ = message.InitiatingMessage.Value.AMFConfigurationUpdate
-	log.Warn("[GNB][AMF] Ignoring AMFConfigurationUpdate but send AMFConfigurationUpdateAcknowledge")
-	log.Warn("[GNB][AMF] TODO: Implement update AMF Context from AMFConfigurationUpdate")
 
+	for _, amf := range context.GNBAmfList {
+		tnla := amf.GetTNLA()
+		log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
+		amf.GetAmfName(), amf.GetAmfIp(), amf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
+	}
+
+	log.Info("[GNB][AMF] Receive AMF Configuration Update")
+
+	var amfName string
+	var amfCapacity int64
+
+	valueMessage := message.InitiatingMessage.Value.AMFConfigurationUpdate
+	for _, ie := range valueMessage.ProtocolIEs.List {
+		switch ie.Id.Value {
+
+		case ngapType.ProtocolIEIDAMFName:
+			amfName = ie.Value.AMFName.Value
+
+		case ngapType.ProtocolIEIDServedGUAMIList:
+
+		case ngapType.ProtocolIEIDRelativeAMFCapacity:
+			amfCapacity = ie.Value.RelativeAMFCapacity.Value
+
+		case ngapType.ProtocolIEIDAMFTNLAssociationToAddList:
+			toAddList := ie.Value.AMFTNLAssociationToAddList
+			for _, toAddItem := range toAddList.List {
+				bitLen := toAddItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
+				var ipv4String string
+				if bitLen == 32 || bitLen == 160 {
+					ipv4String = bytesToIpv4String(toAddItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.Bytes)
+				}
+
+				port := 38412 // default sctp port
+				amf := gnb.NewGnBAmf(ipv4String, port)
+				context.GNBAmfList = append(context.GNBAmfList, amf) // add new amf to GNBAmfList
+
+				// start communication with AMF(SCTP).
+				if err := InitConn(amf, gnb); err != nil {
+					log.Fatal("Error in", err)
+				} else {
+					log.Info("[GNB] SCTP/NGAP service is running")
+					// wg.Add(1)
+				}
+
+				trigger.SendNgSetupRequest(gnb, amf)
+
+			}
+
+		case ngapType.ProtocolIEIDAMFTNLAssociationToRemoveList:
+			toRemoveList := ie.Value.AMFTNLAssociationToRemoveList
+			for _, toRemoveItem := range toRemoveList.List {
+				bitLen := toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
+				var ipv4String string
+				if bitLen == 32 || bitLen == 160 {
+					ipv4String = bytesToIpv4String(toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.Bytes)
+				}
+				port := 38412 // default sctp port
+				for i, amf := range context.GNBAmfList {
+					if amf.GetAmfIp() == ipv4String && amf.GetAmfPort() == port {
+						tnla := amf.GetTNLA()
+						tnla.Release() // Close SCTP Conntection
+						amf = nil // with Golang garbage collection mechenism
+						context.GNBAmfList = append(context.GNBAmfList[:i], context.GNBAmfList[i+1:]...)
+						break
+					}
+				}
+			}
+
+		case ngapType.ProtocolIEIDAMFTNLAssociationToUpdateList:
+			toUpdateList := ie.Value.AMFTNLAssociationToUpdateList
+			for _, toUpdateItem := range toUpdateList.List {
+				bitLen := toUpdateItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
+				var ipv4String string
+				if bitLen == 32 || bitLen == 160 {
+					ipv4String = bytesToIpv4String(toUpdateItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.Bytes)
+				}
+				port := 38412 // default sctp port
+				for _, amf := range context.GNBAmfList {
+					if amf.GetAmfIp() == ipv4String && amf.GetAmfPort() == port {
+						amf.SetAmfName(amfName)
+						amf.SetAmfCapacity(amfCapacity)
+
+						amf.SetTNLAUsage(toUpdateItem.TNLAssociationUsage.Value)
+						amf.SetTNLAWeight(toUpdateItem.TNLAddressWeightFactor.Value)
+						break
+					}
+				}
+			}
+
+			// default:
+		}
+	}
+	for _, amf := range context.GNBAmfList {
+		tnla := amf.GetTNLA()
+		log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
+		amf.GetAmfName(), amf.GetAmfIp(), amf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
+	}
 	trigger.SendAmfConfigurationUpdateAcknowledge(amf)
 }
 

@@ -7,6 +7,7 @@ package context
 import (
 	"fmt"
 
+	"github.com/free5gc/aper"
 	"github.com/ishidawataru/sctp"
 )
 
@@ -33,10 +34,12 @@ type GNBAmf struct {
 	// TODO implement the other fields of the AMF Context
 }
 
+var GNBAmfList []*GNBAmf
+
 type TNLAssociation struct {
 	sctpConn         *sctp.SCTPConn
 	tnlaWeightFactor int64
-	usage            bool
+	usage            aper.Enumerated
 	streams          uint16
 }
 
@@ -153,8 +156,20 @@ func (amf *GNBAmf) AddedSlice(sst string, sd string) {
 	amf.lenSlice++
 }
 
-func (amf *GNBAmf) getTNLAs() TNLAssociation {
+func (amf *GNBAmf) GetTNLA() TNLAssociation {
 	return amf.tnla
+}
+
+func (tnla *TNLAssociation) GetWeightFactor() int64 {
+	return tnla.tnlaWeightFactor
+}
+
+func (tnla *TNLAssociation) GetUsage() aper.Enumerated {
+	return tnla.usage
+}
+
+func (tnla *TNLAssociation) Release() error {
+	return tnla.sctpConn.Close()
 }
 
 func (amf *GNBAmf) SetStateInactive() {
@@ -181,11 +196,11 @@ func (amf *GNBAmf) SetSCTPConn(conn *sctp.SCTPConn) {
 	amf.tnla.sctpConn = conn
 }
 
-func (amf *GNBAmf) setTNLAWeight(weight int64) {
+func (amf *GNBAmf) SetTNLAWeight(weight int64) {
 	amf.tnla.tnlaWeightFactor = weight
 }
 
-func (amf *GNBAmf) setTNLAUsage(usage bool) {
+func (amf *GNBAmf) SetTNLAUsage(usage aper.Enumerated) {
 	amf.tnla.usage = usage
 }
 
