@@ -255,13 +255,14 @@ void gtp5g_xmit_skb_ipv4(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
 
 inline void gtp5g_set_pktinfo_ipv4(struct gtp5g_pktinfo *pktinfo,
     struct sock *sk, struct iphdr *iph, struct outer_header_creation *hdr_creation,
-    u8 qfi, struct rtable *rt, struct flowi4 *fl4,
+    u8 qfi, u16 seq_number, struct rtable *rt, struct flowi4 *fl4,
     struct net_device *dev)
 {
     pktinfo->sk = sk;
     pktinfo->iph = iph;
     pktinfo->hdr_creation = hdr_creation;
     pktinfo->qfi = qfi;
+    pktinfo->seq_number = seq_number;
     pktinfo->rt = rt;
     pktinfo->fl4 = *fl4;
     pktinfo->dev = dev;
@@ -273,7 +274,12 @@ void gtp5g_push_header(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
     struct gtpv1_hdr *gtp1;
     gtpv1_hdr_opt_t *gtp1opt;
     ext_pdu_sess_ctr_t *dl_pdu_sess;
+    u16 seq_number = 0;
+    u8 next_ehdr_type = 0;
+
     int ext_flag = 0;
+    int opt_flag = 0;
+    int seq_flag = get_seq_enable();
 
     GTP5G_TRC(NULL, "SKBLen(%u) GTP-U V1(%zu) Opt(%zu) DL_PDU(%zu)\n", 
         payload_len, sizeof(*gtp1), sizeof(*gtp1opt), sizeof(*dl_pdu_sess));
@@ -295,11 +301,21 @@ void gtp5g_push_header(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
         //TODO: PPI
         dl_pdu_sess->next_ehdr_type = 0; /* No more extension Header */
         
+        opt_flag = 1;
+        next_ehdr_type = 0x85; /* PDU Session Container */
+    }
+
+    if (seq_flag){
+        opt_flag = 1;
+        seq_number = htons(pktinfo->seq_number);
+    }
+
+    if (opt_flag) {
         /* Push optional header information */
         gtp1opt = skb_push(skb, sizeof(*gtp1opt));
-        gtp1opt->seq_number = 0;
+        gtp1opt->seq_number = seq_number;
         gtp1opt->NPDU = 0;
-        gtp1opt->next_ehdr_type = 0x85; /* PDU Session Container */
+        gtp1opt->next_ehdr_type = next_ehdr_type;
         // Increment the GTP-U payload length by size of optional headers length
         payload_len += (sizeof(*gtp1opt) + sizeof(*dl_pdu_sess));
     }
@@ -314,6 +330,8 @@ void gtp5g_push_header(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
     gtp1->flags = GTPV1; /* v1, GTP-non-prime. */
     if (ext_flag) 
         gtp1->flags |= GTPV1_HDR_FLG_EXTHDR; /* v1, Extension header enabled */ 
+    if (seq_flag)
+        gtp1->flags |= GTPV1_HDR_FLG_SEQ;
     gtp1->type = GTPV1_MSG_TYPE_TPDU;
     gtp1->tid = pktinfo->hdr_creation->teid;
     gtp1->length = htons(payload_len);       /* Excluded the header length of gtpv1 */

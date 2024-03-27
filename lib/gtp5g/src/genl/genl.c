@@ -1,4 +1,5 @@
 #include <linux/module.h>
+#include <linux/version.h>
 #include <net/genetlink.h>
 
 #include "genl.h"
@@ -179,4 +180,7 @@ struct genl_family gtp5g_genl_family __ro_after_init = {
     .n_ops      = ARRAY_SIZE(gtp5g_genl_ops),
     .mcgrps     = gtp5g_genl_mcgrps,
     .n_mcgrps   = ARRAY_SIZE(gtp5g_genl_mcgrps),
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
+    .resv_start_op = GTP5G_ATTR_MAX,
+#endif
 };

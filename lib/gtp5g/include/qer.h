@@ -19,6 +19,9 @@ struct qer {
         uint32_t dl_high;
         uint8_t dl_low;
     } mbr;
+    u64 ul_mbr;
+    u64 dl_mbr;
+
     struct {
         uint32_t ul_high;
         uint8_t ul_low;
@@ -32,6 +35,8 @@ struct qer {
     uint8_t rcsr;
     struct net_device *dev;
     struct rcu_head rcu_head;
+
+    TrafficPolicer  *ul_policer, *dl_policer;  
 };
 
 extern void qer_context_delete(struct qer *);
@@ -41,5 +46,6 @@ extern void qer_append(u64, u32, struct qer *, struct gtp5g_dev *);
 extern int qer_get_pdr_ids(u16 *, int, struct qer *, struct gtp5g_dev *);
 extern int qer_set_pdr(struct pdr *, struct gtp5g_dev *);
 extern void del_related_qer_hash(struct gtp5g_dev *, struct pdr *);
+extern void set_pdr_qer_with_rate_null(struct qer *, struct gtp5g_dev *);
 
 #endif // __QER_H__

@@ -51,7 +51,8 @@ EXTRA_CFLAGS += -I $(MAKEFILE_DIR)/include
 			src/gtpu/hash.o \
 			src/gtpu/link.o \
 			src/gtpu/net.o \
-			src/gtpu/pktinfo.o
+			src/gtpu/pktinfo.o \
+			src/gtpu/trTCM.o
 
 5G_GENL := src/genl/genl.o \
 			src/genl/genl_version.o \

@@ -4,6 +4,18 @@
 #include "seid.h"
 #include "hash.h"
 
+int seq_enable = 1; // set Seq enable as default value
+
+int get_seq_enable()
+{
+    return seq_enable;
+}
+
+void set_seq_enable(int val)
+{
+    seq_enable = val;
+}
+
 static void seid_far_id_to_hex_str(u64 seid_int, u32 far_id, char *buff)
 {
     seid_and_u32id_to_hex_str(seid_int, far_id, buff);

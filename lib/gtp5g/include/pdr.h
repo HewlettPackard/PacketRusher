@@ -10,6 +10,7 @@
 #include <net/ip.h>
 
 #include "urr.h"
+#include "trTCM.h"
 
 #define SEID_U32ID_HEX_STR_LEN 24
 
@@ -69,9 +70,9 @@ struct pdr {
     u32 *qer_ids; 
     u32 qer_num;
     u8  qfi;
+    struct qer __rcu *qer_with_rate;
     u32 *urr_ids;
     u32 urr_num;
-    struct urr *urr;
     
     /* deprecated: AF_UNIX socket for buffer */
     struct sockaddr_un addr_unix;
@@ -109,6 +110,12 @@ extern void pdr_update_hlist_table(struct pdr *, struct gtp5g_dev *);
 extern void unix_sock_client_delete(struct pdr *);
 extern int unix_sock_client_new(struct pdr *);
 extern int unix_sock_client_update(struct pdr *, struct far *);
+
+extern int get_qos_enable(void);
+extern void set_qos_enable(int);
+
+extern int get_seq_enable(void);
+extern void set_seq_enable(int);
 
 static inline bool pdr_addr_is_netlink(struct pdr *pdr)
 {

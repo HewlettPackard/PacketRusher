@@ -6,6 +6,7 @@
 #include "genl.h"
 #include "genl_qer.h"
 #include "qer.h"
+#include "hash.h"
 
 #include <linux/rculist.h>
 #include <net/netns/generic.h>
@@ -158,6 +159,14 @@ int gtp5g_genl_del_qer(struct sk_buff *skb, struct genl_info *info)
         return -ENOENT;
     }
 
+    // free QoS traffic policer 
+    kfree(qer->ul_policer);
+    qer->ul_policer = NULL;
+    kfree(qer->dl_policer);
+    qer->dl_policer = NULL;
+    // set related PDR qer_with_rate to NULL
+    set_pdr_qer_with_rate_null(qer, gtp);
+
     qer_context_delete(qer);
     rcu_read_unlock();
 
@@ -284,6 +293,9 @@ out:
     return skb->len;
 }
 
+u64 concat_bit_rate(u32 highbit, u8 lowbit) {
+    return (highbit << 8) | lowbit;
+}
 
 static int qer_fill(struct qer *qer, struct gtp5g_dev *gtp, struct genl_info *info)
 {
@@ -307,6 +319,11 @@ static int qer_fill(struct qer *qer, struct gtp5g_dev *gtp, struct genl_info *in
         qer->mbr.ul_low  = nla_get_u8(mbr_param_attrs[GTP5G_QER_MBR_UL_LOW8]);
         qer->mbr.dl_high = nla_get_u32(mbr_param_attrs[GTP5G_QER_MBR_DL_HIGH32]);
         qer->mbr.dl_low  = nla_get_u8(mbr_param_attrs[GTP5G_QER_MBR_DL_LOW8]);
+
+        qer->ul_mbr = concat_bit_rate(qer->mbr.ul_high, qer->mbr.ul_low);
+        qer->dl_mbr = concat_bit_rate(qer->mbr.dl_high, qer->mbr.dl_low);
+        qer->ul_policer = newTrafficPolicer(qer->ul_mbr);
+        qer->dl_policer = newTrafficPolicer(qer->dl_mbr);
     }
 
     /* GBR */

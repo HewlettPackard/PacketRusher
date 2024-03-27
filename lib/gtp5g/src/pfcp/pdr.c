@@ -13,6 +13,17 @@
 #include "log.h"
 #include <linux/types.h>
 
+int qos_enable = 0; // set QoS disable as default value
+
+int get_qos_enable()
+{
+    return qos_enable;
+}
+
+void set_qos_enable(int val)
+{
+    qos_enable = val;
+}
 
 static void seid_pdr_id_to_hex_str(u64 seid_int, u16 pdr_id, char *buff)
 {
