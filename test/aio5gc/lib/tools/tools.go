@@ -8,7 +8,7 @@ import (
 	"my5G-RANTester/config"
 )
 
-func GenerateDefaultConf(controlIF config.ControlIF, dataIF config.DataIF, amf config.AMF) config.Config {
+func GenerateDefaultConf(controlIF config.ControlIF, dataIF config.DataIF, amfs []*config.AMF) config.Config {
 	return config.Config{
 		GNodeB: config.GNodeB{
 			ControlIF: controlIF,
@@ -51,7 +51,7 @@ func GenerateDefaultConf(controlIF config.ControlIF, dataIF config.DataIF, amf c
 				Nea2: true,
 			},
 		},
-		AMF: amf,
+		AMFs: amfs,
 		Logs: config.Logs{
 			Level: 4,
 		},
