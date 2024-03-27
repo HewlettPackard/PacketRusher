@@ -9,6 +9,7 @@ import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/service"
+	"reflect"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/ngap/ngapType"
@@ -78,7 +79,7 @@ func (f *FiveGCBuilder) Build() (*context.Aio5gc, error) {
 	amfName := "amf.5gc.3gppnetwork.org" // TODO generate Name
 
 	fgc := context.Aio5gc{}
-	if (f.config == config.Config{}) {
+	if reflect.DeepEqual(f.config, config.Config{}) {
 		return &context.Aio5gc{}, errors.New("No configuration provided")
 	}
 	err := fgc.Init(f.config, amfId, amfName, f.ueCallbacks, f.pduCallbacks)
@@ -93,6 +94,8 @@ func (f *FiveGCBuilder) Build() (*context.Aio5gc, error) {
 	if f.ngapHook != nil {
 		fgc.SetNgapHooks(f.ngapHook)
 	}
-	go service.RunServer(f.config.AMF.Ip, f.config.AMF.Port, &fgc)
+	for _, amf := range f.config.AMFs {
+		go service.RunServer(amf.Ip, amf.Port, &fgc)
+	}
 	return &fgc, nil
 }

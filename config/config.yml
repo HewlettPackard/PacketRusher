@@ -39,7 +39,7 @@ ue:
     nea2: true
     nea3: false
 amfif:
-  ip: "192.168.11.30"
-  port: 38412
+  - ip: "192.168.11.30"
+    port: 38412
 logs:
     level: 4
