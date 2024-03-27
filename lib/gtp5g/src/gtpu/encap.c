@@ -39,12 +39,12 @@ static int gtp5g_encap_recv(struct sock *, struct sk_buff *);
 static int gtp1u_udp_encap_recv(struct gtp5g_dev *, struct sk_buff *);
 static int gtp5g_rx(struct pdr *, struct sk_buff *, unsigned int, unsigned int);
 static int gtp5g_fwd_skb_encap(struct sk_buff *, struct net_device *,
-        unsigned int, struct pdr *, struct far *, uint64_t);
+        unsigned int, struct pdr *, struct far *);
 static int netlink_send(struct pdr *, struct far *, struct sk_buff *, struct net *, struct usage_report *, u32);
 static int unix_sock_send(struct pdr *, struct far *, void *, u32, u32);
 static int gtp5g_fwd_skb_ipv4(struct sk_buff *, 
     struct net_device *, struct gtp5g_pktinfo *, 
-    struct pdr *, struct far *, uint64_t);
+    struct pdr *, struct far *);
 
 /* When gtp5g newlink, establish the udp tunnel used in N3 interface */
 struct sock *gtp5g_encap_enable(int fd, int type, struct gtp5g_dev *gtp){
@@ -140,16 +140,18 @@ static int gtp5g_encap_recv(struct sock *sk, struct sk_buff *skb)
     }
 
     switch (ret) {
-    case 1:
-        GTP5G_ERR(gtp->dev, "Pass up to the process\n");
+    case PKT_TO_APP: // packet that gtp5g cannot handle
+        GTP5G_TRC(gtp->dev, "Pass up to the process\n");
         break;
-    case 0:
+    case PKT_FORWARDED:
         break;
-    case -1:
-        GTP5G_ERR(gtp->dev, "GTP packet has been dropped\n");
+    case PKT_DROPPED:
+        GTP5G_TRC(gtp->dev, "GTP packet has been dropped\n");
         kfree_skb(skb);
         ret = 0;
         break;
+    default:
+        GTP5G_ERR(gtp->dev, "Unhandled return value from gtp1u_udp_encap_recv\n");
     }
 
     return ret;
@@ -242,14 +244,14 @@ static int gtp1u_udp_encap_recv(struct gtp5g_dev *gtp, struct sk_buff *skb)
 
     if (!pskb_may_pull(skb, pull_len)) {
         GTP5G_ERR(gtp->dev, "Failed to pull skb length %#x\n", pull_len);
-        return -1;
+        return PKT_DROPPED;
     }
 
     gtpv1 = (struct gtpv1_hdr *)(skb->data + sizeof(struct udphdr));
     if ((gtpv1->flags >> 5) != GTP_V1) {
         GTP5G_ERR(gtp->dev, "GTP version is not v1: %#x\n",
             gtpv1->flags);
-        return 1;
+        return PKT_TO_APP;
     }
 
     gtp_type = gtpv1->type;
@@ -264,7 +266,7 @@ static int gtp1u_udp_encap_recv(struct gtp5g_dev *gtp, struct sk_buff *skb)
     if (gtp_type != GTPV1_MSG_TYPE_TPDU && gtp_type != GTPV1_MSG_TYPE_EMARK) {
         GTP5G_ERR(gtp->dev, "GTP-U message type is not a TPDU or End Marker: %#x\n",
             gtp_type);
-        return 1;
+        return PKT_TO_APP;
     }
 
     /** TS 29.281 Chapter 5.1 and Figure 5.1-1
@@ -281,7 +283,7 @@ static int gtp1u_udp_encap_recv(struct gtp5g_dev *gtp, struct sk_buff *skb)
         pull_len = hdrlen;
         if (!pskb_may_pull(skb, pull_len)) {
             GTP5G_ERR(gtp->dev, "Failed to pull skb length %#x\n", pull_len);
-            return -1;
+            return PKT_DROPPED;
         }
 
         /** TS 29.281 Chapter 5.2 and Figure 5.2.1-1
@@ -294,18 +296,18 @@ static int gtp1u_udp_encap_recv(struct gtp5g_dev *gtp, struct sk_buff *skb)
             pull_len = hdrlen + 1; // 1 byte for the length of extension hdr
             if (!pskb_may_pull(skb, pull_len)) {
                 GTP5G_ERR(gtp->dev, "Failed to pull skb length %#x\n", pull_len);
-                return -1;
+                return PKT_DROPPED;
             }
             extlen = (*((u8 *)(skb->data + hdrlen))) * 4; // total length of extension hdr
             if (extlen == 0) {
                 GTP5G_ERR(gtp->dev, "Invalid extention header length\n");
-                return -1;
+                return PKT_DROPPED;
             }
             hdrlen += extlen;
             pull_len = hdrlen;
             if (!pskb_may_pull(skb, pull_len)) {
                 GTP5G_ERR(gtp->dev, "Failed to pull skb length %#x\n", pull_len);
-                return -1;
+                return PKT_DROPPED;
             }
             switch (ext_hdr_type) {
                 case GTPV1_NEXT_EXT_HDR_TYPE_85:
@@ -327,7 +329,7 @@ static int gtp1u_udp_encap_recv(struct gtp5g_dev *gtp, struct sk_buff *skb)
     pdr = pdr_find_by_gtp1u(gtp, skb, hdrlen, teid, gtp_type);
     if (!pdr) {
         GTP5G_ERR(gtp->dev, "No PDR match this skb : teid[%d]\n", ntohl(teid));
-        return -1;
+        return PKT_DROPPED;
     }
 
     return gtp5g_rx(pdr, skb, hdrlen, gtp->role);
@@ -341,8 +343,9 @@ static int gtp5g_drop_skb_encap(struct sk_buff *skb, struct net_device *dev,
         pdr->ul_drop_cnt++;
         GTP5G_INF(NULL, "PDR (%u) UL_DROP_CNT (%llu)", pdr->id, pdr->ul_drop_cnt);
     }
-    dev_kfree_skb(skb);
-    return 0;
+    
+    // release skb in outer function
+    return PKT_DROPPED;
 }
 
 static int gtp5g_buf_skb_encap(struct sk_buff *skb, struct net_device *dev, 
@@ -356,7 +359,7 @@ static int gtp5g_buf_skb_encap(struct sk_buff *skb, struct net_device *dev,
                 skb->protocol,
                 !net_eq(sock_net(pdr->sk), dev_net(dev)))) {
             GTP5G_ERR(dev, "Failed to pull GTP-U and UDP headers\n");
-            return -1;
+            return PKT_DROPPED;
         }
 
         if (pdr_addr_is_netlink(pdr)) {
@@ -372,7 +375,7 @@ static int gtp5g_buf_skb_encap(struct sk_buff *skb, struct net_device *dev,
         }
     }
     dev_kfree_skb(skb);
-    return 0;
+    return PKT_FORWARDED;
 }
 
 /* Function netlink_{...} are used to handle buffering */
@@ -529,6 +532,10 @@ bool increment_and_check_counter(struct VolumeMeasurement *volmeasure, struct Vo
         return false;
     }
 
+    if (vol == 0) {
+        return false;
+    }
+
     if (mnop) {
         if (uplink) {
             volmeasure->uplinkPktNum++;
@@ -561,7 +568,7 @@ bool increment_and_check_counter(struct VolumeMeasurement *volmeasure, struct Vo
     return false;
 }
 
-int check_urr(struct pdr *pdr, struct far *far, u64 vol, u64 vol_mbqe, bool uplink) {
+int update_urr_counter_and_send_report(struct pdr *pdr, struct far *far, u64 vol, u64 vol_mbqe, bool uplink) {
     struct gtp5g_dev *gtp = netdev_priv(pdr->dev);
     int i;
     int ret = 1;
@@ -574,6 +581,12 @@ int check_urr(struct pdr *pdr, struct far *far, u64 vol, u64 vol_mbqe, bool upli
     bool mnop;
     struct sk_buff *skb;
     
+    // vol_mbqe(volume of measurement before QoS enforcement) is zero(payload is zero), 
+    // no need to add volume and packet count
+    if (vol_mbqe == 0) {
+        return ret;
+    }
+
     urrs = kzalloc(sizeof(struct urr *) * pdr->urr_num , GFP_ATOMIC);
     triggers = kzalloc(sizeof(u32) * pdr->urr_num , GFP_ATOMIC);
     if (!urrs || !triggers) {
@@ -606,9 +619,6 @@ int check_urr(struct pdr *pdr, struct far *far, u64 vol, u64 vol_mbqe, bool upli
                 }
 
                 if (urr->info & URR_INFO_MBQE) {
-                    // TODO: gtp5g isn't support QoS enforcement yet
-                    // Currently MBQE Volume = MAQE Volume
-                    vol_mbqe = vol;
                     volume = vol_mbqe;
                 } else {
                     volume = vol;
@@ -621,7 +631,7 @@ int check_urr(struct pdr *pdr, struct far *far, u64 vol, u64 vol_mbqe, bool upli
                     }
                 } else {
                     // For other triggers, only increment bytes
-                    increment_and_check_counter(&urr->bytes, NULL, volume, uplink,mnop);
+                    increment_and_check_counter(&urr->bytes, NULL, volume, uplink, mnop);
                 }
                 if (urr->trigger & URR_RPT_TRIGGER_VOLQU) {
                     if (increment_and_check_counter(&urr->consumed, &urr->volumequota, volume, uplink, mnop)) {
@@ -687,7 +697,6 @@ static int gtp5g_rx(struct pdr *pdr, struct sk_buff *skb,
     unsigned int hdrlen, unsigned int role)
 {
     int rt = -1;
-    u64 volume_mbqe = 0;
     struct far *far = rcu_dereference(pdr->far);
     // struct qer *qer = rcu_dereference(pdr->qer);
 
@@ -695,12 +704,6 @@ static int gtp5g_rx(struct pdr *pdr, struct sk_buff *skb,
         GTP5G_ERR(pdr->dev, "FAR not exists for PDR(%u)\n", pdr->id);
         goto out;
     }
-
-    //TODO: QER
-    //if (qer) {
-    //    printk_ratelimited("%s:%d QER Rule found, id(%#x) qfi(%#x)\n", __func__, __LINE__,
-    //        qer->id, qer->qfi);
-    //}
 
     // TODO: not reading the value of outer_header_removal now,
     // just check if it is assigned.
@@ -713,7 +716,7 @@ static int gtp5g_rx(struct pdr *pdr, struct sk_buff *skb,
             rt = gtp5g_drop_skb_encap(skb, pdr->dev, pdr);
             break;
         case FAR_ACTION_FORW:
-            rt = gtp5g_fwd_skb_encap(skb, pdr->dev, hdrlen, pdr, far, volume_mbqe);
+            rt = gtp5g_fwd_skb_encap(skb, pdr->dev, hdrlen, pdr, far);
             break;
         case FAR_ACTION_BUFF:
             rt = gtp5g_buf_skb_encap(skb, pdr->dev, hdrlen, pdr, far);
@@ -734,7 +737,7 @@ out:
 }
 
 static int gtp5g_fwd_skb_encap(struct sk_buff *skb, struct net_device *dev,
-    unsigned int hdrlen, struct pdr *pdr, struct far *far, uint64_t volume_mbqe)
+    unsigned int hdrlen, struct pdr *pdr, struct far *far)
 {
     struct forwarding_parameter *fwd_param = rcu_dereference(far->fwd_param);
     struct outer_header_creation *hdr_creation;
@@ -744,10 +747,26 @@ static int gtp5g_fwd_skb_encap(struct sk_buff *skb, struct net_device *dev,
     struct udphdr *uh;
     struct pcpu_sw_netstats *stats;
     int ret;
-    u64 volume = 0;
+    u64 volume, volume_mbqe = 0;
 
+    TrafficPolicer* tp = NULL;
+    Color color = Green;
+    struct qer __rcu *qer_with_rate = NULL;
+    
     if (gtp1->type == GTPV1_MSG_TYPE_TPDU)
-        volume = ip4_rm_header(skb, hdrlen);
+        volume_mbqe = ip4_rm_header(skb, hdrlen);
+
+    qer_with_rate = rcu_dereference(pdr->qer_with_rate);
+    if (qer_with_rate != NULL)
+        tp = qer_with_rate->ul_policer;
+    if (get_qos_enable() && tp != NULL) {
+        color = policePacket(tp, volume_mbqe);
+    }
+    if (color == Red) {
+        volume = 0;
+    } else {
+        volume = volume_mbqe;
+    }
 
     if (fwd_param) {
         if ((fwd_policy = fwd_param->fwd_policy))
@@ -774,23 +793,27 @@ static int gtp5g_fwd_skb_encap(struct sk_buff *skb, struct net_device *dev,
             uh->check = 0;
 
             if (pdr->urr_num != 0) {
-                ret = check_urr(pdr, far, volume, volume_mbqe, true);
+                ret = update_urr_counter_and_send_report(pdr, far, volume, volume_mbqe, true);
                 if (ret < 0) {
                     if (ret == DONT_SEND_UL_PACKET) {
-                        GTP5G_ERR(pdr->dev, "Should not foward the first uplink packet");
-                        return -1;
+                        GTP5G_INF(pdr->dev, "Should not foward the first uplink packet");
+                        return PKT_DROPPED;
                     } else {
                         GTP5G_ERR(pdr->dev, "Fail to send Usage Report");
                     }
                 }
             }
 
+            if (color == Red) {
+                GTP5G_TRC(pdr->dev, "Drop red packet");
+                return PKT_DROPPED;
+            }
             if (ip_xmit(skb, pdr->sk, dev) < 0) {
                 GTP5G_ERR(dev, "Failed to transmit skb through ip_xmit\n");
-                return -1;
+                return PKT_DROPPED;
             }
 
-            return 0;
+            return PKT_FORWARDED;
         }
     }
 
@@ -806,7 +829,7 @@ static int gtp5g_fwd_skb_encap(struct sk_buff *skb, struct net_device *dev,
             !net_eq(sock_net(pdr->sk), 
             dev_net(dev)))) {
         GTP5G_ERR(dev, "Failed to pull GTP-U and UDP headers\n");
-        return -1;
+        return PKT_DROPPED;
     }
 
     /* Now that the UDP and the GTP header have been removed, set up the
@@ -830,19 +853,23 @@ static int gtp5g_fwd_skb_encap(struct sk_buff *skb, struct net_device *dev,
 
     pdr->ul_pkt_cnt++;
     pdr->ul_byte_cnt += skb->len; /* length without GTP header */
-    GTP5G_INF(NULL, "PDR (%u) UL_PKT_CNT (%llu) UL_BYTE_CNT (%llu)", pdr->id, pdr->ul_pkt_cnt, pdr->ul_byte_cnt);
-
+    GTP5G_INF(NULL, "PDR (%u) UL_PKT_CNT (%llu) UL_BYTE_CNT (%llu)", pdr->id, pdr->ul_pkt_cnt, pdr->ul_byte_cnt);    
+ 
+    if (pdr->urr_num != 0) {
+        if (update_urr_counter_and_send_report(pdr, far, volume, volume_mbqe, true) < 0)
+            GTP5G_ERR(pdr->dev, "Fail to send Usage Report");
+    }
+    
+    if (color == Red) {
+        GTP5G_TRC(pdr->dev, "Drop red packet");
+        return PKT_DROPPED;
+    }
     ret = netif_rx(skb);
     if (ret != NET_RX_SUCCESS) {
         GTP5G_ERR(dev, "Uplink: Packet got dropped\n");
     }
 
-    if (pdr->urr_num != 0) {
-        if (check_urr(pdr, far, volume, volume_mbqe, true) < 0)
-            GTP5G_ERR(pdr->dev, "Fail to send Usage Report");
-    }
-
-    return 0;
+    return PKT_FORWARDED;
 }
 
 static int gtp5g_drop_skb_ipv4(struct sk_buff *skb, struct net_device *dev, 
@@ -856,15 +883,19 @@ static int gtp5g_drop_skb_ipv4(struct sk_buff *skb, struct net_device *dev,
 
 static int gtp5g_fwd_skb_ipv4(struct sk_buff *skb, 
     struct net_device *dev, struct gtp5g_pktinfo *pktinfo, 
-    struct pdr *pdr, struct far *far, uint64_t volume_mbqe)
+    struct pdr *pdr, struct far *far)
 {
     struct rtable *rt;
     struct flowi4 fl4;
     struct iphdr *iph = ip_hdr(skb);
     struct outer_header_creation *hdr_creation;
-    u64 volume;
+    u64 volume, volume_mbqe = 0;
     struct forwarding_parameter *fwd_param;
 
+    TrafficPolicer* tp = NULL;
+    Color color = Green;
+    struct qer __rcu *qer_with_rate = NULL;
+    
     if (!far) {
         GTP5G_ERR(dev, "Unknown RAN address\n");
         goto err;
@@ -893,23 +924,40 @@ static int gtp5g_fwd_skb_ipv4(struct sk_buff *skb,
             iph, 
             hdr_creation,
             pdr->qfi, 
+            far->seq_number,
             rt, 
             &fl4, 
             dev);
 
+    far->seq_number++;
     pdr->dl_pkt_cnt++;
     pdr->dl_byte_cnt += skb->len;
     GTP5G_INF(NULL, "PDR (%u) DL_PKT_CNT (%llu) DL_BYTE_CNT (%llu)", pdr->id, pdr->dl_pkt_cnt, pdr->dl_byte_cnt);
 
-    volume = ip4_rm_header(skb, 0);
+    volume_mbqe = ip4_rm_header(skb, 0);
+
+    qer_with_rate = rcu_dereference(pdr->qer_with_rate);
+    if (qer_with_rate != NULL)
+        tp = qer_with_rate->dl_policer;
+    if (get_qos_enable() && tp != NULL) {
+        color = policePacket(tp, volume_mbqe);
+    }
+    if (color == Red) {
+        volume = 0;
+    } else {
+        volume = volume_mbqe;
+    }
 
     gtp5g_push_header(skb, pktinfo);
 
     if (pdr->urr_num != 0) {
-        if (check_urr(pdr, far, volume, volume_mbqe, false) < 0)
+        if (update_urr_counter_and_send_report(pdr, far, volume, volume_mbqe, false) < 0)
             GTP5G_ERR(pdr->dev, "Fail to send Usage Report");
     }
-
+    if (color == Red) {
+        GTP5G_TRC(pdr->dev, "Drop red packet");
+        return PKT_DROPPED;
+    }
     return FAR_ACTION_FORW;
 err:
     return -EBADMSG;
@@ -943,7 +991,6 @@ int gtp5g_handle_skb_ipv4(struct sk_buff *skb, struct net_device *dev,
     struct far *far;
     //struct gtp5g_qer *qer;
     struct iphdr *iph;
-    u64 volume_mbqe = 0;
 
     /* Read the IP destination address and resolve the PDR.
      * Prepend PDR header with TEI/TID from PDR.
@@ -976,7 +1023,7 @@ int gtp5g_handle_skb_ipv4(struct sk_buff *skb, struct net_device *dev,
         case FAR_ACTION_DROP:
             return gtp5g_drop_skb_ipv4(skb, dev, pdr);
         case FAR_ACTION_FORW:
-            return gtp5g_fwd_skb_ipv4(skb, dev, pktinfo, pdr, far, volume_mbqe);
+            return gtp5g_fwd_skb_ipv4(skb, dev, pktinfo, pdr, far);
         case FAR_ACTION_BUFF:
             return gtp5g_buf_skb_ipv4(skb, dev, pdr, far);
         default:

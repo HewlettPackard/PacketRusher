@@ -405,6 +405,8 @@ static int pdr_fill(struct pdr *pdr, struct gtp5g_dev *gtp, struct genl_info *in
     struct nlattr *hdr = nlmsg_attrdata(info->nlhdr, 0);
     int remaining = nlmsg_attrlen(info->nlhdr, 0);
     struct far *far;
+    struct qer *qer;
+    int i;
 
     pdr->seid = 0;
 
@@ -485,6 +487,15 @@ static int pdr_fill(struct pdr *pdr, struct gtp5g_dev *gtp, struct genl_info *in
         return err;
 
     set_pdr_qfi(pdr, gtp);
+
+    // set qer with bit rate to pdr structure
+    for (i = 0; i < pdr->qer_num; i++) {
+        qer = find_qer_by_id(gtp, pdr->seid, pdr->qer_ids[i]);
+        if (qer && qer->ul_policer!= NULL && qer->dl_policer!= NULL) {
+            rcu_assign_pointer(pdr->qer_with_rate, qer);
+            break;
+        }   
+    }
 
     if (unix_sock_client_update(pdr, far) < 0)
         return -EINVAL;
