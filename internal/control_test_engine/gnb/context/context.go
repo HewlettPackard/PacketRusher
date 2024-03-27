@@ -88,7 +88,7 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipDat
 	gnb.dataInfo.gnbPort = portData
 }
 
-func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUeId int64) *GNBUe {
+func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUeId int64) (*GNBUe, error) {
 
 	// TODO if necessary add more information for UE.
 	// TODO implement mutex
@@ -119,8 +119,7 @@ func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUe
 	// select AMF with Capacity is more than 0.
 	amf := gnb.selectAmFByActive()
 	if amf == nil {
-		log.Error("No AMF available for this UE")
-		return nil
+		return nil, fmt.Errorf("No AMF available for this UE")
 	}
 
 	// set amfId and SCTP association for UE.
@@ -128,7 +127,7 @@ func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUe
 	ue.SetSCTP(amf.GetSCTPConn())
 
 	// return UE Context.
-	return ue
+	return ue, nil
 }
 
 func (gnb *GNBContext) GetInboundChannel() chan UEMessage {
