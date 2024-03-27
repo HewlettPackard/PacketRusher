@@ -33,7 +33,7 @@ var config *Config
 type Config struct {
 	GNodeB GNodeB `yaml:"gnodeb"`
 	Ue     Ue     `yaml:"ue"`
-	AMF    AMF    `yaml:"amfif"`
+	AMFs   []*AMF    `yaml:"amfif"`
 	Logs   Logs   `yaml:"logs"`
 }
 
@@ -142,7 +142,10 @@ func readConfig(configPath string) Config {
 		log.Fatal("Could not unmarshal yaml config at \"", configPath, "\". ", err.Error())
 	}
 
-	cfg.AMF.Ip = resolvHost("AMF's IP address", cfg.AMF.Ip)
+	for i, amf := range cfg.AMFs {
+		cfg.AMFs[i].Ip = resolvHost("AMF's IP address", amf.Ip)
+	}
+
 	cfg.GNodeB.DataIF.Ip = resolvHost("gNodeB's N3/Data IP address", cfg.GNodeB.DataIF.Ip)
 	cfg.GNodeB.ControlIF.Ip = resolvHost("gNodeB's N2/Control IP address", cfg.GNodeB.ControlIF.Ip)
 

@@ -5,7 +5,6 @@
 package gnb
 
 import (
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	serviceNas "my5G-RANTester/internal/control_test_engine/gnb/nas/service"
@@ -16,6 +15,8 @@ import (
 	"os/signal"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
@@ -37,22 +38,22 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 		conf.GNodeB.DataIF.Port)
 
 	// start communication with AMF (server SCTP).
+	for _, amf := range conf.AMFs {
+		// new AMF context.
+		amf := gnb.NewGnBAmf(amf.Ip, amf.Port)
 
-	// new AMF context.
-	amf := gnb.NewGnBAmf(conf.AMF.Ip, conf.AMF.Port)
+		// start communication with AMF(SCTP).
+		if err := serviceNgap.InitConn(amf, gnb); err != nil {
+			log.Fatal("Error in", err)
+		} else {
+			log.Info("[GNB] SCTP/NGAP service is running")
+			// wg.Add(1)
+		}
 
-	// start communication with AMF(SCTP).
-	if err := serviceNgap.InitConn(amf, gnb); err != nil {
-		log.Fatal("Error in", err)
-	} else {
-		log.Info("[GNB] SCTP/NGAP service is running")
-		// wg.Add(1)
+		// start communication with UE (server UNIX sockets).
+		serviceNas.InitServer(gnb)
+		trigger.SendNgSetupRequest(gnb, amf)
 	}
-
-	// start communication with UE (server UNIX sockets).
-	serviceNas.InitServer(gnb)
-
-	trigger.SendNgSetupRequest(gnb, amf)
 
 	go func() {
 		// control the signals
@@ -88,22 +89,23 @@ func InitGnbForLoadSeconds(conf config.Config, wg *sync.WaitGroup,
 		conf.GNodeB.DataIF.Port)
 
 	// start communication with AMF (server SCTP).
+	for _, amf := range conf.AMFs {
+		// new AMF context.
+		amf := gnb.NewGnBAmf(amf.Ip, amf.Port)
 
-	// new AMF context.
-	amf := gnb.NewGnBAmf(conf.AMF.Ip, conf.AMF.Port)
+		// start communication with AMF(SCTP).
+		serviceNgap.InitConn(amf, gnb)
 
-	// start communication with AMF(SCTP).
-	serviceNgap.InitConn(amf, gnb)
+		trigger.SendNgSetupRequest(gnb, amf)
 
-	trigger.SendNgSetupRequest(gnb, amf)
+		// timeout is 1 second for receive NG Setup Response
+		time.Sleep(1000 * time.Millisecond)
 
-	// timeout is 1 second for receive NG Setup Response
-	time.Sleep(1000 * time.Millisecond)
-
-	// AMF responds message sends by Tester
-	// means AMF is available
-	if amf.GetState() == 0x01 {
-		monitor.IncRqs()
+		// AMF responds message sends by Tester
+		// means AMF is available
+		if amf.GetState() == 0x01 {
+			monitor.IncRqs()
+		}
 	}
 
 	gnb.Terminate()
@@ -131,31 +133,32 @@ func InitGnbForAvaibility(conf config.Config,
 		conf.GNodeB.DataIF.Port)
 
 	// start communication with AMF (server SCTP).
+	for _, amf := range conf.AMFs {
+		// new AMF context.
+		amf := gnb.NewGnBAmf(amf.Ip, amf.Port)
 
-	// new AMF context.
-	amf := gnb.NewGnBAmf(conf.AMF.Ip, conf.AMF.Port)
+		// start communication with AMF(SCTP).
+		if err := serviceNgap.InitConn(amf, gnb); err != nil {
+			log.Info("Error in ", err)
 
-	// start communication with AMF(SCTP).
-	if err := serviceNgap.InitConn(amf, gnb); err != nil {
-		log.Info("Error in ", err)
+			return
 
-		return
+		} else {
+			log.Info("[GNB] SCTP/NGAP service is running")
 
-	} else {
-		log.Info("[GNB] SCTP/NGAP service is running")
+		}
 
-	}
+		trigger.SendNgSetupRequest(gnb, amf)
 
-	trigger.SendNgSetupRequest(gnb, amf)
+		// timeout is 1 second for receive NG Setup Response
+		time.Sleep(1000 * time.Millisecond)
 
-	// timeout is 1 second for receive NG Setup Response
-	time.Sleep(1000 * time.Millisecond)
+		// AMF responds message sends by Tester
+		// means AMF is available
+		if amf.GetState() == 0x01 {
+			monitor.IncAvaibility()
 
-	// AMF responds message sends by Tester
-	// means AMF is available
-	if amf.GetState() == 0x01 {
-		monitor.IncAvaibility()
-
+		}
 	}
 
 	gnb.Terminate()
