@@ -8,7 +8,9 @@ package test
 import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
+	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/sender"
 	"my5G-RANTester/internal/control_test_engine/procedures"
+	"my5G-RANTester/internal/scenario"
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
@@ -23,7 +25,95 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestSingleUe(t *testing.T) {
+	controlIFConfig := config.ControlIF{
+		Ip:   "127.0.0.1",
+		Port: 9489,
+	}
+	dataIFConfig := config.DataIF{
+		Ip:   "127.0.0.1",
+		Port: 2154,
+	}
+	amfConfig := config.AMF{
+		Ip:   "127.0.0.1",
+		Port: 38414,
+	}
+
+	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
+	type UECheck struct {
+		HasAuthOnce bool
+	}
+	ueChecks := map[string]*UECheck{}
+
+	// Setup 5GC
+	builder := aio5gc.FiveGCBuilder{}
+	fiveGC, err := builder.
+		WithConfig(conf).
+		WithUeCallback(context.Authenticated, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			ue := args["ue"].(*context.UEContext)
+			check, ok := ueChecks[ue.GetSecurityContext().GetMsin()]
+			if !ok {
+				check = &UECheck{}
+				ueChecks[ue.GetSecurityContext().GetMsin()] = check
+			}
+			check.HasAuthOnce = true
+		}).
+		Build()
+	if err != nil {
+		log.Printf("[5GC] Error during 5GC creation  %v", err)
+		os.Exit(1)
+	}
+	time.Sleep(1 * time.Second)
+
+	securityContext := context.SecurityContext{}
+	securityContext.SetMsin(conf.Ue.Msin)
+	securityContext.SetAuthSubscription(conf.Ue.Key, conf.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
+	securityContext.SetAbba([]uint8{0x00, 0x00})
+
+	amfContext := fiveGC.GetAMFContext()
+	amfContext.Provision(models.Snssai{Sst: int32(conf.Ue.Snssai.Sst), Sd: conf.Ue.Snssai.Sd}, securityContext)
+
+	gnbs := []config.GNodeB{conf.GNodeB}
+	ueScenario := scenario.UEScenario{
+		Config:    conf.Ue,
+		Loop:      false,
+		ForceStop: 20000,
+		Tasks: []scenario.Task{
+			{
+				TaskType: scenario.AttachToGNB,
+				Parameters: struct {
+					GnbId string
+				}{conf.GNodeB.PlmnList.GnbId},
+			},
+			{
+				TaskType: scenario.Registration,
+			},
+			{
+				TaskType: scenario.NewPDUSession,
+			},
+			{
+				TaskType: scenario.Deregistration,
+				Delay:    2000,
+			},
+		},
+	}
+	ueScenarios := []scenario.UEScenario{ueScenario}
+
+	r := scenario.ScenarioManager{}
+	r.StartScenario(gnbs, conf.AMF, ueScenarios, 500, 0)
+
+	time.Sleep(time.Duration(1000) * time.Millisecond)
+
+	fiveGC.GetAMFContext().ExecuteForAllUe(
+		func(ue *context.UEContext) {
+			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
+			assert.True(t, ueChecks[ue.GetSecurityContext().GetMsin()].HasAuthOnce, "UE has never changed state")
+		})
+}
+
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
+
+	sender.Init(0)
 
 	controlIFConfig := config.ControlIF{
 		Ip:   "127.0.0.1",
@@ -156,6 +246,7 @@ func TestUERegistrationLoop(t *testing.T) {
 	}
 	ueChecks := map[string]*UECheck{}
 
+	sender.Init(0)
 	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
 
 	// Setup 5GC

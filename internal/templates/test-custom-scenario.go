@@ -33,7 +33,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	wg.Add(1)
 
-	_ = ue.NewUE(cfg, 1, ueChan, gnb.GetInboundChannel(), &wg)
+	_ = ue.NewUE(cfg.Ue, 1, ueChan, gnb.GetInboundChannel(), &wg)
 
 	ctx, runtime := script.NewCustomScenario(scenarioPath)
 
