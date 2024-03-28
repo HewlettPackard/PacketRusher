@@ -33,12 +33,14 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		Ip:   "127.0.0.1",
 		Port: 2154,
 	}
-	amfConfig := config.AMF{
-		Ip:   "127.0.0.1",
-		Port: 38414,
+	amfListConfig := []*config.AMF{
+		{
+			Ip:   "127.0.0.1",
+			Port: 38414,
+		},
 	}
 
-	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
+	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfListConfig)
 
 	type UECheck struct {
 		HasAuthOnce  bool
@@ -146,9 +148,11 @@ func TestUERegistrationLoop(t *testing.T) {
 		Ip:   "127.0.0.1",
 		Port: 2155,
 	}
-	amfConfig := config.AMF{
-		Ip:   "127.0.0.1",
-		Port: 38415,
+	amfListConfig := []*config.AMF{
+		{
+			Ip:   "127.0.0.1",
+			Port: 38415,
+		},
 	}
 
 	type UECheck struct {
@@ -156,7 +160,7 @@ func TestUERegistrationLoop(t *testing.T) {
 	}
 	ueChecks := map[string]*UECheck{}
 
-	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
+	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfListConfig)
 
 	// Setup 5GC
 	builder := aio5gc.FiveGCBuilder{}

@@ -46,9 +46,11 @@ func main() {
 					log.Info("[TESTER] Starting test function: ", name)
 					log.Info("[TESTER][UE] Number of UEs: ", 1)
 					log.Info("[TESTER][UE] disableTunnel is ", !tunnelEnabled)
-					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
+					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port, "~")
 					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
-					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					for _, amf := range cfg.AMFs {
+						log.Info("[TESTER][AMF] AMF IP/Port: ", amf.Ip, "/", amf.Port)
+					}
 					log.Info("---------------------------------------")
 
 					if c.IsSet("pcap") {
@@ -71,9 +73,11 @@ func main() {
 					log.Info("---------------------------------------")
 					log.Info("[TESTER] Starting test function: ", name)
 					log.Info("[TESTER][GNB] Number of GNBs: ", 1)
-					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
+					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port, "~")
 					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
-					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					for _, amf := range cfg.AMFs {
+						log.Info("[TESTER][AMF] AMF IP/Port: ", amf.Ip, "/", amf.Port)
+					}
 					log.Info("---------------------------------------")
 					templates.TestAttachGnbWithConfiguration()
 					return nil
@@ -115,9 +119,11 @@ func main() {
 					log.Info("---------------------------------------")
 					log.Info("[TESTER] Starting test function: ", name)
 					log.Info("[TESTER][UE] Number of UEs: ", numUes)
-					log.Info("[TESTER][GNB] gNodeB control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
+					log.Info("[TESTER][GNB] gNodeB control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port, "~")
 					log.Info("[TESTER][GNB] gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
-					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					for _, amf := range cfg.AMFs {
+						log.Info("[TESTER][AMF] AMF IP/Port: ", amf.Ip, "/", amf.Port)
+					}
 					log.Info("---------------------------------------")
 
 					if c.IsSet("pcap") {
@@ -185,7 +191,9 @@ func main() {
 					log.Warn("[TESTER][UE] Number of Requests per second: ", numRqs)
 					log.Info("[TESTER][GNB] gNodeB control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
 					log.Info("[TESTER][GNB] gNodeB data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
-					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					for _, amf := range cfg.AMFs {
+						log.Info("[TESTER][AMF] AMF IP/Port: ", amf.Ip, "/", amf.Port)
+					}
 					log.Info("---------------------------------------")
 					log.Warn("[TESTER][GNB] Total of AMF Responses in the interval:", templates.TestRqsLoop(numRqs, time))
 					return nil
@@ -212,7 +220,9 @@ func main() {
 					log.Warn("[TESTER][UE] Interval of test: ", time, " seconds")
 					log.Info("[TESTER][GNB] Control interface IP/Port: ", cfg.GNodeB.ControlIF.Ip, "/", cfg.GNodeB.ControlIF.Port)
 					log.Info("[TESTER][GNB] Data interface IP/Port: ", cfg.GNodeB.DataIF.Ip, "/", cfg.GNodeB.DataIF.Port)
-					log.Info("[TESTER][AMF] AMF IP/Port: ", cfg.AMF.Ip, "/", cfg.AMF.Port)
+					for _, amf := range cfg.AMFs {
+						log.Info("[TESTER][AMF] AMF IP/Port: ", amf.Ip, "/", amf.Port)
+					}
 					log.Info("---------------------------------------")
 					templates.TestAvailability(time)
 					return nil
