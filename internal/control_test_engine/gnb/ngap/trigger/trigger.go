@@ -112,14 +112,14 @@ func SendAmfConfigurationUpdateAcknowledge(amf *context.GNBAmf) {
 	// send AMF Configure Update Acknowledge
 	ngapMsg, err := interface_management.AmfConfigurationUpdateAcknowledge()
 	if err != nil {
-		log.Fatal("[GNB][NGAP] Error sending AMF Configuration Update Acknowledge: ", err)
+		log.Warn("[GNB][NGAP] Error sending AMF Configuration Update Acknowledge: ", err)
 	}
 
 	// Send AMF Configure Update Acknowledge
 	conn := amf.GetSCTPConn()
 	err = sender.SendToAmF(ngapMsg, conn)
 	if err != nil {
-		log.Fatal("[GNB][NGAP] Error sending AMF Configuration Update Acknowledge: ", err)
+		log.Warn("[GNB][NGAP] Error sending AMF Configuration Update Acknowledge: ", err)
 	}
 }
 

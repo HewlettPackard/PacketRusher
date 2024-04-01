@@ -690,20 +690,15 @@ func bytesToIpv4String(bs []byte) string {
 }
 
 func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
-
-	// TODO: Implement update AMF Context from AMFConfigurationUpdate
-	_ = message.InitiatingMessage.Value.AMFConfigurationUpdate
-
 	for _, amf := range context.GNBAmfList {
 		tnla := amf.GetTNLA()
 		log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
-		amf.GetAmfName(), amf.GetAmfIp(), amf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
+			amf.GetAmfName(), amf.GetAmfIp(), amf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
 	}
-
-	log.Info("[GNB][AMF] Receive AMF Configuration Update")
 
 	var amfName string
 	var amfCapacity int64
+	var amfRegionId, amfSetId, amfPointer aper.BitString
 
 	valueMessage := message.InitiatingMessage.Value.AMFConfigurationUpdate
 	for _, ie := range valueMessage.ProtocolIEs.List {
@@ -713,7 +708,11 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 			amfName = ie.Value.AMFName.Value
 
 		case ngapType.ProtocolIEIDServedGUAMIList:
-
+			for _, servedGuamiItem := range ie.Value.ServedGUAMIList.List {
+				amfRegionId = servedGuamiItem.GUAMI.AMFRegionID.Value
+				amfSetId = servedGuamiItem.GUAMI.AMFSetID.Value
+				amfPointer = servedGuamiItem.GUAMI.AMFPointer.Value
+			}
 		case ngapType.ProtocolIEIDRelativeAMFCapacity:
 			amfCapacity = ie.Value.RelativeAMFCapacity.Value
 
@@ -728,6 +727,13 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 
 				port := 38412 // default sctp port
 				amf := gnb.NewGnBAmf(ipv4String, port)
+				amf.SetAmfName(amfName)
+				amf.SetAmfCapacity(amfCapacity)
+				amf.SetRegionId(amfRegionId)
+				amf.SetSetId(amfSetId)
+				amf.SetPointer(amfPointer)
+				amf.SetTNLAUsage(toAddItem.TNLAssociationUsage.Value)
+				amf.SetTNLAWeight(toAddItem.TNLAddressWeightFactor.Value)
 				context.GNBAmfList = append(context.GNBAmfList, amf) // add new amf to GNBAmfList
 
 				// start communication with AMF(SCTP).
@@ -753,9 +759,9 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 				port := 38412 // default sctp port
 				for i, amf := range context.GNBAmfList {
 					if amf.GetAmfIp() == ipv4String && amf.GetAmfPort() == port {
+						log.Info("[GNB][AMF] Remove AMF:", amf.GetAmfName(), " IP:", amf.GetAmfIp())
 						tnla := amf.GetTNLA()
 						tnla.Release() // Close SCTP Conntection
-						amf = nil // with Golang garbage collection mechenism
 						context.GNBAmfList = append(context.GNBAmfList[:i], context.GNBAmfList[i+1:]...)
 						break
 					}
@@ -775,6 +781,9 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 					if amf.GetAmfIp() == ipv4String && amf.GetAmfPort() == port {
 						amf.SetAmfName(amfName)
 						amf.SetAmfCapacity(amfCapacity)
+						amf.SetRegionId(amfRegionId)
+						amf.SetSetId(amfSetId)
+						amf.SetPointer(amfPointer)
 
 						amf.SetTNLAUsage(toUpdateItem.TNLAssociationUsage.Value)
 						amf.SetTNLAWeight(toUpdateItem.TNLAddressWeightFactor.Value)
@@ -789,9 +798,75 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 	for _, amf := range context.GNBAmfList {
 		tnla := amf.GetTNLA()
 		log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
-		amf.GetAmfName(), amf.GetAmfIp(), amf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
+			amf.GetAmfName(), amf.GetAmfIp(), amf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
 	}
 	trigger.SendAmfConfigurationUpdateAcknowledge(amf)
+}
+
+func compareAperBitString(a *aper.BitString, b *aper.BitString) bool {
+	if a.BitLength != b.BitLength {
+		return false
+	}
+
+	for i := 0; i < len(a.Bytes); i++ {
+		if a.Bytes[i] != b.Bytes[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+	valueMessage := message.InitiatingMessage.Value.AMFStatusIndication
+	for _, ie := range valueMessage.ProtocolIEs.List {
+		switch ie.Id.Value {
+		case ngapType.ProtocolIEIDUnavailableGUAMIList:
+			for _, unavailableGuamiItem := range ie.Value.UnavailableGUAMIList.List {
+				octetStr := unavailableGuamiItem.GUAMI.PLMNIdentity.Value
+				hexStr := fmt.Sprintf("%02x%02x%02x", octetStr[0], octetStr[1], octetStr[2])
+				var unavailableMcc, unavailableMnc string
+				unavailableMcc = string(hexStr[3]) + string(hexStr[0]) + string(hexStr[1])
+				unavailableMnc = string(hexStr[5]) + string(hexStr[4])
+				unavailableRegionId := unavailableGuamiItem.GUAMI.AMFRegionID.Value
+				unavailableSetId := unavailableGuamiItem.GUAMI.AMFSetID.Value
+				unavailablePointer := unavailableGuamiItem.GUAMI.AMFPointer.Value
+				if hexStr[2] != 'f' {
+					unavailableMnc = string(hexStr[2]) + string(hexStr[5]) + string(hexStr[4])
+				}
+				for i, amf := range context.GNBAmfList {
+					for j := 0; j < amf.GetLenPlmns(); j++ {
+						amfSupportMcc, amfSupportMnc := amf.GetPlmnSupport(j)
+						amfSupportRegionId := amf.GetRegionId()
+						amfSupportSetId := amf.GetSetId()
+						amfSupportPointer := amf.GetPointer()
+						log.Debugf("amf Support: %s %s %s %s %s\n", amfSupportMcc, amfSupportMnc,
+							ngapConvert.BitStringToHex(&amfSupportRegionId),
+							ngapConvert.BitStringToHex(&amfSupportSetId),
+							ngapConvert.BitStringToHex(&amfSupportPointer))
+						log.Debugf("unavailable: %s %s %s %s %s\n", unavailableMcc, unavailableMnc,
+							ngapConvert.BitStringToHex(&unavailableRegionId),
+							ngapConvert.BitStringToHex(&unavailableSetId),
+							ngapConvert.BitStringToHex(&unavailablePointer))
+
+						if amfSupportMcc == unavailableMcc && amfSupportMnc == unavailableMnc &&
+							compareAperBitString(&amfSupportRegionId, &unavailableRegionId) &&
+							compareAperBitString(&amfSupportSetId, &unavailableSetId) &&
+							compareAperBitString(&amfSupportPointer, &unavailablePointer) {
+							log.Info("[GNB][AMF] Remove AMF:", amf.GetAmfName())
+							tnla := amf.GetTNLA()
+							tnla.Release()
+							// context.GNBAmfList[i] = nil
+							context.GNBAmfList = append(context.GNBAmfList[:i], context.GNBAmfList[i+1:]...)
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
+	//context.GNBAmfList
 }
 
 func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapType.NGAPPDU) {

@@ -24,9 +24,9 @@ type GNBAmf struct {
 	relativeAmfCapacity int64          // AMF capacity
 	state               int
 	name                string // amf name.
-	regionId            byte
-	setId               byte
-	pointer             byte
+	regionId            aper.BitString
+	setId               aper.BitString
+	pointer             aper.BitString
 	plmns               *PlmnSupported
 	slices              *SliceSupported
 	lenSlice            int
@@ -238,6 +238,30 @@ func (amf *GNBAmf) setAmfId(id int64) {
 
 func (amf *GNBAmf) GetAmfName() string {
 	return amf.name
+}
+
+func (amf *GNBAmf) GetRegionId() aper.BitString {
+	return amf.regionId
+}
+
+func (amf *GNBAmf) SetRegionId(regionId aper.BitString) {
+	amf.regionId = regionId
+}
+
+func (amf *GNBAmf) GetSetId() aper.BitString {
+	return amf.setId
+}
+
+func (amf *GNBAmf) SetSetId(setId aper.BitString) {
+	amf.setId = setId
+}
+
+func (amf *GNBAmf) GetPointer() aper.BitString {
+	return amf.pointer
+}
+
+func (amf *GNBAmf) SetPointer(pointer aper.BitString) {
+	amf.pointer = pointer
 }
 
 func (amf *GNBAmf) SetAmfName(name string) {
