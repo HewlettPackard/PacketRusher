@@ -159,3 +159,20 @@ int qer_set_pdr(struct pdr *pdr, struct gtp5g_dev *gtp)
     }
     return 0;
 }
+
+void set_pdr_qer_with_rate_null(struct qer *qer_with_rate, struct gtp5g_dev *gtp)
+{
+    char seid_qer_id_hexstr[SEID_U32ID_HEX_STR_LEN] = {0};
+    struct hlist_head *head;
+    struct pdr_node *pdr_node;
+    struct pdr *pdr;
+
+    seid_qer_id_to_hex_str(qer_with_rate->seid, qer_with_rate->id, seid_qer_id_hexstr);
+    head = &gtp->related_qer_hash[str_hashfn(seid_qer_id_hexstr) % gtp->hash_size];
+    hlist_for_each_entry_rcu(pdr_node, head, hlist) {
+        pdr = pdr_node->pdr;
+        if (pdr != NULL) {
+            rcu_assign_pointer(pdr->qer_with_rate, NULL);
+        }
+    }
+}

@@ -56,7 +56,13 @@ func gnbListen(gnb *context.GNBContext) {
 
 			trigger.SendHandoverNotify(gnb, ue)
 		} else {
-			ue = gnb.NewGnBUe(message.GNBTx, message.GNBRx, message.PrUeId)
+			var err error
+			ue, err = gnb.NewGnBUe(message.GNBTx, message.GNBRx, message.PrUeId)
+			if ue == nil && err != nil {
+				log.Errorf("[GNB] UE was not created succesfully: %s. Closing connection with UE.", err)
+				close(message.GNBTx)
+				continue
+			}
 			if message.UEContext != nil && message.IsHandover {
 				// Xn Handover
 				log.Info("[GNB] Received incoming handover for UE from another gNodeB")
@@ -74,8 +80,8 @@ func gnbListen(gnb *context.GNBContext) {
 		}
 
 		if ue == nil {
-			log.Warn("[GNB] UE has not been created")
-			break
+			log.Errorf("[GNB] UE has not been created")
+			continue
 		}
 
 		// accept and handle connection.

@@ -859,7 +859,10 @@ func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, messag
 	}
 	prUeId := sourceToTargetContainerNgap.IndexToRFSP.Value
 
-	ue := gnb.NewGnBUe(nil, nil, prUeId)
+	ue, err := gnb.NewGnBUe(nil, nil, prUeId)
+	if ue == nil || err != nil {
+		log.Fatalf("[GNB] HandoverFailure: %s", err)
+	}
 	ue.SetAmfUeId(amfUeId)
 
 	ue.CreateUeContext("not informed", maskedImeisv, sst, sd, ueSecurityCapabilities)

@@ -469,6 +469,7 @@ static int far_fill(struct far *far, struct gtp5g_dev *gtp, struct genl_info *in
         return -EINVAL;
 
     far->id = nla_get_u32(info->attrs[GTP5G_FAR_ID]);
+    far->seq_number = 0;
 
     if (info->attrs[GTP5G_FAR_SEID])
         far->seid = nla_get_u64(info->attrs[GTP5G_FAR_SEID]);

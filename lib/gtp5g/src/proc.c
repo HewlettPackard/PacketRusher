@@ -78,16 +78,30 @@ struct proc_gtp5g_urr {
     s64     end_time;
 };
 
+struct proc_gtp5g_qos 
+{
+    bool qos_enable;
+};
+
+struct proc_gtp5g_seq
+{
+    bool seq_enable;
+};
+
 struct proc_dir_entry *proc_gtp5g = NULL;
 struct proc_dir_entry *proc_gtp5g_dbg = NULL;
 struct proc_dir_entry *proc_gtp5g_pdr = NULL;
 struct proc_dir_entry *proc_gtp5g_far = NULL;
 struct proc_dir_entry *proc_gtp5g_qer = NULL;
 struct proc_dir_entry *proc_gtp5g_urr = NULL;
+struct proc_dir_entry *proc_gtp5g_qos = NULL;
+struct proc_dir_entry *proc_gtp5g_seq = NULL;
 struct proc_gtp5g_pdr proc_pdr;
 struct proc_gtp5g_far proc_far;
 struct proc_gtp5g_qer proc_qer;
 struct proc_gtp5g_urr proc_urr;
+struct proc_gtp5g_qos proc_qos;
+struct proc_gtp5g_seq proc_seq;
 
 u64 proc_seid = 0;
 u16 proc_pdr_id = 0;
@@ -263,6 +277,71 @@ static int gtp5g_urr_read(struct seq_file *s, void *v)
     seq_printf(s, "\t End time: %lld\n", proc_urr.end_time);
 
     return 0;
+}
+
+static int gtp5g_qos_read(struct seq_file *s, void *v)
+{
+    GTP5G_TRC(NULL, "gtp5g_qos_read");
+    seq_printf(s, "QoS Enable: %d\n", get_qos_enable());
+    return 0;
+}
+
+static ssize_t proc_qos_write(struct file *filp, const char __user *buffer,
+    size_t len, loff_t *dptr) 
+{
+    char buf[16];
+    unsigned long buf_len = min(len, sizeof(buf) - 1);
+    int qos_enable;
+
+    if (copy_from_user(buf, buffer, buf_len)) {
+        GTP5G_ERR(NULL, "Failed to read buffer: %s\n", buffer);
+        goto err;
+    }
+    
+    buf[buf_len] = 0;
+    if (sscanf(buf, "%d", &qos_enable) != 1) {
+        GTP5G_ERR(NULL, "Failed to read qos enable setting: %s\n", buffer);
+        goto err;
+    }
+     
+    set_qos_enable(qos_enable);
+    GTP5G_TRC(NULL, "qos enable:%d", get_qos_enable());
+    return strnlen(buf, buf_len);
+err:
+    return -1;
+}
+
+
+static int gtp5g_seq_read(struct seq_file *s, void *v)
+{
+    GTP5G_TRC(NULL, "gtp5g_seq_read");
+    seq_printf(s, "Sequence Number Enable: %d\n", get_seq_enable());
+    return 0;
+}
+
+static ssize_t proc_seq_write(struct file *filp, const char __user *buffer,
+    size_t len, loff_t *dptr) 
+{
+    char buf[16];
+    unsigned long buf_len = min(len, sizeof(buf) - 1);
+    int seq_enable;
+
+    if (copy_from_user(buf, buffer, buf_len)) {
+        GTP5G_ERR(NULL, "Failed to read buffer: %s\n", buffer);
+        goto err;
+    }
+    
+    buf[buf_len] = 0;
+    if (sscanf(buf, "%d", &seq_enable) != 1) {
+        GTP5G_ERR(NULL, "Failed to read seq enable setting: %s\n", buffer);
+        goto err;
+    }
+     
+    set_seq_enable(seq_enable);
+    GTP5G_TRC(NULL, "seq enable:%d", get_seq_enable());
+    return strnlen(buf, buf_len);
+err:
+    return -1;
 }
 
 static ssize_t proc_pdr_write(struct file *filp, const char __user *buffer,
@@ -539,6 +618,16 @@ static int proc_urr_read(struct inode *inode, struct file *file)
     return single_open(file, gtp5g_urr_read, NULL);
 }
 
+static int proc_qos_read(struct inode *inode, struct file *file)
+{
+    return single_open(file, gtp5g_qos_read, NULL);
+}
+
+static int proc_seq_read(struct inode *inode, struct file *file)
+{
+    return single_open(file, gtp5g_seq_read, NULL);
+}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
 static const struct proc_ops proc_gtp5g_dbg_ops = {
     .proc_open = proc_dbg_read,
@@ -634,6 +723,44 @@ static const struct file_operations proc_gtp5g_urr_ops = {
 };
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+static const struct proc_ops proc_gtp5g_qos_ops = {
+    .proc_open = proc_qos_read,
+    .proc_read = seq_read,
+    .proc_write = proc_qos_write,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
+};
+#else
+static const struct file_operations proc_gtp5g_qos_ops = {
+    .owner      = THIS_MODULE,
+    .open       = proc_qos_read,
+    .read       = seq_read,
+    .write      = proc_qos_write,
+    .llseek     = seq_lseek,
+    .release    = single_release,
+};
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+static const struct proc_ops proc_gtp5g_seq_ops = {
+    .proc_open = proc_seq_read,
+    .proc_read = seq_read,
+    .proc_write = proc_seq_write,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
+};
+#else
+static const struct file_operations proc_gtp5g_seq_ops = {
+    .owner      = THIS_MODULE,
+    .open       = proc_seq_read,
+    .read       = seq_read,
+    .write      = proc_seq_write,
+    .llseek     = seq_lseek,
+    .release    = single_release,
+};
+#endif
+
 int create_proc(void)
 {
     proc_gtp5g = proc_mkdir("gtp5g", NULL);
@@ -676,8 +803,26 @@ int create_proc(void)
         goto remove_qer_proc;
     }
 
+    proc_gtp5g_qos = proc_create("qos", (S_IFREG | S_IRUGO | S_IWUGO),
+        proc_gtp5g, &proc_gtp5g_qos_ops);
+    if (!proc_gtp5g_qos) {
+        GTP5G_ERR(NULL, "Failed to create /proc/gtp5g/qos\n");
+        goto remove_urr_proc;
+    }
+
+    proc_gtp5g_seq = proc_create("seq", (S_IFREG | S_IRUGO | S_IWUGO),
+        proc_gtp5g, &proc_gtp5g_seq_ops);
+    if (!proc_gtp5g_seq) {
+        GTP5G_ERR(NULL, "Failed to create /proc/gtp5g/seq\n");
+        goto remove_qos_proc;
+    }
+
     return 0;
 
+    remove_qos_proc:
+        remove_proc_entry("qos", proc_gtp5g);
+    remove_urr_proc:
+        remove_proc_entry("urr", proc_gtp5g);
     remove_qer_proc:
         remove_proc_entry("qer", proc_gtp5g);
     remove_far_proc:
@@ -693,6 +838,8 @@ int create_proc(void)
 
 void remove_proc()
 {
+    remove_proc_entry("qos", proc_gtp5g);
+    remove_proc_entry("seq", proc_gtp5g);
     remove_proc_entry("urr", proc_gtp5g);
     remove_proc_entry("qer", proc_gtp5g);
     remove_proc_entry("far", proc_gtp5g);
