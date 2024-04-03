@@ -78,10 +78,10 @@ func (amf *GNBAmf) GetPlmnSupport(index int) (string, string) {
 
 func convertMccMnc(plmn string) (mcc string, mnc string) {
 	if plmn[2] == 'f' {
-		mcc = fmt.Sprintf("%c%c%c", plmn[3], plmn[0], plmn[1])
+		mcc = fmt.Sprintf("%c%c%c", plmn[1], plmn[0], plmn[3])
 		mnc = fmt.Sprintf("%c%c", plmn[5], plmn[4])
 	} else {
-		mcc = fmt.Sprintf("%c%c%c", plmn[3], plmn[0], plmn[1])
+		mcc = fmt.Sprintf("%c%c%c", plmn[1], plmn[0], plmn[3])
 		mnc = fmt.Sprintf("%c%c%c", plmn[2], plmn[5], plmn[4])
 	}
 

@@ -826,14 +826,15 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 				octetStr := unavailableGuamiItem.GUAMI.PLMNIdentity.Value
 				hexStr := fmt.Sprintf("%02x%02x%02x", octetStr[0], octetStr[1], octetStr[2])
 				var unavailableMcc, unavailableMnc string
-				unavailableMcc = string(hexStr[3]) + string(hexStr[0]) + string(hexStr[1])
+				unavailableMcc = string(hexStr[1]) + string(hexStr[0]) + string(hexStr[3])
 				unavailableMnc = string(hexStr[5]) + string(hexStr[4])
-				unavailableRegionId := unavailableGuamiItem.GUAMI.AMFRegionID.Value
-				unavailableSetId := unavailableGuamiItem.GUAMI.AMFSetID.Value
-				unavailablePointer := unavailableGuamiItem.GUAMI.AMFPointer.Value
 				if hexStr[2] != 'f' {
 					unavailableMnc = string(hexStr[2]) + string(hexStr[5]) + string(hexStr[4])
 				}
+				unavailableRegionId := unavailableGuamiItem.GUAMI.AMFRegionID.Value
+				unavailableSetId := unavailableGuamiItem.GUAMI.AMFSetID.Value
+				unavailablePointer := unavailableGuamiItem.GUAMI.AMFPointer.Value
+
 				for i, amf := range context.GNBAmfList {
 					for j := 0; j < amf.GetLenPlmns(); j++ {
 						amfSupportMcc, amfSupportMnc := amf.GetPlmnSupport(j)
@@ -856,7 +857,6 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 							log.Info("[GNB][AMF] Remove AMF:", amf.GetAmfName())
 							tnla := amf.GetTNLA()
 							tnla.Release()
-							// context.GNBAmfList[i] = nil
 							context.GNBAmfList = append(context.GNBAmfList[:i], context.GNBAmfList[i+1:]...)
 							break
 						}
@@ -865,8 +865,6 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 			}
 		}
 	}
-
-	//context.GNBAmfList
 }
 
 func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
