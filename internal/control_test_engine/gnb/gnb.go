@@ -42,7 +42,6 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 	for _, amfConfig := range conf.AMFs {
 		// new AMF context.
 		amf := gnb.NewGnBAmf(amfConfig.Ip, amfConfig.Port)
-		context.GNBAmfList = append(context.GNBAmfList, amf)
 
 		// start communication with AMF(SCTP).
 		if err := ngap.InitConn(amf, gnb); err != nil {
@@ -51,14 +50,12 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 			log.Info("[GNB] SCTP/NGAP service is running")
 			// wg.Add(1)
 		}
+
+		trigger.SendNgSetupRequest(gnb, amf)
 	}
 
 	// start communication with UE (server UNIX sockets).
 	serviceNas.InitServer(gnb)
-
-	for _, amf := range context.GNBAmfList {
-		trigger.SendNgSetupRequest(gnb, amf)
-	}
 
 	go func() {
 		// control the signals
@@ -97,7 +94,6 @@ func InitGnbForLoadSeconds(conf config.Config, wg *sync.WaitGroup,
 	for _, amf := range conf.AMFs {
 		// new AMF context.
 		amf := gnb.NewGnBAmf(amf.Ip, amf.Port)
-		context.GNBAmfList = append(context.GNBAmfList, amf)
 
 		// start communication with AMF(SCTP).
 		ngap.InitConn(amf, gnb)
@@ -142,7 +138,6 @@ func InitGnbForAvaibility(conf config.Config,
 	for _, amf := range conf.AMFs {
 		// new AMF context.
 		amf := gnb.NewGnBAmf(amf.Ip, amf.Port)
-		context.GNBAmfList = append(context.GNBAmfList, amf)
 
 		// start communication with AMF(SCTP).
 		if err := ngap.InitConn(amf, gnb); err != nil {

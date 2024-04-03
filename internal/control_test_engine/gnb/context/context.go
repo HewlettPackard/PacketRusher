@@ -211,6 +211,10 @@ func (gnb *GNBContext) NewGnBAmf(ip string, port int) *GNBAmf {
 	return amf
 }
 
+func (gnb *GNBContext) GetAmfPool() *sync.Map {
+	return &gnb.amfPool
+}
+
 func (gnb *GNBContext) deleteGnBAmf(amfId int64) {
 	gnb.amfPool.Delete(amfId)
 }

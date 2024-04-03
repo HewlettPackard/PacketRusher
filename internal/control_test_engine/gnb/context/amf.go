@@ -34,8 +34,6 @@ type GNBAmf struct {
 	// TODO implement the other fields of the AMF Context
 }
 
-var GNBAmfList []*GNBAmf
-
 type TNLAssociation struct {
 	sctpConn         *sctp.SCTPConn
 	tnlaWeightFactor int64

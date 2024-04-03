@@ -690,11 +690,18 @@ func bytesToIpv4String(bs []byte) string {
 }
 
 func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
-	for _, amf := range context.GNBAmfList {
-		tnla := amf.GetTNLA()
-		log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
-			amf.GetAmfName(), amf.GetAmfIp(), amf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
-	}
+	log.Debugf("Before Update:")
+
+	amfPool := gnb.GetAmfPool()
+	amfPool.Range(func(k, v any) bool {
+		oldAmf, ok := v.(*context.GNBAmf)
+		if ok {
+			tnla := oldAmf.GetTNLA()
+			log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
+				oldAmf.GetAmfName(), oldAmf.GetAmfIp(), oldAmf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
+		}
+		return true
+	})
 
 	var amfName string
 	var amfCapacity int64
@@ -721,7 +728,7 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 			for _, toAddItem := range toAddList.List {
 				bitLen := toAddItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
 				var ipv4String string
-				if bitLen == 32 || bitLen == 160 {
+				if bitLen == 32 || bitLen == 160 { // IPv4 or IPv4+IPv6
 					ipv4String = bytesToIpv4String(toAddItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.Bytes)
 				}
 
@@ -734,7 +741,6 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 				amf.SetPointer(amfPointer)
 				amf.SetTNLAUsage(toAddItem.TNLAssociationUsage.Value)
 				amf.SetTNLAWeight(toAddItem.TNLAddressWeightFactor.Value)
-				context.GNBAmfList = append(context.GNBAmfList, amf) // add new amf to GNBAmfList
 
 				// start communication with AMF(SCTP).
 				if err := InitConn(amf, gnb); err != nil {
@@ -753,19 +759,22 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 			for _, toRemoveItem := range toRemoveList.List {
 				bitLen := toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
 				var ipv4String string
-				if bitLen == 32 || bitLen == 160 {
+				if bitLen == 32 || bitLen == 160 { // IPv4 or IPv4+IPv6
 					ipv4String = bytesToIpv4String(toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.Bytes)
 				}
 				port := 38412 // default sctp port
-				for i, amf := range context.GNBAmfList {
-					if amf.GetAmfIp() == ipv4String && amf.GetAmfPort() == port {
+				amfPool := gnb.GetAmfPool()
+				amfPool.Range(func(k, v any) bool {
+					oldAmf, ok := v.(*context.GNBAmf)
+					if ok && oldAmf.GetAmfIp() == ipv4String && oldAmf.GetAmfPort() == port {
 						log.Info("[GNB][AMF] Remove AMF:", amf.GetAmfName(), " IP:", amf.GetAmfIp())
 						tnla := amf.GetTNLA()
 						tnla.Release() // Close SCTP Conntection
-						context.GNBAmfList = append(context.GNBAmfList[:i], context.GNBAmfList[i+1:]...)
-						break
+						amfPool.Delete(k)
+						return false
 					}
-				}
+					return true
+				})
 			}
 
 		case ngapType.ProtocolIEIDAMFTNLAssociationToUpdateList:
@@ -777,29 +786,40 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 					ipv4String = bytesToIpv4String(toUpdateItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.Bytes)
 				}
 				port := 38412 // default sctp port
-				for _, amf := range context.GNBAmfList {
-					if amf.GetAmfIp() == ipv4String && amf.GetAmfPort() == port {
-						amf.SetAmfName(amfName)
-						amf.SetAmfCapacity(amfCapacity)
-						amf.SetRegionId(amfRegionId)
-						amf.SetSetId(amfSetId)
-						amf.SetPointer(amfPointer)
+				amfPool := gnb.GetAmfPool()
+				amfPool.Range(func(k, v any) bool {
+					oldAmf, ok := v.(*context.GNBAmf)
+					if ok && oldAmf.GetAmfIp() == ipv4String && oldAmf.GetAmfPort() == port {
+						oldAmf.SetAmfName(amfName)
+						oldAmf.SetAmfCapacity(amfCapacity)
+						oldAmf.SetRegionId(amfRegionId)
+						oldAmf.SetSetId(amfSetId)
+						oldAmf.SetPointer(amfPointer)
 
-						amf.SetTNLAUsage(toUpdateItem.TNLAssociationUsage.Value)
-						amf.SetTNLAWeight(toUpdateItem.TNLAddressWeightFactor.Value)
-						break
+						oldAmf.SetTNLAUsage(toUpdateItem.TNLAssociationUsage.Value)
+						oldAmf.SetTNLAWeight(toUpdateItem.TNLAddressWeightFactor.Value)
+						return false
 					}
-				}
+					return true
+				})
 			}
 
 			// default:
 		}
 	}
-	for _, amf := range context.GNBAmfList {
-		tnla := amf.GetTNLA()
-		log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
-			amf.GetAmfName(), amf.GetAmfIp(), amf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
-	}
+
+	log.Debugf("After Update:")
+	amfPool = gnb.GetAmfPool()
+	amfPool.Range(func(k, v any) bool {
+		oldAmf, ok := v.(*context.GNBAmf)
+		if ok {
+			tnla := oldAmf.GetTNLA()
+			log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
+				oldAmf.GetAmfName(), oldAmf.GetAmfIp(), oldAmf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
+		}
+		return true
+	})
+
 	trigger.SendAmfConfigurationUpdateAcknowledge(amf)
 }
 
@@ -835,33 +855,39 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 				unavailableSetId := unavailableGuamiItem.GUAMI.AMFSetID.Value
 				unavailablePointer := unavailableGuamiItem.GUAMI.AMFPointer.Value
 
-				for i, amf := range context.GNBAmfList {
-					for j := 0; j < amf.GetLenPlmns(); j++ {
-						amfSupportMcc, amfSupportMnc := amf.GetPlmnSupport(j)
-						amfSupportRegionId := amf.GetRegionId()
-						amfSupportSetId := amf.GetSetId()
-						amfSupportPointer := amf.GetPointer()
-						log.Debugf("amf Support: %s %s %s %s %s\n", amfSupportMcc, amfSupportMnc,
-							ngapConvert.BitStringToHex(&amfSupportRegionId),
-							ngapConvert.BitStringToHex(&amfSupportSetId),
-							ngapConvert.BitStringToHex(&amfSupportPointer))
+				amfPool := gnb.GetAmfPool()
+				amfPool.Range(func(k, v any) bool {
+					oldAmf, ok := v.(*context.GNBAmf)
+					if !ok {
+						return true
+					}
+					for j := 0; j < oldAmf.GetLenPlmns(); j++ {
+						oldAmfSupportMcc, oldAmfSupportMnc := oldAmf.GetPlmnSupport(j)
+						oldAmfSupportRegionId := oldAmf.GetRegionId()
+						oldAmfSupportSetId := oldAmf.GetSetId()
+						oldAmfSupportPointer := oldAmf.GetPointer()
+						log.Debugf("amf Support: %s %s %s %s %s\n", oldAmfSupportMcc, oldAmfSupportMnc,
+							ngapConvert.BitStringToHex(&oldAmfSupportRegionId),
+							ngapConvert.BitStringToHex(&oldAmfSupportSetId),
+							ngapConvert.BitStringToHex(&oldAmfSupportPointer))
 						log.Debugf("unavailable: %s %s %s %s %s\n", unavailableMcc, unavailableMnc,
 							ngapConvert.BitStringToHex(&unavailableRegionId),
 							ngapConvert.BitStringToHex(&unavailableSetId),
 							ngapConvert.BitStringToHex(&unavailablePointer))
 
-						if amfSupportMcc == unavailableMcc && amfSupportMnc == unavailableMnc &&
-							compareAperBitString(&amfSupportRegionId, &unavailableRegionId) &&
-							compareAperBitString(&amfSupportSetId, &unavailableSetId) &&
-							compareAperBitString(&amfSupportPointer, &unavailablePointer) {
-							log.Info("[GNB][AMF] Remove AMF:", amf.GetAmfName())
-							tnla := amf.GetTNLA()
+						if oldAmfSupportMcc == unavailableMcc && oldAmfSupportMnc == unavailableMnc &&
+							compareAperBitString(&oldAmfSupportRegionId, &unavailableRegionId) &&
+							compareAperBitString(&oldAmfSupportSetId, &unavailableSetId) &&
+							compareAperBitString(&oldAmfSupportPointer, &unavailablePointer) {
+							log.Info("[GNB][AMF] Remove AMF:", oldAmf.GetAmfName())
+							tnla := oldAmf.GetTNLA()
 							tnla.Release()
-							context.GNBAmfList = append(context.GNBAmfList[:i], context.GNBAmfList[i+1:]...)
-							break
+							amfPool.Delete(k)
+							return true
 						}
 					}
-				}
+					return true
+				})
 			}
 		}
 	}
