@@ -221,16 +221,17 @@ func (gnb *GNBContext) deleteGnBAmf(amfId int64) {
 
 func (gnb *GNBContext) selectAmFByCapacity() *GNBAmf {
 	var amfSelect *GNBAmf
+	var maxWeightFactor int64 = -1
 	gnb.amfPool.Range(func(key, value interface{}) bool {
 		amf := value.(*GNBAmf)
 		if amf.relativeAmfCapacity > 0 {
-			amfSelect = amf
-			// select AMF and decrement capacity.
-			amfSelect.relativeAmfCapacity--
-			return false
-		} else {
-			return true
+			if maxWeightFactor < amf.tnla.tnlaWeightFactor {
+				// select AMF
+				maxWeightFactor = amf.tnla.tnlaWeightFactor
+				amfSelect = amf
+			}
 		}
+		return true
 	})
 
 	return amfSelect
@@ -238,14 +239,17 @@ func (gnb *GNBContext) selectAmFByCapacity() *GNBAmf {
 
 func (gnb *GNBContext) selectAmFByActive() *GNBAmf {
 	var amfSelect *GNBAmf
+	var maxWeightFactor int64 = -1
 	gnb.amfPool.Range(func(key, value interface{}) bool {
 		amf := value.(*GNBAmf)
 		if amf.GetState() == Active {
-			amfSelect = amf
-			return false
-		} else {
-			return true
+			if maxWeightFactor < amf.tnla.tnlaWeightFactor {
+				maxWeightFactor = amf.tnla.tnlaWeightFactor
+				amfSelect = amf
+			}
 		}
+
+		return true
 	})
 
 	return amfSelect
