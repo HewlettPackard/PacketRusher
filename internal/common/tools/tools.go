@@ -83,7 +83,7 @@ func gnbIdGenerator(i int, gnbId string) string {
 	}
 	base := int(gnbId_int) + i
 
-	gnbId = fmt.Sprintf("%06x", base)
+	gnbId = fmt.Sprintf("%06X", base)
 	return gnbId
 }
 
