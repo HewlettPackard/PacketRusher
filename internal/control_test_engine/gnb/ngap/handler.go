@@ -11,6 +11,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
+	"reflect"
 
 	"strconv"
 
@@ -823,20 +824,6 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 	trigger.SendAmfConfigurationUpdateAcknowledge(amf)
 }
 
-func compareAperBitString(a *aper.BitString, b *aper.BitString) bool {
-	if a.BitLength != b.BitLength {
-		return false
-	}
-
-	for i := 0; i < len(a.Bytes); i++ {
-		if a.Bytes[i] != b.Bytes[i] {
-			return false
-		}
-	}
-
-	return true
-}
-
 func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 	valueMessage := message.InitiatingMessage.Value.AMFStatusIndication
 	for _, ie := range valueMessage.ProtocolIEs.List {
@@ -876,9 +863,9 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 							ngapConvert.BitStringToHex(&unavailablePointer))
 
 						if oldAmfSupportMcc == unavailableMcc && oldAmfSupportMnc == unavailableMnc &&
-							compareAperBitString(&oldAmfSupportRegionId, &unavailableRegionId) &&
-							compareAperBitString(&oldAmfSupportSetId, &unavailableSetId) &&
-							compareAperBitString(&oldAmfSupportPointer, &unavailablePointer) {
+							reflect.DeepEqual(&oldAmfSupportRegionId, &unavailableRegionId) &&
+							reflect.DeepEqual(&oldAmfSupportSetId, &unavailableSetId) &&
+							reflect.DeepEqual(&oldAmfSupportPointer, &unavailablePointer) {
 							log.Info("[GNB][AMF] Remove AMF:", oldAmf.GetAmfName())
 							tnla := oldAmf.GetTNLA()
 							tnla.Release()
