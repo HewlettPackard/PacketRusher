@@ -25,35 +25,48 @@ func CaptureTraffic(path cli.Path) {
 	}
 
 	config := config.GetConfig()
-	for _, amf := range config.AMFs {
-		ip := net.ParseIP(amf.Ip)
-		route, err := netlink.RouteGet(ip)
-		if err != nil || len(route) <= 0 {
-			log.Fatal("Unable to capture traffic to AMF as we are unable to determine route to AMF. Aborting.", err)
-		}
+	ip := net.ParseIP(config.GNodeB.ControlIF.Ip)
 
-		iif, err := netlink.LinkByIndex(route[0].LinkIndex) 
-		if err != nil {
-			log.Fatalf("LinkByIndex: %v", err)
-		}
-
-		pcapw := pcapgo.NewWriter(f)
-		if err := pcapw.WriteFileHeader(1600, layers.LinkTypeEthernet); err != nil {
-			log.Fatalf("WriteFileHeader: %v", err)
-		}
-
-		handle, err := pcapgo.NewEthernetHandle(iif.Attrs().Name)
-		if err != nil {
-			log.Fatalf("OpenEthernet: %v", err)
-		}
-
-		pkgsrc := gopacket.NewPacketSource(handle, layers.LayerTypeEthernet)
-		go func() {
-			for packet := range pkgsrc.Packets() {
-				if err := pcapw.WritePacket(packet.Metadata().CaptureInfo, packet.Data()); err != nil {
-					log.Fatalf("pcap.WritePacket(): %v", err)
-				}
-			}
-		}()
+	links, err := netlink.LinkList()
+	if err != nil {
+		log.Fatalf("Unable to capture traffic to AMF as we are unable to get Links informations %s", err)
 	}
+	var n2Link *netlink.Link
+outer:
+	for _, link := range links {
+		addrs, err := netlink.AddrList(link, 0)
+		if err != nil {
+			log.Errorf("Unable to get IPs of link %s: %s", link.Attrs().Name, err)
+			continue
+		}
+		for _, addr := range addrs {
+			if addr.IP.Equal(ip) {
+				n2Link = &link
+				break outer
+			}
+		}
+	}
+
+	if n2Link == nil {
+		log.Fatalf("Unable to find network interface providing gNodeB IP %s", ip)
+	}
+
+	pcapw := pcapgo.NewWriter(f)
+	if err := pcapw.WriteFileHeader(1600, layers.LinkTypeEthernet); err != nil {
+		log.Fatalf("WriteFileHeader: %v", err)
+	}
+
+	handle, err := pcapgo.NewEthernetHandle((*n2Link).Attrs().Name)
+	if err != nil {
+		log.Fatalf("OpenEthernet: %v", err)
+	}
+
+	pkgsrc := gopacket.NewPacketSource(handle, layers.LayerTypeEthernet)
+	go func() {
+		for packet := range pkgsrc.Packets() {
+			if err := pcapw.WritePacket(packet.Metadata().CaptureInfo, packet.Data()); err != nil {
+				log.Fatalf("pcap.WritePacket(): %v", err)
+			}
+		}
+	}()
 }
