@@ -31,7 +31,7 @@ func getConfigurationUpdateComplete() (nasPdu []byte) {
 
 	configurationUpdateComplete := nasMessage.NewConfigurationUpdateComplete(0)
 	configurationUpdateComplete.SetExtendedProtocolDiscriminator(nasMessage.Epd5GSMobilityManagementMessage)
-	configurationUpdateComplete.SetSecurityHeaderType(nas.SecurityHeaderTypeIntegrityProtectedAndCiphered)
+	configurationUpdateComplete.SetSecurityHeaderType(0x00)
 	configurationUpdateComplete.SetSpareHalfOctet(0x00)
 	configurationUpdateComplete.SetMessageType(nas.MsgTypeConfigurationUpdateComplete)
 
