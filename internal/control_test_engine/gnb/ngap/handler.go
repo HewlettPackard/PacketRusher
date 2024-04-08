@@ -13,8 +13,6 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"reflect"
 
-	"strconv"
-
 	_ "net"
 
 	"github.com/free5gc/aper"
@@ -678,18 +676,6 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 	log.Info("[GNB][NGAP] Releasing UE Context, cause: ", causeToString(cause))
 }
 
-func bytesToIpv4String(bs []byte) string {
-	var s string
-	for i, b := range bs {
-		if i > 3 {
-			break
-		}
-		s += strconv.FormatInt(int64(b), 10)
-		s += "."
-	}
-	return s[:len(s)-1]
-}
-
 func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 	log.Debugf("Before Update:")
 
@@ -730,7 +716,7 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 				bitLen := toAddItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
 				var ipv4String string
 				if bitLen == 32 || bitLen == 160 { // IPv4 or IPv4+IPv6
-					ipv4String = bytesToIpv4String(toAddItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.Bytes)
+					ipv4String, _ = ngapConvert.IPAddressToString(*toAddItem.AMFTNLAssociationAddress.EndpointIPAddress)
 				}
 
 				port := 38412 // default sctp port
@@ -761,7 +747,7 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 				bitLen := toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
 				var ipv4String string
 				if bitLen == 32 || bitLen == 160 { // IPv4 or IPv4+IPv6
-					ipv4String = bytesToIpv4String(toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.Bytes)
+					ipv4String, _ = ngapConvert.IPAddressToString(*toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress)
 				}
 				port := 38412 // default sctp port
 				amfPool := gnb.GetAmfPool()
@@ -784,7 +770,7 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 				bitLen := toUpdateItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
 				var ipv4String string
 				if bitLen == 32 || bitLen == 160 {
-					ipv4String = bytesToIpv4String(toUpdateItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.Bytes)
+					ipv4String, _ = ngapConvert.IPAddressToString(*toUpdateItem.AMFTNLAssociationAddress.EndpointIPAddress)
 				}
 				port := 38412 // default sctp port
 				amfPool := gnb.GetAmfPool()
