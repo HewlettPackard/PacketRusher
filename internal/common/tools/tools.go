@@ -31,11 +31,10 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 	// gnb[0].n2_ip = 192.168.2.10, gnb[0].n3_ip = 192.168.3.10
 	// gnb[1].n2_ip = 192.168.2.11, gnb[1].n3_ip = 192.168.3.11
 	// ...
-	gnbId := cfg.GNodeB.PlmnList.GnbId
+	baseGnbId := cfg.GNodeB.PlmnList.GnbId
 	n2Ip := cfg.GNodeB.ControlIF.Ip
 	n3Ip := cfg.GNodeB.DataIF.Ip
 	for i := 1; i <= count; i++ {
-		cfg.GNodeB.PlmnList.GnbId = gnbId
 		cfg.GNodeB.ControlIF.Ip = n2Ip
 		cfg.GNodeB.DataIF.Ip = n3Ip
 
@@ -44,7 +43,7 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 
 		// TODO: We could find the interfaces where N2/N3 are
 		// and check that the generated IPs, still belong to the interfaces' subnet
-		gnbId = gnbIdGenerator(i, gnbId)
+		cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(i, baseGnbId)
 		n2Ip, err = IncrementIP(n2Ip, "0.0.0.0/0")
 		if err != nil {
 			log.Fatal("[GNB][CONFIG] Error while allocating ip for N2: " + err.Error())
