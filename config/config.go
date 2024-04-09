@@ -195,8 +195,8 @@ func setLogLevel(cfg Config) {
 func (config *Config) GetUESecurityCapability() *nasType.UESecurityCapability {
 	UESecurityCapability := &nasType.UESecurityCapability{
 		Iei:    nasMessage.RegistrationRequestUESecurityCapabilityType,
-		Len:    8,
-		Buffer: []uint8{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		Len:    2,
+		Buffer: []uint8{0x00, 0x00},
 	}
 
 	// Ciphering algorithms
