@@ -75,7 +75,7 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 		case ngapType.ProcedureCodePaging:
 			// handler NGAP Paging
 			log.Info("[GNB][NGAP] Receive Paging")
-			handler.HandlerPaging(gnb, ngapMsg)
+			HandlerPaging(gnb, ngapMsg)
 
 		case ngapType.ProcedureCodeErrorIndication:
 			// handler Error Indicator
