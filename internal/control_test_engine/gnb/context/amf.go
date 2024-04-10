@@ -31,6 +31,7 @@ type GNBAmf struct {
 	slices              *SliceSupported
 	lenSlice            int
 	lenPlmn             int
+	backupAMF           string
 	// TODO implement the other fields of the AMF Context
 }
 
@@ -156,6 +157,9 @@ func (amf *GNBAmf) AddedSlice(sst string, sd string) {
 
 func (amf *GNBAmf) GetTNLA() TNLAssociation {
 	return amf.tnla
+}
+func (tnla *TNLAssociation) GetSCTP() *sctp.SCTPConn {
+	return tnla.sctpConn
 }
 
 func (tnla *TNLAssociation) GetWeightFactor() int64 {
@@ -288,4 +292,12 @@ func (amf *GNBAmf) SetLenPlmns(value int) {
 
 func (amf *GNBAmf) SetLenSlice(value int) {
 	amf.lenSlice = value
+}
+
+func (amf *GNBAmf) GetBackupAMF() string {
+	return amf.backupAMF
+}
+
+func (amf *GNBAmf) SetBackupAMF(backupAMF string) {
+	amf.backupAMF = backupAMF
 }

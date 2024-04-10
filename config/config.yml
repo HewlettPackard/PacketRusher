@@ -13,7 +13,6 @@ gnodeb:
   slicesupportlist:
     sst: "01"
     sd: "000001" # optional, can be removed if not used
-
 ue:
   msin: "0000000120"
   key: "00112233445566778899AABBCCDDEEFF"
@@ -42,4 +41,4 @@ amfif:
   - ip: "192.168.11.30"
     port: 38412
 logs:
-    level: 7
+  level: 4

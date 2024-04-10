@@ -142,6 +142,14 @@ func (gnb *GNBContext) GetN3GnbIp() string {
 	return gnb.dataInfo.gnbIp
 }
 
+func (gnb *GNBContext) GetUePool() *sync.Map {
+	return &gnb.uePool
+}
+
+func (gnb *GNBContext) GetPrUePool() *sync.Map {
+	return &gnb.prUePool
+}
+
 func (gnb *GNBContext) DeleteGnBUe(ue *GNBUe) {
 	gnb.uePool.Delete(ue.ranUeNgapId)
 	gnb.prUePool.CompareAndDelete(ue.GetPrUeId(), ue)

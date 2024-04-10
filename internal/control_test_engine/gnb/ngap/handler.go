@@ -824,11 +824,24 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 				if hexStr[2] != 'f' {
 					unavailableMnc = string(hexStr[2]) + string(hexStr[5]) + string(hexStr[4])
 				}
-				unavailableRegionId := unavailableGuamiItem.GUAMI.AMFRegionID.Value
-				unavailableSetId := unavailableGuamiItem.GUAMI.AMFSetID.Value
-				unavailablePointer := unavailableGuamiItem.GUAMI.AMFPointer.Value
 
 				amfPool := gnb.GetAmfPool()
+
+				// select backup AMF
+				var backupAmf *context.GNBAmf
+				amfPool.Range(func(k, v any) bool {
+					amf, ok := v.(*context.GNBAmf)
+					if !ok {
+						return true
+					}
+					if amf.GetAmfName() == unavailableGuamiItem.BackupAMFName.Value {
+						backupAmf = amf
+						return false
+					}
+
+					return true
+				})
+
 				amfPool.Range(func(k, v any) bool {
 					oldAmf, ok := v.(*context.GNBAmf)
 					if !ok {
@@ -836,26 +849,57 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 					}
 					for j := 0; j < oldAmf.GetLenPlmns(); j++ {
 						oldAmfSupportMcc, oldAmfSupportMnc := oldAmf.GetPlmnSupport(j)
-						oldAmfSupportRegionId := oldAmf.GetRegionId()
-						oldAmfSupportSetId := oldAmf.GetSetId()
-						oldAmfSupportPointer := oldAmf.GetPointer()
-						log.Debugf("amf Support: %s %s %s %s %s\n", oldAmfSupportMcc, oldAmfSupportMnc,
-							ngapConvert.BitStringToHex(&oldAmfSupportRegionId),
-							ngapConvert.BitStringToHex(&oldAmfSupportSetId),
-							ngapConvert.BitStringToHex(&oldAmfSupportPointer))
-						log.Debugf("unavailable: %s %s %s %s %s\n", unavailableMcc, unavailableMnc,
-							ngapConvert.BitStringToHex(&unavailableRegionId),
-							ngapConvert.BitStringToHex(&unavailableSetId),
-							ngapConvert.BitStringToHex(&unavailablePointer))
 
 						if oldAmfSupportMcc == unavailableMcc && oldAmfSupportMnc == unavailableMnc &&
-							reflect.DeepEqual(&oldAmfSupportRegionId, &unavailableRegionId) &&
-							reflect.DeepEqual(&oldAmfSupportSetId, &unavailableSetId) &&
-							reflect.DeepEqual(&oldAmfSupportPointer, &unavailablePointer) {
-							log.Info("[GNB][AMF] Remove AMF:", oldAmf.GetAmfName())
+							reflect.DeepEqual(oldAmf.GetRegionId(), unavailableGuamiItem.GUAMI.AMFRegionID.Value) &&
+							reflect.DeepEqual(oldAmf.GetSetId(), unavailableGuamiItem.GUAMI.AMFSetID.Value) &&
+							reflect.DeepEqual(oldAmf.GetPointer(), unavailableGuamiItem.GUAMI.AMFPointer.Value) {
+
+							log.Info("[GNB][AMF] Remove AMF: [",
+								"Id: ", oldAmf.GetAmfId(),
+								"Name: ", oldAmf.GetAmfName(),
+								"Ipv4: ", oldAmf.GetAmfIp(),
+								"]",
+							)
+
 							tnla := oldAmf.GetTNLA()
+
+							// NGAP UE-TNLA Rebinding
+							uePool := gnb.GetUePool()
+							uePool.Range(func(k, v any) bool {
+								ue, ok := v.(*context.GNBUe)
+								if !ok {
+									return true
+								}
+
+								if ue.GetAmfId() == oldAmf.GetAmfId() {
+									// set amfId and SCTP association for UE.
+									ue.SetAmfId(backupAmf.GetAmfId())
+									ue.SetSCTP(backupAmf.GetSCTPConn())
+								}
+
+								return true
+							})
+
+							prUePool := gnb.GetPrUePool()
+							prUePool.Range(func(k, v any) bool {
+								ue, ok := v.(*context.GNBUe)
+								if !ok {
+									return true
+								}
+
+								if ue.GetAmfId() == oldAmf.GetAmfId() {
+									// set amfId and SCTP association for UE.
+									ue.SetAmfId(backupAmf.GetAmfId())
+									ue.SetSCTP(backupAmf.GetSCTPConn())
+								}
+
+								return true
+							})
+
 							tnla.Release()
 							amfPool.Delete(k)
+
 							return true
 						}
 					}
