@@ -19,6 +19,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var (
+	NewUe = ue.NewUE
+)
+
 type ueTaskExecuter struct {
 	UeId       int
 	UeCfg      config.Ue

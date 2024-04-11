@@ -42,4 +42,4 @@ amfif:
   ip: "192.168.11.30"
   port: 38412
 logs:
-    level: 4
+    level: 5

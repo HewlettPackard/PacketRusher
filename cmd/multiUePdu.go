@@ -204,8 +204,7 @@ func testMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 		ueScenarios = append(ueScenarios, ueScenario)
 	}
 
-	r := scenario.ScenarioManager{}
-	r.StartScenario(gnbs, cfg.AMF, ueScenarios, timeBetweenRegistration, maxRequestRate)
+	scenario.Start(gnbs, cfg.AMF, ueScenarios, timeBetweenRegistration, maxRequestRate)
 }
 
 func nextGnbConf(gnb config.GNodeB, i int, baseId string) config.GNodeB {
