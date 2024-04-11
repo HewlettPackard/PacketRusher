@@ -25,7 +25,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	wg.Add(1)
 
-	gnb := gnb.InitGnb(cfg, &wg)
+	gnb := gnb.InitGnb(cfg.GNodeB, cfg.AMFs, &wg)
 
 	time.Sleep(1 * time.Second)
 

@@ -38,7 +38,7 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 		cfg.GNodeB.ControlIF.Ip = n2Ip
 		cfg.GNodeB.DataIF.Ip = n3Ip
 
-		gnbs[cfg.GNodeB.PlmnList.GnbId] = gnb.InitGnb(cfg, wg)
+		gnbs[cfg.GNodeB.PlmnList.GnbId] = gnb.InitGnb(cfg.GNodeB, cfg.AMFs, wg)
 		wg.Add(1)
 
 		// TODO: We could find the interfaces where N2/N3 are

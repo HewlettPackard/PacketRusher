@@ -74,9 +74,8 @@ func TestSingleUe(t *testing.T) {
 
 	gnbs := []config.GNodeB{conf.GNodeB}
 	ueScenario := scenario.UEScenario{
-		Config:    conf.Ue,
-		Loop:      false,
-		ForceStop: 20000,
+		Config: conf.Ue,
+		Loop:   false,
 		Tasks: []scenario.Task{
 			{
 				TaskType: scenario.AttachToGNB,
@@ -98,10 +97,9 @@ func TestSingleUe(t *testing.T) {
 	}
 	ueScenarios := []scenario.UEScenario{ueScenario}
 
-	r := scenario.ScenarioManager{}
-	r.StartScenario(gnbs, conf.AMF, ueScenarios, 500)
+	scenario.Start(gnbs, conf.AMF, ueScenarios, 500, 30000)
 
-	time.Sleep(time.Duration(1000) * time.Millisecond)
+	time.Sleep(time.Duration(4000) * time.Millisecond)
 
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {

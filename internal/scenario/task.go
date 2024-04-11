@@ -7,7 +7,6 @@ package scenario
 type Task struct {
 	TaskType   TaskType
 	Delay      int
-	Hang       bool // hang simulation in this state until ctrl-c is received
 	Parameters struct {
 		GnbId string
 	}
@@ -20,13 +19,13 @@ const (
 	Registration
 	Deregistration
 	NewPDUSession
-	// DestroyPDUSession
 	Terminate
 	Kill
 	Idle
 	ServiceRequest
 	NGAPHandover
 	XNHandover
+	// DestroyPDUSession
 )
 
 func (t TaskType) ToStr() string {
