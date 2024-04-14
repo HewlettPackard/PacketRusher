@@ -7,6 +7,7 @@ package context
 import (
 	"fmt"
 
+	"github.com/free5gc/aper"
 	"github.com/ishidawataru/sctp"
 )
 
@@ -23,20 +24,21 @@ type GNBAmf struct {
 	relativeAmfCapacity int64          // AMF capacity
 	state               int
 	name                string // amf name.
-	regionId            byte
-	setId               byte
-	pointer             byte
+	regionId            aper.BitString
+	setId               aper.BitString
+	pointer             aper.BitString
 	plmns               *PlmnSupported
 	slices              *SliceSupported
 	lenSlice            int
 	lenPlmn             int
+	backupAMF           string
 	// TODO implement the other fields of the AMF Context
 }
 
 type TNLAssociation struct {
 	sctpConn         *sctp.SCTPConn
 	tnlaWeightFactor int64
-	usage            bool
+	usage            aper.Enumerated
 	streams          uint16
 }
 
@@ -75,10 +77,10 @@ func (amf *GNBAmf) GetPlmnSupport(index int) (string, string) {
 
 func convertMccMnc(plmn string) (mcc string, mnc string) {
 	if plmn[2] == 'f' {
-		mcc = fmt.Sprintf("%c%c%c", plmn[3], plmn[0], plmn[1])
+		mcc = fmt.Sprintf("%c%c%c", plmn[1], plmn[0], plmn[3])
 		mnc = fmt.Sprintf("%c%c", plmn[5], plmn[4])
 	} else {
-		mcc = fmt.Sprintf("%c%c%c", plmn[3], plmn[0], plmn[1])
+		mcc = fmt.Sprintf("%c%c%c", plmn[1], plmn[0], plmn[3])
 		mnc = fmt.Sprintf("%c%c%c", plmn[2], plmn[5], plmn[4])
 	}
 
@@ -153,8 +155,23 @@ func (amf *GNBAmf) AddedSlice(sst string, sd string) {
 	amf.lenSlice++
 }
 
-func (amf *GNBAmf) getTNLAs() TNLAssociation {
+func (amf *GNBAmf) GetTNLA() TNLAssociation {
 	return amf.tnla
+}
+func (tnla *TNLAssociation) GetSCTP() *sctp.SCTPConn {
+	return tnla.sctpConn
+}
+
+func (tnla *TNLAssociation) GetWeightFactor() int64 {
+	return tnla.tnlaWeightFactor
+}
+
+func (tnla *TNLAssociation) GetUsage() aper.Enumerated {
+	return tnla.usage
+}
+
+func (tnla *TNLAssociation) Release() error {
+	return tnla.sctpConn.Close()
 }
 
 func (amf *GNBAmf) SetStateInactive() {
@@ -181,11 +198,11 @@ func (amf *GNBAmf) SetSCTPConn(conn *sctp.SCTPConn) {
 	amf.tnla.sctpConn = conn
 }
 
-func (amf *GNBAmf) setTNLAWeight(weight int64) {
+func (amf *GNBAmf) SetTNLAWeight(weight int64) {
 	amf.tnla.tnlaWeightFactor = weight
 }
 
-func (amf *GNBAmf) setTNLAUsage(usage bool) {
+func (amf *GNBAmf) SetTNLAUsage(usage aper.Enumerated) {
 	amf.tnla.usage = usage
 }
 
@@ -225,6 +242,30 @@ func (amf *GNBAmf) GetAmfName() string {
 	return amf.name
 }
 
+func (amf *GNBAmf) GetRegionId() aper.BitString {
+	return amf.regionId
+}
+
+func (amf *GNBAmf) SetRegionId(regionId aper.BitString) {
+	amf.regionId = regionId
+}
+
+func (amf *GNBAmf) GetSetId() aper.BitString {
+	return amf.setId
+}
+
+func (amf *GNBAmf) SetSetId(setId aper.BitString) {
+	amf.setId = setId
+}
+
+func (amf *GNBAmf) GetPointer() aper.BitString {
+	return amf.pointer
+}
+
+func (amf *GNBAmf) SetPointer(pointer aper.BitString) {
+	amf.pointer = pointer
+}
+
 func (amf *GNBAmf) SetAmfName(name string) {
 	amf.name = name
 }
@@ -251,4 +292,12 @@ func (amf *GNBAmf) SetLenPlmns(value int) {
 
 func (amf *GNBAmf) SetLenSlice(value int) {
 	amf.lenSlice = value
+}
+
+func (amf *GNBAmf) GetBackupAMF() string {
+	return amf.backupAMF
+}
+
+func (amf *GNBAmf) SetBackupAMF(backupAMF string) {
+	amf.backupAMF = backupAMF
 }

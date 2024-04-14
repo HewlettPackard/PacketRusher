@@ -25,20 +25,38 @@ func CaptureTraffic(path cli.Path) {
 	}
 
 	config := config.GetConfig()
-	ip := net.ParseIP(config.AMF.Ip)
-	route, err := netlink.RouteGet(ip)
-	if err != nil || len(route) <= 0 {
-		log.Fatal("Unable to capture traffic to AMF as we are unable to determine route to AMF. Aborting.", err)
+	ip := net.ParseIP(config.GNodeB.ControlIF.Ip)
+
+	links, err := netlink.LinkList()
+	if err != nil {
+		log.Fatalf("Unable to capture traffic to AMF as we are unable to get Links informations %s", err)
+	}
+	var n2Link *netlink.Link
+outer:
+	for _, link := range links {
+		addrs, err := netlink.AddrList(link, 0)
+		if err != nil {
+			log.Errorf("Unable to get IPs of link %s: %s", link.Attrs().Name, err)
+			continue
+		}
+		for _, addr := range addrs {
+			if addr.IP.Equal(ip) {
+				n2Link = &link
+				break outer
+			}
+		}
 	}
 
-	iif, err := netlink.LinkByIndex(route[0].LinkIndex)
+	if n2Link == nil {
+		log.Fatalf("Unable to find network interface providing gNodeB IP %s", ip)
+	}
 
 	pcapw := pcapgo.NewWriter(f)
 	if err := pcapw.WriteFileHeader(1600, layers.LinkTypeEthernet); err != nil {
 		log.Fatalf("WriteFileHeader: %v", err)
 	}
 
-	handle, err := pcapgo.NewEthernetHandle(iif.Attrs().Name)
+	handle, err := pcapgo.NewEthernetHandle((*n2Link).Attrs().Name)
 	if err != nil {
 		log.Fatalf("OpenEthernet: %v", err)
 	}

@@ -3,7 +3,7 @@
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
  * © Copyright 2023-2024 Valentin D'Emmanuele
  */
-package handler
+package ngap
 
 import (
 	"encoding/binary"
@@ -11,6 +11,8 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
+	"reflect"
+
 	_ "net"
 
 	"github.com/free5gc/aper"
@@ -675,13 +677,237 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 }
 
 func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+	log.Debugf("Before Update:")
 
-	// TODO: Implement update AMF Context from AMFConfigurationUpdate
-	_ = message.InitiatingMessage.Value.AMFConfigurationUpdate
-	log.Warn("[GNB][AMF] Ignoring AMFConfigurationUpdate but send AMFConfigurationUpdateAcknowledge")
-	log.Warn("[GNB][AMF] TODO: Implement update AMF Context from AMFConfigurationUpdate")
+	amfPool := gnb.GetAmfPool()
+	amfPool.Range(func(k, v any) bool {
+		oldAmf, ok := v.(*context.GNBAmf)
+		if ok {
+			tnla := oldAmf.GetTNLA()
+			log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
+				oldAmf.GetAmfName(), oldAmf.GetAmfIp(), oldAmf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
+		}
+		return true
+	})
+
+	var amfName string
+	var amfCapacity int64
+	var amfRegionId, amfSetId, amfPointer aper.BitString
+
+	valueMessage := message.InitiatingMessage.Value.AMFConfigurationUpdate
+	for _, ie := range valueMessage.ProtocolIEs.List {
+		switch ie.Id.Value {
+
+		case ngapType.ProtocolIEIDAMFName:
+			amfName = ie.Value.AMFName.Value
+
+		case ngapType.ProtocolIEIDServedGUAMIList:
+			for _, servedGuamiItem := range ie.Value.ServedGUAMIList.List {
+				amfRegionId = servedGuamiItem.GUAMI.AMFRegionID.Value
+				amfSetId = servedGuamiItem.GUAMI.AMFSetID.Value
+				amfPointer = servedGuamiItem.GUAMI.AMFPointer.Value
+			}
+		case ngapType.ProtocolIEIDRelativeAMFCapacity:
+			amfCapacity = ie.Value.RelativeAMFCapacity.Value
+
+		case ngapType.ProtocolIEIDAMFTNLAssociationToAddList:
+			toAddList := ie.Value.AMFTNLAssociationToAddList
+			for _, toAddItem := range toAddList.List {
+				bitLen := toAddItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
+				var ipv4String string
+				if bitLen == 32 || bitLen == 160 { // IPv4 or IPv4+IPv6
+					ipv4String, _ = ngapConvert.IPAddressToString(*toAddItem.AMFTNLAssociationAddress.EndpointIPAddress)
+				}
+
+				port := 38412 // default sctp port
+				amf := gnb.NewGnBAmf(ipv4String, port)
+				amf.SetAmfName(amfName)
+				amf.SetAmfCapacity(amfCapacity)
+				amf.SetRegionId(amfRegionId)
+				amf.SetSetId(amfSetId)
+				amf.SetPointer(amfPointer)
+				amf.SetTNLAUsage(toAddItem.TNLAssociationUsage.Value)
+				amf.SetTNLAWeight(toAddItem.TNLAddressWeightFactor.Value)
+
+				// start communication with AMF(SCTP).
+				if err := InitConn(amf, gnb); err != nil {
+					log.Fatal("Error in", err)
+				} else {
+					log.Info("[GNB] SCTP/NGAP service is running")
+					// wg.Add(1)
+				}
+
+				trigger.SendNgSetupRequest(gnb, amf)
+
+			}
+
+		case ngapType.ProtocolIEIDAMFTNLAssociationToRemoveList:
+			toRemoveList := ie.Value.AMFTNLAssociationToRemoveList
+			for _, toRemoveItem := range toRemoveList.List {
+				bitLen := toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
+				var ipv4String string
+				if bitLen == 32 || bitLen == 160 { // IPv4 or IPv4+IPv6
+					ipv4String, _ = ngapConvert.IPAddressToString(*toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress)
+				}
+				port := 38412 // default sctp port
+				amfPool := gnb.GetAmfPool()
+				amfPool.Range(func(k, v any) bool {
+					oldAmf, ok := v.(*context.GNBAmf)
+					if ok && oldAmf.GetAmfIp() == ipv4String && oldAmf.GetAmfPort() == port {
+						log.Info("[GNB][AMF] Remove AMF:", amf.GetAmfName(), " IP:", amf.GetAmfIp())
+						tnla := amf.GetTNLA()
+						tnla.Release() // Close SCTP Conntection
+						amfPool.Delete(k)
+						return false
+					}
+					return true
+				})
+			}
+
+		case ngapType.ProtocolIEIDAMFTNLAssociationToUpdateList:
+			toUpdateList := ie.Value.AMFTNLAssociationToUpdateList
+			for _, toUpdateItem := range toUpdateList.List {
+				bitLen := toUpdateItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
+				var ipv4String string
+				if bitLen == 32 || bitLen == 160 {
+					ipv4String, _ = ngapConvert.IPAddressToString(*toUpdateItem.AMFTNLAssociationAddress.EndpointIPAddress)
+				}
+				port := 38412 // default sctp port
+				amfPool := gnb.GetAmfPool()
+				amfPool.Range(func(k, v any) bool {
+					oldAmf, ok := v.(*context.GNBAmf)
+					if ok && oldAmf.GetAmfIp() == ipv4String && oldAmf.GetAmfPort() == port {
+						oldAmf.SetAmfName(amfName)
+						oldAmf.SetAmfCapacity(amfCapacity)
+						oldAmf.SetRegionId(amfRegionId)
+						oldAmf.SetSetId(amfSetId)
+						oldAmf.SetPointer(amfPointer)
+
+						oldAmf.SetTNLAUsage(toUpdateItem.TNLAssociationUsage.Value)
+						oldAmf.SetTNLAWeight(toUpdateItem.TNLAddressWeightFactor.Value)
+						return false
+					}
+					return true
+				})
+			}
+
+			// default:
+		}
+	}
+
+	log.Debugf("After Update:")
+	amfPool = gnb.GetAmfPool()
+	amfPool.Range(func(k, v any) bool {
+		oldAmf, ok := v.(*context.GNBAmf)
+		if ok {
+			tnla := oldAmf.GetTNLA()
+			log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
+				oldAmf.GetAmfName(), oldAmf.GetAmfIp(), oldAmf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
+		}
+		return true
+	})
 
 	trigger.SendAmfConfigurationUpdateAcknowledge(amf)
+}
+
+func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+	valueMessage := message.InitiatingMessage.Value.AMFStatusIndication
+	for _, ie := range valueMessage.ProtocolIEs.List {
+		switch ie.Id.Value {
+		case ngapType.ProtocolIEIDUnavailableGUAMIList:
+			for _, unavailableGuamiItem := range ie.Value.UnavailableGUAMIList.List {
+				octetStr := unavailableGuamiItem.GUAMI.PLMNIdentity.Value
+				hexStr := fmt.Sprintf("%02x%02x%02x", octetStr[0], octetStr[1], octetStr[2])
+				var unavailableMcc, unavailableMnc string
+				unavailableMcc = string(hexStr[1]) + string(hexStr[0]) + string(hexStr[3])
+				unavailableMnc = string(hexStr[5]) + string(hexStr[4])
+				if hexStr[2] != 'f' {
+					unavailableMnc = string(hexStr[2]) + string(hexStr[5]) + string(hexStr[4])
+				}
+
+				amfPool := gnb.GetAmfPool()
+
+				// select backup AMF
+				var backupAmf *context.GNBAmf
+				amfPool.Range(func(k, v any) bool {
+					amf, ok := v.(*context.GNBAmf)
+					if !ok {
+						return true
+					}
+					if amf.GetAmfName() == unavailableGuamiItem.BackupAMFName.Value {
+						backupAmf = amf
+						return false
+					}
+
+					return true
+				})
+
+				amfPool.Range(func(k, v any) bool {
+					oldAmf, ok := v.(*context.GNBAmf)
+					if !ok {
+						return true
+					}
+					for j := 0; j < oldAmf.GetLenPlmns(); j++ {
+						oldAmfSupportMcc, oldAmfSupportMnc := oldAmf.GetPlmnSupport(j)
+
+						if oldAmfSupportMcc == unavailableMcc && oldAmfSupportMnc == unavailableMnc &&
+							reflect.DeepEqual(oldAmf.GetRegionId(), unavailableGuamiItem.GUAMI.AMFRegionID.Value) &&
+							reflect.DeepEqual(oldAmf.GetSetId(), unavailableGuamiItem.GUAMI.AMFSetID.Value) &&
+							reflect.DeepEqual(oldAmf.GetPointer(), unavailableGuamiItem.GUAMI.AMFPointer.Value) {
+
+							log.Info("[GNB][AMF] Remove AMF: [",
+								"Id: ", oldAmf.GetAmfId(),
+								"Name: ", oldAmf.GetAmfName(),
+								"Ipv4: ", oldAmf.GetAmfIp(),
+								"]",
+							)
+
+							tnla := oldAmf.GetTNLA()
+
+							// NGAP UE-TNLA Rebinding
+							uePool := gnb.GetUePool()
+							uePool.Range(func(k, v any) bool {
+								ue, ok := v.(*context.GNBUe)
+								if !ok {
+									return true
+								}
+
+								if ue.GetAmfId() == oldAmf.GetAmfId() {
+									// set amfId and SCTP association for UE.
+									ue.SetAmfId(backupAmf.GetAmfId())
+									ue.SetSCTP(backupAmf.GetSCTPConn())
+								}
+
+								return true
+							})
+
+							prUePool := gnb.GetPrUePool()
+							prUePool.Range(func(k, v any) bool {
+								ue, ok := v.(*context.GNBUe)
+								if !ok {
+									return true
+								}
+
+								if ue.GetAmfId() == oldAmf.GetAmfId() {
+									// set amfId and SCTP association for UE.
+									ue.SetAmfId(backupAmf.GetAmfId())
+									ue.SetSCTP(backupAmf.GetSCTPConn())
+								}
+
+								return true
+							})
+
+							tnla.Release()
+							amfPool.Delete(k)
+
+							return true
+						}
+					}
+					return true
+				})
+			}
+		}
+	}
 }
 
 func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
