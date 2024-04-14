@@ -27,6 +27,9 @@ func SendNGSetupResponse(gnb *context.GNBContext, amf *context.AMFContext) {
 func SendAuthenticationRequest(gnb *context.GNBContext, ue *context.UEContext) {
 	log.Info("[5GC][NAS] Creating Authentication Request")
 	nasRes, err := nasBuilder.AuthenticationRequest(ue)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 
 	msg, err := ngapBuilder.DownlinkNASTransport(nasRes, ue)
 	if err != nil {
@@ -40,6 +43,9 @@ func SendAuthenticationRequest(gnb *context.GNBContext, ue *context.UEContext) {
 func SendIdentityRequest(gnb *context.GNBContext, ue *context.UEContext) {
 	log.Info("[5GC][NAS] Creating Identity Request")
 	nasRes, err := nasBuilder.IdentityRequest(ue)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 
 	msg, err := ngapBuilder.DownlinkNASTransport(nasRes, ue)
 	if err != nil {
@@ -54,6 +60,9 @@ func SendSecurityModeCommand(gnb *context.GNBContext, ue *context.UEContext) {
 
 	log.Info("[5GC][NAS] Creating Security Mode Command")
 	nasRes, err := nasBuilder.SecurityModeCommand(ue)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 
 	msg, err := ngapBuilder.DownlinkNASTransport(nasRes, ue)
 	if err != nil {
@@ -68,6 +77,9 @@ func SendRegistrationAccept(gnb *context.GNBContext, ue *context.UEContext, amf 
 
 	log.Info("[5GC][NAS] Creating Registration Accept")
 	nasRes, err := nasBuilder.RegistrationAccept(ue)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 
 	msg, err := ngapBuilder.InitialContextSetupRequest(nasRes, ue, *amf)
 	if err != nil {
