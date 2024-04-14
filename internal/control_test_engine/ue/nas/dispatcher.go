@@ -76,27 +76,9 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 		}
 		ue.UeSecurity.DLCount.SetSQN(sequenceNumber)
 
-		mac32, err := security.NASMacCalculate(ue.UeSecurity.IntegrityAlg,
-			ue.UeSecurity.KnasInt,
-			ue.UeSecurity.DLCount.Get(),
-			security.Bearer3GPP,
-			security.DirectionDownlink, payload)
-		if err != nil {
-			log.Info("NAS MAC calculate error")
-			return
-		}
-
-		// check integrity
-		if !reflect.DeepEqual(mac32, macReceived) {
-			log.Error("[UE][NAS] NAS MAC verification failed(received:", macReceived, "expected:", mac32)
-			return
-		} else {
-			log.Info("[UE][NAS] successful NAS MAC verification")
-		}
-
 		// check ciphering.
 		if cph {
-			if err = security.NASEncrypt(ue.UeSecurity.CipheringAlg, ue.UeSecurity.KnasEnc, ue.UeSecurity.DLCount.Get(), security.Bearer3GPP,
+			if err := security.NASEncrypt(ue.UeSecurity.CipheringAlg, ue.UeSecurity.KnasEnc, ue.UeSecurity.DLCount.Get(), security.Bearer3GPP,
 				security.DirectionDownlink, payload[1:]); err != nil {
 				log.Info("error in encrypt algorithm")
 				return
@@ -106,13 +88,37 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 		}
 
 		// remove security header.
-		payload = message[7:]
+		msg := message[7:]
 
 		// decode NAS message.
-		err = m.PlainNasDecode(&payload)
+		err := m.PlainNasDecode(&msg)
 		if err != nil {
-			// TODO return error
-			log.Info("[UE][NAS] Decode NAS error", err)
+			log.Error("[UE][NAS] Decode NAS error", err)
+		}
+
+		if ue.UeSecurity.NgKsi.Ksi == 7 &&
+			m.GmmHeader.GetMessageType() == nas.MsgTypeSecurityModeCommand {
+			ue.UeSecurity.CipheringAlg = m.SecurityModeCommand.SelectedNASSecurityAlgorithms.GetTypeOfCipheringAlgorithm()
+			ue.UeSecurity.IntegrityAlg = m.SecurityModeCommand.SelectedNASSecurityAlgorithms.GetTypeOfIntegrityProtectionAlgorithm()
+			ue.DerivateAlgKey()
+		}
+
+		mac32, err := security.NASMacCalculate(ue.UeSecurity.IntegrityAlg,
+			ue.UeSecurity.KnasInt,
+			ue.UeSecurity.DLCount.Get(),
+			security.Bearer3GPP,
+			security.DirectionDownlink, payload)
+		if err != nil {
+			log.Error("[UE][NAS] NAS MAC error", err)
+			return
+		}
+
+		// check integrity
+		if !reflect.DeepEqual(mac32, macReceived) {
+			log.Error("[UE][NAS] NAS MAC verification failed(received:", macReceived, "expected:", mac32)
+			return
+		} else {
+			log.Info("[UE][NAS] successful NAS MAC verification")
 		}
 
 	} else {
