@@ -630,7 +630,6 @@ func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscr
 	P2 := RES
 
 	ue.DerivateKamf(key, snNmae, sqnHn, AK)
-	ue.DerivateAlgKey()
 	kdfVal_for_resStar, err := ueauth.GetKDFValue(key, FC, P0, ueauth.KDFLen(P0), P1, ueauth.KDFLen(P1), P2, ueauth.KDFLen(P2))
 	if err != nil {
 		log.Fatal("[UE] Error while deriving KDF ", err)
