@@ -7,6 +7,7 @@ package test
 
 import (
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/common/routine"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/test/aio5gc"
@@ -85,14 +86,9 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	keys := make([]string, 0)
-	for k := range gnbs {
-		keys = append(keys, k)
-	}
-
 	// Setup UE
 	ueCount := 10
-	scenarioChans := make([]chan procedures.UeTesterMessage, ueCount+1)
+	scenarioRoutines := make([]*routine.Routine[procedures.UeTesterMessage], ueCount+1)
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
 		Cfg:                      conf,
@@ -103,8 +99,6 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	for ueSimCfg.UeId = 1; ueSimCfg.UeId <= ueCount; ueSimCfg.UeId++ {
-		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
-
 		imsi := tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin)
 
 		securityContext := context.SecurityContext{}
@@ -115,7 +109,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		amfContext := fiveGC.GetAMFContext()
 		amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
 
-		tools.SimulateSingleUE(ueSimCfg, &wg)
+		scenarioRoutines[ueSimCfg.UeId] = tools.SimulateSingleUE(ueSimCfg, &wg)
 
 		// Before creating a new UE, we wait for 5 ms
 		time.Sleep(time.Duration(5) * time.Millisecond)
@@ -189,14 +183,9 @@ func TestUERegistrationLoop(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	keys := make([]string, 0)
-	for k := range gnbs {
-		keys = append(keys, k)
-	}
-
 	// Setup UE
 	loopCount := 5
-	scenarioChans := make([]chan procedures.UeTesterMessage, 2)
+	scenarioRoutines := make([]*routine.Routine[procedures.UeTesterMessage], 2)
 	ueSimCfg := tools.UESimulationConfig{
 		UeId:                     1,
 		Gnbs:                     gnbs,
@@ -208,13 +197,13 @@ func TestUERegistrationLoop(t *testing.T) {
 	}
 
 	for i := 0; i < loopCount; i++ {
-		if scenarioChans[ueSimCfg.UeId] != nil {
-			scenarioChans[ueSimCfg.UeId] <- procedures.UeTesterMessage{Type: procedures.Kill}
-			close(scenarioChans[ueSimCfg.UeId])
-			scenarioChans[ueSimCfg.UeId] = nil
+		if scenarioRoutines[ueSimCfg.UeId] != nil {
+			scenarioRoutines[ueSimCfg.UeId].DoIfRunning(func(c chan<- procedures.UeTesterMessage) {
+				c <- procedures.UeTesterMessage{Type: procedures.Kill}
+				close(c)
+			})
+			scenarioRoutines[ueSimCfg.UeId] = nil
 		}
-		scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage)
-		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
 
 		securityContext := context.SecurityContext{}
 		securityContext.SetMsin(tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin))
@@ -224,7 +213,7 @@ func TestUERegistrationLoop(t *testing.T) {
 		amfContext := fiveGC.GetAMFContext()
 		amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
 
-		tools.SimulateSingleUE(ueSimCfg, &wg)
+		scenarioRoutines[ueSimCfg.UeId] = tools.SimulateSingleUE(ueSimCfg, &wg)
 
 		// Before creating a new UE, we wait for 2000 ms
 		time.Sleep(time.Duration(2000) * time.Millisecond)

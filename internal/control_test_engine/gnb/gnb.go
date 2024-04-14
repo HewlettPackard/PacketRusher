@@ -48,7 +48,7 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 			log.Fatal("Error in", err)
 		} else {
 			log.Info("[GNB] SCTP/NGAP service is running")
-			// wg.Add(1)
+			wg.Add(1)
 		}
 
 		trigger.SendNgSetupRequest(gnb, amf)

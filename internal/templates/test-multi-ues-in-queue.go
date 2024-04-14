@@ -6,6 +6,7 @@ package templates
 
 import (
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/common/routine"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"os"
@@ -52,7 +53,7 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 
 	cfg.Ue.TunnelMode = tunnelMode
 
-	scenarioChans := make([]chan procedures.UeTesterMessage, numUes+1)
+	scenarioRoutines := make([]*routine.Routine[procedures.UeTesterMessage], numUes+1)
 
 	sigStop := make(chan os.Signal, 1)
 	signal.Notify(sigStop, os.Interrupt)
@@ -76,15 +77,14 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 			// If there is currently a coroutine handling current UE
 			// kill it, before creating a new coroutine with same UE
 			// Use case: Registration of N UEs in loop, when loop = true
-			if scenarioChans[ueSimCfg.UeId] != nil {
-				scenarioChans[ueSimCfg.UeId] <- procedures.UeTesterMessage{Type: procedures.Kill}
-				close(scenarioChans[ueSimCfg.UeId])
-				scenarioChans[ueSimCfg.UeId] = nil
+			if scenarioRoutines[ueSimCfg.UeId] != nil {
+				scenarioRoutines[ueSimCfg.UeId].DoIfRunning(func(c chan<- procedures.UeTesterMessage) {
+					c <- procedures.UeTesterMessage{Type: procedures.Kill}
+					close(c)
+				})
+				scenarioRoutines[ueSimCfg.UeId] = nil
 			}
-			scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage)
-			ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
-
-			tools.SimulateSingleUE(ueSimCfg, &wg)
+			scenarioRoutines[ueSimCfg.UeId] = tools.SimulateSingleUE(ueSimCfg, &wg)
 
 			// Before creating a new UE, we wait for timeBetweenRegistration ms
 			time.Sleep(time.Duration(timeBetweenRegistration) * time.Millisecond)
@@ -105,11 +105,14 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	if stopSignal {
 		<-sigStop
 	}
-	for _, scenarioChan := range scenarioChans {
-		if scenarioChan != nil {
-			scenarioChan <- procedures.UeTesterMessage{Type: procedures.Terminate}
+	for _, scenarioRoutine := range scenarioRoutines {
+		if scenarioRoutine != nil {
+			scenarioRoutine.DoIfRunning(func(c chan<- procedures.UeTesterMessage) {
+				c <- procedures.UeTesterMessage{Type: procedures.Terminate}
+				close(c)
+			})
 		}
 	}
 
-	time.Sleep(time.Second * 1)
+	wg.Wait()
 }
