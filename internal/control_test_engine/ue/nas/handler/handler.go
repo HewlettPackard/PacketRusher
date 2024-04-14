@@ -150,7 +150,6 @@ func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) { /
 		log.Fatal("[UE][NAS] Error in Security Mode Command, Replayed UE Security Capabilities is missing")
 	}
 
-	ue.UeSecurity.CipheringAlg = message.SecurityModeCommand.SelectedNASSecurityAlgorithms.GetTypeOfCipheringAlgorithm()
 	switch ue.UeSecurity.CipheringAlg {
 	case 0:
 		log.Info("[UE][NAS] Type of ciphering algorithm is 5G-EA0")
@@ -160,7 +159,6 @@ func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) { /
 		log.Info("[UE][NAS] Type of ciphering algorithm is 128-5G-EA2")
 	}
 
-	ue.UeSecurity.IntegrityAlg = message.SecurityModeCommand.SelectedNASSecurityAlgorithms.GetTypeOfIntegrityProtectionAlgorithm()
 	switch ue.UeSecurity.IntegrityAlg {
 	case 0:
 		log.Info("[UE][NAS] Type of integrity protection algorithm is 5G-IA0")

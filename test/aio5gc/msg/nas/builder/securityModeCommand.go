@@ -5,10 +5,9 @@
 package builder
 
 import (
-	"bytes"
-	"fmt"
 	"my5G-RANTester/internal/common/auth"
 	"my5G-RANTester/test/aio5gc/context"
+	"my5G-RANTester/test/aio5gc/msg/nas/codec"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasConvert"
@@ -24,23 +23,19 @@ func SecurityModeCommand(ue *context.UEContext) ([]byte, error) {
 
 	ue.GetSecurityContext().DerivateAlgKey()
 	nasMsg := buildSecurityModeCommand(ue)
-	data := new(bytes.Buffer)
-	err := nasMsg.GmmMessageEncode(data)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
 
-	msg := data.Bytes()
-	if err != nil {
-		return nil, err
-	}
-	return msg, nil
+	return codec.Encode(ue, nasMsg)
 }
 
 func buildSecurityModeCommand(ue *context.UEContext) *nas.Message {
 	m := nas.NewMessage()
 	m.GmmMessage = nas.NewGmmMessage()
 	m.GmmHeader.SetMessageType(nas.MsgTypeSecurityModeCommand)
+
+	m.SecurityHeader = nas.SecurityHeader{
+		ProtocolDiscriminator: nasMessage.Epd5GSMobilityManagementMessage,
+		SecurityHeaderType:    nas.SecurityHeaderTypeIntegrityProtectedAndCiphered,
+	}
 
 	securityModeCommand := nasMessage.NewSecurityModeCommand(0)
 	securityModeCommand.SetExtendedProtocolDiscriminator(nasMessage.Epd5GSMobilityManagementMessage)
