@@ -59,7 +59,6 @@ func InitPduSessionRequest(ue *context.UEContext) {
 }
 
 func InitPduSessionRequestInner(ue *context.UEContext, pduSession *context.UEPDUSession) {
-	log.Info("[UE] Initiating New PDU Session")
 
 	ulNasTransport, err := mm_5gs.Request_UlNasTransport(pduSession, ue)
 	if err != nil {
