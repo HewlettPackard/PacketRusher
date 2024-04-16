@@ -42,12 +42,12 @@ func GenerateDefaultConf(controlIF config.ControlIF, dataIF config.DataIF, amfs 
 			},
 			Integrity: config.Integrity{
 				Nia0: false,
-				Nia1: false,
+				Nia1: true,
 				Nia2: true,
 			},
 			Ciphering: config.Ciphering{
-				Nea0: true,
-				Nea1: false,
+				Nea0: false,
+				Nea1: true,
 				Nea2: true,
 			},
 		},

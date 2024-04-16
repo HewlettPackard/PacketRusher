@@ -34,7 +34,7 @@ func buildSecurityModeCommand(ue *context.UEContext) *nas.Message {
 
 	m.SecurityHeader = nas.SecurityHeader{
 		ProtocolDiscriminator: nasMessage.Epd5GSMobilityManagementMessage,
-		SecurityHeaderType:    nas.SecurityHeaderTypeIntegrityProtectedAndCiphered,
+		SecurityHeaderType:    nas.SecurityHeaderTypeIntegrityProtectedWithNew5gNasSecurityContext,
 	}
 
 	securityModeCommand := nasMessage.NewSecurityModeCommand(0)
