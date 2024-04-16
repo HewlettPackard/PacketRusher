@@ -125,7 +125,7 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 		trigger.InitPduSessionRequest(ue)
 	case procedures.DestroyPDUSession:
 		pdu, err := ue.GetPduSession(msg.Param)
-		if err == nil {
+		if err != nil {
 			log.Error("[UE] Cannot release unknown PDU Session ID ", msg.Param)
 			return loop
 		}
