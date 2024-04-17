@@ -834,13 +834,18 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 					if !ok {
 						return true
 					}
-					if amf.GetAmfName() == unavailableGuamiItem.BackupAMFName.Value {
+					if unavailableGuamiItem.BackupAMFName != nil &&
+						amf.GetAmfName() == unavailableGuamiItem.BackupAMFName.Value {
 						backupAmf = amf
 						return false
 					}
 
 					return true
 				})
+
+				if backupAmf == nil {
+					return
+				}
 
 				amfPool.Range(func(k, v any) bool {
 					oldAmf, ok := v.(*context.GNBAmf)
