@@ -23,7 +23,7 @@ func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 	// decode NGAP message.
 	ngapMsg, err := ngap.Decoder(message)
 	if err != nil {
-		log.Info("[GNB][NGAP] Error decoding NGAP message in ", gnb.GetGnbId(), " GNB")
+		log.Error("[GNB][NGAP] Error decoding NGAP message in ", gnb.GetGnbId(), " GNB", ": ", err)
 	}
 
 	// check RanUeId and get UE.
