@@ -119,7 +119,9 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 		}
 
 		ueScenario.Loop = loop
-		ueScenario.Hang = true
+		if tasks[len(tasks)-1].TaskType != scenario.Deregistration {
+			ueScenario.Hang = true
+		}
 
 		ueScenarios = append(ueScenarios, ueScenario)
 	}

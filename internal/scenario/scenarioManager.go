@@ -75,7 +75,8 @@ func initManager(ueScenarios []UEScenario, timeBetweenRegistration int, timeout 
 	signal.Notify(s.sigStop, os.Interrupt)
 	if timeout > 0 {
 		time.AfterFunc(time.Duration(timeout)*time.Millisecond, func() {
-			s.stop = true
+			log.Debug("Scenario Timeout, sending interrupt signal")
+			s.sigStop <- os.Interrupt
 		})
 	}
 	return s
@@ -143,7 +144,6 @@ func (s *ScenarioManager) cleanup() {
 }
 
 func (s *ScenarioManager) handleReport(report report) {
-	log.Debugf("------------------------------------ Report UE-%d ------------------------------------", report.ueId)
 	if !report.success {
 		s.ues[report.ueId].nextTasks = []Task{}
 		log.Errorf("[UE-%d] Reported error:  %s", report.ueId, report.reason)

@@ -8,13 +8,11 @@ package test
 import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
-	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/scenario"
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
 	"os"
-	"sync"
 	"testing"
 	"time"
 
@@ -33,10 +31,10 @@ func TestSingleUe(t *testing.T) {
 		Ip:   "127.0.0.1",
 		Port: 2154,
 	}
-	amfConfig := config.AMF{
+	amfConfig := []*config.AMF{{
 		Ip:   "127.0.0.1",
 		Port: 38414,
-	}
+	}}
 
 	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
 	type UECheck struct {
@@ -76,6 +74,7 @@ func TestSingleUe(t *testing.T) {
 	ueScenario := scenario.UEScenario{
 		Config: conf.Ue,
 		Loop:   false,
+		Hang:   false,
 		Tasks: []scenario.Task{
 			{
 				TaskType: scenario.AttachToGNB,
@@ -97,9 +96,9 @@ func TestSingleUe(t *testing.T) {
 	}
 	ueScenarios := []scenario.UEScenario{ueScenario}
 
-	scenario.Start(gnbs, conf.AMF, ueScenarios, 500, 30000)
+	scenario.Start(gnbs, conf.AMFs, ueScenarios, 50, 30000)
 
-	time.Sleep(time.Duration(4000) * time.Millisecond)
+	time.Sleep(2 * time.Second)
 
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
@@ -163,50 +162,52 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 	time.Sleep(1 * time.Second)
 
-	// Setup gNodeB
-	gnbCount := 1
-	wg := sync.WaitGroup{}
-	gnbs := tools.CreateGnbs(gnbCount, conf, &wg)
-
-	time.Sleep(1 * time.Second)
-
-	keys := make([]string, 0)
-	for k := range gnbs {
-		keys = append(keys, k)
-	}
-
 	// Setup UE
 	ueCount := 10
-	scenarioChans := make([]chan procedures.UeTesterMessage, ueCount+1)
-	ueSimCfg := tools.UESimulationConfig{
-		Gnbs:                     gnbs,
-		Cfg:                      conf,
-		TimeBeforeDeregistration: 400,
-		TimeBeforeNgapHandover:   0,
-		TimeBeforeXnHandover:     0,
-		NumPduSessions:           1,
-	}
-
-	for ueSimCfg.UeId = 1; ueSimCfg.UeId <= ueCount; ueSimCfg.UeId++ {
-		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
-
-		imsi := tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin)
+	amfContext := fiveGC.GetAMFContext()
+	ueScenarios := []scenario.UEScenario{}
+	for i := 1; i <= ueCount; i++ {
+		tmpConf := conf
+		tmpConf.Ue.Msin = tools.IncrementMsin(i, conf.Ue.Msin)
+		ueScenario := scenario.UEScenario{
+			Config: tmpConf.Ue,
+			Loop:   false,
+			Hang:   false,
+			Tasks: []scenario.Task{
+				{
+					TaskType: scenario.AttachToGNB,
+					Parameters: struct {
+						GnbId string
+					}{tmpConf.GNodeB.PlmnList.GnbId},
+				},
+				{
+					TaskType: scenario.Registration,
+				},
+				{
+					TaskType: scenario.NewPDUSession,
+				},
+				{
+					TaskType: scenario.Deregistration,
+					Delay:    2000,
+				},
+			},
+		}
+		ueScenarios = append(ueScenarios, ueScenario)
 
 		securityContext := context.SecurityContext{}
-		securityContext.SetMsin(imsi)
-		securityContext.SetAuthSubscription(ueSimCfg.Cfg.Ue.Key, ueSimCfg.Cfg.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
+		securityContext.SetMsin(tmpConf.Ue.Msin)
+		securityContext.SetAuthSubscription(tmpConf.Ue.Key, tmpConf.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
 		securityContext.SetAbba([]uint8{0x00, 0x00})
 
-		amfContext := fiveGC.GetAMFContext()
-		amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
+		amfContext.Provision(models.Snssai{Sst: int32(tmpConf.Ue.Snssai.Sst), Sd: tmpConf.Ue.Snssai.Sd}, securityContext)
 
-		tools.SimulateSingleUE(ueSimCfg, &wg)
-
-		// Before creating a new UE, we wait for 5 ms
-		time.Sleep(time.Duration(5) * time.Millisecond)
 	}
 
-	time.Sleep(time.Duration(5000) * time.Millisecond)
+	gnbs := []config.GNodeB{conf.GNodeB}
+	scenario.Start(gnbs, conf.AMFs, ueScenarios, 500, 40000)
+
+	time.Sleep(2 * time.Second)
+
 	i := 0
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
@@ -267,58 +268,51 @@ func TestUERegistrationLoop(t *testing.T) {
 	}
 	time.Sleep(1 * time.Second)
 
-	// Setup gNodeB
-	gnbCount := 1
-	wg := sync.WaitGroup{}
-	gnbs := tools.CreateGnbs(gnbCount, conf, &wg)
-
-	time.Sleep(1 * time.Second)
-
-	keys := make([]string, 0)
-	for k := range gnbs {
-		keys = append(keys, k)
-	}
-
 	// Setup UE
-	loopCount := 5
-	scenarioChans := make([]chan procedures.UeTesterMessage, 2)
-	ueSimCfg := tools.UESimulationConfig{
-		UeId:                     1,
-		Gnbs:                     gnbs,
-		Cfg:                      conf,
-		TimeBeforeDeregistration: 3000,
-		TimeBeforeNgapHandover:   0,
-		TimeBeforeXnHandover:     0,
-		NumPduSessions:           1,
+	securityContext := context.SecurityContext{}
+	securityContext.SetMsin(conf.Ue.Msin)
+	securityContext.SetAuthSubscription(conf.Ue.Key, conf.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
+	securityContext.SetAbba([]uint8{0x00, 0x00})
+
+	amfContext := fiveGC.GetAMFContext()
+	amfContext.Provision(models.Snssai{Sst: int32(conf.Ue.Snssai.Sst), Sd: conf.Ue.Snssai.Sd}, securityContext)
+
+	gnbs := []config.GNodeB{conf.GNodeB}
+	ueScenario := scenario.UEScenario{
+		Config: conf.Ue,
+		Loop:   true,
+		Hang:   false,
+		Tasks: []scenario.Task{
+			{
+				TaskType: scenario.AttachToGNB,
+				Parameters: struct {
+					GnbId string
+				}{conf.GNodeB.PlmnList.GnbId},
+			},
+			{
+				TaskType: scenario.Registration,
+			},
+			{
+				TaskType: scenario.NewPDUSession,
+			},
+			{
+				TaskType: scenario.Deregistration,
+				Delay:    2000,
+			},
+		},
 	}
+	ueScenarios := []scenario.UEScenario{ueScenario}
 
-	for i := 0; i < loopCount; i++ {
-		if scenarioChans[ueSimCfg.UeId] != nil {
-			scenarioChans[ueSimCfg.UeId] <- procedures.UeTesterMessage{Type: procedures.Kill}
-			close(scenarioChans[ueSimCfg.UeId])
-			scenarioChans[ueSimCfg.UeId] = nil
-		}
-		scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage)
-		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
+	scenario.Start(gnbs, conf.AMFs, ueScenarios, 50, 15000)
 
-		securityContext := context.SecurityContext{}
-		securityContext.SetMsin(tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin))
-		securityContext.SetAuthSubscription(ueSimCfg.Cfg.Ue.Key, ueSimCfg.Cfg.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
-		securityContext.SetAbba([]uint8{0x00, 0x00})
-
-		amfContext := fiveGC.GetAMFContext()
-		amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
-
-		tools.SimulateSingleUE(ueSimCfg, &wg)
-
-		// Before creating a new UE, we wait for 2000 ms
-		time.Sleep(time.Duration(2000) * time.Millisecond)
-	}
-
-	time.Sleep(time.Duration(5000) * time.Millisecond)
+	time.Sleep(2 * time.Second)
+	i := 0
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
+			i++
 			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
 			assert.True(t, ueChecks[ue.GetSecurityContext().GetMsin()].HasAuthOnce, "UE has never changed state")
+
 		})
+	assert.GreaterOrEqual(t, i, 3)
 }

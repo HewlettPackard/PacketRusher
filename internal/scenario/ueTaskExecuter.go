@@ -122,7 +122,6 @@ func (e *ueTaskExecuter) handleTaskTimer(task Task) {
 }
 
 func (e *ueTaskExecuter) handleTask(task Task) {
-	log.Debugf("------------------------------------ Task UE-%d ------------------------------------", e.UeId)
 	log.Debugf("[UE-%d] Received Task: %s", e.UeId, task.TaskType.ToStr())
 	log.Debugf("UE %d is attached to %s, tasked to %s", e.UeId, e.attachedGnb, task.TaskType.ToStr())
 

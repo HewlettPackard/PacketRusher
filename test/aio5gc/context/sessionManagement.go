@@ -228,6 +228,6 @@ func ForceReleaseAllPDUSession(ue *UEContext) {
 		if err != nil {
 			log.Error("[5GC] Failed to release pdu session " + fmt.Sprint(smCtx.GetPduSessionId()) + " for ue " + ue.securityContext.msin + ": " + err.Error())
 		}
-		ue.DeleteSmContext(smCtx.GetPduSessionId())
+		delete(ue.smContexts, smCtx.GetPduSessionId())
 	})
 }
