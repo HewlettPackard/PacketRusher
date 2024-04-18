@@ -10,8 +10,8 @@ import (
 
 // Description of the scenario to be run for one UE
 type UEScenario struct {
-	Config config.Ue
-	Tasks  []Task
-	Loop   bool // Restart scenario once done
-	Hang   bool // Keep scenario going after all tasks are done
+	Config  config.Ue
+	Tasks   []Task
+	Loop    bool // Restart scenario once done
+	Persist bool // Keep scenario going after all tasks are done
 }

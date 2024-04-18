@@ -33,7 +33,7 @@ func getDefaultManager() ScenarioManager {
 	ue.workerChan = make(chan Task, 5)
 	ue.nextTasks = []Task{}
 	s.ues[defaultUeId] = ue
-	s.taskExecuterWg = &sync.WaitGroup{}
+	s.taskExecutorWg = &sync.WaitGroup{}
 	s.gnbWg = &sync.WaitGroup{}
 	return s
 }
@@ -623,7 +623,7 @@ func TestSetupGnbs(t *testing.T) {
 	}
 }
 
-func TestSetupUeTaskExecuter(t *testing.T) {
+func TestSetupUeTaskExecutor(t *testing.T) {
 	type input struct {
 		manager    ScenarioManager
 		ueScenario UEScenario
@@ -714,8 +714,8 @@ func TestSetupUeTaskExecuter(t *testing.T) {
 			s := scenario.input.manager
 			s.reportChan = make(chan report, 1)
 			s.gnbs = map[string]*context.GNBContext{scenario.input.gnbs.GetGnbId(): scenario.input.gnbs}
-			s.taskExecuterWg = &sync.WaitGroup{}
-			s.setupUeTaskExecuter(scenario.input.ueId, scenario.input.ueScenario)
+			s.taskExecutorWg = &sync.WaitGroup{}
+			s.setupUeTaskExecutor(scenario.input.ueId, scenario.input.ueScenario)
 
 			time.Sleep(time.Duration(100) * time.Millisecond)
 
@@ -733,7 +733,7 @@ func TestSetupUeTaskExecuter(t *testing.T) {
 
 }
 
-func TestSetupUeTaskExecuterHasError(t *testing.T) {
+func TestSetupUeTaskExecutorHasError(t *testing.T) {
 
 	gnbConf := config.GNodeB{
 		ControlIF: config.ControlIF{
@@ -785,19 +785,19 @@ func TestSetupUeTaskExecuterHasError(t *testing.T) {
 		s := getDefaultManager()
 		s.reportChan = make(chan report, 1)
 		s.gnbs = map[string]*context.GNBContext{gnb.GetGnbId(): gnb}
-		s.taskExecuterWg = &sync.WaitGroup{}
+		s.taskExecutorWg = &sync.WaitGroup{}
 		ueid := 0
-		assert.Error(t, s.setupUeTaskExecuter(ueid, ueScenario))
+		assert.Error(t, s.setupUeTaskExecutor(ueid, ueScenario))
 	})
-	t.Run("Task Executer already exists", func(t *testing.T) {
+	t.Run("Task Executor already exists", func(t *testing.T) {
 
 		s := getDefaultManager()
 		s.reportChan = make(chan report, 1)
 		s.gnbs = map[string]*context.GNBContext{gnb.GetGnbId(): gnb}
-		s.taskExecuterWg = &sync.WaitGroup{}
+		s.taskExecutorWg = &sync.WaitGroup{}
 		ueid := 0
-		s.setupUeTaskExecuter(ueid, ueScenario)
-		assert.Error(t, s.setupUeTaskExecuter(ueid, ueScenario))
+		s.setupUeTaskExecutor(ueid, ueScenario)
+		assert.Error(t, s.setupUeTaskExecutor(ueid, ueScenario))
 	})
 }
 
@@ -841,8 +841,8 @@ func TestStartOrderRateController(t *testing.T) {
 func TestCleanup(t *testing.T) {
 
 	s := getDefaultManager()
-	s.taskExecuterWg.Add(1)
-	time.AfterFunc(time.Duration(1)*time.Second, func() { s.taskExecuterWg.Done() })
+	s.taskExecutorWg.Add(1)
+	time.AfterFunc(time.Duration(1)*time.Second, func() { s.taskExecutorWg.Done() })
 	s.reportChan = make(chan report, 2)
 	s.reportChan <- report{ueId: 1, reason: "test"}
 	s.reportChan <- report{ueId: 2, reason: "test"}

@@ -28,7 +28,7 @@ type ScenarioManager struct {
 	reportChan        chan report
 	registrationQueue chan order
 	gnbWg             *sync.WaitGroup
-	taskExecuterWg    *sync.WaitGroup
+	taskExecutorWg    *sync.WaitGroup
 	sigStop           chan os.Signal
 	ueScenarios       []UEScenario
 	stop              bool
@@ -65,12 +65,17 @@ func Start(gnbConfs []config.GNodeB, amfConfs []*config.AMF, ueScenarios []UESce
 func initManager(ueScenarios []UEScenario, timeBetweenRegistration int, timeout int) *ScenarioManager {
 	log.Debug("Init manager with timeBetweenRegistration = ", timeBetweenRegistration)
 	s := &ScenarioManager{}
-	s.taskExecuterWg = &sync.WaitGroup{}
+
+	s.ues = make(map[int]*ueTasksCtx)
+
+	s.taskExecutorWg = &sync.WaitGroup{}
 	s.gnbWg = &sync.WaitGroup{}
+
+	s.reportChan = make(chan report, 10)
+
 	s.registrationQueue = make(chan order, len(ueScenarios))
 	go startOrderRateController(s.registrationQueue, timeBetweenRegistration)
-	s.reportChan = make(chan report, 10)
-	s.ues = make(map[int]*ueTasksCtx)
+
 	s.sigStop = make(chan os.Signal, 1)
 	signal.Notify(s.sigStop, os.Interrupt)
 	if timeout > 0 {
@@ -82,20 +87,85 @@ func initManager(ueScenarios []UEScenario, timeBetweenRegistration int, timeout 
 	return s
 }
 
+func startOrderRateController(orderChan <-chan order, timeBetweenRegistration int) {
+	waitTime := time.Duration(timeBetweenRegistration) * time.Millisecond
+	orderTicker := time.NewTicker(waitTime)
+	var order order
+	var open bool
+	for {
+		<-orderTicker.C
+		orderTicker.Stop()
+		order, open = <-orderChan
+		if open {
+			order.workerChan <- order.task
+			orderTicker.Reset(waitTime)
+		} else {
+			return
+		}
+	}
+}
+
+func (s *ScenarioManager) setupGnbs(gnbConfs []config.GNodeB, amfConfs []*config.AMF) {
+	s.gnbs = make(map[string]*context.GNBContext)
+
+	for gnbConf := range gnbConfs {
+		s.gnbs[gnbConfs[gnbConf].PlmnList.GnbId] = InitGnb(gnbConfs[gnbConf], amfConfs, s.gnbWg)
+		s.gnbWg.Add(1)
+	}
+
+	// Wait for gNB to be connected before registering UEs
+	// TODO: We should wait for NGSetupResponse instead
+	time.Sleep(2 * time.Second)
+}
+
 func (s *ScenarioManager) setupScenarios(ueScenarios []UEScenario) {
 	s.stop = false
 	s.ueScenarios = ueScenarios
 	for ueId := 1; ueId <= len(ueScenarios); ueId++ {
-		if err := s.setupUeTaskExecuter(ueId, ueScenarios[ueId-1]); err != nil {
+		if err := s.setupUeTaskExecutor(ueId, ueScenarios[ueId-1]); err != nil {
 			log.Errorf("scenario for UE %d could not be started: %v", ueId, err)
 		}
-		select {
-		case <-s.sigStop:
-			s.stop = true
-			ueId = len(ueScenarios) + 1 // exit loop
-		default:
-		}
 	}
+}
+
+func (s *ScenarioManager) setupUeTaskExecutor(ueId int, ueScenario UEScenario) error {
+	if ueId < 1 {
+		return errors.New("ueId must be at least 1")
+	}
+	_, exist := s.ues[ueId]
+	if exist {
+		return errors.New("this ue already have a task executor")
+	}
+	if ueScenario.Tasks == nil {
+		return errors.New("tasks list is nil")
+	}
+	if ueScenario.Config == (config.Ue{}) {
+		return errors.New("config is empty")
+	}
+	if s.reportChan == nil {
+		return errors.New("scenario manager's report channel is not set")
+	}
+	if s.gnbs == nil {
+		return errors.New("scenario manager's gnb list is not set")
+	}
+	ue := ueTasksCtx{
+		done:       false,
+		nextTasks:  ueScenario.Tasks,
+		workerChan: make(chan Task, 1),
+	}
+
+	worker := ueTaskExecutor{
+		UeId:       ueId,
+		UeCfg:      ueScenario.Config,
+		TaskChan:   ue.workerChan,
+		ReportChan: s.reportChan,
+		Gnbs:       s.gnbs,
+		Wg:         s.taskExecutorWg,
+	}
+	worker.Run()
+
+	s.ues[ueId] = &ue
+	return nil
 }
 
 func (s *ScenarioManager) executeScenarios() {
@@ -106,7 +176,7 @@ func (s *ScenarioManager) executeScenarios() {
 		case report := <-s.reportChan:
 			s.handleReport(report)
 			if err := s.manageNextTask(report.ueId, s.ueScenarios[report.ueId-1]); err != nil {
-				if !s.ueScenarios[report.ueId-1].Hang {
+				if !s.ueScenarios[report.ueId-1].Persist {
 					log.Debugf("Stopping simulation for ue %d, reason: %s", report.ueId, err)
 					s.ues[report.ueId].done = true
 					s.stop = true
@@ -119,28 +189,6 @@ func (s *ScenarioManager) executeScenarios() {
 			}
 		}
 	}
-}
-
-func (s *ScenarioManager) cleanup() {
-	drainAndCloseOrderRateController(s.registrationQueue)
-
-	go func() {
-		open := true
-		var report report
-		for open {
-			report, open = <-s.reportChan
-			log.Debug("Got report from UE ", report.ueId, " during cleanup: ", report.reason)
-		}
-	}()
-
-	for _, ue := range s.ues {
-		ue.workerChan <- Task{
-			TaskType: Terminate,
-		}
-	}
-
-	s.taskExecuterWg.Wait()
-	close(s.reportChan)
 }
 
 func (s *ScenarioManager) handleReport(report report) {
@@ -194,75 +242,26 @@ func (s *ScenarioManager) restartUeScenario(ueId int, ueScenario UEScenario) err
 	return nil
 }
 
-func (s *ScenarioManager) setupGnbs(gnbConfs []config.GNodeB, amfConfs []*config.AMF) {
-	s.gnbs = make(map[string]*context.GNBContext)
+func (s *ScenarioManager) cleanup() {
+	drainAndCloseOrderRateController(s.registrationQueue)
 
-	for gnbConf := range gnbConfs {
-		s.gnbs[gnbConfs[gnbConf].PlmnList.GnbId] = InitGnb(gnbConfs[gnbConf], amfConfs, s.gnbWg)
-		s.gnbWg.Add(1)
-	}
+	go func() {
+		open := true
+		var report report
+		for open {
+			report, open = <-s.reportChan
+			log.Debug("Got report from UE ", report.ueId, " during cleanup: ", report.reason)
+		}
+	}()
 
-	// Wait for gNB to be connected before registering UEs
-	// TODO: We should wait for NGSetupResponse instead
-	time.Sleep(2 * time.Second)
-}
-
-func (s *ScenarioManager) setupUeTaskExecuter(ueId int, ueScenario UEScenario) error {
-	if ueId < 1 {
-		return errors.New("ueId must be at least 1")
-	}
-	_, exist := s.ues[ueId]
-	if exist {
-		return errors.New("this ue already have a task executer")
-	}
-	if ueScenario.Tasks == nil {
-		return errors.New("tasks list is nil")
-	}
-	if ueScenario.Config == (config.Ue{}) {
-		return errors.New("config is empty")
-	}
-	if s.reportChan == nil {
-		return errors.New("scenario manager's report channel is not set")
-	}
-	if s.gnbs == nil {
-		return errors.New("scenario manager's gnb list is not set")
-	}
-	ue := ueTasksCtx{
-		done:       false,
-		nextTasks:  ueScenario.Tasks,
-		workerChan: make(chan Task, 1),
-	}
-
-	worker := ueTaskExecuter{
-		UeId:       ueId,
-		UeCfg:      ueScenario.Config,
-		TaskChan:   ue.workerChan,
-		ReportChan: s.reportChan,
-		Gnbs:       s.gnbs,
-		Wg:         s.taskExecuterWg,
-	}
-	worker.Run()
-
-	s.ues[ueId] = &ue
-	return nil
-}
-
-func startOrderRateController(orderChan <-chan order, timeBetweenRegistration int) {
-	waitTime := time.Duration(timeBetweenRegistration) * time.Millisecond
-	orderTicker := time.NewTicker(waitTime)
-	var order order
-	var open bool
-	for {
-		<-orderTicker.C
-		orderTicker.Stop()
-		order, open = <-orderChan
-		if open {
-			order.workerChan <- order.task
-			orderTicker.Reset(waitTime)
-		} else {
-			return
+	for _, ue := range s.ues {
+		ue.workerChan <- Task{
+			TaskType: Terminate,
 		}
 	}
+
+	s.taskExecutorWg.Wait()
+	close(s.reportChan)
 }
 
 func drainAndCloseOrderRateController(orderChan chan order) {

@@ -64,9 +64,9 @@ func TestSingleUe(t *testing.T) {
 
 	gnbs := []config.GNodeB{conf.GNodeB}
 	ueScenario := scenario.UEScenario{
-		Config: conf.Ue,
-		Loop:   false,
-		Hang:   false,
+		Config:  conf.Ue,
+		Loop:    false,
+		Persist: false,
 		Tasks: []scenario.Task{
 			{
 				TaskType: scenario.AttachToGNB,
@@ -147,9 +147,9 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		tmpConf := conf
 		tmpConf.Ue.Msin = tools.IncrementMsin(i, conf.Ue.Msin)
 		ueScenario := scenario.UEScenario{
-			Config: tmpConf.Ue,
-			Loop:   false,
-			Hang:   false,
+			Config:  tmpConf.Ue,
+			Loop:    false,
+			Persist: false,
 			Tasks: []scenario.Task{
 				{
 					TaskType: scenario.AttachToGNB,
@@ -242,9 +242,9 @@ func TestUERegistrationLoop(t *testing.T) {
 
 	gnbs := []config.GNodeB{conf.GNodeB}
 	ueScenario := scenario.UEScenario{
-		Config: conf.Ue,
-		Loop:   true,
-		Hang:   false,
+		Config:  conf.Ue,
+		Loop:    true,
+		Persist: false,
 		Tasks: []scenario.Task{
 			{
 				TaskType: scenario.AttachToGNB,

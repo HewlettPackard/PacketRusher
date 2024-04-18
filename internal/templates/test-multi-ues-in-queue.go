@@ -120,7 +120,7 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 
 		ueScenario.Loop = loop
 		if tasks[len(tasks)-1].TaskType != scenario.Deregistration {
-			ueScenario.Hang = true
+			ueScenario.Persist = true
 		}
 
 		ueScenarios = append(ueScenarios, ueScenario)
@@ -131,7 +131,7 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 
 func nextGnbConf(gnb config.GNodeB, i int, baseId string) config.GNodeB {
 	var err error
-	gnb.PlmnList.GnbId = genereateGnbId(i, baseId)
+	gnb.PlmnList.GnbId = generateGnbId(i, baseId)
 	gnb.ControlIF.Ip, err = tools.IncrementIP(gnb.ControlIF.Ip, "0.0.0.0/0")
 	if err != nil {
 		log.Fatal("[GNB][CONFIG] Error while allocating ip for N2: " + err.Error())
@@ -143,7 +143,7 @@ func nextGnbConf(gnb config.GNodeB, i int, baseId string) config.GNodeB {
 	return gnb
 }
 
-func genereateGnbId(i int, gnbId string) string {
+func generateGnbId(i int, gnbId string) string {
 
 	gnbId_int, err := strconv.ParseInt(gnbId, 16, 0)
 	if err != nil {
@@ -151,6 +151,6 @@ func genereateGnbId(i int, gnbId string) string {
 	}
 	base := int(gnbId_int) + i
 
-	gnbId = fmt.Sprintf("%06x", base)
+	gnbId = fmt.Sprintf("%06X", base)
 	return gnbId
 }

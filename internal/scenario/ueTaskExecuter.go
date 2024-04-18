@@ -23,7 +23,7 @@ var (
 	NewUe = ue.NewUE
 )
 
-type ueTaskExecuter struct {
+type ueTaskExecutor struct {
 	UeId       int
 	UeCfg      config.Ue
 	TaskChan   chan Task
@@ -44,7 +44,7 @@ type ueTaskExecuter struct {
 	loop                 bool
 }
 
-func (e *ueTaskExecuter) Run() {
+func (e *ueTaskExecutor) Run() {
 	if e.running {
 		log.Errorf("simulation for ue %d failed: already running", e.UeId)
 		return
@@ -81,7 +81,7 @@ func (e *ueTaskExecuter) Run() {
 	go e.listen()
 }
 
-func (e *ueTaskExecuter) listen() {
+func (e *ueTaskExecutor) listen() {
 	e.loop = true
 	log.Infof("simulation started for ue %d", e.UeId)
 	e.sendReport(true, "simulation started")
@@ -98,7 +98,7 @@ func (e *ueTaskExecuter) listen() {
 	e.running = false
 }
 
-func (e *ueTaskExecuter) handleUeMsg(ueMsg scenario.ScenarioMessage) {
+func (e *ueTaskExecutor) handleUeMsg(ueMsg scenario.ScenarioMessage) {
 	msg := fmt.Sprintf("Switched from state %d to state %d ", e.state, ueMsg.StateChange)
 	if ueMsg.StateChange == e.targetState {
 		e.sendReport(true, msg)
@@ -106,7 +106,7 @@ func (e *ueTaskExecuter) handleUeMsg(ueMsg scenario.ScenarioMessage) {
 	e.state = ueMsg.StateChange
 }
 
-func (e *ueTaskExecuter) handleTaskTimer(task Task) {
+func (e *ueTaskExecutor) handleTaskTimer(task Task) {
 	if task.Delay > 0 {
 		task.Delay = max(0, task.Delay-int(time.Since(e.lastReceivedTaskTime).Milliseconds()))
 		e.timedTasks[task] = time.AfterFunc(time.Duration(task.Delay)*time.Millisecond, func() {
@@ -121,7 +121,7 @@ func (e *ueTaskExecuter) handleTaskTimer(task Task) {
 	e.lastReceivedTaskTime = time.Now()
 }
 
-func (e *ueTaskExecuter) handleTask(task Task) {
+func (e *ueTaskExecutor) handleTask(task Task) {
 	log.Debugf("[UE-%d] Received Task: %s", e.UeId, task.TaskType.ToStr())
 	log.Debugf("UE %d is attached to %s, tasked to %s", e.UeId, e.attachedGnb, task.TaskType.ToStr())
 
@@ -133,7 +133,7 @@ func (e *ueTaskExecuter) handleTask(task Task) {
 	e.dispatchTask(task)
 }
 
-func (e *ueTaskExecuter) dispatchTask(task Task) {
+func (e *ueTaskExecutor) dispatchTask(task Task) {
 	switch task.TaskType {
 	case AttachToGNB:
 		e.handleAttachToGnb(task)
@@ -160,7 +160,7 @@ func (e *ueTaskExecuter) dispatchTask(task Task) {
 	}
 }
 
-func (e *ueTaskExecuter) handleAttachToGnb(task Task) {
+func (e *ueTaskExecutor) handleAttachToGnb(task Task) {
 	if e.Gnbs[task.Parameters.GnbId] != nil {
 		// Create a new UE coroutine
 		// ue.NewUE returns context of the new UE
@@ -178,28 +178,28 @@ func (e *ueTaskExecuter) handleAttachToGnb(task Task) {
 	}
 }
 
-func (e *ueTaskExecuter) handleRegistration() {
+func (e *ueTaskExecutor) handleRegistration() {
 	e.ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
 	e.targetState = ueCtx.MM5G_REGISTERED
 }
 
-func (e *ueTaskExecuter) handleDeregistration() {
+func (e *ueTaskExecutor) handleDeregistration() {
 	e.ueRx <- procedures.UeTesterMessage{Type: procedures.Deregistration}
 	e.targetState = ueCtx.MM5G_DEREGISTERED
 }
 
-func (e *ueTaskExecuter) handleIdle() {
+func (e *ueTaskExecutor) handleIdle() {
 	e.ueRx <- procedures.UeTesterMessage{Type: procedures.Idle}
 	e.targetState = ueCtx.MM5G_IDLE
 	// TODO Should sync with gnb before sending Idle success report
 }
 
-func (e *ueTaskExecuter) handleServiceRequest() {
+func (e *ueTaskExecutor) handleServiceRequest() {
 	e.ueRx <- procedures.UeTesterMessage{Type: procedures.ServiceRequest}
 	e.targetState = ueCtx.MM5G_REGISTERED
 }
 
-func (e *ueTaskExecuter) handleNewPduSession(task Task) {
+func (e *ueTaskExecutor) handleNewPduSession(task Task) {
 	if e.state == ueCtx.MM5G_REGISTERED {
 		e.ueRx <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
 		// TODO: Implement way to check if pduSession is successful
@@ -211,7 +211,7 @@ func (e *ueTaskExecuter) handleNewPduSession(task Task) {
 	}
 }
 
-func (e *ueTaskExecuter) handleXnHandover(task Task) {
+func (e *ueTaskExecutor) handleXnHandover(task Task) {
 	if e.Gnbs[task.Parameters.GnbId] != nil {
 		trigger.TriggerXnHandover(e.Gnbs[e.attachedGnb], e.Gnbs[task.Parameters.GnbId], int64(e.UeId))
 		e.attachedGnb = task.Parameters.GnbId
@@ -226,7 +226,7 @@ func (e *ueTaskExecuter) handleXnHandover(task Task) {
 	}
 }
 
-func (e *ueTaskExecuter) handleNgapHandover(task Task) {
+func (e *ueTaskExecutor) handleNgapHandover(task Task) {
 	if e.Gnbs[task.Parameters.GnbId] != nil {
 		trigger.TriggerNgapHandover(e.Gnbs[e.attachedGnb], e.Gnbs[task.Parameters.GnbId], int64(e.UeId))
 		e.attachedGnb = task.Parameters.GnbId
@@ -241,7 +241,7 @@ func (e *ueTaskExecuter) handleNgapHandover(task Task) {
 	}
 }
 
-func (e *ueTaskExecuter) handleTerminate() {
+func (e *ueTaskExecutor) handleTerminate() {
 	e.ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
 	open := true
 	for open {
@@ -255,13 +255,13 @@ func (e *ueTaskExecuter) handleTerminate() {
 	e.Wg.Done()
 }
 
-func (e *ueTaskExecuter) handleKill() {
+func (e *ueTaskExecutor) handleKill() {
 	e.ueRx <- procedures.UeTesterMessage{Type: procedures.Kill}
 	e.reset()
 	e.sendReport(true, "UE Killed")
 }
 
-func (e *ueTaskExecuter) reset() {
+func (e *ueTaskExecutor) reset() {
 	e.lock.Lock()
 	e.ueRx = nil
 	e.ueTx = nil
@@ -274,6 +274,6 @@ func (e *ueTaskExecuter) reset() {
 	e.lock.Unlock()
 }
 
-func (e *ueTaskExecuter) sendReport(success bool, msg string) {
+func (e *ueTaskExecutor) sendReport(success bool, msg string) {
 	e.ReportChan <- report{success: success, reason: msg, ueId: e.UeId}
 }
