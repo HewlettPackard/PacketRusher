@@ -11,8 +11,8 @@ import (
 	"my5G-RANTester/internal/scenario"
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
-	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,21 +22,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestSingleUe(t *testing.T) {
-	controlIFConfig := config.ControlIF{
-		Ip:   "127.0.0.1",
-		Port: 9489,
-	}
-	dataIFConfig := config.DataIF{
-		Ip:   "127.0.0.1",
-		Port: 2154,
-	}
-	amfConfig := []*config.AMF{{
-		Ip:   "127.0.0.1",
-		Port: 38414,
-	}}
+var (
+	testCount = 0
+	mutex     sync.Mutex
+)
 
-	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfConfig)
+func TestSingleUe(t *testing.T) {
+	conf := generateDefaultConf()
 	type UECheck struct {
 		HasAuthOnce bool
 	}
@@ -109,22 +101,7 @@ func TestSingleUe(t *testing.T) {
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 
-	controlIFConfig := config.ControlIF{
-		Ip:   "127.0.0.1",
-		Port: 9489,
-	}
-	dataIFConfig := config.DataIF{
-		Ip:   "127.0.0.1",
-		Port: 2154,
-	}
-	amfListConfig := []*config.AMF{
-		{
-			Ip:   "127.0.0.1",
-			Port: 38414,
-		},
-	}
-
-	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfListConfig)
+	conf := generateDefaultConf()
 
 	type UECheck struct {
 		HasAuthOnce  bool
@@ -226,27 +203,13 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 }
 
 func TestUERegistrationLoop(t *testing.T) {
-	controlIFConfig := config.ControlIF{
-		Ip:   "127.0.0.1",
-		Port: 9490,
-	}
-	dataIFConfig := config.DataIF{
-		Ip:   "127.0.0.1",
-		Port: 2155,
-	}
-	amfListConfig := []*config.AMF{
-		{
-			Ip:   "127.0.0.1",
-			Port: 38415,
-		},
-	}
 
 	type UECheck struct {
 		HasAuthOnce bool
 	}
 	ueChecks := map[string]*UECheck{}
 
-	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfListConfig)
+	conf := generateDefaultConf()
 
 	// Setup 5GC
 	builder := aio5gc.FiveGCBuilder{}
@@ -315,4 +278,73 @@ func TestUERegistrationLoop(t *testing.T) {
 
 		})
 	assert.GreaterOrEqual(t, i, 3)
+}
+
+func generateDefaultConf() config.Config {
+
+	conf := config.Config{
+		GNodeB: config.GNodeB{
+			ControlIF: config.ControlIF{
+				Ip:   "127.0.0.1",
+				Port: 9489,
+			},
+			DataIF: config.DataIF{
+				Ip:   "127.0.0.1",
+				Port: 2154,
+			},
+			PlmnList: config.PlmnList{
+				Mcc:   "999",
+				Mnc:   "70",
+				Tac:   "000001",
+				GnbId: "000008",
+			},
+			SliceSupportList: config.SliceSupportList{
+				Sst: "01",
+				Sd:  "000001",
+			},
+		},
+		Ue: config.Ue{
+			Msin:             "0000000120",
+			Key:              "00112233445566778899AABBCCDDEEFF",
+			Opc:              "00112233445566778899AABBCCDDEEFF",
+			Amf:              "8000",
+			Sqn:              "00000000",
+			Dnn:              "internet",
+			RoutingIndicator: "4567",
+			Hplmn: config.Hplmn{
+				Mcc: "999",
+				Mnc: "70",
+			},
+			Snssai: config.Snssai{
+				Sst: 01,
+				Sd:  "000001",
+			},
+			Integrity: config.Integrity{
+				Nia0: false,
+				Nia1: true,
+				Nia2: true,
+			},
+			Ciphering: config.Ciphering{
+				Nea0: false,
+				Nea1: true,
+				Nea2: true,
+			},
+		},
+		AMFs: []*config.AMF{
+			{
+				Ip:   "127.0.0.1",
+				Port: 38414,
+			}},
+		Logs: config.Logs{
+			Level: 4,
+		},
+	}
+
+	mutex.Lock()
+	conf.AMFs[0].Port = conf.AMFs[0].Port + testCount
+	conf.GNodeB.ControlIF.Port = conf.GNodeB.ControlIF.Port + testCount
+	conf.GNodeB.DataIF.Port = conf.GNodeB.DataIF.Port + testCount
+	testCount++
+	mutex.Unlock()
+	return conf
 }
