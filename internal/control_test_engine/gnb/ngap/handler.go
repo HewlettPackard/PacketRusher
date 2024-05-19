@@ -719,25 +719,43 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 					ipv4String, _ = ngapConvert.IPAddressToString(*toAddItem.AMFTNLAssociationAddress.EndpointIPAddress)
 				}
 
+				amfPool := gnb.GetAmfPool()
+				amfExisted := false
+				amfPool.Range(func(key, value any) bool {
+					gnbAmf, ok := value.(*context.GNBAmf)
+					if !ok {
+						return true
+					}
+					if gnbAmf.GetAmfIp() == ipv4String {
+						log.Info("[GNB] SCTP/NGAP service exists")
+						amfExisted = true
+						return false
+					}
+					return true
+				})
+				if amfExisted {
+					continue
+				}
+
 				port := 38412 // default sctp port
-				amf := gnb.NewGnBAmf(ipv4String, port)
-				amf.SetAmfName(amfName)
-				amf.SetAmfCapacity(amfCapacity)
-				amf.SetRegionId(amfRegionId)
-				amf.SetSetId(amfSetId)
-				amf.SetPointer(amfPointer)
-				amf.SetTNLAUsage(toAddItem.TNLAssociationUsage.Value)
-				amf.SetTNLAWeight(toAddItem.TNLAddressWeightFactor.Value)
+				newAmf := gnb.NewGnBAmf(ipv4String, port)
+				newAmf.SetAmfName(amfName)
+				newAmf.SetAmfCapacity(amfCapacity)
+				newAmf.SetRegionId(amfRegionId)
+				newAmf.SetSetId(amfSetId)
+				newAmf.SetPointer(amfPointer)
+				newAmf.SetTNLAUsage(toAddItem.TNLAssociationUsage.Value)
+				newAmf.SetTNLAWeight(toAddItem.TNLAddressWeightFactor.Value)
 
 				// start communication with AMF(SCTP).
-				if err := InitConn(amf, gnb); err != nil {
+				if err := InitConn(newAmf, gnb); err != nil {
 					log.Fatal("Error in", err)
 				} else {
 					log.Info("[GNB] SCTP/NGAP service is running")
 					// wg.Add(1)
 				}
 
-				trigger.SendNgSetupRequest(gnb, amf)
+				trigger.SendNgSetupRequest(gnb, newAmf)
 
 			}
 
