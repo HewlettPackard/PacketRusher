@@ -5,10 +5,10 @@
 package nas_transport
 
 import (
-	"encoding/hex"
 	"fmt"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 
+	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/ngap"
 
 	"github.com/free5gc/aper"
@@ -23,12 +23,12 @@ func init() {
 	TestPlmn.Value = aper.OctetString("\x02\xf8\x39")
 }
 
-func GetInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, gnb *context.GNBContext) ([]byte, error) {
-	message := BuildInitialUEMessage(ranUeNgapID, nasPdu, fiveGSTmsi, gnb)
+func GetInitialUEMessage(ranUeNgapID int64, nasPdu []byte, guti5g *nasType.GUTI5G, gnb *context.GNBContext) ([]byte, error) {
+	message := BuildInitialUEMessage(ranUeNgapID, nasPdu, guti5g, gnb)
 	return ngap.Encoder(message)
 }
 
-func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, gnb *context.GNBContext) (pdu ngapType.NGAPPDU) {
+func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, guti5g *nasType.GUTI5G, gnb *context.GNBContext) (pdu ngapType.NGAPPDU) {
 
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -101,7 +101,7 @@ func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, 
 	initialUEMessageIEs.List = append(initialUEMessageIEs.List, ie)
 
 	// 5G-S-TSMI (optional)
-	if fiveGSTmsi != "" {
+	if guti5g != nil {
 		ie = ngapType.InitialUEMessageIEs{}
 		ie.Id.Value = ngapType.ProtocolIEIDFiveGSTMSI
 		ie.Criticality.Value = ngapType.CriticalityPresentReject
@@ -109,18 +109,16 @@ func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, 
 		ie.Value.FiveGSTMSI = new(ngapType.FiveGSTMSI)
 
 		fiveGSTMSI := ie.Value.FiveGSTMSI
-		amfSetID, _ := hex.DecodeString(fiveGSTmsi[:4])
 		fiveGSTMSI.AMFSetID.Value = aper.BitString{
-			Bytes:     amfSetID,
+			Bytes:     []byte{guti5g.Octet[5], guti5g.Octet[6]},
 			BitLength: 10,
 		}
-		amfPointer, _ := hex.DecodeString(fiveGSTmsi[2:4])
 		fiveGSTMSI.AMFPointer.Value = aper.BitString{
-			Bytes:     amfPointer,
+			Bytes:     []byte{guti5g.GetAMFPointer()},
 			BitLength: 6,
 		}
-		tmsi, _ := hex.DecodeString(fiveGSTmsi[4:])
-		fiveGSTMSI.FiveGTMSI.Value = aper.OctetString(tmsi)
+		tmsi := guti5g.GetTMSI5G()
+		fiveGSTMSI.FiveGTMSI.Value = tmsi[:]
 
 		initialUEMessageIEs.List = append(initialUEMessageIEs.List, ie)
 	}
@@ -140,7 +138,7 @@ func BuildInitialUEMessage(ranUeNgapID int64, nasPdu []byte, fiveGSTmsi string, 
 }
 
 func SendInitialUeMessage(registrationRequest []byte, ue *context.GNBUe, gnb *context.GNBContext) ([]byte, error) {
-	sendMsg, err := GetInitialUEMessage(ue.GetRanUeId(), registrationRequest, "", gnb)
+	sendMsg, err := GetInitialUEMessage(ue.GetRanUeId(), registrationRequest, ue.GetTMSI(), gnb)
 	if err != nil {
 		return nil, fmt.Errorf("Error in %d ue initial message", ue.GetRanUeId())
 	}

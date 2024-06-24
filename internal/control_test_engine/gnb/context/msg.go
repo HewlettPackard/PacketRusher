@@ -4,6 +4,8 @@
  */
 package context
 
+import "github.com/free5gc/nas/nasType"
+
 type UEMessage struct {
 	GNBPduSessions    [16]*GnbPDUSession
 	GnbIp             string
@@ -14,6 +16,7 @@ type UEMessage struct {
 	Nas               []byte
 	ConnectionClosed  bool
 	PrUeId            int64
+	Tmsi              *nasType.GUTI5G
 	Mcc               string
 	Mnc               string
 	UEContext         *GNBUe

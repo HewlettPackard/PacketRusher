@@ -1108,7 +1108,7 @@ func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, messag
 	}
 	prUeId := sourceToTargetContainerNgap.IndexToRFSP.Value
 
-	ue, err := gnb.NewGnBUe(nil, nil, prUeId)
+	ue, err := gnb.NewGnBUe(nil, nil, prUeId, nil)
 	if ue == nil || err != nil {
 		log.Fatalf("[GNB] HandoverFailure: %s", err)
 	}
