@@ -525,7 +525,10 @@ func (ue *UEContext) SetAmfMccAndMnc(mcc string, mnc string) {
 }
 
 func (ue *UEContext) GetTMSI5G() [4]uint8 {
-	return ue.UeSecurity.Guti.GetTMSI5G()
+	if ue.UeSecurity.Guti != nil {
+		return ue.UeSecurity.Guti.GetTMSI5G()
+	}
+	return [4]uint8{}
 }
 
 func (ue *UEContext) Set5gGuti(guti *nasType.GUTI5G) {

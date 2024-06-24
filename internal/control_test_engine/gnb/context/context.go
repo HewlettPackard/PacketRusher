@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/free5gc/aper"
+	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/ngap/ngapConvert"
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/openapi/models"
@@ -88,7 +89,7 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipDat
 	gnb.dataInfo.gnbPort = portData
 }
 
-func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUeId int64) (*GNBUe, error) {
+func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUeId int64, tmsi *nasType.GUTI5G) (*GNBUe, error) {
 
 	// TODO if necessary add more information for UE.
 	// TODO implement mutex
@@ -106,6 +107,7 @@ func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUe
 	ue.SetGnbRx(gnbRx)
 	ue.SetGnbTx(gnbTx)
 	ue.SetPrUeId(prUeId)
+	ue.SetTMSI(tmsi)
 
 	// set state to UE.
 	ue.SetStateInitialized()

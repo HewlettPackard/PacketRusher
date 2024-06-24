@@ -57,7 +57,7 @@ func gnbListen(gnb *context.GNBContext) {
 			trigger.SendHandoverNotify(gnb, ue)
 		} else {
 			var err error
-			ue, err = gnb.NewGnBUe(message.GNBTx, message.GNBRx, message.PrUeId)
+			ue, err = gnb.NewGnBUe(message.GNBTx, message.GNBRx, message.PrUeId, message.Tmsi)
 			if ue == nil && err != nil {
 				log.Errorf("[GNB] UE was not created succesfully: %s. Closing connection with UE.", err)
 				close(message.GNBTx)

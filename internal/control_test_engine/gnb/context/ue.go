@@ -8,6 +8,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/ishidawataru/sctp"
 )
@@ -27,6 +28,7 @@ type GNBUe struct {
 	gnbRx          chan UEMessage
 	gnbTx          chan UEMessage
 	pRueId         int64 // PacketRusher unique UE ID
+	tmsi           *nasType.GUTI5G
 	context        Context
 	lock           sync.Mutex
 	newGnb         *GNBContext
@@ -235,6 +237,14 @@ func (ue *GNBUe) SetPrUeId(pRueId int64) {
 
 func (ue *GNBUe) GetPrUeId() int64 {
 	return ue.pRueId
+}
+
+func (ue *GNBUe) SetTMSI(tmsi *nasType.GUTI5G) {
+	ue.tmsi = tmsi
+}
+
+func (ue *GNBUe) GetTMSI() *nasType.GUTI5G {
+	return ue.tmsi
 }
 
 func (ue *GNBUe) Lock() {
