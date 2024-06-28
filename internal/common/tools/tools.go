@@ -7,6 +7,7 @@ package tools
 import (
 	"fmt"
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/common/routine"
 	"my5G-RANTester/internal/control_test_engine/gnb"
 	gnbCxt "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
@@ -38,8 +39,8 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 		cfg.GNodeB.ControlIF.Ip = n2Ip
 		cfg.GNodeB.DataIF.Ip = n3Ip
 
-		gnbs[cfg.GNodeB.PlmnList.GnbId] = gnb.InitGnb(cfg, wg)
 		wg.Add(1)
+		gnbs[cfg.GNodeB.PlmnList.GnbId] = gnb.InitGnb(cfg, wg)
 
 		// TODO: We could find the interfaces where N2/N3 are
 		// and check that the generated IPs, still belong to the interfaces' subnet
@@ -100,7 +101,6 @@ type UESimulationConfig struct {
 	UeId                     int
 	Gnbs                     map[string]*gnbCxt.GNBContext
 	Cfg                      config.Config
-	ScenarioChan             chan procedures.UeTesterMessage
 	TimeBeforeDeregistration int
 	TimeBeforeNgapHandover   int
 	TimeBeforeXnHandover     int
@@ -109,7 +109,7 @@ type UESimulationConfig struct {
 	NumPduSessions           int
 }
 
-func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
+func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *routine.Routine[procedures.UeTesterMessage] {
 	numGnb := len(simConfig.Gnbs)
 	ueCfg := simConfig.Cfg
 	ueCfg.Ue.Msin = IncrementMsin(simConfig.UeId, simConfig.Cfg.Ue.Msin)
@@ -119,18 +119,20 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 		return gnbIdGenerator((simConfig.UeId+index)%numGnb, ueCfg.GNodeB.PlmnList.GnbId)
 	}
 
-	// Launch a coroutine to handle UE's individual scenario
-	go func(scenarioChan chan procedures.UeTesterMessage, ueId int) {
-		wg.Add(1)
+	scenarioRoutine := routine.NewRoutine[procedures.UeTesterMessage]()
 
-		ueRx := make(chan procedures.UeTesterMessage)
+	wg.Add(1)
+
+	// Launch a coroutine to handle UE's individual scenario
+	go func(scenarioRoutine *routine.Routine[procedures.UeTesterMessage], ueId int) {
+		ueRx := routine.NewRoutine[procedures.UeTesterMessage]()
 
 		// Create a new UE coroutine
 		// ue.NewUE returns context of the new UE
-		ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[gnbIdGen(0)].GetInboundChannel(), wg)
+		ueTx := ue.NewUE(ueCfg, ueId, &ueRx, simConfig.Gnbs[gnbIdGen(0)].GetInboundChannel(), wg)
 
 		// We tell the UE to perform a registration
-		ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
+		ueRx.SendIfRunning(procedures.UeTesterMessage{Type: procedures.Registration})
 
 		var deregistrationChannel <-chan time.Time = nil
 		if simConfig.TimeBeforeDeregistration != 0 {
@@ -159,10 +161,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 		for loop {
 			select {
 			case <-deregistrationChannel:
-				if ueRx != nil {
-					ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
-					ueRx = nil
-				}
+				ueRx.SendIfRunning(procedures.UeTesterMessage{Type: procedures.Terminate})
 			case <-ngapHandoverChannel:
 				trigger.TriggerNgapHandover(simConfig.Gnbs[gnbIdGen(nextHandoverId)], simConfig.Gnbs[gnbIdGen(nextHandoverId+1)], int64(ueId))
 				nextHandoverId++
@@ -170,31 +169,25 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 				trigger.TriggerXnHandover(simConfig.Gnbs[gnbIdGen(nextHandoverId)], simConfig.Gnbs[gnbIdGen(nextHandoverId+1)], int64(ueId))
 				nextHandoverId++
 			case <-idleChannel:
-				if ueRx != nil {
-					ueRx <- procedures.UeTesterMessage{Type: procedures.Idle}
+				ueRx.DoIfRunning(func(c chan<- procedures.UeTesterMessage) {
+					c <- procedures.UeTesterMessage{Type: procedures.Terminate}
 					// Channel creation to be transformed into a task ;-)
 					if simConfig.TimeBeforeReconnecting != 0 {
 						reconnectChannel = time.After(time.Duration(simConfig.TimeBeforeReconnecting) * time.Millisecond)
 					}
-				}
+				})
+
 			case <-reconnectChannel:
-				if ueRx != nil {
-					ueRx <- procedures.UeTesterMessage{Type: procedures.ServiceRequest}
-				}
-			case msg := <-scenarioChan:
-				if ueRx != nil {
-					ueRx <- msg
-					if msg.Type == procedures.Terminate || msg.Type == procedures.Kill {
-						ueRx = nil
-					}
-				}
+				ueRx.SendIfRunning(procedures.UeTesterMessage{Type: procedures.ServiceRequest})
+			case msg := <-scenarioRoutine.Read():
+				ueRx.SendIfRunning(msg)
 			case msg := <-ueTx:
 				log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)
 				switch msg.StateChange {
 				case ueCtx.MM5G_REGISTERED:
 					if !registered {
 						for i := 0; i < simConfig.NumPduSessions; i++ {
-							ueRx <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
+							ueRx.SendIfRunning(procedures.UeTesterMessage{Type: procedures.NewPDUSession})
 						}
 						registered = true
 					}
@@ -204,7 +197,12 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 				state = msg.StateChange
 			}
 		}
-	}(simConfig.ScenarioChan, simConfig.UeId)
+
+		scenarioRoutine.StopRunning()
+		wg.Done()
+	}(&scenarioRoutine, simConfig.UeId)
+
+	return &scenarioRoutine
 }
 
 func IncrementMsin(i int, msin string) string {

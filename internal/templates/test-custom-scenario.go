@@ -6,6 +6,7 @@ package templates
 
 import (
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/common/routine"
 	"my5G-RANTester/internal/control_test_engine/gnb"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue"
@@ -29,33 +30,33 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	time.Sleep(1 * time.Second)
 
-	ueChan := make(chan procedures.UeTesterMessage)
-
 	wg.Add(1)
 
-	_ = ue.NewUE(cfg, 1, ueChan, gnb.GetInboundChannel(), &wg)
+	routine := routine.NewRoutine[procedures.UeTesterMessage]()
+
+	_ = ue.NewUE(cfg, 1, &routine, gnb.GetInboundChannel(), &wg)
 
 	ctx, runtime := script.NewCustomScenario(scenarioPath)
 
 	_, err := runtime.NewHostModuleBuilder("env").
 		NewFunctionBuilder().
 		WithFunc(func(ueId uint32) {
-			ueChan <- procedures.UeTesterMessage{Type: procedures.Registration}
+			routine.SendIfRunning(procedures.UeTesterMessage{Type: procedures.Registration})
 		}).
 		Export("attach").
 		NewFunctionBuilder().
 		WithFunc(func(ueId uint32) {
-			ueChan <- procedures.UeTesterMessage{Type: procedures.Deregistration}
+			routine.SendIfRunning(procedures.UeTesterMessage{Type: procedures.Deregistration})
 		}).
 		Export("detach").
 		NewFunctionBuilder().
 		WithFunc(func(ueId uint32, pduSessionId uint8) {
-			ueChan <- procedures.UeTesterMessage{Type: procedures.NewPDUSession, Param: pduSessionId - 1}
+			routine.SendIfRunning(procedures.UeTesterMessage{Type: procedures.NewPDUSession, Param: pduSessionId - 1})
 		}).
 		Export("pduSessionRequest").
 		NewFunctionBuilder().
 		WithFunc(func(ueId uint32, pduSessionId uint8) {
-			ueChan <- procedures.UeTesterMessage{Type: procedures.DestroyPDUSession, Param: pduSessionId - 1}
+			routine.SendIfRunning(procedures.UeTesterMessage{Type: procedures.DestroyPDUSession, Param: pduSessionId - 1})
 		}).
 		Export("pduSessionRelease").
 		NewFunctionBuilder().
@@ -81,7 +82,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	module, err := runtime.InstantiateWithConfig(ctx, addWasm, config)
 	if err != nil {
-		log.Fatal("failed to instantiate module: %v", err)
+		log.Fatalf("failed to instantiate module: %v", err)
 	}
 
 	// Call the `add` function and print the results to the console.

@@ -6,6 +6,7 @@ package ue
 
 import (
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/common/routine"
 	context2 "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
@@ -22,7 +23,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnbInboundChannel chan context2.UEMessage, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
+func NewUE(conf config.Config, id int, ueMgrChannel *routine.Routine[procedures.UeTesterMessage], gnbInboundChannel chan context2.UEMessage, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
 	// new UE instance.
 	ue := &context.UEContext{}
 	scenarioChan := make(chan scenario.ScenarioMessage)
@@ -64,7 +65,7 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 					break
 				}
 				gnbMsgHandler(msg, ue)
-			case msg, open := <-ueMgrChannel:
+			case msg, open := <-ueMgrChannel.Read():
 				if !open {
 					log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with scenario was closed")
 					loop = false
@@ -76,6 +77,7 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 			}
 		}
 		ue.Terminate()
+		ueMgrChannel.StopRunning()
 		wg.Done()
 	}()
 
