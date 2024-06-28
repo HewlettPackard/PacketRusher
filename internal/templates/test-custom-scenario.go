@@ -25,7 +25,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	wg.Add(1)
 
-	gnb := gnb.InitGnb(cfg, &wg)
+	gnb := gnb.InitGnb(cfg.GNodeB, cfg.AMFs, &wg)
 
 	time.Sleep(1 * time.Second)
 
@@ -33,7 +33,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	wg.Add(1)
 
-	_ = ue.NewUE(cfg, 1, ueChan, gnb.GetInboundChannel(), &wg)
+	_ = ue.NewUE(cfg.Ue, 1, ueChan, gnb.GetInboundChannel(), &wg)
 
 	ctx, runtime := script.NewCustomScenario(scenarioPath)
 
@@ -81,7 +81,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	module, err := runtime.InstantiateWithConfig(ctx, addWasm, config)
 	if err != nil {
-		log.Fatal("failed to instantiate module: %v", err)
+		log.Fatalf("failed to instantiate module: %v", err)
 	}
 
 	// Call the `add` function and print the results to the console.

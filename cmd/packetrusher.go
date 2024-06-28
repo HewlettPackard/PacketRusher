@@ -98,7 +98,7 @@ func main() {
 					&cli.IntFlag{Name: "timeBeforeIdle", Value: 0, Aliases: []string{"idl"}, Usage: "The time in ms, before switching UE to Idle. 0 to disable Idling."},
 					&cli.IntFlag{Name: "timeBeforeReconnecting", Value: 1000, Aliases: []string{"tbr"}, Usage: "The time in ms, before reconnecting to gNodeB after switching to Idle state. Default is 1000 ms. Only work in conjunction with timeBeforeIdle."},
 					&cli.IntFlag{Name: "numPduSessions", Value: 1, Aliases: []string{"nPdu"}, Usage: "The number of PDU Sessions to create"},
-					&cli.BoolFlag{Name: "loop", Aliases: []string{"l"}, Usage: "Register UEs in a loop."},
+					&cli.BoolFlag{Name: "loop", Aliases: []string{"l"}, Usage: "Loop over all procedures."},
 					&cli.BoolFlag{Name: "tunnel", Aliases: []string{"t"}, Usage: "Enable the creation of the GTP-U tunnel interface."},
 					&cli.BoolFlag{Name: "tunnel-vrf", Value: true, Usage: "Enable/disable VRP usage of the GTP-U tunnel interface."},
 					&cli.BoolFlag{Name: "dedicatedGnb", Aliases: []string{"d"}, Usage: "Enable the creation of a dedicated gNB per UE. Require one IP on N2/N3 per gNB."},
