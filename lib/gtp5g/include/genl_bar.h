@@ -12,7 +12,7 @@ enum gtp5g_bar_attrs {
 
     __GTP5G_BAR_ATTR_MAX,
 };
-#define GTP5G_BAR_ATTR_MAX (__GTP5G_BAR_ATTR_MAX - 1)
+#define GTP5G_BAR_ATTR_MAX 16
 
 struct buffer_action {
     u64 seid;
@@ -21,9 +21,9 @@ struct buffer_action {
 } __attribute__((packed));
 
 /* for kernel */
-extern int gtp5g_genl_add_bar(struct sk_buff *, struct genl_info *);
-extern int gtp5g_genl_del_bar(struct sk_buff *, struct genl_info *);
-extern int gtp5g_genl_get_bar(struct sk_buff *, struct genl_info *);
-extern int gtp5g_genl_dump_bar(struct sk_buff *, struct netlink_callback *);
+int gtp5g_genl_add_bar(struct sk_buff *, struct genl_info *);
+int gtp5g_genl_del_bar(struct sk_buff *, struct genl_info *);
+int gtp5g_genl_get_bar(struct sk_buff *, struct genl_info *);
+int gtp5g_genl_dump_bar(struct sk_buff *, struct netlink_callback *);
 
 #endif // __GENL_BAR_H__

@@ -3,10 +3,10 @@
 
 #include <linux/rculist.h>
 
-extern int create_proc(void);
-extern void remove_proc(void);
+int create_proc(void);
+void remove_proc(void);
 
-extern void init_proc_gtp5g_dev_list(void);
-extern struct list_head * get_proc_gtp5g_dev_list_head(void);
+void init_proc_gtp5g_dev_list(void);
+struct list_head * get_proc_gtp5g_dev_list_head(void);
 
 #endif // __GTP5G_PROC_H__

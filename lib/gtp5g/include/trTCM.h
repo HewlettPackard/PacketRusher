@@ -13,12 +13,13 @@ typedef struct {
     u64 tc;
     u64 te;  
 
-    u64 tokenRate; 
+    u64 byteRate;
     u64 lastUpdate;
+    u64 refillTokenTime;
 
     spinlock_t lock;
 } TrafficPolicer;
 
-extern TrafficPolicer* newTrafficPolicer(u64);
-extern void refillTokens(TrafficPolicer*); 
-extern Color policePacket(TrafficPolicer*, int);
+TrafficPolicer* newTrafficPolicer(u64);
+void refillTokens(TrafficPolicer*);
+Color policePacket(TrafficPolicer*, int);

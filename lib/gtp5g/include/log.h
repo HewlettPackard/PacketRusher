@@ -18,7 +18,7 @@
 #define GTP5G_INF(dev, fmt, args...) DBG(3, dev, fmt, ##args)
 #define GTP5G_TRC(dev, fmt, args...) DBG(4, dev, fmt, ##args)
 
-extern int get_dbg_lvl(void);
-extern void set_dbg_lvl(int);
+int get_dbg_lvl(void);
+void set_dbg_lvl(int);
 
 #endif // __GTP5G_LOG_H__

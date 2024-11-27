@@ -36,9 +36,8 @@ enum gtp5g_buffer_attrs {
 };
 #define GTP5G_BUFFER_ATTR_MAX (__GTP5G_BUFFER_ATTR_MAX - 1)
 
-extern struct sock *gtp5g_encap_enable(int, int, struct gtp5g_dev *);
-extern void gtp5g_encap_disable(struct sock *);
-extern int gtp5g_handle_skb_ipv4(struct sk_buff *, struct net_device *,
-        struct gtp5g_pktinfo *);
+struct sock *gtp5g_encap_enable(int, int, struct gtp5g_dev *);
+void gtp5g_encap_disable(struct sock *);
+int gtp5g_handle_skb_ipv4(struct sk_buff *, struct net_device *, struct gtp5g_pktinfo *);
 
 #endif // __ENCAP_H__

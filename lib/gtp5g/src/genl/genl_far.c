@@ -454,6 +454,12 @@ static int forwarding_parameter_fill(struct forwarding_parameter *param,
         }
     }
 
+    if (attrs[GTP5G_FORWARDING_PARAMETER_TOS_TC]) {
+        if (param->hdr_creation) {
+            param->hdr_creation->tosTc = nla_get_u8(attrs[GTP5G_FORWARDING_PARAMETER_TOS_TC]);
+        }
+    }
+
     return 0;
 }
 
@@ -550,6 +556,7 @@ static int gtp5g_genl_fill_far(struct sk_buff *skb, u32 snd_portid, u32 snd_seq,
         if (nla_put_u64_64bit(skb, GTP5G_FAR_SEID, far->seid, 0))
             goto genlmsg_fail;
     }
+
     fwd_param = rcu_dereference(far->fwd_param);
     if (fwd_param) {
         nest_fwd_param = nla_nest_start(skb, GTP5G_FAR_FORWARDING_PARAMETER);
@@ -578,6 +585,10 @@ static int gtp5g_genl_fill_far(struct sk_buff *skb, u32 snd_portid, u32 snd_seq,
             if (nla_put(skb, GTP5G_FORWARDING_PARAMETER_FORWARDING_POLICY, fwd_policy->len, fwd_policy->identifier))
                 goto genlmsg_fail;
 
+        if (fwd_param->hdr_creation) {
+            if (nla_put_u8(skb, GTP5G_FORWARDING_PARAMETER_TOS_TC, hdr_creation->tosTc))
+                goto genlmsg_fail;
+        }
         nla_nest_end(skb, nest_fwd_param);
     }
 

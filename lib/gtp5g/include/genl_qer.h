@@ -22,7 +22,7 @@ enum gtp5g_qer_attrs {
     GTP5G_QER_SEID,
     __GTP5G_QER_ATTR_MAX,
 };
-#define GTP5G_QER_ATTR_MAX (__GTP5G_QER_ATTR_MAX - 1)
+#define GTP5G_QER_ATTR_MAX 16
 
 /* Nest in GTP5G_QER_MBR */
 enum gtp5g_mbr_attrs {
@@ -46,9 +46,9 @@ enum gtp5g_qer_gbr_attrs {
 };
 #define GTP5G_QER_GBR_ATTR_MAX (__GTP5G_QER_GBR_ATTR_MAX - 1)
 
-extern int gtp5g_genl_add_qer(struct sk_buff *, struct genl_info *);
-extern int gtp5g_genl_del_qer(struct sk_buff *, struct genl_info *);
-extern int gtp5g_genl_get_qer(struct sk_buff *, struct genl_info *);
-extern int gtp5g_genl_dump_qer(struct sk_buff *, struct netlink_callback *);
+int gtp5g_genl_add_qer(struct sk_buff *, struct genl_info *);
+int gtp5g_genl_del_qer(struct sk_buff *, struct genl_info *);
+int gtp5g_genl_get_qer(struct sk_buff *, struct genl_info *);
+int gtp5g_genl_dump_qer(struct sk_buff *, struct netlink_callback *);
 
 #endif // __GENL_QER_H__

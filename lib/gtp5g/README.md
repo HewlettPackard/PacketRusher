@@ -7,9 +7,20 @@ Due to the evolution of Linux kernel, this module would not work with every kern
 Please run this module with kernel version `5.0.0-23-generic`, upper than `5.4` (Ubuntu 20.04) or RHEL8.
 
 ## Usage
+### Clone
+#### The latest version
+```
+git clone https://github.com/free5gc/gtp5g.git
+```
+#### The specific version
+```
+# git clone -b {version} https://github.com/free5gc/gtp5g.git
+git clone -b v0.8.10 https://github.com/free5gc/gtp5g.git
+```
+
 ### Compile
 ```
-git clone https://github.com/free5gc/gtp5g.git && cd gtp5g
+cd gtp5g
 make clean && make
 ```
 
@@ -24,7 +35,7 @@ Remove the kernel module from the system
 ```
 sudo make uninstall
 ```
-### Checkout Rules
+### Check Rules
 Get PDR/FAR/QER information by "/proc"
 ```
 # if UPF used legacy netlink struct without SEID, need use #SEID=0 to query related info as below:
@@ -38,8 +49,8 @@ cat /proc/gtp5g/far
 cat /proc/gtp5g/qer
 ```
 
-### QoS Enable
-Support Session AMBR and MFBR
+### Enable/Disable QoS (Default is disabled)
+Support Session AMBR and MFBR.
 
 1) Check whether QoS is enabled or disabled. (1 means enabled, 0 means disabled)
     ```
@@ -53,6 +64,23 @@ Support Session AMBR and MFBR
    + disable
         ```
         echo 0 >  /proc/gtp5g/qos
+        ```
+
+### Enable/Disable GTP-U Sequence Number (Default is enabled)
+Support GTP-U Sequence Number.
+
+1) Check whether GTP-U Sequence Number is enabled or disabled. (1 means enabled, 0 means disabled)
+    ```
+    cat /proc/gtp5g/seq
+    ```
+2) Enable or disable GTP-U Sequence Number
+   + enable
+        ```
+        echo 1 >  /proc/gtp5g/seq
+        ```
+   + disable
+        ```
+        echo 0 >  /proc/gtp5g/seq
         ```
 
 ### Log Related

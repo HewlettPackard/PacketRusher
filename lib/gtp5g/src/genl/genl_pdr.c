@@ -409,6 +409,7 @@ static int pdr_fill(struct pdr *pdr, struct gtp5g_dev *gtp, struct genl_info *in
     int i;
 
     pdr->seid = 0;
+    pdr->ul_dl_gate = 0;
 
     hdr = nla_next(hdr, &remaining);
     while (nla_ok(hdr, remaining)) {
@@ -472,6 +473,9 @@ static int pdr_fill(struct pdr *pdr, struct gtp5g_dev *gtp, struct genl_info *in
 
     pdr->af = AF_INET;
     far = find_far_by_id(gtp, pdr->seid, *pdr->far_id);
+    if (!far) {
+        return -EINVAL;
+    }
     rcu_assign_pointer(pdr->far, far);
 
     err = far_set_pdr(pdr, gtp);
@@ -493,8 +497,15 @@ static int pdr_fill(struct pdr *pdr, struct gtp5g_dev *gtp, struct genl_info *in
         qer = find_qer_by_id(gtp, pdr->seid, pdr->qer_ids[i]);
         if (qer && qer->ul_policer!= NULL && qer->dl_policer!= NULL) {
             rcu_assign_pointer(pdr->qer_with_rate, qer);
-            break;
-        }   
+        }
+        // close the uplink gate when one of the QERs referenced by this PDR closes the gate
+        if (qer && qer->ul_dl_gate & QER_UL_GATE_CLOSE) {
+            pdr->ul_dl_gate |= QER_UL_GATE_CLOSE;
+        }  
+        // close the downlink gate when one of the QERs referenced by this PDR closes the gate
+        if (qer && qer->ul_dl_gate & QER_DL_GATE_CLOSE) {
+            pdr->ul_dl_gate |= QER_DL_GATE_CLOSE;
+        }
     }
 
     if (unix_sock_client_update(pdr, far) < 0)
@@ -539,6 +550,10 @@ static int parse_pdi(struct pdr *pdr, struct nlattr *a)
         err = parse_f_teid(pdi, attrs[GTP5G_PDI_F_TEID]);
         if (err)
             return err;
+    }
+
+    if (attrs[GTP5G_PDI_SRC_INTF]) {
+        pdi->srcIntf = nla_get_u8(attrs[GTP5G_PDI_SRC_INTF]);
     }
 
     if (attrs[GTP5G_PDI_SDF_FILTER]) {

@@ -41,7 +41,11 @@ struct sdf_filter {
     u32 *bi_id;
 };
 
+#define SRC_INTF_ACCESS 0
+#define SRC_INTF_CORE 1
+
 struct pdi {
+    u8 srcIntf;
     struct in_addr *ue_addr_ipv4;
     struct local_f_teid *f_teid;
     struct sdf_filter *sdf;
@@ -71,6 +75,7 @@ struct pdr {
     u32 qer_num;
     u8  qfi;
     struct qer __rcu *qer_with_rate;
+    uint8_t ul_dl_gate;
     u32 *urr_ids;
     u32 urr_num;
     
@@ -95,27 +100,28 @@ struct pdr {
     u64                     dl_byte_cnt;
 };
 
-extern void pdr_context_delete(struct pdr *);
-extern struct pdr *find_pdr_by_id(struct gtp5g_dev *, u64, u16);
-extern struct pdr *pdr_find_by_gtp1u(struct gtp5g_dev *, struct sk_buff *,
-        unsigned int, u32, u8);
-extern struct pdr *pdr_find_by_ipv4(struct gtp5g_dev *, struct sk_buff *,
-        unsigned int, __be32);
-extern int find_qer_id_in_pdr(struct pdr *, u32);
-extern int find_urr_id_in_pdr(struct pdr *, u32);
+void pdr_context_delete(struct pdr *);
+struct pdr *find_pdr_by_id(struct gtp5g_dev *, u64, u16);
+struct pdr *pdr_find_by_gtp1u(struct gtp5g_dev *, struct sk_buff *, unsigned int, u32, u8);
+struct pdr *pdr_find_by_ipv4(struct gtp5g_dev *, struct sk_buff *, unsigned int, __be32);
+int find_qer_id_in_pdr(struct pdr *, u32);
+int find_urr_id_in_pdr(struct pdr *, u32);
 
-extern void pdr_append(u64, u16, struct pdr *, struct gtp5g_dev *);
-extern void pdr_update_hlist_table(struct pdr *, struct gtp5g_dev *);
+void pdr_append(u64, u16, struct pdr *, struct gtp5g_dev *);
+void pdr_update_hlist_table(struct pdr *, struct gtp5g_dev *);
 
-extern void unix_sock_client_delete(struct pdr *);
-extern int unix_sock_client_new(struct pdr *);
-extern int unix_sock_client_update(struct pdr *, struct far *);
+void unix_sock_client_delete(struct pdr *);
+int unix_sock_client_new(struct pdr *);
+int unix_sock_client_update(struct pdr *, struct far *);
 
-extern int get_qos_enable(void);
-extern void set_qos_enable(int);
+int get_qos_enable(void);
+void set_qos_enable(int);
 
-extern int get_seq_enable(void);
-extern void set_seq_enable(int);
+int get_seq_enable(void);
+void set_seq_enable(int);
+
+bool is_uplink(struct pdr *);
+bool is_downlink(struct pdr *);
 
 static inline bool pdr_addr_is_netlink(struct pdr *pdr)
 {

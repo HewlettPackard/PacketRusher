@@ -403,3 +403,17 @@ void pdr_update_hlist_table(struct pdr *pdr, struct gtp5g_dev *gtp)
             hlist_add_behind_rcu(&pdr->hlist_addr, &last_ppdr->hlist_addr);
     }
 }
+
+bool is_uplink(struct pdr *pdr)
+{
+    if (!pdr || !pdr->pdi)
+        return false;
+    return (pdr->pdi->srcIntf == SRC_INTF_ACCESS);
+}
+
+bool is_downlink(struct pdr *pdr)
+{
+    if (!pdr || !pdr->pdi)
+        return false;
+    return (pdr->pdi->srcIntf == SRC_INTF_CORE);
+}
