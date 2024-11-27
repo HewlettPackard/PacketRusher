@@ -84,6 +84,20 @@ func ParsePDROptions(args []string) ([]nl.Attr, error) {
 				Type:  gtp5gnl.PDI_UE_ADDR_IPV4,
 				Value: nl.AttrBytes(v),
 			})
+		case "--source-interface":
+			// --source-interface <0|1> 0: uplink, 1: downlink
+			arg, ok := p.GetToken()
+			if !ok {
+				return attrs, fmt.Errorf("option requires argument %q", opt)
+			}
+			v, err := strconv.Atoi(arg)
+			if err != nil || v != 0 && v != 1 {
+				return attrs, fmt.Errorf("invalid source interface %q", arg)
+			}
+			pdiv = append(pdiv, nl.Attr{
+				Type:  gtp5gnl.PDI_SRC_INTF,
+				Value: nl.AttrU8(v),
+			})
 		case "--f-teid":
 			// --f-teid <i-teid> <local-gtpu-ipv4>
 			arg, ok := p.GetToken()

@@ -93,7 +93,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		return
 	}
 
-	cmdAddPdr = []string{nameInf, "2", "--pcd", "2", "--ue-ipv4", ueIp, "--far-id", "2"}
+	cmdAddPdr = []string{nameInf, "2", "--pcd", "2", "--ue-ipv4", ueIp, "--far-id", "2", "--source-interface", "0"}
 	cmdAddQer := []string{nameInf, "1", "--qfi", strconv.Itoa(int(qfi))}
 	if qfi > 0 {
 		log.Debug("[UE][GTP] Setting Up QFI", strings.Join(cmdAddQer, " "))

@@ -29,9 +29,8 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
-				Name:    "ue",
-				Aliases: []string{"ue"},
-				Usage:   "Launch a gNB and a UE with a PDU Session\nFor more complex scenario and features, use instead packetrusher multi-ue\n",
+				Name:  "ue",
+				Usage: "Launch a gNB and a UE with a PDU Session\nFor more complex scenario and features, use instead packetrusher multi-ue\n",
 				Flags: []cli.Flag{
 					&cli.BoolFlag{Name: "disableTunnel", Aliases: []string{"t"}, Usage: "Disable the creation of the GTP-U tunnel interface."},
 					&cli.PathFlag{Name: "pcap", Usage: "Capture traffic to given PCAP file when a path is given", Value: "./dump.pcap"},
@@ -62,9 +61,8 @@ func main() {
 				},
 			},
 			{
-				Name:    "gnb",
-				Aliases: []string{"gnb"},
-				Usage:   "Launch only a gNB",
+				Name:  "gnb",
+				Usage: "Launch only a gNB",
 				Action: func(c *cli.Context) error {
 					name := "Testing an gnb attached with configuration"
 					cfg := setConfig(*c)
@@ -167,8 +165,7 @@ func main() {
 				},
 			},
 			{
-				Name:    "amf-load-loop",
-				Aliases: []string{"amf-load-loop"},
+				Name: "amf-load-loop",
 				Usage: "\nTest AMF responses in interval\n" +
 					"Example for generating 20 requests to AMF per second in interval of 20 seconds: amf-load-loop -n 20 -t 20\n",
 				Flags: []cli.Flag{
