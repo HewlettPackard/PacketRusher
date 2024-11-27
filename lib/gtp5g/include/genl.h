@@ -38,14 +38,21 @@ enum gtp5g_cmd {
 
     GTP5G_CMD_GET_MULTI_REPORTS,
 
+    GTP5G_CMD_GET_USAGE_STATISTIC,
+
     __GTP5G_CMD_MAX,
 };
-#define GTP5G_CMD_MAX (__GTP5G_CMD_MAX - 1)
+#define GTP5G_CMD_MAX 32
 
 /* This const value need to bigger than the Layer 1 attr size,
- * like GTP5G_PDR_ATTR_MAX and GTP5G_FAR_ATTR_MAX
+ * like GTP5G_MSG_TYPE_ATTR_MAX(2), 
+ * GTP5G_BUFFER_ATTR_MAX(7), GTP5G_UR_ATTR_MAX(10),
+ * GTP5G_BAR_ATTR_MAX(6), GTP5G_URR_ATTR_MAX(13),
+ * GTP5G_FAR_ATTR_MAX(8), GTP5G_PDR_ATTR_MAX(12),
+ * GTP5G_QER_ATTR_MAX(13)
+ * Now use the value of 0x20(32)
  */
-#define GTP5G_ATTR_MAX 0x10
+#define GTP5G_ATTR_MAX 0x20
 
 enum gtp5g_device_attrs {
     GTP5G_LINK = 1,

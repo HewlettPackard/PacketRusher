@@ -11,6 +11,7 @@
 #include "bar.h"
 #include "urr.h"
 #include "pktinfo.h"
+#include "log.h"
 
 struct gtp5g_dev *gtp5g_find_dev(struct net *src_net, int ifindex, int netnsfd)
 {
@@ -41,6 +42,32 @@ struct gtp5g_dev *gtp5g_find_dev(struct net *src_net, int ifindex, int netnsfd)
     return gtp;
 }
 
+void update_usage_statistic(struct gtp5g_dev *gtp, u64 rxVol, u64 txVol,
+    int pkt_action, uint srcIntf)
+{
+    switch (srcIntf) {
+    case SRC_INTF_ACCESS: // uplink
+        atomic_add(rxVol, &gtp->rx.ul_byte);
+        atomic_inc(&gtp->rx.ul_pkt);
+        if (pkt_action != PKT_DROPPED) {
+            atomic_add(txVol, &gtp->tx.ul_byte);
+            atomic_inc(&gtp->tx.ul_pkt);
+        }
+        break;
+    case SRC_INTF_CORE: // downlink
+        atomic_add(rxVol, &gtp->rx.dl_byte);
+        atomic_inc(&gtp->rx.dl_pkt);
+        if (pkt_action != PKT_DROPPED) {
+            atomic_add(txVol, &gtp->tx.dl_byte);
+            atomic_inc(&gtp->tx.dl_pkt);
+        }
+        break;
+    default:
+        GTP5G_ERR(gtp->dev, "unknown srcIntf type\n");
+        break;
+    }
+}
+
 static int gtp5g_dev_init(struct net_device *dev)
 {
     struct gtp5g_dev *gtp = netdev_priv(dev);
@@ -68,9 +95,11 @@ static void gtp5g_dev_uninit(struct net_device *dev)
  * */
 static netdev_tx_t gtp5g_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 {
+    struct gtp5g_dev *gtp = netdev_priv(dev);
     unsigned int proto = ntohs(skb->protocol);
     struct gtp5g_pktinfo pktinfo;
     int ret = 0;
+    u64 rxVol = skb->len;
 
     /* Ensure there is sufficient headroom */
     if (skb_cow_head(skb, dev->needed_headroom)) {
@@ -85,6 +114,7 @@ static netdev_tx_t gtp5g_dev_xmit(struct sk_buff *skb, struct net_device *dev)
     switch (proto) {
     case ETH_P_IP:
         ret = gtp5g_handle_skb_ipv4(skb, dev, &pktinfo);
+        update_usage_statistic(gtp, rxVol, skb->len, ret, SRC_INTF_CORE); // DL
         break;
     default:
         ret = -EOPNOTSUPP;
@@ -94,7 +124,7 @@ static netdev_tx_t gtp5g_dev_xmit(struct sk_buff *skb, struct net_device *dev)
     if (ret < 0)
         goto tx_err;
 
-    if (ret == FAR_ACTION_FORW)
+    if (ret == PKT_FORWARDED)
         gtp5g_xmit_skb_ipv4(skb, &pktinfo);
 
     return NETDEV_TX_OK;

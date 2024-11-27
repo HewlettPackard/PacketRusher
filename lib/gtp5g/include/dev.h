@@ -5,6 +5,13 @@
 #include <linux/rculist.h>
 #include <linux/socket.h>
 
+struct usage_statistic {
+    atomic_t ul_byte;
+    atomic_t dl_byte;
+    atomic_t ul_pkt;
+    atomic_t dl_pkt;
+};
+
 struct gtp5g_dev {
     struct list_head list;
     struct sock *sk1u; // UDP socket from user space
@@ -28,13 +35,16 @@ struct gtp5g_dev {
     
     /* Used by proc interface */
     struct list_head proc_list;
+
+    /* Usage Statistics */
+    struct usage_statistic rx, tx;
 };
 
 extern const struct net_device_ops gtp5g_netdev_ops;
 
-extern struct gtp5g_dev *gtp5g_find_dev(struct net *, int, int);
-
-extern int dev_hashtable_new(struct gtp5g_dev *, int);
-extern void gtp5g_hashtable_free(struct gtp5g_dev *);
+struct gtp5g_dev *gtp5g_find_dev(struct net *, int, int);
+int dev_hashtable_new(struct gtp5g_dev *, int);
+void gtp5g_hashtable_free(struct gtp5g_dev *);
+void update_usage_statistic(struct gtp5g_dev *, u64, u64, int, uint);
 
 #endif // __GTP5G_DEV_H__

@@ -84,16 +84,17 @@ module:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
- 
+
 install:
 	$(INSTALL)
 	modprobe udp_tunnel
 	$(DEPMOD)
 	modprobe $(MODULE_NAME)
-	echo "gtp5g" >> /etc/modules
+	echo "udp_tunnel" > /etc/modules-load.d/gtp5g.conf
+	echo "gtp5g" >> /etc/modules-load.d/gtp5g.conf
 
 uninstall:
 	rm -f $(DESTDIR)/lib/modules/$(KVER)/$(MOD_KERNEL_PATH)/$(MODULE_NAME).ko
 	$(DEPMOD)
-	sed -zi "s/gtp5g\n//g" /etc/modules
+	rm -f /etc/modules-load.d/gtp5g.conf
 	rmmod -f  $(MODULE_NAME)

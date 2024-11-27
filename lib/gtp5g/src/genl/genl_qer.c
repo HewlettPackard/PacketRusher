@@ -7,6 +7,7 @@
 #include "genl_qer.h"
 #include "qer.h"
 #include "hash.h"
+#include "log.h"
 
 #include <linux/rculist.h>
 #include <net/netns/generic.h>
@@ -309,8 +310,10 @@ static int qer_fill(struct qer *qer, struct gtp5g_dev *gtp, struct genl_info *in
     else
         qer->seid = 0;
 
-    if (info->attrs[GTP5G_QER_GATE])
+    if (info->attrs[GTP5G_QER_GATE]) {
         qer->ul_dl_gate = nla_get_u8(info->attrs[GTP5G_QER_GATE]);
+        GTP5G_INF(NULL, "QER Gate Status (%x)", qer->ul_dl_gate);
+    }
 
     /* MBR */
     if (info->attrs[GTP5G_QER_MBR] &&

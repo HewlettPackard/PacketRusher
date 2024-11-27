@@ -74,7 +74,7 @@ struct rtable *ip4_find_route(struct sk_buff *skb, struct iphdr *iph,
     fl4->flowi4_oif = sk->sk_bound_dev_if;
     fl4->daddr = daddr;
     fl4->saddr = (saddr ? saddr : inet_sk(sk)->inet_saddr);
-    fl4->flowi4_tos = RT_CONN_FLAGS(sk);
+    fl4->flowi4_tos = RT_TOS(inet_sk(sk)->tos) | sock_flag(sk, SOCK_LOCALROUTE);
     fl4->flowi4_proto = sk->sk_protocol;
 
     rt = ip_route_output_key(dev_net(gtp_dev), fl4);
@@ -136,7 +136,7 @@ struct rtable *ip4_find_route_simple(struct sk_buff *skb,
     fl4->flowi4_oif = sk->sk_bound_dev_if;
     fl4->daddr = daddr;
     fl4->saddr = (saddr ? saddr : inet_sk(sk)->inet_saddr);
-    fl4->flowi4_tos = RT_CONN_FLAGS(sk);
+    fl4->flowi4_tos = RT_TOS(inet_sk(sk)->tos) | sock_flag(sk, SOCK_LOCALROUTE);
     fl4->flowi4_proto = sk->sk_protocol;
 
     rt = ip_route_output_key(dev_net(gtp_dev), fl4);
@@ -239,12 +239,18 @@ void gtp5g_fwd_emark_skb_ipv4(struct sk_buff *skb,
 
 void gtp5g_xmit_skb_ipv4(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
 {
+    u8 tos = 0;
+    if (pktinfo->hdr_creation == NULL) {
+        tos = pktinfo->iph->tos;
+    } else {
+        tos = pktinfo->hdr_creation->tosTc;
+    }
     udp_tunnel_xmit_skb(pktinfo->rt, 
         pktinfo->sk,
         skb,
         pktinfo->fl4.saddr,
         pktinfo->fl4.daddr,
-        pktinfo->iph->tos,
+        tos,
         ip4_dst_hoplimit(&pktinfo->rt->dst),
         0,
         pktinfo->gtph_port, 
@@ -255,13 +261,14 @@ void gtp5g_xmit_skb_ipv4(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
 
 inline void gtp5g_set_pktinfo_ipv4(struct gtp5g_pktinfo *pktinfo,
     struct sock *sk, struct iphdr *iph, struct outer_header_creation *hdr_creation,
-    u8 qfi, u16 seq_number, struct rtable *rt, struct flowi4 *fl4,
+    u8 qfi, u8 pdu_type, u16 seq_number, struct rtable *rt, struct flowi4 *fl4,
     struct net_device *dev)
 {
     pktinfo->sk = sk;
     pktinfo->iph = iph;
     pktinfo->hdr_creation = hdr_creation;
     pktinfo->qfi = qfi;
+    pktinfo->pdu_type = pdu_type;
     pktinfo->seq_number = seq_number;
     pktinfo->rt = rt;
     pktinfo->fl4 = *fl4;
@@ -273,7 +280,7 @@ void gtp5g_push_header(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
     int payload_len = skb->len;
     struct gtpv1_hdr *gtp1;
     gtpv1_hdr_opt_t *gtp1opt;
-    ext_pdu_sess_ctr_t *dl_pdu_sess;
+    ext_pdu_sess_ctr_t *ext_pdu_sess;
     u16 seq_number = 0;
     u8 next_ehdr_type = 0;
 
@@ -281,8 +288,8 @@ void gtp5g_push_header(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
     int opt_flag = 0;
     int seq_flag = get_seq_enable();
 
-    GTP5G_TRC(NULL, "SKBLen(%u) GTP-U V1(%zu) Opt(%zu) DL_PDU(%zu)\n", 
-        payload_len, sizeof(*gtp1), sizeof(*gtp1opt), sizeof(*dl_pdu_sess));
+    GTP5G_TRC(NULL, "SKBLen(%u) GTP-U V1(%zu) Opt(%zu) PDU(%zu)\n",
+        payload_len, sizeof(*gtp1), sizeof(*gtp1opt), sizeof(*ext_pdu_sess));
 
     pktinfo->gtph_port = pktinfo->hdr_creation->port;
 
@@ -293,13 +300,20 @@ void gtp5g_push_header(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
         ext_flag = 1; 
 
         /* Push PDU Session container information */
-        dl_pdu_sess = skb_push(skb, sizeof(*dl_pdu_sess));
+        ext_pdu_sess = skb_push(skb, sizeof(*ext_pdu_sess));
         /* Multiple of 4 (TODO include PPI) */
-        dl_pdu_sess->length = 1;
-        dl_pdu_sess->pdu_sess_ctr.type_spare = 0; /* For DL */
-        dl_pdu_sess->pdu_sess_ctr.u.dl.ppp_rqi_qfi = pktinfo->qfi;
+        ext_pdu_sess->length = 1;
+
+        if (pktinfo->pdu_type == PDU_SESSION_INFO_TYPE1) { // UL
+            ext_pdu_sess->pdu_sess_ctr.type_spare = PDU_SESSION_INFO_TYPE1;
+            ext_pdu_sess->pdu_sess_ctr.u.ul.spare_qfi = pktinfo->qfi;
+        } else { // DL
+            ext_pdu_sess->pdu_sess_ctr.type_spare = PDU_SESSION_INFO_TYPE0;
+            ext_pdu_sess->pdu_sess_ctr.u.dl.ppp_rqi_qfi = pktinfo->qfi;
+        }
+
         //TODO: PPI
-        dl_pdu_sess->next_ehdr_type = 0; /* No more extension Header */
+        ext_pdu_sess->next_ehdr_type = 0; /* No more extension Header */
         
         opt_flag = 1;
         next_ehdr_type = 0x85; /* PDU Session Container */
@@ -317,7 +331,7 @@ void gtp5g_push_header(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
         gtp1opt->NPDU = 0;
         gtp1opt->next_ehdr_type = next_ehdr_type;
         // Increment the GTP-U payload length by size of optional headers length
-        payload_len += (sizeof(*gtp1opt) + sizeof(*dl_pdu_sess));
+        payload_len += (sizeof(*gtp1opt) + sizeof(*ext_pdu_sess));
     }
 
     /* Bits 8  7  6  5  4  3  2  1

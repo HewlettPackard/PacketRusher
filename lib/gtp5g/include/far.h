@@ -28,6 +28,7 @@ struct outer_header_creation {
     u32 teid;
     struct in_addr peer_addr_ipv4;
     u16 port;
+    u8 tosTc;
 };
 
 struct forwarding_policy {
@@ -56,13 +57,12 @@ struct far {
     struct rcu_head rcu_head;
 };
 
-extern void far_context_delete(struct far *);
-extern struct far *find_far_by_id(struct gtp5g_dev *, u64, u32);
-extern void far_update(struct far *, struct gtp5g_dev *, u8 *,
-        struct gtp5g_emark_pktinfo *);
-extern void far_append(u64, u32, struct far *, struct gtp5g_dev *);
-extern int far_get_pdr_ids(u16 *, int, struct far *, struct gtp5g_dev *);
-extern int far_set_pdr(struct pdr *, struct gtp5g_dev *);
-extern void del_related_far_hash(struct gtp5g_dev *, struct pdr *);
+void far_context_delete(struct far *);
+struct far *find_far_by_id(struct gtp5g_dev *, u64, u32);
+void far_update(struct far *, struct gtp5g_dev *, u8 *, struct gtp5g_emark_pktinfo *);
+void far_append(u64, u32, struct far *, struct gtp5g_dev *);
+int far_get_pdr_ids(u16 *, int, struct far *, struct gtp5g_dev *);
+int far_set_pdr(struct pdr *, struct gtp5g_dev *);
+void del_related_far_hash(struct gtp5g_dev *, struct pdr *);
 
 #endif // __FAR_H__

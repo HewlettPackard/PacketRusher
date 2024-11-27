@@ -335,6 +335,7 @@ static int urr_fill(struct urr *urr, struct gtp5g_dev *gtp, struct genl_info *in
             // Clean bytes to make sure the bytes are counted after the start of service data flow
             // TODO: Should send the previous stroed bytes to CP first
             memset(&urr->bytes, 0, sizeof(struct VolumeMeasurement));
+            memset(&urr->bytes2, 0, sizeof(struct VolumeMeasurement));
         }
     }
 
@@ -349,7 +350,7 @@ static int urr_fill(struct urr *urr, struct gtp5g_dev *gtp, struct genl_info *in
 
     if (info->attrs[GTP5G_URR_VOLUME_QUOTA]) {
         parse_volumeqouta(urr, info->attrs[GTP5G_URR_VOLUME_QUOTA]);
-        urr->consumed = urr->bytes;
+        memset(&urr->consumed, 0, sizeof(struct VolumeMeasurement));
 
         if (urr->volumequota.totalVolume == 0 && urr->trigger == URR_RPT_TRIGGER_VOLQU) {
             urr_quota_exhaust_action(urr, gtp);

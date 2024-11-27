@@ -29,7 +29,7 @@ enum gtp5g_pdr_attrs {
 
     __GTP5G_PDR_ATTR_MAX,
 };
-#define GTP5G_PDR_ATTR_MAX (__GTP5G_PDR_ATTR_MAX - 1)
+#define GTP5G_PDR_ATTR_MAX 16
 
 /* Nest in GTP5G_PDR_PDI */
 enum gtp5g_pdi_attrs {
@@ -37,9 +37,11 @@ enum gtp5g_pdi_attrs {
     GTP5G_PDI_UE_ADDR_IPV4,
     GTP5G_PDI_F_TEID,
     GTP5G_PDI_SDF_FILTER,
+    GTP5G_PDI_SRC_INTF,
+
     __GTP5G_PDI_ATTR_MAX,
 };
-#define GTP5G_PDI_ATTR_MAX (__GTP5G_PDI_ATTR_MAX - 1)
+#define GTP5G_PDI_ATTR_MAX 16
 
 /* Nest in GTP5G_PDI_F_TEID */
 enum gtp5g_f_teid_attrs {
@@ -48,7 +50,7 @@ enum gtp5g_f_teid_attrs {
     GTP5G_F_TEID_GTPU_ADDR_IPV4,
     __GTP5G_F_TEID_ATTR_MAX,
 };
-#define GTP5G_F_TEID_ATTR_MAX (__GTP5G_F_TEID_ATTR_MAX - 1)
+#define GTP5G_F_TEID_ATTR_MAX 8
 
 /* Nest in GTP5G_PDI_SDF_FILTER */
 enum gtp5g_sdf_filter_attrs {
@@ -60,7 +62,7 @@ enum gtp5g_sdf_filter_attrs {
 
     __GTP5G_SDF_FILTER_ATTR_MAX,
 };
-#define GTP5G_SDF_FILTER_ATTR_MAX (__GTP5G_SDF_FILTER_ATTR_MAX - 1)
+#define GTP5G_SDF_FILTER_ATTR_MAX 16
 
 /* Nest in GTP5G_SDF_FILTER_FLOW_DESCRIPTION */
 enum gtp5g_flow_description_attrs {
@@ -93,9 +95,9 @@ enum {
 };
 #define GTP5G_SDF_FILTER_DIRECTION_MAX (__GTP5G_SDF_FILTER_DIRECTION_MAX - 1)
 
-extern int gtp5g_genl_add_pdr(struct sk_buff *, struct genl_info *);
-extern int gtp5g_genl_del_pdr(struct sk_buff *, struct genl_info *);
-extern int gtp5g_genl_get_pdr(struct sk_buff *, struct genl_info *);
-extern int gtp5g_genl_dump_pdr(struct sk_buff *, struct netlink_callback *);
+int gtp5g_genl_add_pdr(struct sk_buff *, struct genl_info *);
+int gtp5g_genl_del_pdr(struct sk_buff *, struct genl_info *);
+int gtp5g_genl_get_pdr(struct sk_buff *, struct genl_info *);
+int gtp5g_genl_dump_pdr(struct sk_buff *, struct netlink_callback *);
 
 #endif // __GENL_PDR_H__

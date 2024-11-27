@@ -22,6 +22,6 @@ enum ifla_gtp5g_role {
 
 extern struct rtnl_link_ops gtp5g_link_ops;
 
-extern void gtp5g_link_all_del(struct list_head *);
+void gtp5g_link_all_del(struct list_head *);
 
 #endif // __GTP5G_LINK_H__
