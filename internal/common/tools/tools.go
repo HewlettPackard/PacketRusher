@@ -38,7 +38,7 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 		cfg.GNodeB.ControlIF.Ip = n2Ip
 		cfg.GNodeB.DataIF.Ip = n3Ip
 
-		gnbs[cfg.GNodeB.PlmnList.GnbId] = gnb.InitGnb(cfg, wg)
+		gnbs[cfg.GNodeB.PlmnList.GnbId] = gnb.InitGnb(cfg.GNodeB, cfg.AMFs, wg)
 		wg.Add(1)
 
 		// TODO: We could find the interfaces where N2/N3 are
@@ -127,7 +127,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 
 		// Create a new UE coroutine
 		// ue.NewUE returns context of the new UE
-		ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[gnbIdGen(0)].GetInboundChannel(), wg)
+		ueTx := ue.NewUE(ueCfg.Ue, ueId, ueRx, simConfig.Gnbs[gnbIdGen(0)].GetInboundChannel(), wg)
 
 		// We tell the UE to perform a registration
 		ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}

@@ -20,26 +20,26 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
+func InitGnb(gnbConf config.GNodeB, amfConfs []*config.AMF, wg *sync.WaitGroup) *context.GNBContext {
 
 	// instance new gnb.
 	gnb := &context.GNBContext{}
 
 	// new gnb context.
 	gnb.NewRanGnbContext(
-		conf.GNodeB.PlmnList.GnbId,
-		conf.GNodeB.PlmnList.Mcc,
-		conf.GNodeB.PlmnList.Mnc,
-		conf.GNodeB.PlmnList.Tac,
-		conf.GNodeB.SliceSupportList.Sst,
-		conf.GNodeB.SliceSupportList.Sd,
-		conf.GNodeB.ControlIF.Ip,
-		conf.GNodeB.DataIF.Ip,
-		conf.GNodeB.ControlIF.Port,
-		conf.GNodeB.DataIF.Port)
+		gnbConf.PlmnList.GnbId,
+		gnbConf.PlmnList.Mcc,
+		gnbConf.PlmnList.Mnc,
+		gnbConf.PlmnList.Tac,
+		gnbConf.SliceSupportList.Sst,
+		gnbConf.SliceSupportList.Sd,
+		gnbConf.ControlIF.Ip,
+		gnbConf.DataIF.Ip,
+		gnbConf.ControlIF.Port,
+		gnbConf.DataIF.Port)
 
 	// start communication with AMF (server SCTP).
-	for _, amfConfig := range conf.AMFs {
+	for _, amfConfig := range amfConfs {
 		// new AMF context.
 		amf := gnb.NewGnBAmf(amfConfig.Ip, amfConfig.Port)
 

@@ -38,7 +38,6 @@ func DefaultUEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFCon
 	context.ForceReleaseAllPDUSession(ue)
 
 	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.DeregistrationRequest, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
-
 	if err != nil {
 		return err
 	}
