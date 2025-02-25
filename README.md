@@ -4,9 +4,11 @@
 
 ----
 ## Description
-PacketRusher is a tool, based upon [my5G-RANTester](https://github.com/my5G/my5G-RANTester), dedicated to the performance testing and automatic validation of 5G Core Networks using simulated UE (user equipment) and gNodeB (5G base station).
+#### Now with SUCI Concealing/Deconcealment (Null-Scheme, Profile A (X25519), Profile B (P-256))!
 
-If you have questions or comments, feel free to open an issue.
+PacketRusher is a tool dedicated to the performance testing and automatic validation of 5G Core Networks using simulated UE (user equipment) and gNodeB (5G base station).
+
+If you have questions or comments, feel free to open an issue after **a careful** review of existing closed issues.
 
 PacketRusher borrows libraries and data structures from the [free5gc project](https://github.com/free5gc/free5gc).
 
@@ -16,6 +18,7 @@ PacketRusher borrows libraries and data structures from the [free5gc project](ht
 * Supports both N2 (NGAP) and N1 (NAS) interfaces for stress testing
 * --pcap parameter to capture pcap of N1/N2 traffic
 * Implements main control plane procedures:
+  * SUCI Concealing/Deconcealment (Null-Scheme, Profile A (X25519), Profile B (P-256))
   * UE attach/detach (registration/identity request/authentification/security mode) procedures
   * Create/Delete PDU Sessions, up to 15 PDU Sessions per UE
   * Xn handover: UE handover between simulated gNodeB (PathSwitchRequest)
@@ -110,7 +113,7 @@ If you use this software, you may cite it as below:
 ## License
 © Copyright 2023 Hewlett Packard Enterprise Development LP
 
-© Copyright 2024 Valentin D'Emmanuele
+© Copyright 2024-2025 Valentin D'Emmanuele
 
 This project is under the [Apache 2.0 License](LICENSE) license.
 
