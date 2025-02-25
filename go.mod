@@ -32,6 +32,7 @@ require (
 	github.com/aead/cmac v0.0.0-20160719120800-7af84192f0b1 // indirect
 	github.com/antonfisher/nested-logrus-formatter v1.3.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
+	github.com/goccy/go-yaml v1.15.23 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/khirono/go-genl v1.0.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

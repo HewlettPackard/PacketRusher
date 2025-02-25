@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2025 Valentin D'Emmanuele
  */
 
 package context
@@ -16,10 +17,10 @@ import (
 	"net"
 	"reflect"
 	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
-	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/nas/security"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/free5gc/util/ueauth"
 
 	"my5G-RANTester/internal/common/auth"
+	"my5G-RANTester/internal/common/sidf"
 
 	"github.com/free5gc/openapi/models"
 	log "github.com/sirupsen/logrus"
@@ -109,13 +111,14 @@ type SECURITY struct {
 	Kamf                 []uint8
 	AuthenticationSubs   models.AuthenticationSubscription
 	Suci                 nasType.MobileIdentity5GS
+	suciPublicKey        sidf.HomeNetworkPublicKey
 	RoutingIndicator     string
 	Guti                 *nasType.GUTI5G
 }
 
 func (ue *UEContext) NewRanUeContext(msin string,
 	ueSecurityCapability *nasType.UESecurityCapability,
-	k, opc, op, amf, sqn, mcc, mnc, routingIndicator, dnn string,
+	k, opc, op, amf, sqn, mcc, mnc string, homeNetworkPublicKey sidf.HomeNetworkPublicKey, routingIndicator, dnn string,
 	sst int32, sd string, tunnelMode config.TunnelMode, scenarioChan chan scenario.ScenarioMessage,
 	gnbInboundChannel chan context.UEMessage, id int) {
 
@@ -145,6 +148,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 	// added routing indidcator
 	ue.UeSecurity.RoutingIndicator = routingIndicator
+	ue.UeSecurity.suciPublicKey = homeNetworkPublicKey
 
 	// added supi
 	ue.UeSecurity.Supi = fmt.Sprintf("imsi-%s%s%s", mcc, mnc, msin)
@@ -478,31 +482,38 @@ func (ue *UEContext) GetRoutingIndicatorInOctets() []byte {
 }
 
 func (ue *UEContext) EncodeSuci() nasType.MobileIdentity5GS {
-	msin := ue.GetMsin()
-	suci := nasType.MobileIdentity5GS{
-		Buffer: []uint8{nasMessage.SupiFormatImsi<<4 |
-			nasMessage.MobileIdentity5GSTypeSuci, 0x0, 0x0, 0x0, 0xf0, 0xff, 0x00, 0x00},
-	}
+	protScheme, _ := strconv.ParseUint(ue.UeSecurity.suciPublicKey.ProtectionScheme, 10, 8)
+	buf6 := byte(protScheme)
 
-	//mcc & mnc
-	mccmnc := ue.GetMccAndMncInOctets()
-	copy(suci.Buffer[1:], mccmnc)
+	hnPubKeyId, _ := strconv.ParseUint(ue.UeSecurity.suciPublicKey.PublicKeyID, 10, 8)
+	buf7 := byte(hnPubKeyId)
 
-	routingIndicator := ue.GetRoutingIndicatorInOctets()
-	suci.Buffer[4] = routingIndicator[0]
-	suci.Buffer[5] = routingIndicator[1]
+	var schemeOutput []byte
 
-	for i := 0; i < len(msin); i += 2 {
-		suci.Buffer = append(suci.Buffer, 0x0)
-		j := len(suci.Buffer) - 1
-		if i+1 == len(msin) {
-			suci.Buffer[j] = 0xf<<4 | hexCharToByte(msin[i])
-		} else {
-			suci.Buffer[j] = hexCharToByte(msin[i+1])<<4 | hexCharToByte(msin[i])
+	if protScheme == 0 {
+		schemeOutput, _ = hex.DecodeString(sidf.Tbcd(ue.UeSecurity.Msin))
+	} else {
+		suci, err := sidf.CipherSuci(ue.UeSecurity.Msin, ue.UeSecurity.mcc, ue.UeSecurity.mnc, ue.UeSecurity.RoutingIndicator, ue.UeSecurity.suciPublicKey)
+		if err != nil {
+			log.Fatalf("Unable to cipher SUCI: %v", err)
 		}
+		schemeOutput, _ = hex.DecodeString(suci.SchemeOutput)
 	}
 
-	suci.Len = uint16(len(suci.Buffer))
+	buffer := make([]byte, 8+len(schemeOutput))
+
+	buffer[0] = 1
+	copy(buffer[1:], ue.GetMccAndMncInOctets())
+	copy(buffer[4:], ue.GetRoutingIndicatorInOctets())
+	buffer[6] = buf6
+	buffer[7] = buf7
+	copy(buffer[8:], schemeOutput)
+
+	suci := nasType.MobileIdentity5GS{
+		Buffer: buffer,
+		Len:    uint16(len(buffer)),
+	}
+
 	return suci
 }
 

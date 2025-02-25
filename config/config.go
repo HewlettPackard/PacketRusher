@@ -5,15 +5,19 @@
 package config
 
 import (
+	"crypto/ecdh"
+	"encoding/hex"
+	"my5G-RANTester/internal/common/sidf"
 	"net"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
+	"github.com/goccy/go-yaml"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
 )
 
 // TunnelMode indicates how to create a GTP-U tunnel interface in an UE.
@@ -33,7 +37,7 @@ var config *Config
 type Config struct {
 	GNodeB GNodeB `yaml:"gnodeb"`
 	Ue     Ue     `yaml:"ue"`
-	AMFs   []*AMF    `yaml:"amfif"`
+	AMFs   []*AMF `yaml:"amfif"`
 	Logs   Logs   `yaml:"logs"`
 }
 
@@ -64,18 +68,21 @@ type SliceSupportList struct {
 }
 
 type Ue struct {
-	Msin             string     `yaml:"msin"`
-	Key              string     `yaml:"key"`
-	Opc              string     `yaml:"opc"`
-	Amf              string     `yaml:"amf"`
-	Sqn              string     `yaml:"sqn"`
-	Dnn              string     `yaml:"dnn"`
-	RoutingIndicator string     `yaml:"routingindicator"`
-	Hplmn            Hplmn      `yaml:"hplmn"`
-	Snssai           Snssai     `yaml:"snssai"`
-	Integrity        Integrity  `yaml:"integrity"`
-	Ciphering        Ciphering  `yaml:"ciphering"`
-	TunnelMode       TunnelMode `yaml:"-"`
+	Msin                   string     `yaml:"msin"`
+	Key                    string     `yaml:"key"`
+	Opc                    string     `yaml:"opc"`
+	Amf                    string     `yaml:"amf"`
+	Sqn                    string     `yaml:"sqn"`
+	Dnn                    string     `yaml:"dnn"`
+	ProtectionScheme       int        `yaml:"protectionScheme"`
+	HomeNetworkPublicKey   string     `yaml:"homeNetworkPublicKey"`
+	HomeNetworkPublicKeyID uint8      `yaml:"homeNetworkPublicKeyID"`
+	RoutingIndicator       string     `yaml:"routingindicator"`
+	Hplmn                  Hplmn      `yaml:"hplmn"`
+	Snssai                 Snssai     `yaml:"snssai"`
+	Integrity              Integrity  `yaml:"integrity"`
+	Ciphering              Ciphering  `yaml:"ciphering"`
+	TunnelMode             TunnelMode `yaml:"-"`
 }
 
 type Hplmn struct {
@@ -136,7 +143,7 @@ func readConfig(configPath string) Config {
 	}
 	defer f.Close()
 
-	decoder := yaml.NewDecoder(f)
+	decoder := yaml.NewDecoder(f, yaml.Strict())
 	err = decoder.Decode(&cfg)
 	if err != nil {
 		log.Fatal("Could not unmarshal yaml config at \"", configPath, "\". ", err.Error())
@@ -215,6 +222,54 @@ func (config *Config) GetUESecurityCapability() *nasType.UESecurityCapability {
 	UESecurityCapability.SetIA3_128_5G(boolToUint8(config.Ue.Integrity.Nia3))
 
 	return UESecurityCapability
+}
+
+func (config *Config) GetHomeNetworkPublicKey() sidf.HomeNetworkPublicKey {
+	switch config.Ue.ProtectionScheme {
+	case 0:
+		config.Ue.HomeNetworkPublicKey = ""
+		config.Ue.HomeNetworkPublicKeyID = 0
+	case 1:
+		key, err := hex.DecodeString(config.Ue.HomeNetworkPublicKey)
+		if err != nil {
+			log.Fatalf("Invalid Home Network Public Key in configuration for Profile A: %v", err)
+		}
+
+		publicKey, err := ecdh.X25519().NewPublicKey(key)
+		if err != nil {
+			log.Fatalf("Invalid Home Network Public Key in configuration for Profile A: %v", err)
+		}
+
+		return sidf.HomeNetworkPublicKey{
+			ProtectionScheme: strconv.Itoa(config.Ue.ProtectionScheme),
+			PublicKey:        publicKey,
+			PublicKeyID:      strconv.Itoa(int(config.Ue.HomeNetworkPublicKeyID)),
+		}
+	case 2:
+		key, err := hex.DecodeString(config.Ue.HomeNetworkPublicKey)
+		if err != nil {
+			log.Fatalf("Invalid Home Network Public Key in configuration for Profile B: %v", err)
+		}
+
+		publicKey, err := ecdh.P256().NewPublicKey(key)
+		if err != nil {
+			log.Fatalf("Invalid Home Network Public Key in configuration for Profile B: %v", err)
+		}
+
+		return sidf.HomeNetworkPublicKey{
+			ProtectionScheme: strconv.Itoa(config.Ue.ProtectionScheme),
+			PublicKey:        publicKey,
+			PublicKeyID:      strconv.Itoa(int(config.Ue.HomeNetworkPublicKeyID)),
+		}
+	default:
+		log.Fatal("Invalid Protection Scheme for SUCI. Valid values are 0, 1 and 2")
+	}
+
+	return sidf.HomeNetworkPublicKey{
+		ProtectionScheme: "0",
+		PublicKey:        nil,
+		PublicKeyID:      "0",
+	}
 }
 
 func boolToUint8(boolean bool) uint8 {

@@ -38,6 +38,7 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 		conf.Ue.Sqn,
 		conf.Ue.Hplmn.Mcc,
 		conf.Ue.Hplmn.Mnc,
+		conf.GetHomeNetworkPublicKey(),
 		conf.Ue.RoutingIndicator,
 		conf.Ue.Dnn,
 		int32(conf.Ue.Snssai.Sst),

@@ -1,44 +1,87 @@
+# PacketRusher Simulated gNodeB Configuration
 gnodeb:
+  # IP Address on the N2 Interface (e.g. used between the gNodeB and the AMF)
   controlif:
-    ip: "192.168.11.13"
+    ip: "127.0.0.1"
     port: 9487
+
+  # IP Address on the N3 Interface (e.g. used between the gNodeB and the UPF)
   dataif:
-    ip: "192.168.11.13"
+    ip: "127.0.0.1"
     port: 2152
+
+  # gNodeB's Identity
   plmnlist:
-    mcc: "999"
-    mnc: "70"
+    mcc: "208"
+    mnc: "93"
     tac: "000001"
     gnbid: "000008"
+
+  # gNodeB's Supported Slices
   slicesupportlist:
     sst: "01"
     sd: "000001" # optional, can be removed if not used
+
+# PacketRusher Simulated UE Configuration
 ue:
+  # UE's Identity, frequently called IMSI in 4G and before
+  # IMSI format is "<mcc><mnc><msin>"
+  # In 5G, the SUPI of the UE will be "imsi-<mcc><mnc><msin>""
+  # With default configuration, SUPI will be imsi-208930000000120
+  hplmn:
+    mcc: "208"
+    mnc: "93"
   msin: "0000000120"
+
+  # In 5G, the UE's identity to the AMF as a SUCI (Subscription Concealed Identifier)
+  #
+  # SUCI format is suci-<supi_type>-<MCC>-<MNC>-<routing_indicator>-<protection_scheme>-<public_key_id>-<scheme_output>
+  # With default configuration, SUCI sent to AMF will be suci-0-999-70-0000-0-0-0000000120
+  #
+  # SUCI Routing Indicator allows the AMF to route the UE to the correct UDM
+  routingindicator: "0000"
+  #
+  # SUCI Protection Scheme: 0 for Null-scheme, 1 for Profile A and 2 for Profile B
+  protectionScheme: 0
+  #
+  # Home Network Public Key
+  # Ignored with default Null-Scheme configuration
+  homeNetworkPublicKey: "5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650"
+  #
+  # Home Network Public Key ID
+  # Ignored ith default Null-Scheme configuration
+  homeNetworkPublicKeyID: 1
+  
+  # UE's SIM credentials
   key: "00112233445566778899AABBCCDDEEFF"
   opc: "00112233445566778899AABBCCDDEEFF"
   amf: "8000"
   sqn: "00000000"
+
+  # UE will request to establish a data session in this DNN (APN)
   dnn: "internet"
-  routingindicator: "0000"
-  hplmn:
-    mcc: "999"
-    mnc: "70"
+  # in the following slice
   snssai:
-    sst: 01
+    sst: "01"
     sd: "000001" # optional, can be removed if not used
+
+  # The UE's security capabilities that will be advertised to the AMF
   integrity:
     nia0: false
     nia1: false
     nia2: true
     nia3: false
   ciphering:
+    # For debugging Wireshark traces, NEA0 is recommended, as the NAS messages 
+    # will be sent in cleartext, and be decipherable in Wireshark.
     nea0: true
     nea1: false
     nea2: true
     nea3: false
+
+# List of AMF that PacketRusher will try to connect to
 amfif:
-  - ip: "192.168.11.30"
+  - ip: "127.0.0.1"
     port: 38412
 logs:
   level: 4
