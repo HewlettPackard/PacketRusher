@@ -109,6 +109,7 @@ type UESimulationConfig struct {
 	NumPduSessions           int
 	RegistrationLoop         bool
 	LoopCount                int
+	TimeBeforeReregistration int
 }
 
 func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
@@ -211,10 +212,10 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 			}
 			if !simConfig.RegistrationLoop {
 				break
-			} else if simConfig.LoopCount != 0 {
-				if i == simConfig.LoopCount {
-					break
-				}
+			} else if simConfig.LoopCount != 0 && i == simConfig.LoopCount {
+				break
+			} else {
+				time.Sleep(time.Duration(simConfig.TimeBeforeReregistration) * time.Millisecond)
 			}
 		}
 	}(simConfig.ScenarioChan, simConfig.UeId)
