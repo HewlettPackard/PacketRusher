@@ -201,7 +201,7 @@ func TestUERegistrationLoop(t *testing.T) {
 		UeId:                     1,
 		Gnbs:                     gnbs,
 		Cfg:                      conf,
-		TimeBeforeDeregistration: 3000,
+		TimeBeforeDeregistration: 2000,
 		TimeBeforeNgapHandover:   0,
 		TimeBeforeXnHandover:     0,
 		NumPduSessions:           1,
