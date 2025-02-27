@@ -107,6 +107,8 @@ type UESimulationConfig struct {
 	TimeBeforeIdle           int
 	TimeBeforeReconnecting   int
 	NumPduSessions           int
+	RegistrationLoop         bool
+	LoopCount                int
 }
 
 func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
@@ -121,87 +123,98 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 
 	// Launch a coroutine to handle UE's individual scenario
 	go func(scenarioChan chan procedures.UeTesterMessage, ueId int) {
-		wg.Add(1)
+		i := 0
+		for {
+			i++
+			wg.Add(1)
 
-		ueRx := make(chan procedures.UeTesterMessage)
+			ueRx := make(chan procedures.UeTesterMessage)
 
-		// Create a new UE coroutine
-		// ue.NewUE returns context of the new UE
-		ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[gnbIdGen(0)].GetInboundChannel(), wg)
+			// Create a new UE coroutine
+			// ue.NewUE returns context of the new UE
+			ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[gnbIdGen(0)].GetInboundChannel(), wg)
 
-		// We tell the UE to perform a registration
-		ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
+			// We tell the UE to perform a registration
+			ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
 
-		var deregistrationChannel <-chan time.Time = nil
-		if simConfig.TimeBeforeDeregistration != 0 {
-			deregistrationChannel = time.After(time.Duration(simConfig.TimeBeforeDeregistration) * time.Millisecond)
-		}
+			var deregistrationChannel <-chan time.Time = nil
+			if simConfig.TimeBeforeDeregistration != 0 {
+				deregistrationChannel = time.After(time.Duration(simConfig.TimeBeforeDeregistration) * time.Millisecond)
+			}
 
-		nextHandoverId := 0
-		var ngapHandoverChannel <-chan time.Time = nil
-		if simConfig.TimeBeforeNgapHandover != 0 {
-			ngapHandoverChannel = time.After(time.Duration(simConfig.TimeBeforeNgapHandover) * time.Millisecond)
-		}
-		var xnHandoverChannel <-chan time.Time = nil
-		if simConfig.TimeBeforeXnHandover != 0 {
-			xnHandoverChannel = time.After(time.Duration(simConfig.TimeBeforeXnHandover) * time.Millisecond)
-		}
+			nextHandoverId := 0
+			var ngapHandoverChannel <-chan time.Time = nil
+			if simConfig.TimeBeforeNgapHandover != 0 {
+				ngapHandoverChannel = time.After(time.Duration(simConfig.TimeBeforeNgapHandover) * time.Millisecond)
+			}
+			var xnHandoverChannel <-chan time.Time = nil
+			if simConfig.TimeBeforeXnHandover != 0 {
+				xnHandoverChannel = time.After(time.Duration(simConfig.TimeBeforeXnHandover) * time.Millisecond)
+			}
 
-		var idleChannel <-chan time.Time = nil
-		var reconnectChannel <-chan time.Time = nil
-		if simConfig.TimeBeforeIdle != 0 {
-			idleChannel = time.After(time.Duration(simConfig.TimeBeforeIdle) * time.Millisecond)
-		}
+			var idleChannel <-chan time.Time = nil
+			var reconnectChannel <-chan time.Time = nil
+			if simConfig.TimeBeforeIdle != 0 {
+				idleChannel = time.After(time.Duration(simConfig.TimeBeforeIdle) * time.Millisecond)
+			}
 
-		loop := true
-		registered := false
-		state := ueCtx.MM5G_NULL
-		for loop {
-			select {
-			case <-deregistrationChannel:
-				if ueRx != nil {
-					ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
-					ueRx = nil
-				}
-			case <-ngapHandoverChannel:
-				trigger.TriggerNgapHandover(simConfig.Gnbs[gnbIdGen(nextHandoverId)], simConfig.Gnbs[gnbIdGen(nextHandoverId+1)], int64(ueId))
-				nextHandoverId++
-			case <-xnHandoverChannel:
-				trigger.TriggerXnHandover(simConfig.Gnbs[gnbIdGen(nextHandoverId)], simConfig.Gnbs[gnbIdGen(nextHandoverId+1)], int64(ueId))
-				nextHandoverId++
-			case <-idleChannel:
-				if ueRx != nil {
-					ueRx <- procedures.UeTesterMessage{Type: procedures.Idle}
-					// Channel creation to be transformed into a task ;-)
-					if simConfig.TimeBeforeReconnecting != 0 {
-						reconnectChannel = time.After(time.Duration(simConfig.TimeBeforeReconnecting) * time.Millisecond)
-					}
-				}
-			case <-reconnectChannel:
-				if ueRx != nil {
-					ueRx <- procedures.UeTesterMessage{Type: procedures.ServiceRequest}
-				}
-			case msg := <-scenarioChan:
-				if ueRx != nil {
-					ueRx <- msg
-					if msg.Type == procedures.Terminate || msg.Type == procedures.Kill {
+			loop := true
+			registered := false
+			state := ueCtx.MM5G_NULL
+			for loop {
+				select {
+				case <-deregistrationChannel:
+					if ueRx != nil {
+						ueRx <- procedures.UeTesterMessage{Type: procedures.Terminate}
 						ueRx = nil
 					}
-				}
-			case msg := <-ueTx:
-				log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)
-				switch msg.StateChange {
-				case ueCtx.MM5G_REGISTERED:
-					if !registered {
-						for i := 0; i < simConfig.NumPduSessions; i++ {
-							ueRx <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
+				case <-ngapHandoverChannel:
+					trigger.TriggerNgapHandover(simConfig.Gnbs[gnbIdGen(nextHandoverId)], simConfig.Gnbs[gnbIdGen(nextHandoverId+1)], int64(ueId))
+					nextHandoverId++
+				case <-xnHandoverChannel:
+					trigger.TriggerXnHandover(simConfig.Gnbs[gnbIdGen(nextHandoverId)], simConfig.Gnbs[gnbIdGen(nextHandoverId+1)], int64(ueId))
+					nextHandoverId++
+				case <-idleChannel:
+					if ueRx != nil {
+						ueRx <- procedures.UeTesterMessage{Type: procedures.Idle}
+						// Channel creation to be transformed into a task ;-)
+						if simConfig.TimeBeforeReconnecting != 0 {
+							reconnectChannel = time.After(time.Duration(simConfig.TimeBeforeReconnecting) * time.Millisecond)
 						}
-						registered = true
 					}
-				case ueCtx.MM5G_NULL:
-					loop = false
+				case <-reconnectChannel:
+					if ueRx != nil {
+						ueRx <- procedures.UeTesterMessage{Type: procedures.ServiceRequest}
+					}
+				case msg := <-scenarioChan:
+					if ueRx != nil {
+						ueRx <- msg
+						if msg.Type == procedures.Terminate || msg.Type == procedures.Kill {
+							ueRx = nil
+						}
+					}
+				case msg := <-ueTx:
+					log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)
+					switch msg.StateChange {
+					case ueCtx.MM5G_REGISTERED:
+						if !registered {
+							for i := 0; i < simConfig.NumPduSessions; i++ {
+								ueRx <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
+							}
+							registered = true
+						}
+					case ueCtx.MM5G_NULL:
+						loop = false
+					}
+					state = msg.StateChange
 				}
-				state = msg.StateChange
+			}
+			if !simConfig.RegistrationLoop {
+				break
+			} else if simConfig.LoopCount != 0 {
+				if i == simConfig.LoopCount {
+					break
+				}
 			}
 		}
 	}(simConfig.ScenarioChan, simConfig.UeId)
