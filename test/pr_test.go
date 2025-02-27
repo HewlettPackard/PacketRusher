@@ -100,6 +100,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		TimeBeforeNgapHandover:   0,
 		TimeBeforeXnHandover:     0,
 		NumPduSessions:           1,
+		RegistrationLoop:         false,
 	}
 
 	for ueSimCfg.UeId = 1; ueSimCfg.UeId <= ueCount; ueSimCfg.UeId++ {
@@ -156,7 +157,7 @@ func TestUERegistrationLoop(t *testing.T) {
 	}
 
 	type UECheck struct {
-		HasAuthOnce bool
+		authCounter int
 	}
 	ueChecks := map[string]*UECheck{}
 
@@ -173,7 +174,7 @@ func TestUERegistrationLoop(t *testing.T) {
 				check = &UECheck{}
 				ueChecks[ue.GetSecurityContext().GetMsin()] = check
 			}
-			check.HasAuthOnce = true
+			check.authCounter++
 		}).
 		Build()
 	if err != nil {
@@ -195,7 +196,6 @@ func TestUERegistrationLoop(t *testing.T) {
 	}
 
 	// Setup UE
-	loopCount := 5
 	scenarioChans := make([]chan procedures.UeTesterMessage, 2)
 	ueSimCfg := tools.UESimulationConfig{
 		UeId:                     1,
@@ -205,35 +205,27 @@ func TestUERegistrationLoop(t *testing.T) {
 		TimeBeforeNgapHandover:   0,
 		TimeBeforeXnHandover:     0,
 		NumPduSessions:           1,
+		RegistrationLoop:         true,
+		LoopCount:                5,
 	}
+	scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage)
+	ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
 
-	for i := 0; i < loopCount; i++ {
-		if scenarioChans[ueSimCfg.UeId] != nil {
-			scenarioChans[ueSimCfg.UeId] <- procedures.UeTesterMessage{Type: procedures.Kill}
-			close(scenarioChans[ueSimCfg.UeId])
-			scenarioChans[ueSimCfg.UeId] = nil
-		}
-		scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage)
-		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
+	securityContext := context.SecurityContext{}
+	securityContext.SetMsin(tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin))
+	securityContext.SetAuthSubscription(ueSimCfg.Cfg.Ue.Key, ueSimCfg.Cfg.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
+	securityContext.SetAbba([]uint8{0x00, 0x00})
 
-		securityContext := context.SecurityContext{}
-		securityContext.SetMsin(tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin))
-		securityContext.SetAuthSubscription(ueSimCfg.Cfg.Ue.Key, ueSimCfg.Cfg.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
-		securityContext.SetAbba([]uint8{0x00, 0x00})
+	amfContext := fiveGC.GetAMFContext()
+	amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
 
-		amfContext := fiveGC.GetAMFContext()
-		amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
+	tools.SimulateSingleUE(ueSimCfg, &wg)
 
-		tools.SimulateSingleUE(ueSimCfg, &wg)
-
-		// Before creating a new UE, we wait for 2000 ms
-		time.Sleep(time.Duration(2000) * time.Millisecond)
-	}
-
-	time.Sleep(time.Duration(5000) * time.Millisecond)
+	time.Sleep(time.Duration(15000) * time.Millisecond)
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
 			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
-			assert.True(t, ueChecks[ue.GetSecurityContext().GetMsin()].HasAuthOnce, "UE has never changed state")
+			assert.Equalf(t, 15, ueChecks[ue.GetSecurityContext().GetMsin()].authCounter, "Number of registrations should be 15 (counter triggered 3x per loop)")
+			// authCounter = 3*loopCount because callback is triggered 3x per state transition in fsm.go from free5gc util
 		})
 }
