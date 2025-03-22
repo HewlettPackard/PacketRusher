@@ -37,11 +37,11 @@ PacketRusher borrows libraries and data structures from the [free5gc project](ht
 The following is a quick start guide, for more details on the installation, configuration or usage, you may refer to the [wiki](https://github.com/HewlettPackard/PacketRusher/wiki).
 
 ### Requirements
-- Ubuntu 20.04-23.04, Debian 12 Bookworm
+- Ubuntu 20.04-24.04
   - All Linux distibutions with kernel >= 5.4 should work, but untested.
   - There might be issues with frankenstein kernel from RHEL/CentOS/Rocky, feel free to open a bug if you encounter one!
 - Windows is not supported (Windows does not support SCTP)
-- Go 1.21.0 or more recent
+- Go 1.23.0 or more recent
 - Root privilege
 - Secure boot disabled (for custom kernel module)
 
@@ -51,7 +51,7 @@ PacketRusher is not yet supported on Docker.
 ```bash
 $ sudo apt install build-essential linux-headers-generic make git wget tar linux-modules-extra-$(uname -r)
 # Warning this command will remove your existing local Go installation if you have one:
-$ wget https://go.dev/dl/go1.21.3.linux-amd64.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.21.3.linux-amd64.tar.gz
+$ wget https://go.dev/dl/go1.24.1.linux-amd64.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.24.1.linux-amd64.tar.gz
 # Add go binary to the executable PATH variable:
 $ echo 'export PATH=$PATH:/usr/local/go/bin' >> $HOME/.profile
 ```

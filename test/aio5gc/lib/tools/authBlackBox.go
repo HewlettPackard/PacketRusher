@@ -9,8 +9,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"math/rand"
-	"time"
 
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/util/milenage"
@@ -24,9 +22,8 @@ func AuthProcedure(authSub models.AuthenticationSubscription, servingNetworkName
 ) {
 	response = &models.AuthenticationInfoResult{}
 
-	rand.Seed(time.Now().UnixNano())
 	RAND := make([]byte, 16)
-	_, err := cryptoRand.Read(RAND)
+	cryptoRand.Read(RAND)
 
 	opc, err := hex.DecodeString(authSub.Opc.OpcValue)
 	if err != nil {
@@ -49,30 +46,12 @@ func AuthProcedure(authSub models.AuthenticationSubscription, servingNetworkName
 	}
 
 	// Run milenage
-	macA, macS := make([]byte, 8), make([]byte, 8)
-	CK, IK := make([]byte, 16), make([]byte, 16)
-	RES := make([]byte, 8)
-	AK, AKstar := make([]byte, 6), make([]byte, 6)
-
-	// Generate macA, macS
-	err = milenage.F1(opc, k, RAND, sqn, amf, macA, macS)
+	IK, CK, RES, AUTN, err := milenage.GenerateAKAParameters(opc, k, RAND, sqn, amf)
 	if err != nil {
 		log.Error("milenage F1 err:", err)
 	}
 
-	// Generate RES, CK, IK, AK, AKstar
-	// RES == XRES (expected RES) for server
-	err = milenage.F2345(opc, k, RAND, RES, CK, IK, AK, AKstar)
-	if err != nil {
-		log.Error("milenage F2345 err:", err)
-	}
-
-	// Generate AUTN
-	SQNxorAK := make([]byte, 6)
-	for i := 0; i < len(sqn); i++ {
-		SQNxorAK[i] = sqn[i] ^ AK[i]
-	}
-	AUTN := append(append(SQNxorAK, amf...), macA...)
+	SQNxorAK, _, _ := milenage.CutAUTN(AUTN)
 
 	var av models.AuthenticationVector
 
@@ -97,9 +76,6 @@ func AuthProcedure(authSub models.AuthenticationSubscription, servingNetworkName
 	P0 = []byte(servingNetworkName)
 	P1 = SQNxorAK
 	kdfValForKausf, err := ueauth.GetKDFValue(key, FC, P0, ueauth.KDFLen(P0), P1, ueauth.KDFLen(P1))
-
-	// strKausf := hex.EncodeToString(kdfValForKausf)
-	// log.Info("[5GC] Kausf: " + strKausf)
 	if err != nil {
 		log.Errorf("Get kdfValForKausf err: %+v", err)
 	}
