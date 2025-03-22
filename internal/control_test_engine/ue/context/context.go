@@ -15,7 +15,6 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 	"net"
-	"reflect"
 	"regexp"
 	"strconv"
 	"sync"
@@ -550,36 +549,12 @@ func (ue *UEContext) Get5gGuti() *nasType.GUTI5G {
 	return ue.UeSecurity.Guti
 }
 
-func (ue *UEContext) deriveAUTN(autn []byte, ak []uint8) ([]byte, []byte, []byte) {
-
-	sqn := make([]byte, 6)
-
-	// get SQNxorAK
-	SQNxorAK := autn[0:6]
-	amf := autn[6:8]
-	mac_a := autn[8:]
-
-	// get SQN
-	for i := 0; i < len(SQNxorAK); i++ {
-		sqn[i] = SQNxorAK[i] ^ ak[i]
-	}
-
-	// return SQN, amf, mac_a
-	return sqn, amf, mac_a
-}
-
 func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription,
 	RAND []byte,
 	snNmae string,
 	AUTN []byte) ([]byte, string) {
 
-	// parameters for authentication challenge.
-	mac_a, mac_s := make([]byte, 8), make([]byte, 8)
-	CK, IK := make([]byte, 16), make([]byte, 16)
-	RES := make([]byte, 8)
-	AK, AKstar := make([]byte, 6), make([]byte, 6)
-
-	// Get OPC, K, SQN, AMF from USIM.
+	// Get OPC, K, SQN from USIM.
 	OPC, err := hex.DecodeString(authSubs.Opc.OpcValue)
 	if err != nil {
 		log.Fatal("[UE] OPC error: ", err, authSubs.Opc.OpcValue)
@@ -592,49 +567,24 @@ func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscr
 	if err != nil {
 		log.Fatal("[UE] sqn error: ", err, authSubs.SequenceNumber)
 	}
-	AMF, err := hex.DecodeString(authSubs.AuthenticationManagementField)
+
+	sqnHn, AK, IK, CK, RES, err := milenage.GenerateKeysWithAUTN(OPC, K, RAND, AUTN)
 	if err != nil {
-		log.Fatal("[UE] AuthenticationManagementField error: ", err, authSubs.AuthenticationManagementField)
-	}
-
-	// Generate RES, CK, IK, AK, AKstar
-	milenage.F2345(OPC, K, RAND, RES, CK, IK, AK, AKstar)
-
-	// Get SQN, MAC_A, AMF from AUTN
-	sqnHn, _, mac_aHn := ue.deriveAUTN(AUTN, AK)
-
-	// Generate MAC_A, MAC_S
-	milenage.F1(OPC, K, RAND, sqnHn, AMF, mac_a, mac_s)
-
-	// MAC verification.
-	if !reflect.DeepEqual(mac_a, mac_aHn) {
 		return nil, "MAC failure"
 	}
 
 	// Verification of sequence number freshness.
 	if bytes.Compare(sqnUe, sqnHn) > 0 {
-
-		// get AK*
-		milenage.F2345(OPC, K, RAND, RES, CK, IK, AK, AKstar)
-
-		// From the standard, AMF(0x0000) should be used in the synch failure.
-		amfSynch, _ := hex.DecodeString("0000")
-
-		// get mac_s using sqn ue.
-		milenage.F1(OPC, K, RAND, sqnUe, amfSynch, mac_a, mac_s)
-
-		sqnUeXorAK := make([]byte, 6)
-		for i := 0; i < len(sqnUe); i++ {
-			sqnUeXorAK[i] = sqnUe[i] ^ AKstar[i]
+		auts, err := milenage.GenerateAUTS(OPC, K, RAND, sqnUe)
+		if err != nil {
+			log.Fatal("[UE] AUTS generation error: ", err, authSubs.SequenceNumber)
 		}
 
-		failureParam := append(sqnUeXorAK, mac_s...)
-
-		return failureParam, "SQN failure"
+		return auts, "SQN failure"
 	}
 
 	// updated sqn value.
-	authSubs.SequenceNumber = fmt.Sprintf("%x", sqnHn)
+	authSubs.SequenceNumber = fmt.Sprintf("%08x", sqnHn)
 
 	// derive RES*
 	key := append(CK, IK...)

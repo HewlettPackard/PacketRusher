@@ -7,6 +7,7 @@ package config
 import (
 	"crypto/ecdh"
 	"encoding/hex"
+	"fmt"
 	"my5G-RANTester/internal/common/sidf"
 	"net"
 	"os"
@@ -155,6 +156,12 @@ func readConfig(configPath string) Config {
 
 	cfg.GNodeB.DataIF.Ip = resolvHost("gNodeB's N3/Data IP address", cfg.GNodeB.DataIF.Ip)
 	cfg.GNodeB.ControlIF.Ip = resolvHost("gNodeB's N2/Control IP address", cfg.GNodeB.ControlIF.Ip)
+
+	sqn, err := strconv.ParseInt(cfg.Ue.Sqn, 16, 64)
+	if err != nil {
+		log.Fatalf("sqn[%s] is invalid: %v", sqn, err)
+	}
+	cfg.Ue.Sqn = fmt.Sprintf("%08X", sqn)
 
 	return cfg
 }
