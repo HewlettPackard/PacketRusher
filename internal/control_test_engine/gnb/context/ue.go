@@ -147,7 +147,7 @@ func (ue *GNBUe) GetUeMaskedImeiSv() string {
 }
 
 func (ue *GNBUe) GetSelectedNssai(pduSessionId int64) (string, string) {
-	pduSession := ue.context.pduSession[pduSessionId]
+	pduSession := ue.context.pduSession[pduSessionId-1]
 	if pduSession != nil {
 		return pduSession.sst, pduSession.sd
 	}
