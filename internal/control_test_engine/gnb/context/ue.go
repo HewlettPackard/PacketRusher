@@ -5,7 +5,7 @@
 package context
 
 import (
-	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/free5gc/nas/nasType"
@@ -85,18 +85,18 @@ func (ue *GNBUe) CreatePduSession(pduSessionId int64, upfIp string, sst string, 
 	qosId int64, priArp int64, fiveQi int64, ulTeid uint32, dlTeid uint32) (*GnbPDUSession, error) {
 
 	if pduSessionId < 1 && pduSessionId > 16 {
-		return nil, errors.New("PDU Session Id must lies between 0 and 15, id: " + string(pduSessionId))
+		return nil, fmt.Errorf("PDU Session Id must lies between 0 and 15, id: %d", pduSessionId)
 	}
 
 	if ue.context.pduSession[pduSessionId-1] != nil {
-		return nil, errors.New("Unable to create PDU Session " + string(pduSessionId) + " as such PDU Session already exists")
+		return nil, fmt.Errorf("unable to create PDU Session %d as such PDU Session already exists", pduSessionId)
 	}
 
 	var pduSession = new(GnbPDUSession)
 	pduSession.pduSessionId = pduSessionId
 	pduSession.upfIp = upfIp
 	if !ue.isWantedNssai(sst, sd) {
-		return nil, errors.New("Unable to create PDU Session, slice " + string(sst) + string(sd) + " is not selected for current UE")
+		return nil, fmt.Errorf("unable to create PDU Session, slice sst:%s sd:%s is not selected for current UE", sst, sd)
 	}
 	pduSession.pduType = pduType
 	pduSession.qosId = qosId
@@ -114,7 +114,7 @@ func (ue *GNBUe) CreatePduSession(pduSessionId int64, upfIp string, sst string, 
 
 func (ue *GNBUe) GetPduSession(pduSessionId int64) (*GnbPDUSession, error) {
 	if pduSessionId < 1 && pduSessionId > 16 {
-		return nil, errors.New("PDU Session Id must lies between 1 and 16, id: " + string(pduSessionId))
+		return nil, fmt.Errorf("PDU Session Id must lies between 1 and 16, id: %d", pduSessionId)
 	}
 
 	return ue.context.pduSession[pduSessionId-1], nil
@@ -130,7 +130,7 @@ func (ue *GNBUe) SetPduSessions(pduSessions [16]*GnbPDUSession) {
 
 func (ue *GNBUe) DeletePduSession(pduSessionId int64) error {
 	if pduSessionId < 1 && pduSessionId > 16 {
-		return errors.New("PDU Session Id must lies between 1 and 16, id: " + string(pduSessionId))
+		return fmt.Errorf("PDU Session Id must lies between 1 and 16, id: %d", pduSessionId)
 	}
 
 	ue.context.pduSession[pduSessionId-1] = nil

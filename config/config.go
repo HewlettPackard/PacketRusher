@@ -159,7 +159,7 @@ func readConfig(configPath string) Config {
 
 	sqn, err := strconv.ParseInt(cfg.Ue.Sqn, 16, 64)
 	if err != nil {
-		log.Fatalf("sqn[%s] is invalid: %v", sqn, err)
+		log.Fatalf("sqn[%s] is invalid: %v", cfg.Ue.Sqn, err)
 	}
 	cfg.Ue.Sqn = fmt.Sprintf("%08X", sqn)
 
