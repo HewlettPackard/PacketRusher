@@ -7,10 +7,11 @@ package service
 import (
 	"fmt"
 	"my5G-RANTester/config"
-	gtpLink "my5G-RANTester/internal/cmd/gogtp5g-link"
-	gtpTunnel "my5G-RANTester/internal/cmd/gogtp5g-tunnel"
 	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
+
+	gtpLink "github.com/free5gc/go-gtp5gnl/linkcmd"
+	gtpTunnel "github.com/free5gc/go-gtp5gnl/tuncmd"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -61,7 +62,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 
 	go func() {
 		// This function should not return as long as the GTP-U UDP socket is open
-		if err := gtpLink.CmdAdd(nameInf, 1, ueGnbIp.String(), stopSignal); err != nil {
+		if err := gtpLink.CmdAddWithStopCh(nameInf, 1, 131072, ueGnbIp.String(), "", stopSignal); err != nil {
 			log.Fatal("[GNB][GTP] Unable to create Kernel GTP interface: ", err, msin, nameInf)
 			return
 		}
@@ -85,8 +86,8 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		return
 	}
 
-	cmdAddPdr := []string{nameInf, "1", "--pcd", "1", "--hdr-rm", "0", "--ue-ipv4", ueIp, "--f-teid", 
-			fmt.Sprint(gnbPduSession.GetTeidDownlink()), msg.GnbIp, "--far-id", "1", "--source-interface", "1"}
+	cmdAddPdr := []string{nameInf, "1", "--pcd", "1", "--hdr-rm", "0", "--ue-ipv4", ueIp, "--f-teid",
+		fmt.Sprint(gnbPduSession.GetTeidDownlink()), msg.GnbIp, "--far-id", "1", "--src-intf", "1"}
 	log.Debug("[UE][GTP] Setting up GTP Packet Detection Rule for ", strings.Join(cmdAddPdr, " "))
 
 	if err := gtpTunnel.CmdAddPDR(cmdAddPdr); err != nil {
@@ -94,7 +95,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		return
 	}
 
-	cmdAddPdr = []string{nameInf, "2", "--pcd", "2", "--ue-ipv4", ueIp, "--far-id", "2", "--source-interface", "0"}
+	cmdAddPdr = []string{nameInf, "2", "--pcd", "2", "--ue-ipv4", ueIp, "--far-id", "2", "--src-intf", "0"}
 	cmdAddQer := []string{nameInf, "1", "--qfi", strconv.Itoa(int(qfi))}
 	if qfi > 0 {
 		log.Debug("[UE][GTP] Setting Up QFI", strings.Join(cmdAddQer, " "))
