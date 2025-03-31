@@ -13,9 +13,9 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/vishvananda/netlink"
 
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcapgo"
+	"github.com/gopacket/gopacket"
+	"github.com/gopacket/gopacket/layers"
+	"github.com/gopacket/gopacket/pcapgo"
 )
 
 func CaptureTraffic(path cli.Path) {
@@ -24,41 +24,16 @@ func CaptureTraffic(path cli.Path) {
 		log.Fatal(err)
 	}
 
-	config := config.GetConfig()
-	ip := net.ParseIP(config.GNodeB.ControlIF.Ip)
-
-	links, err := netlink.LinkList()
-	if err != nil {
-		log.Fatalf("Unable to capture traffic to AMF as we are unable to get Links informations %s", err)
-	}
-	var n2Link *netlink.Link
-outer:
-	for _, link := range links {
-		addrs, err := netlink.AddrList(link, 0)
-		if err != nil {
-			log.Errorf("Unable to get IPs of link %s: %s", link.Attrs().Name, err)
-			continue
-		}
-		for _, addr := range addrs {
-			if addr.IP.Equal(ip) {
-				n2Link = &link
-				break outer
-			}
-		}
-	}
-
-	if n2Link == nil {
-		log.Fatalf("Unable to find network interface providing gNodeB IP %s", ip)
-	}
+	n2Link := findN2Link()
 
 	pcapw := pcapgo.NewWriter(f)
 	if err := pcapw.WriteFileHeader(1600, layers.LinkTypeEthernet); err != nil {
 		log.Fatalf("WriteFileHeader: %v", err)
 	}
 
-	handle, err := pcapgo.NewEthernetHandle((*n2Link).Attrs().Name)
+	handle, err := pcapgo.NewEthernetHandle(n2Link.Attrs().Name)
 	if err != nil {
-		log.Fatalf("OpenEthernet: %v", err)
+		log.Fatalf("NewEthernetHandle: %v", err)
 	}
 
 	pkgsrc := gopacket.NewPacketSource(handle, layers.LayerTypeEthernet)
@@ -69,4 +44,31 @@ outer:
 			}
 		}
 	}()
+}
+
+func findN2Link() netlink.Link {
+	config := config.GetConfig()
+	ip := net.ParseIP(config.GNodeB.ControlIF.Ip)
+
+	links, err := netlink.LinkList()
+	if err != nil {
+		log.Fatalf("Unable to capture traffic to AMF as we are unable to get Links information %s", err)
+	}
+
+	for _, link := range links {
+		addrs, err := netlink.AddrList(link, 0)
+		if err != nil {
+			log.Errorf("Unable to get IPs of link %s: %s", link.Attrs().Name, err)
+			continue
+		}
+
+		for _, addr := range addrs {
+			if addr.IP.Equal(ip) {
+				return link
+			}
+		}
+	}
+
+	log.Fatalf("Unable to find network interface providing gNodeB IP %s", ip)
+	return nil // unreachable
 }

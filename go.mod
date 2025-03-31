@@ -13,7 +13,7 @@ require (
 	github.com/free5gc/openapi v1.0.8
 	github.com/free5gc/util v1.0.7-0.20250305152753-9b83de3c2612
 	github.com/goccy/go-yaml v1.16.0
-	github.com/google/gopacket v1.1.19
+	github.com/gopacket/gopacket v1.3.1
 	github.com/ishidawataru/sctp v0.0.0-20250303034628-ecf9ed6df987
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
