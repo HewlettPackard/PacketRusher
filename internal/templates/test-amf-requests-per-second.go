@@ -29,7 +29,7 @@ func TestRqsLoop(numRqs int, interval int) int64 {
 
 	cfg := config.GetConfig()
 
-	ranPort := 1000
+	ranPort := uint16(1000)
 	for y := 1; y <= interval; y++ {
 
 		monitor.InitRqsLocal()
@@ -38,7 +38,7 @@ func TestRqsLoop(numRqs int, interval int) int64 {
 
 			cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(i)
 
-			cfg.GNodeB.ControlIF.Port = ranPort
+			cfg.GNodeB.ControlIF = cfg.GNodeB.ControlIF.WithPort(ranPort)
 
 			go gnb.InitGnbForLoadSeconds(cfg, &wg, &monitor)
 

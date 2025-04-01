@@ -33,15 +33,14 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 		conf.GNodeB.PlmnList.Tac,
 		conf.GNodeB.SliceSupportList.Sst,
 		conf.GNodeB.SliceSupportList.Sd,
-		conf.GNodeB.ControlIF.Ip,
-		conf.GNodeB.DataIF.Ip,
-		conf.GNodeB.ControlIF.Port,
-		conf.GNodeB.DataIF.Port)
+		conf.GNodeB.ControlIF.AddrPort,
+		conf.GNodeB.DataIF.AddrPort,
+	)
 
 	// start communication with AMF (server SCTP).
 	for _, amfConfig := range conf.AMFs {
 		// new AMF context.
-		amf := gnb.NewGnBAmf(amfConfig.Ip, amfConfig.Port)
+		amf := gnb.NewGnBAmf(amfConfig.AddrPort)
 
 		// start communication with AMF(SCTP).
 		if err := ngap.InitConn(amf, gnb); err != nil {
@@ -85,15 +84,13 @@ func InitGnbForLoadSeconds(conf config.Config, wg *sync.WaitGroup,
 		conf.GNodeB.PlmnList.Tac,
 		conf.GNodeB.SliceSupportList.Sst,
 		conf.GNodeB.SliceSupportList.Sd,
-		conf.GNodeB.ControlIF.Ip,
-		conf.GNodeB.DataIF.Ip,
-		conf.GNodeB.ControlIF.Port,
-		conf.GNodeB.DataIF.Port)
+		conf.GNodeB.ControlIF.AddrPort,
+		conf.GNodeB.DataIF.AddrPort)
 
 	// start communication with AMF (server SCTP).
 	for _, amf := range conf.AMFs {
 		// new AMF context.
-		amf := gnb.NewGnBAmf(amf.Ip, amf.Port)
+		amf := gnb.NewGnBAmf(amf.AddrPort)
 
 		// start communication with AMF(SCTP).
 		ngap.InitConn(amf, gnb)
@@ -129,15 +126,13 @@ func InitGnbForAvaibility(conf config.Config,
 		conf.GNodeB.PlmnList.Tac,
 		conf.GNodeB.SliceSupportList.Sst,
 		conf.GNodeB.SliceSupportList.Sd,
-		conf.GNodeB.ControlIF.Ip,
-		conf.GNodeB.DataIF.Ip,
-		conf.GNodeB.ControlIF.Port,
-		conf.GNodeB.DataIF.Port)
+		conf.GNodeB.ControlIF.AddrPort,
+		conf.GNodeB.DataIF.AddrPort)
 
 	// start communication with AMF (server SCTP).
 	for _, amf := range conf.AMFs {
 		// new AMF context.
-		amf := gnb.NewGnBAmf(amf.Ip, amf.Port)
+		amf := gnb.NewGnBAmf(amf.AddrPort)
 
 		// start communication with AMF(SCTP).
 		if err := ngap.InitConn(amf, gnb); err != nil {

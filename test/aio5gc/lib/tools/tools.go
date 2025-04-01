@@ -6,13 +6,14 @@ package tools
 
 import (
 	"my5G-RANTester/config"
+	"net/netip"
 )
 
-func GenerateDefaultConf(controlIF config.ControlIF, dataIF config.DataIF, amfs []*config.AMF) config.Config {
+func GenerateDefaultConf(controlIF netip.AddrPort, dataIF netip.AddrPort, amfs []*config.AMF) config.Config {
 	return config.Config{
 		GNodeB: config.GNodeB{
-			ControlIF: controlIF,
-			DataIF:    dataIF,
+			ControlIF: config.IPv4Port{AddrPort: controlIF},
+			DataIF:    config.IPv4Port{AddrPort: dataIF},
 			PlmnList: config.PlmnList{
 				Mcc:   "999",
 				Mnc:   "70",

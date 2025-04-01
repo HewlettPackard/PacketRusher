@@ -19,7 +19,7 @@ func TestAvailability(interval int) {
 
 	conf := config.GetConfig()
 
-	ranPort := 1000
+	ranPort := uint16(1000)
 	for y := 1; y <= interval; y++ {
 
 		monitor.InitAvaibility()
@@ -28,7 +28,7 @@ func TestAvailability(interval int) {
 
 			conf.GNodeB.PlmnList.GnbId = gnbIdGenerator(i)
 
-			conf.GNodeB.ControlIF.Port = ranPort
+			conf.GNodeB.ControlIF = conf.GNodeB.ControlIF.WithPort(ranPort)
 
 			go gnb.InitGnbForAvaibility(conf, &monitor)
 
@@ -45,6 +45,4 @@ func TestAvailability(interval int) {
 
 		}
 	}
-
-	return
 }

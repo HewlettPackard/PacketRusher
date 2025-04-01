@@ -11,6 +11,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
+	"net/netip"
 	"reflect"
 
 	_ "net"
@@ -685,7 +686,7 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 		if ok {
 			tnla := oldAmf.GetTNLA()
 			log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
-				oldAmf.GetAmfName(), oldAmf.GetAmfIp(), oldAmf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
+				oldAmf.GetAmfName(), oldAmf.GetAmfIpPort().Addr(), oldAmf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
 		}
 		return true
 	})
@@ -713,11 +714,12 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 		case ngapType.ProtocolIEIDAMFTNLAssociationToAddList:
 			toAddList := ie.Value.AMFTNLAssociationToAddList
 			for _, toAddItem := range toAddList.List {
-				bitLen := toAddItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
-				var ipv4String string
-				if bitLen == 32 || bitLen == 160 { // IPv4 or IPv4+IPv6
-					ipv4String, _ = ngapConvert.IPAddressToString(*toAddItem.AMFTNLAssociationAddress.EndpointIPAddress)
+				ipv4String, _ := ngapConvert.IPAddressToString(*toAddItem.AMFTNLAssociationAddress.EndpointIPAddress)
+				if ipv4String == "" {
+					// ignore AMF that does not have IPv4 address
+					continue
 				}
+				ipv4Port := netip.AddrPortFrom(netip.MustParseAddr(ipv4String), 38412) // with default sctp port
 
 				amfPool := gnb.GetAmfPool()
 				amfExisted := false
@@ -726,7 +728,7 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 					if !ok {
 						return true
 					}
-					if gnbAmf.GetAmfIp() == ipv4String {
+					if gnbAmf.GetAmfIpPort() == ipv4Port {
 						log.Info("[GNB] SCTP/NGAP service exists")
 						amfExisted = true
 						return false
@@ -737,8 +739,7 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 					continue
 				}
 
-				port := 38412 // default sctp port
-				newAmf := gnb.NewGnBAmf(ipv4String, port)
+				newAmf := gnb.NewGnBAmf(ipv4Port)
 				newAmf.SetAmfName(amfName)
 				newAmf.SetAmfCapacity(amfCapacity)
 				newAmf.SetRegionId(amfRegionId)
@@ -762,17 +763,18 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 		case ngapType.ProtocolIEIDAMFTNLAssociationToRemoveList:
 			toRemoveList := ie.Value.AMFTNLAssociationToRemoveList
 			for _, toRemoveItem := range toRemoveList.List {
-				bitLen := toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
-				var ipv4String string
-				if bitLen == 32 || bitLen == 160 { // IPv4 or IPv4+IPv6
-					ipv4String, _ = ngapConvert.IPAddressToString(*toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress)
+				ipv4String, _ := ngapConvert.IPAddressToString(*toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress)
+				if ipv4String == "" {
+					// ignore AMF that does not have IPv4 address
+					continue
 				}
-				port := 38412 // default sctp port
+				ipv4Port := netip.AddrPortFrom(netip.MustParseAddr(ipv4String), 38412) // with default sctp port
+
 				amfPool := gnb.GetAmfPool()
 				amfPool.Range(func(k, v any) bool {
 					oldAmf, ok := v.(*context.GNBAmf)
-					if ok && oldAmf.GetAmfIp() == ipv4String && oldAmf.GetAmfPort() == port {
-						log.Info("[GNB][AMF] Remove AMF:", amf.GetAmfName(), " IP:", amf.GetAmfIp())
+					if ok && oldAmf.GetAmfIpPort() == ipv4Port {
+						log.Info("[GNB][AMF] Remove AMF:", amf.GetAmfName(), " IP:", amf.GetAmfIpPort().Addr())
 						tnla := amf.GetTNLA()
 						tnla.Release() // Close SCTP Conntection
 						amfPool.Delete(k)
@@ -785,16 +787,17 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 		case ngapType.ProtocolIEIDAMFTNLAssociationToUpdateList:
 			toUpdateList := ie.Value.AMFTNLAssociationToUpdateList
 			for _, toUpdateItem := range toUpdateList.List {
-				bitLen := toUpdateItem.AMFTNLAssociationAddress.EndpointIPAddress.Value.BitLength
-				var ipv4String string
-				if bitLen == 32 || bitLen == 160 {
-					ipv4String, _ = ngapConvert.IPAddressToString(*toUpdateItem.AMFTNLAssociationAddress.EndpointIPAddress)
+				ipv4String, _ := ngapConvert.IPAddressToString(*toUpdateItem.AMFTNLAssociationAddress.EndpointIPAddress)
+				if ipv4String == "" {
+					// ignore AMF that does not have IPv4 address
+					continue
 				}
-				port := 38412 // default sctp port
+				ipv4Port := netip.AddrPortFrom(netip.MustParseAddr(ipv4String), 38412) // with default sctp port
+
 				amfPool := gnb.GetAmfPool()
 				amfPool.Range(func(k, v any) bool {
 					oldAmf, ok := v.(*context.GNBAmf)
-					if ok && oldAmf.GetAmfIp() == ipv4String && oldAmf.GetAmfPort() == port {
+					if ok && oldAmf.GetAmfIpPort() == ipv4Port {
 						oldAmf.SetAmfName(amfName)
 						oldAmf.SetAmfCapacity(amfCapacity)
 						oldAmf.SetRegionId(amfRegionId)
@@ -820,7 +823,7 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 		if ok {
 			tnla := oldAmf.GetTNLA()
 			log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
-				oldAmf.GetAmfName(), oldAmf.GetAmfIp(), oldAmf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
+				oldAmf.GetAmfName(), oldAmf.GetAmfIpPort().Addr(), oldAmf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
 		}
 		return true
 	})
@@ -881,7 +884,7 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 							log.Info("[GNB][AMF] Remove AMF: [",
 								"Id: ", oldAmf.GetAmfId(),
 								"Name: ", oldAmf.GetAmfName(),
-								"Ipv4: ", oldAmf.GetAmfIp(),
+								"Ipv4: ", oldAmf.GetAmfIpPort().Addr(),
 								"]",
 							)
 
