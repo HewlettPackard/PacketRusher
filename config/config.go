@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"my5G-RANTester/internal/common/sidf"
-	"net"
 	"os"
 	"path"
 	"path/filepath"
@@ -43,20 +42,12 @@ type Config struct {
 }
 
 type GNodeB struct {
-	ControlIF        ControlIF        `yaml:"controlif"`
-	DataIF           DataIF           `yaml:"dataif"`
+	ControlIF        IPv4Port         `yaml:"controlif"`
+	DataIF           IPv4Port         `yaml:"dataif"`
 	PlmnList         PlmnList         `yaml:"plmnlist"`
 	SliceSupportList SliceSupportList `yaml:"slicesupportlist"`
 }
 
-type ControlIF struct {
-	Ip   string `yaml:"ip"`
-	Port int    `yaml:"port"`
-}
-type DataIF struct {
-	Ip   string `yaml:"ip"`
-	Port int    `yaml:"port"`
-}
 type PlmnList struct {
 	Mcc   string `yaml:"mcc"`
 	Mnc   string `yaml:"mnc"`
@@ -108,8 +99,7 @@ type Ciphering struct {
 }
 
 type AMF struct {
-	Ip   string `yaml:"ip"`
-	Port int    `yaml:"port"`
+	IPv4Port
 }
 
 type Logs struct {
@@ -150,13 +140,6 @@ func readConfig(configPath string) Config {
 		log.Fatal("Could not unmarshal yaml config at \"", configPath, "\". ", err.Error())
 	}
 
-	for i, amf := range cfg.AMFs {
-		cfg.AMFs[i].Ip = resolvHost("AMF's IP address", amf.Ip)
-	}
-
-	cfg.GNodeB.DataIF.Ip = resolvHost("gNodeB's N3/Data IP address", cfg.GNodeB.DataIF.Ip)
-	cfg.GNodeB.ControlIF.Ip = resolvHost("gNodeB's N2/Control IP address", cfg.GNodeB.ControlIF.Ip)
-
 	sqn, err := strconv.ParseInt(cfg.Ue.Sqn, 16, 64)
 	if err != nil {
 		log.Fatalf("sqn[%s] is invalid: %v", cfg.Ue.Sqn, err)
@@ -164,24 +147,6 @@ func readConfig(configPath string) Config {
 	cfg.Ue.Sqn = fmt.Sprintf("%012X", sqn)
 
 	return cfg
-}
-
-func resolvHost(hostType string, hostOrIp string) string {
-	ips, err := net.LookupIP(hostOrIp)
-	if err != nil {
-		log.Errorf("Unable to resolve %s in configuration for %s, make sure it is an IP address or a domain that can be resolved to an IPv4", hostOrIp, hostType)
-		log.Fatal(err)
-	}
-	for _, ip := range ips {
-		if ip.To4() == nil {
-			log.Warnf("Skipping %s for host %s as %s, as it is not an IPv4", ip, hostOrIp, hostType)
-		} else {
-			log.Infof("Selecting %s for host %s as %s", ip, hostOrIp, hostType)
-			return ip.String()
-		}
-	}
-	log.Fatalf("No suitable IP address found as host %s, for %s", hostOrIp, hostType)
-	return ""
 }
 
 func getDefautlConfigPath() string {

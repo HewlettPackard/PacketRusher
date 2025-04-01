@@ -5,9 +5,9 @@
 package service
 
 import (
-	"fmt"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg/ngap"
+	"net/netip"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -17,8 +17,8 @@ import (
 
 var bufsize = 65535
 
-func RunServer(ServerIp string, ServerPort int, fgc *context.Aio5gc) {
-	addr, err := sctp.ResolveSCTPAddr("sctp", fmt.Sprintf("%s:%d", ServerIp, ServerPort))
+func RunServer(ServerIpPort netip.AddrPort, fgc *context.Aio5gc) {
+	addr, err := sctp.ResolveSCTPAddr("sctp", ServerIpPort.String())
 	if err != nil {
 		log.Fatalf("[5GC] Failed to resolve MockedAMF SCTP address %v", err)
 	}

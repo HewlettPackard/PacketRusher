@@ -12,6 +12,7 @@ import (
 	"my5G-RANTester/test/aio5gc"
 	"my5G-RANTester/test/aio5gc/context"
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
+	"net/netip"
 	"os"
 	"sync"
 	"testing"
@@ -25,19 +26,10 @@ import (
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 
-	controlIFConfig := config.ControlIF{
-		Ip:   "127.0.0.1",
-		Port: 9489,
-	}
-	dataIFConfig := config.DataIF{
-		Ip:   "127.0.0.1",
-		Port: 2154,
-	}
+	controlIFConfig := netip.MustParseAddrPort("127.0.0.1:9489")
+	dataIFConfig := netip.MustParseAddrPort("127.0.0.1:2154")
 	amfListConfig := []*config.AMF{
-		{
-			Ip:   "127.0.0.1",
-			Port: 38414,
-		},
+		{IPv4Port: config.IPv4Port{AddrPort: netip.MustParseAddrPort("127.0.0.1:38414")}},
 	}
 
 	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfListConfig)
@@ -141,19 +133,10 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 }
 
 func TestUERegistrationLoop(t *testing.T) {
-	controlIFConfig := config.ControlIF{
-		Ip:   "127.0.0.1",
-		Port: 9490,
-	}
-	dataIFConfig := config.DataIF{
-		Ip:   "127.0.0.1",
-		Port: 2155,
-	}
+	controlIFConfig := netip.MustParseAddrPort("127.0.0.1:9490")
+	dataIFConfig := netip.MustParseAddrPort("127.0.0.1:2155")
 	amfListConfig := []*config.AMF{
-		{
-			Ip:   "127.0.0.1",
-			Port: 38415,
-		},
+		{IPv4Port: config.IPv4Port{AddrPort: netip.MustParseAddrPort("127.0.0.1:38415")}},
 	}
 
 	type UECheck struct {

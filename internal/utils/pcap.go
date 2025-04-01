@@ -6,7 +6,6 @@ package pcap
 
 import (
 	"my5G-RANTester/config"
-	"net"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -48,7 +47,7 @@ func CaptureTraffic(path cli.Path) {
 
 func findN2Link() netlink.Link {
 	config := config.GetConfig()
-	ip := net.ParseIP(config.GNodeB.ControlIF.Ip)
+	ip := config.GNodeB.ControlIF.Addr().AsSlice()
 
 	links, err := netlink.LinkList()
 	if err != nil {

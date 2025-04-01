@@ -6,6 +6,7 @@ package context
 
 import (
 	"fmt"
+	"net/netip"
 
 	"github.com/free5gc/aper"
 	"github.com/ishidawataru/sctp"
@@ -17,8 +18,7 @@ const Active = 0x01
 const Overload = 0x02
 
 type GNBAmf struct {
-	amfIp               string         // AMF ip
-	amfPort             int            // AMF port
+	amfIpPort           netip.AddrPort // AMF ip and port
 	amfId               int64          // AMF id
 	tnla                TNLAssociation // AMF sctp associations
 	relativeAmfCapacity int64          // AMF capacity
@@ -214,20 +214,12 @@ func (amf *GNBAmf) GetTNLAStreams() uint16 {
 	return amf.tnla.streams
 }
 
-func (amf *GNBAmf) GetAmfIp() string {
-	return amf.amfIp
+func (amf *GNBAmf) GetAmfIpPort() netip.AddrPort {
+	return amf.amfIpPort
 }
 
-func (amf *GNBAmf) SetAmfIp(ip string) {
-	amf.amfIp = ip
-}
-
-func (amf *GNBAmf) GetAmfPort() int {
-	return amf.amfPort
-}
-
-func (amf *GNBAmf) setAmfPort(port int) {
-	amf.amfPort = port
+func (amf *GNBAmf) SetAmfIpPort(ap netip.AddrPort) {
+	amf.amfIpPort = ap
 }
 
 func (amf *GNBAmf) GetAmfId() int64 {

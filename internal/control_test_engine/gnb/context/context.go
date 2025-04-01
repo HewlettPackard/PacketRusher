@@ -7,6 +7,7 @@ package context
 import (
 	"encoding/hex"
 	"fmt"
+	"net/netip"
 	"slices"
 	"sync"
 	"time"
@@ -38,8 +39,7 @@ type GNBContext struct {
 }
 
 type DataInfo struct {
-	gnbIp        string            // gnb ip for data plane.
-	gnbPort      int               // gnb port for data plane.
+	gnbIpPort    netip.AddrPort    // gnb ip and port for data plane.
 	upfIp        string            // upf ip
 	upfPort      int               // upf port
 	gtpPlane     *gtpv1.UPlaneConn // N3 connection
@@ -56,8 +56,7 @@ type ControlInfo struct {
 	mnc            string
 	tac            string
 	gnbId          string
-	gnbIp          string
-	gnbPort        int
+	gnbIpPort      netip.AddrPort
 	inboundChannel chan UEMessage
 	n2             *sctp.SCTPConn
 }
@@ -67,7 +66,7 @@ type PagedUE struct {
 	Timestamp  time.Time
 }
 
-func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipData string, port, portData int) {
+func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd string, n2, n3 netip.AddrPort) {
 	gnb.controlInfo.mcc = mcc
 	gnb.controlInfo.mnc = mnc
 	gnb.controlInfo.tac = tac
@@ -77,16 +76,14 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd, ip, ipDat
 	gnb.sliceInfo.sst = sst
 	gnb.idUeGenerator = 1
 	gnb.idAmfGenerator = 1
-	gnb.controlInfo.gnbIp = ip
+	gnb.controlInfo.gnbIpPort = n2
 	gnb.teidGenerator = 1
 	gnb.ueIpGenerator = 3
-	gnb.controlInfo.gnbPort = port
 	gnb.dataInfo.upfPort = 2152
 	gnb.dataInfo.gtpPlane = nil
 	gnb.dataInfo.gatewayGnbIp = "127.0.0.2"
 	gnb.dataInfo.upfIp = ""
-	gnb.dataInfo.gnbIp = ipData
-	gnb.dataInfo.gnbPort = portData
+	gnb.dataInfo.gnbIpPort = n3
 }
 
 func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUeId int64, tmsi *nasType.GUTI5G) (*GNBUe, error) {
@@ -141,7 +138,7 @@ func (gnb *GNBContext) GetGatewayGnbIp() string {
 }
 
 func (gnb *GNBContext) GetN3GnbIp() string {
-	return gnb.dataInfo.gnbIp
+	return gnb.dataInfo.gnbIpPort.Addr().String()
 }
 
 func (gnb *GNBContext) GetUePool() *sync.Map {
@@ -192,7 +189,7 @@ func (gnb *GNBContext) GetGnbUeByTeid(teid uint32) (*GNBUe, error) {
 	return ue.(*GNBUe), nil
 }
 
-func (gnb *GNBContext) NewGnBAmf(ip string, port int) *GNBAmf {
+func (gnb *GNBContext) NewGnBAmf(ipPort netip.AddrPort) *GNBAmf {
 
 	// TODO if necessary add more information for AMF.
 	// TODO implement mutex
@@ -204,8 +201,7 @@ func (gnb *GNBContext) NewGnBAmf(ip string, port int) *GNBAmf {
 	amf.setAmfId(amfId)
 
 	// set AMF ip and AMF port.
-	amf.SetAmfIp(ip)
-	amf.setAmfPort(port)
+	amf.SetAmfIpPort(ipPort)
 
 	// set state to AMF.
 	amf.SetStateInactive()
@@ -345,14 +341,6 @@ func (gnb *GNBContext) GetN3Plane() *gtpv1.UPlaneConn {
 	return gnb.dataInfo.gtpPlane
 }
 
-func (gnb *GNBContext) setGnbPort(port int) {
-	gnb.controlInfo.gnbPort = port
-}
-
-func (gnb *GNBContext) setGnbIp(ip string) {
-	gnb.controlInfo.gnbIp = ip
-}
-
 func (gnb *GNBContext) setGnbId(id string) {
 	gnb.controlInfo.gnbId = id
 }
@@ -373,16 +361,8 @@ func (gnb *GNBContext) GetGnbId() string {
 	return gnb.controlInfo.gnbId
 }
 
-func (gnb *GNBContext) GetGnbPortByData() int {
-	return gnb.dataInfo.gnbPort
-}
-
-func (gnb *GNBContext) GetGnbIp() string {
-	return gnb.controlInfo.gnbIp
-}
-
-func (gnb *GNBContext) GetGnbPort() int {
-	return gnb.controlInfo.gnbPort
+func (gnb *GNBContext) GetGnbIpPort() netip.AddrPort {
+	return gnb.controlInfo.gnbIpPort
 }
 
 func (gnb *GNBContext) AddPagedUE(tmsi *ngapType.FiveGSTMSI) {

@@ -95,7 +95,7 @@ func (f *FiveGCBuilder) Build() (*context.Aio5gc, error) {
 		fgc.SetNgapHooks(f.ngapHook)
 	}
 	for _, amf := range f.config.AMFs {
-		go service.RunServer(amf.Ip, amf.Port, &fgc)
+		go service.RunServer(amf.AddrPort, &fgc)
 	}
 	return &fgc, nil
 }
