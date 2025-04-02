@@ -42,7 +42,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	}
 
 	// get UE GNB IP.
-	pduSession.SetGnbIp(net.ParseIP(msg.GnbIp))
+	pduSession.SetGnbIp(msg.GnbIp)
 
 	ueGnbIp := pduSession.GetGnbIp()
 	upfIp := pduSession.GnbPduSession.GetUpfIp()
@@ -101,7 +101,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		"--pcd", "1", // Precedence = 1
 		"--hdr-rm", "0", // Outer Header Removal = GTP-U/UDP/IPv4
 		"--ue-ipv4", ueIp, // UE IP Address
-		"--f-teid", strconv.FormatUint(uint64(gnbPduSession.GetTeidDownlink()), 10), msg.GnbIp, // F-TEID
+		"--f-teid", strconv.FormatUint(uint64(gnbPduSession.GetTeidDownlink()), 10), msg.GnbIp.String(), // F-TEID
 		"--far-id", "1", // FAR ID = 1
 		"--src-intf", "1", // Source Interface = Core
 	}

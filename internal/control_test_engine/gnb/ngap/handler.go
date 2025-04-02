@@ -679,17 +679,11 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 
 func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 	log.Debugf("Before Update:")
-
-	amfPool := gnb.GetAmfPool()
-	amfPool.Range(func(k, v any) bool {
-		oldAmf, ok := v.(*context.GNBAmf)
-		if ok {
-			tnla := oldAmf.GetTNLA()
-			log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
-				oldAmf.GetAmfName(), oldAmf.GetAmfIpPort().Addr(), oldAmf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
-		}
-		return true
-	})
+	for oldAmf := range gnb.IterGnbAmf() {
+		tnla := oldAmf.GetTNLA()
+		log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
+			oldAmf.GetAmfName(), oldAmf.GetAmfIpPort().Addr(), oldAmf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
+	}
 
 	var amfName string
 	var amfCapacity int64
@@ -721,21 +715,8 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 				}
 				ipv4Port := netip.AddrPortFrom(netip.MustParseAddr(ipv4String), 38412) // with default sctp port
 
-				amfPool := gnb.GetAmfPool()
-				amfExisted := false
-				amfPool.Range(func(key, value any) bool {
-					gnbAmf, ok := value.(*context.GNBAmf)
-					if !ok {
-						return true
-					}
-					if gnbAmf.GetAmfIpPort() == ipv4Port {
-						log.Info("[GNB] SCTP/NGAP service exists")
-						amfExisted = true
-						return false
-					}
-					return true
-				})
-				if amfExisted {
+				if oldAmf := gnb.FindGnbAmfByIpPort(ipv4Port); oldAmf != nil {
+					log.Info("[GNB] SCTP/NGAP service exists")
 					continue
 				}
 
@@ -770,18 +751,15 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 				}
 				ipv4Port := netip.AddrPortFrom(netip.MustParseAddr(ipv4String), 38412) // with default sctp port
 
-				amfPool := gnb.GetAmfPool()
-				amfPool.Range(func(k, v any) bool {
-					oldAmf, ok := v.(*context.GNBAmf)
-					if ok && oldAmf.GetAmfIpPort() == ipv4Port {
-						log.Info("[GNB][AMF] Remove AMF:", amf.GetAmfName(), " IP:", amf.GetAmfIpPort().Addr())
-						tnla := amf.GetTNLA()
-						tnla.Release() // Close SCTP Conntection
-						amfPool.Delete(k)
-						return false
-					}
-					return true
-				})
+				oldAmf := gnb.FindGnbAmfByIpPort(ipv4Port)
+				if oldAmf == nil {
+					continue
+				}
+
+				log.Info("[GNB][AMF] Remove AMF:", amf.GetAmfName(), " IP:", amf.GetAmfIpPort().Addr())
+				tnla := amf.GetTNLA()
+				tnla.Release() // Close SCTP Conntection
+				gnb.DeleteGnBAmf(oldAmf.GetAmfId())
 			}
 
 		case ngapType.ProtocolIEIDAMFTNLAssociationToUpdateList:
@@ -794,22 +772,19 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 				}
 				ipv4Port := netip.AddrPortFrom(netip.MustParseAddr(ipv4String), 38412) // with default sctp port
 
-				amfPool := gnb.GetAmfPool()
-				amfPool.Range(func(k, v any) bool {
-					oldAmf, ok := v.(*context.GNBAmf)
-					if ok && oldAmf.GetAmfIpPort() == ipv4Port {
-						oldAmf.SetAmfName(amfName)
-						oldAmf.SetAmfCapacity(amfCapacity)
-						oldAmf.SetRegionId(amfRegionId)
-						oldAmf.SetSetId(amfSetId)
-						oldAmf.SetPointer(amfPointer)
+				oldAmf := gnb.FindGnbAmfByIpPort(ipv4Port)
+				if oldAmf == nil {
+					continue
+				}
 
-						oldAmf.SetTNLAUsage(toUpdateItem.TNLAssociationUsage.Value)
-						oldAmf.SetTNLAWeight(toUpdateItem.TNLAddressWeightFactor.Value)
-						return false
-					}
-					return true
-				})
+				oldAmf.SetAmfName(amfName)
+				oldAmf.SetAmfCapacity(amfCapacity)
+				oldAmf.SetRegionId(amfRegionId)
+				oldAmf.SetSetId(amfSetId)
+				oldAmf.SetPointer(amfPointer)
+
+				oldAmf.SetTNLAUsage(toUpdateItem.TNLAssociationUsage.Value)
+				oldAmf.SetTNLAWeight(toUpdateItem.TNLAddressWeightFactor.Value)
 			}
 
 			// default:
@@ -817,16 +792,11 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 	}
 
 	log.Debugf("After Update:")
-	amfPool = gnb.GetAmfPool()
-	amfPool.Range(func(k, v any) bool {
-		oldAmf, ok := v.(*context.GNBAmf)
-		if ok {
-			tnla := oldAmf.GetTNLA()
-			log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
-				oldAmf.GetAmfName(), oldAmf.GetAmfIpPort().Addr(), oldAmf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
-		}
-		return true
-	})
+	for oldAmf := range gnb.IterGnbAmf() {
+		tnla := oldAmf.GetTNLA()
+		log.Debugf("[AMF Name: %5s], IP: %10s, AMFCapacity: %3d, TNLA Weight Factor: %2d, TNLA Usage: %2d\n",
+			oldAmf.GetAmfName(), oldAmf.GetAmfIpPort().Addr(), oldAmf.GetAmfCapacity(), tnla.GetWeightFactor(), tnla.GetUsage())
+	}
 
 	trigger.SendAmfConfigurationUpdateAcknowledge(amf)
 }
@@ -846,33 +816,20 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 					unavailableMnc = string(hexStr[2]) + string(hexStr[5]) + string(hexStr[4])
 				}
 
-				amfPool := gnb.GetAmfPool()
-
 				// select backup AMF
 				var backupAmf *context.GNBAmf
-				amfPool.Range(func(k, v any) bool {
-					amf, ok := v.(*context.GNBAmf)
-					if !ok {
-						return true
-					}
+				for oldAmf := range gnb.IterGnbAmf() {
 					if unavailableGuamiItem.BackupAMFName != nil &&
-						amf.GetAmfName() == unavailableGuamiItem.BackupAMFName.Value {
-						backupAmf = amf
-						return false
+						oldAmf.GetAmfName() == unavailableGuamiItem.BackupAMFName.Value {
+						backupAmf = oldAmf
+						break
 					}
-
-					return true
-				})
-
+				}
 				if backupAmf == nil {
 					return
 				}
 
-				amfPool.Range(func(k, v any) bool {
-					oldAmf, ok := v.(*context.GNBAmf)
-					if !ok {
-						return true
-					}
+				for oldAmf := range gnb.IterGnbAmf() {
 					for j := 0; j < oldAmf.GetLenPlmns(); j++ {
 						oldAmfSupportMcc, oldAmfSupportMnc := oldAmf.GetPlmnSupport(j)
 
@@ -924,13 +881,12 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 							})
 
 							tnla.Release()
-							amfPool.Delete(k)
+							gnb.DeleteGnBAmf(oldAmf.GetAmfId())
 
-							return true
+							break
 						}
 					}
-					return true
-				})
+				}
 			}
 		}
 	}

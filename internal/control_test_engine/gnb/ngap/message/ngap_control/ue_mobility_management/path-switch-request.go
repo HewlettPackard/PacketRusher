@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
+	"net/netip"
 
 	"github.com/free5gc/ngap"
 	log "github.com/sirupsen/logrus"
@@ -120,7 +121,7 @@ func (builder *PathSwitchRequestBuilder) SetUserSecurityCapabilities(userSecurit
 	return builder
 }
 
-func (builder *PathSwitchRequestBuilder) PathSwitchRequestTransfer(gnbN3Ip string, pduSessions [16]*context.GnbPDUSession) *PathSwitchRequestBuilder {
+func (builder *PathSwitchRequestBuilder) PathSwitchRequestTransfer(gnbN3Ip netip.Addr, pduSessions [16]*context.GnbPDUSession) *PathSwitchRequestBuilder {
 	// PDUSessionResourceToBeSwitchedDLList
 	ie := ngapType.PathSwitchRequestIEs{}
 	ie.Id.Value = ngapType.ProtocolIEIDPDUSessionResourceToBeSwitchedDLList
@@ -139,7 +140,7 @@ func (builder *PathSwitchRequestBuilder) PathSwitchRequestTransfer(gnbN3Ip strin
 			DLNGUUPTNLInformation: ngapType.UPTransportLayerInformation{
 				Present: ngapType.UPTransportLayerInformationPresentGTPTunnel,
 				GTPTunnel: &ngapType.GTPTunnel{
-					TransportLayerAddress: ngapConvert.IPAddressToNgap(gnbN3Ip, ""),
+					TransportLayerAddress: ngapConvert.IPAddressToNgap(gnbN3Ip.String(), ""),
 					GTPTEID:               ngapType.GTPTEID{Value: aper.OctetString(buf.Bytes())},
 					IEExtensions:          nil,
 				}},

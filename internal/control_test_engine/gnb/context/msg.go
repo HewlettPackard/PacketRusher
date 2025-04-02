@@ -4,11 +4,15 @@
  */
 package context
 
-import "github.com/free5gc/nas/nasType"
+import (
+	"net/netip"
+
+	"github.com/free5gc/nas/nasType"
+)
 
 type UEMessage struct {
 	GNBPduSessions    [16]*GnbPDUSession
-	GnbIp             string
+	GnbIp             netip.Addr
 	GNBRx             chan UEMessage
 	GNBTx             chan UEMessage
 	GNBInboundChannel chan UEMessage
