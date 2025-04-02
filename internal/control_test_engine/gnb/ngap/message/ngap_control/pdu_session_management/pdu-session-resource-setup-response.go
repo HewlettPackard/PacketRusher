@@ -8,6 +8,7 @@ package pdu_session_management
 import (
 	"encoding/binary"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
+	"net/netip"
 
 	"github.com/free5gc/aper"
 	"github.com/free5gc/ngap"
@@ -138,13 +139,13 @@ func (builder *PDUSessionResourceSetupResponseBuilder) Build() ([]byte, error) {
 	return ngap.Encoder(builder.pdu)
 }
 
-func GetPDUSessionResourceSetupResponseTransfer(ipv4 string, teid uint32, qosId int64) []byte {
+func GetPDUSessionResourceSetupResponseTransfer(ipv4 netip.Addr, teid uint32, qosId int64) []byte {
 	data := buildPDUSessionResourceSetupResponseTransfer(ipv4, teid, qosId)
 	encodeData, _ := aper.MarshalWithParams(data, "valueExt")
 	return encodeData
 }
 
-func buildPDUSessionResourceSetupResponseTransfer(ipv4 string, teid uint32, qosId int64) (data customNgapType.PDUSessionResourceSetupResponseTransfer) {
+func buildPDUSessionResourceSetupResponseTransfer(ipv4 netip.Addr, teid uint32, qosId int64) (data customNgapType.PDUSessionResourceSetupResponseTransfer) {
 
 	// QoS Flow per TNL Information
 	qosFlowPerTNLInformation := &data.QosFlowPerTNLInformation
@@ -155,10 +156,9 @@ func buildPDUSessionResourceSetupResponseTransfer(ipv4 string, teid uint32, qosI
 	upTransportLayerInformation.Present = ngapType.UPTransportLayerInformationPresentGTPTunnel
 	upTransportLayerInformation.GTPTunnel = new(ngapType.GTPTunnel)
 
-	dowlinkTeid := make([]byte, 4)
-	binary.BigEndian.PutUint32(dowlinkTeid, teid)
+	dowlinkTeid := binary.BigEndian.AppendUint32(nil, teid)
 	upTransportLayerInformation.GTPTunnel.GTPTEID.Value = dowlinkTeid
-	upTransportLayerInformation.GTPTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(ipv4, "")
+	upTransportLayerInformation.GTPTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(ipv4.String(), "")
 
 	// Associated QoS Flow List in QoS Flow per TNL Information
 	associatedQosFlowList := &qosFlowPerTNLInformation.AssociatedQosFlowList

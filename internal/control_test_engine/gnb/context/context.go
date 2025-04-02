@@ -6,7 +6,9 @@ package context
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"iter"
 	"net/netip"
 	"slices"
 	"sync"
@@ -19,14 +21,13 @@ import (
 	"github.com/free5gc/openapi/models"
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
-	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
 )
 
 type GNBContext struct {
 	dataInfo       DataInfo    // gnb data plane information
 	controlInfo    ControlInfo // gnb control plane information
-	uePool         sync.Map    // map[in64]*GNBUe, UeRanNgapId as key
-	prUePool       sync.Map    // map[in64]*GNBUe, PrUeId as key
+	uePool         sync.Map    // map[int64]*GNBUe, UeRanNgapId as key
+	prUePool       sync.Map    // map[int64]*GNBUe, PrUeId as key
 	amfPool        sync.Map    // map[int64]*GNBAmf, AmfId as key
 	teidPool       sync.Map    // map[uint32]*GNBUe, downlinkTeid as key
 	sliceInfo      Slice
@@ -39,11 +40,7 @@ type GNBContext struct {
 }
 
 type DataInfo struct {
-	gnbIpPort    netip.AddrPort    // gnb ip and port for data plane.
-	upfIp        string            // upf ip
-	upfPort      int               // upf port
-	gtpPlane     *gtpv1.UPlaneConn // N3 connection
-	gatewayGnbIp string            // IP gateway that communicates with UE data plane.
+	gnbIpPort netip.AddrPort // gnb ip and port for data plane.
 }
 
 type Slice struct {
@@ -79,10 +76,6 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd string, n2
 	gnb.controlInfo.gnbIpPort = n2
 	gnb.teidGenerator = 1
 	gnb.ueIpGenerator = 3
-	gnb.dataInfo.upfPort = 2152
-	gnb.dataInfo.gtpPlane = nil
-	gnb.dataInfo.gatewayGnbIp = "127.0.0.2"
-	gnb.dataInfo.upfIp = ""
 	gnb.dataInfo.gnbIpPort = n3
 }
 
@@ -118,7 +111,7 @@ func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUe
 	// select AMF with Capacity is more than 0.
 	amf := gnb.selectAmFByActive()
 	if amf == nil {
-		return nil, fmt.Errorf("No AMF available for this UE")
+		return nil, errors.New("no AMF available for this UE")
 	}
 
 	// set amfId and SCTP association for UE.
@@ -133,12 +126,8 @@ func (gnb *GNBContext) GetInboundChannel() chan UEMessage {
 	return gnb.controlInfo.inboundChannel
 }
 
-func (gnb *GNBContext) GetGatewayGnbIp() string {
-	return gnb.dataInfo.gatewayGnbIp
-}
-
-func (gnb *GNBContext) GetN3GnbIp() string {
-	return gnb.dataInfo.gnbIpPort.Addr().String()
+func (gnb *GNBContext) GetN3GnbIp() netip.Addr {
+	return gnb.dataInfo.gnbIpPort.Addr()
 }
 
 func (gnb *GNBContext) GetUePool() *sync.Map {
@@ -217,19 +206,31 @@ func (gnb *GNBContext) NewGnBAmf(ipPort netip.AddrPort) *GNBAmf {
 	return amf
 }
 
-func (gnb *GNBContext) GetAmfPool() *sync.Map {
-	return &gnb.amfPool
+func (gnb *GNBContext) IterGnbAmf() iter.Seq[*GNBAmf] {
+	return func(yield func(*GNBAmf) bool) {
+		gnb.amfPool.Range(func(key, value any) bool {
+			return yield(value.(*GNBAmf))
+		})
+	}
 }
 
-func (gnb *GNBContext) deleteGnBAmf(amfId int64) {
+func (gnb *GNBContext) FindGnbAmfByIpPort(ipPort netip.AddrPort) *GNBAmf {
+	for amf := range gnb.IterGnbAmf() {
+		if amf.GetAmfIpPort() == ipPort {
+			return amf
+		}
+	}
+	return nil
+}
+
+func (gnb *GNBContext) DeleteGnBAmf(amfId int64) {
 	gnb.amfPool.Delete(amfId)
 }
 
 func (gnb *GNBContext) selectAmFByCapacity() *GNBAmf {
 	var amfSelect *GNBAmf
 	var maxWeightFactor int64 = -1
-	gnb.amfPool.Range(func(key, value interface{}) bool {
-		amf := value.(*GNBAmf)
+	for amf := range gnb.IterGnbAmf() {
 		if amf.relativeAmfCapacity > 0 {
 			if maxWeightFactor < amf.tnla.tnlaWeightFactor {
 				// select AMF
@@ -237,36 +238,20 @@ func (gnb *GNBContext) selectAmFByCapacity() *GNBAmf {
 				amfSelect = amf
 			}
 		}
-		return true
-	})
-
+	}
 	return amfSelect
 }
 
 func (gnb *GNBContext) selectAmFByActive() *GNBAmf {
 	var amfSelect *GNBAmf
 	var maxWeightFactor int64 = -1
-	gnb.amfPool.Range(func(key, value interface{}) bool {
-		amf := value.(*GNBAmf)
-		if amf.GetState() == Active {
-			if maxWeightFactor < amf.tnla.tnlaWeightFactor {
-				maxWeightFactor = amf.tnla.tnlaWeightFactor
-				amfSelect = amf
-			}
+	for amf := range gnb.IterGnbAmf() {
+		if amf.GetState() == Active && maxWeightFactor < amf.tnla.tnlaWeightFactor {
+			maxWeightFactor = amf.tnla.tnlaWeightFactor
+			amfSelect = amf
 		}
-
-		return true
-	})
-
-	return amfSelect
-}
-
-func (gnb *GNBContext) getGnbAmf(amfId int64) (*GNBAmf, error) {
-	amf, err := gnb.amfPool.Load(amfId)
-	if !err {
-		return nil, fmt.Errorf("AMF is not find in GNB AMF POOL ")
 	}
-	return amf.(*GNBAmf), nil
+	return amfSelect
 }
 
 func (gnb *GNBContext) getRanUeId() int64 {
@@ -309,36 +294,12 @@ func (gnb *GNBContext) getRanAmfId() int64 {
 	return id
 }
 
-func (gnb *GNBContext) SetUpfIp(ip string) {
-	gnb.dataInfo.upfIp = ip
-}
-
-func (gnb *GNBContext) setUpfPort(port int) {
-	gnb.dataInfo.upfPort = port
-}
-
 func (gnb *GNBContext) SetN2(n2 *sctp.SCTPConn) {
 	gnb.controlInfo.n2 = n2
 }
 
 func (gnb *GNBContext) GetN2() *sctp.SCTPConn {
 	return gnb.controlInfo.n2
-}
-
-func (gnb *GNBContext) SetN3Plane(n3 *gtpv1.UPlaneConn) {
-	gnb.dataInfo.gtpPlane = n3
-}
-
-func (gnb *GNBContext) GetUpfIp() string {
-	return gnb.dataInfo.upfIp
-}
-
-func (gnb *GNBContext) GetUpfPort() int {
-	return gnb.dataInfo.upfPort
-}
-
-func (gnb *GNBContext) GetN3Plane() *gtpv1.UPlaneConn {
-	return gnb.dataInfo.gtpPlane
 }
 
 func (gnb *GNBContext) setGnbId(id string) {

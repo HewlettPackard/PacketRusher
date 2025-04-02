@@ -14,7 +14,7 @@ import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/scenario"
-	"net"
+	"net/netip"
 	"regexp"
 	"strconv"
 	"sync"
@@ -80,7 +80,7 @@ type UEPDUSession struct {
 	Id            uint8
 	GnbPduSession *context.GnbPDUSession
 	ueIP          string
-	ueGnbIP       net.IP
+	ueGnbIP       netip.Addr
 	tun           netlink.Link
 	rule          *netlink.Rule
 	routeTun      *netlink.Route
@@ -343,11 +343,11 @@ func (pduSession *UEPDUSession) GetIp() string {
 	return pduSession.ueIP
 }
 
-func (pduSession *UEPDUSession) SetGnbIp(ip net.IP) {
+func (pduSession *UEPDUSession) SetGnbIp(ip netip.Addr) {
 	pduSession.ueGnbIP = ip
 }
 
-func (pduSession *UEPDUSession) GetGnbIp() net.IP {
+func (pduSession *UEPDUSession) GetGnbIp() netip.Addr {
 	return pduSession.ueGnbIP
 }
 

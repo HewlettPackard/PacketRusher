@@ -40,7 +40,6 @@ type Context struct {
 	pduSession             [16]*GnbPDUSession
 	allowedSst             []string
 	allowedSd              []string
-	lenSlice               int
 	ueSecurityCapabilities *ngapType.UESecurityCapabilities
 }
 

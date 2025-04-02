@@ -148,7 +148,7 @@ func buildHandoverRequestAcknowledgeTransfer(gnb *context.GNBContext, pduSession
 	downlinkTeid := make([]byte, 4)
 	binary.BigEndian.PutUint32(downlinkTeid, pduSession.GetTeidDownlink())
 	dlTransportLayerInformation.GTPTunnel.GTPTEID.Value = downlinkTeid
-	dlTransportLayerInformation.GTPTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(gnb.GetN3GnbIp(), "")
+	dlTransportLayerInformation.GTPTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(gnb.GetN3GnbIp().String(), "")
 
 	// Qos Flow Setup Response List
 	qosFlowSetupResponseItem := ngapType.QosFlowItemWithDataForwarding{
