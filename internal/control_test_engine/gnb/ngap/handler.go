@@ -381,6 +381,16 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 			log.Error("[GNB][NGAP] Error in Pdu Session Resource Setup Request.")
 			log.Error("[GNB][NGAP] ", err)
 
+			// If PDU session already exists, retrieve it instead of failing
+			existingSession, getErr := ue.GetPduSession(pduSessionId)
+			if getErr == nil && existingSession != nil {
+				log.Warn("[GNB][NGAP] PDU Session ", pduSessionId, " already exists, using existing session")
+				pduSession = existingSession
+			} else {
+				// Cannot create or retrieve session, skip this item
+				log.Error("[GNB][NGAP] Cannot create or retrieve PDU Session ", pduSessionId, ", skipping")
+				continue
+			}
 		}
 		configuredPduSessions = append(configuredPduSessions, pduSession)
 
