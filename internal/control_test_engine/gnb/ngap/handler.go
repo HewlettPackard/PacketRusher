@@ -185,7 +185,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
 	if ue == nil {
-		log.Errorf("[GNB][NGAP] Cannot setup context for unknown UE	with RANUEID %d", ranUeId)
+		log.Warn("[GNB][NGAP] Cannot setup context for unknown or terminated UE with RANUEID ", ranUeId, ", ignoring request")
 		return
 	}
 	// create UE context.
@@ -295,7 +295,7 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
 	if ue == nil {
-		log.Errorf("[GNB][NGAP] Cannot setup PDU Session for unknown UE With RANUEID %d", ranUeId)
+		log.Warn("[GNB][NGAP] Cannot setup PDU Session for unknown or terminated UE with RANUEID ", ranUeId, ", ignoring request")
 		return
 	}
 
@@ -470,7 +470,7 @@ func HandlerPduSessionReleaseCommand(gnb *context.GNBContext, message *ngapType.
 
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
 	if ue == nil {
-		log.Errorf("[GNB][NGAP] Cannot release PDU Session for unknown UE With RANUEID %d", ranUeId)
+		log.Warn("[GNB][NGAP] Cannot release PDU Session for unknown or terminated UE with RANUEID ", ranUeId, ", ignoring request")
 		return
 	}
 
@@ -674,17 +674,24 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 		}
 	}
 
-	ue, err := gnb.GetGnbUe(ue_id.Value)
-	if err != nil {
-		log.Error("[GNB][AMF] AMF is trying to free the context of an unknown UE")
+	if ue_id == nil {
+		log.Warn("[GNB][NGAP] UE Context Release Command missing UE ID")
 		return
 	}
-	gnb.DeleteGnBUe(ue)
 
-	// Send UEContextReleaseComplete
+	ue, err := gnb.GetGnbUe(ue_id.Value)
+	if err != nil || ue == nil {
+		log.Warn("[GNB][NGAP] AMF is trying to free the context of an unknown UE with RANUEID ", ue_id.Value, ", ignoring")
+		return
+	}
+
+	log.Info("[GNB][NGAP] Releasing UE Context for UE ", ue_id.Value, ", cause: ", causeToString(cause))
+
+	// Send UEContextReleaseComplete before deleting context
 	trigger.SendUeContextReleaseComplete(ue)
 
-	log.Info("[GNB][NGAP] Releasing UE Context, cause: ", causeToString(cause))
+	// Clean up UE context
+	gnb.DeleteGnBUe(ue)
 }
 
 func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
@@ -1236,9 +1243,15 @@ func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *co
 	// check RanUeId and get UE.
 	ue, err := gnb.GetGnbUe(ranUeId)
 	if err != nil || ue == nil {
-		log.Error("[GNB][NGAP] RAN UE NGAP ID is incorrect, found: ", ranUeId)
+		log.Warn("[GNB][NGAP] RAN UE NGAP ID ", ranUeId, " not found or already cleaned up")
 		return nil
 		// TODO SEND ERROR INDICATION
+	}
+
+	// Validate UE is not in Down state
+	if ue.GetState() == context.Down {
+		log.Warn("[GNB][NGAP] UE ", ranUeId, " is in Down state, ignoring NGAP message")
+		return nil
 	}
 
 	ue.SetAmfUeId(amfUeId)
