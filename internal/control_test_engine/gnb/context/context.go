@@ -24,19 +24,20 @@ import (
 )
 
 type GNBContext struct {
-	dataInfo       DataInfo    // gnb data plane information
-	controlInfo    ControlInfo // gnb control plane information
-	uePool         sync.Map    // map[int64]*GNBUe, UeRanNgapId as key
-	prUePool       sync.Map    // map[int64]*GNBUe, PrUeId as key
-	amfPool        sync.Map    // map[int64]*GNBAmf, AmfId as key
-	teidPool       sync.Map    // map[uint32]*GNBUe, downlinkTeid as key
-	sliceInfo      Slice
-	idUeGenerator  int64  // ran UE id.
-	idAmfGenerator int64  // ran amf id
-	teidGenerator  uint32 // ran UE downlink Teid
-	ueIpGenerator  uint8  // ran ue ip.
-	pagedUEs       []PagedUE
-	pagedUELock    sync.Mutex
+	dataInfo         DataInfo    // gnb data plane information
+	controlInfo      ControlInfo // gnb control plane information
+	uePool           sync.Map    // map[int64]*GNBUe, UeRanNgapId as key
+	prUePool         sync.Map    // map[int64]*GNBUe, PrUeId as key
+	amfPool          sync.Map    // map[int64]*GNBAmf, AmfId as key
+	teidPool         sync.Map    // map[uint32]*GNBUe, downlinkTeid as key
+	sliceInfo        Slice
+	idUeGenerator    int64  // ran UE id.
+	idAmfGenerator   int64  // ran amf id
+	teidGenerator    uint32 // ran UE downlink Teid
+	ueIpGenerator    uint8  // ran ue ip.
+	pagedUEs         []PagedUE
+	pagedUELock      sync.Mutex
+	idGeneratorMutex sync.Mutex // mutex for protecting ID generators
 }
 
 type DataInfo struct {
@@ -68,7 +69,7 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd string, n2
 	gnb.controlInfo.mnc = mnc
 	gnb.controlInfo.tac = tac
 	gnb.controlInfo.gnbId = gnbId
-	gnb.controlInfo.inboundChannel = make(chan UEMessage, 1)
+	gnb.controlInfo.inboundChannel = make(chan UEMessage, 100) // Increased buffer size for rapid operations
 	gnb.sliceInfo.sd = sd
 	gnb.sliceInfo.sst = sst
 	gnb.idUeGenerator = 1
@@ -82,7 +83,6 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd string, n2
 func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUeId int64, tmsi *nasType.GUTI5G) (*GNBUe, error) {
 
 	// TODO if necessary add more information for UE.
-	// TODO implement mutex
 
 	// new instance of ue.
 	ue := &GNBUe{}
@@ -181,7 +181,6 @@ func (gnb *GNBContext) GetGnbUeByTeid(teid uint32) (*GNBUe, error) {
 func (gnb *GNBContext) NewGnBAmf(ipPort netip.AddrPort) *GNBAmf {
 
 	// TODO if necessary add more information for AMF.
-	// TODO implement mutex
 
 	amf := &GNBAmf{}
 
@@ -255,8 +254,8 @@ func (gnb *GNBContext) selectAmFByActive() *GNBAmf {
 }
 
 func (gnb *GNBContext) getRanUeId() int64 {
-
-	// TODO implement mutex
+	gnb.idGeneratorMutex.Lock()
+	defer gnb.idGeneratorMutex.Unlock()
 
 	id := gnb.idUeGenerator
 
@@ -267,8 +266,8 @@ func (gnb *GNBContext) getRanUeId() int64 {
 }
 
 func (gnb *GNBContext) GetUeTeid(ue *GNBUe) uint32 {
-
-	// TODO implement mutex
+	gnb.idGeneratorMutex.Lock()
+	defer gnb.idGeneratorMutex.Unlock()
 
 	id := gnb.teidGenerator
 
@@ -283,8 +282,8 @@ func (gnb *GNBContext) GetUeTeid(ue *GNBUe) uint32 {
 
 // for AMFs Pools.
 func (gnb *GNBContext) getRanAmfId() int64 {
-
-	// TODO implement mutex
+	gnb.idGeneratorMutex.Lock()
+	defer gnb.idGeneratorMutex.Unlock()
 
 	id := gnb.idAmfGenerator
 
