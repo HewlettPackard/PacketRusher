@@ -313,10 +313,11 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 		var priArp int64
 
 		// check PDU Session NAS PDU.
+		// NAS PDU is optional (TS 38.413 V19.0.0.0 section 9.2.1.1)
 		if item.PDUSessionNASPDU != nil {
 			messageNas = item.PDUSessionNASPDU.Value
 		} else {
-			log.Fatal("[GNB][NGAP] NAS PDU is missing")
+			log.Info("[GNB][NGAP] NAS PDU not present (normal for Service Request scenario)")
 		}
 
 		// check pdu session id and nssai information for create a PDU Session.
@@ -406,8 +407,10 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 		log.Info("[GNB][NGAP][UE] Priority Level ARP: ", pduSession.GetPriorityARP())
 		log.Info("[GNB][NGAP][UE] UPF Address: ", fmt.Sprintf("%d.%d.%d.%d", upfAddress[0], upfAddress[1], upfAddress[2], upfAddress[3]), " :2152")
 
-		// send NAS message to UE.
-		sender.SendToUe(ue, messageNas)
+		// send NAS message to UE if present.
+		if messageNas != nil {
+			sender.SendToUe(ue, messageNas)
+		}
 
 		var pduSessions [16]*context.GnbPDUSession
 		pduSessions[0] = pduSession
