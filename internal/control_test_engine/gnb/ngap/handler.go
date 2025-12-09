@@ -317,7 +317,7 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 		if item.PDUSessionNASPDU != nil {
 			messageNas = item.PDUSessionNASPDU.Value
 		} else {
-			log.Info("[GNB][NGAP] NAS PDU not present (normal for Service Request scenario)")
+			log.Info("[GNB][NGAP] NAS PDU is missing")
 		}
 
 		// check pdu session id and nssai information for create a PDU Session.
