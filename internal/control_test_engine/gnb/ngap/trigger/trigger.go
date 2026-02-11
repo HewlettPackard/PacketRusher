@@ -75,13 +75,15 @@ func SendInitialContextSetupResponse(ue *context.GNBUe, gnb *context.GNBContext)
 func SendUeContextReleaseRequest(ue *context.GNBUe) {
 	log.Info("[GNB] Initiating UE Context Release Request")
 
-	// send UE Context Release Complete
+	ue.SetReleaseRequested(true)
+
+	// send UE Context Release Request
 	ngapMsg, err := ue_context_management.UeContextReleaseRequest(ue)
 	if err != nil {
 		log.Fatal("[GNB][NGAP] Error sending UE Context Release Request: ", err)
 	}
 
-	// Send UE Context Release Complete
+	// Send UE Context Release Request
 	conn := ue.GetSCTP()
 	err = sender.SendToAmF(ngapMsg, conn)
 	if err != nil {

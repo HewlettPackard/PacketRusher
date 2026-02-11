@@ -1211,6 +1211,7 @@ func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU) 
 	valueMessage := message.InitiatingMessage.Value.ErrorIndication
 
 	var amfUeId, ranUeId int64
+	var hasAmfUeId, hasRanUeId bool
 
 	for _, ies := range valueMessage.ProtocolIEs.List {
 		switch ies.Id.Value {
@@ -1221,6 +1222,7 @@ func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU) 
 				log.Fatal("[GNB][NGAP] AMF UE ID is missing")
 			}
 			amfUeId = ies.Value.AMFUENGAPID.Value
+			hasAmfUeId = true
 
 		case ngapType.ProtocolIEIDRANUENGAPID:
 
@@ -1229,10 +1231,32 @@ func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU) 
 				// TODO SEND ERROR INDICATION
 			}
 			ranUeId = ies.Value.RANUENGAPID.Value
+			hasRanUeId = true
 		}
 	}
 
 	log.Warn("[GNB][AMF] Received an Error Indication for UE with AMF UE ID: ", amfUeId, " RAN UE ID: ", ranUeId)
+
+	// Find the UE by RAN UE ID or AMF UE ID
+	var ue *context.GNBUe
+	if hasRanUeId {
+		ue, _ = gnb.GetGnbUe(ranUeId)
+	}
+	if ue == nil && hasAmfUeId {
+		ue, _ = gnb.GetGnbUeByAmfUeId(amfUeId)
+	}
+
+	if ue == nil {
+		log.Warn("[GNB] No UE context found for Error Indication")
+		return
+	}
+
+	// If a release was pending, perform local release
+	if ue.GetReleaseRequested() {
+		ue.SetReleaseRequested(false)
+		log.Warn("[GNB] Performing local release of UE context due to Error Indication (release was pending)")
+		gnb.DeleteGnBUe(ue)
+	}
 }
 
 func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *context.GNBUe {
