@@ -20,18 +20,19 @@ const Ready = 0x02
 const Down = 0x03
 
 type GNBUe struct {
-	ranUeNgapId    int64          // Identifier for UE in GNB Context.
-	amfUeNgapId    int64          // Identifier for UE in AMF Context.
-	amfId          int64          // Identifier for AMF in UE/GNB Context.
-	state          int            // State of UE in NAS/GNB Context.
-	sctpConnection *sctp.SCTPConn // Sctp association in using by the UE.
-	gnbRx          chan UEMessage
-	gnbTx          chan UEMessage
-	pRueId         int64 // PacketRusher unique UE ID
-	tmsi           *nasType.GUTI5G
-	context        Context
-	lock           sync.Mutex
-	newGnb         *GNBContext
+	ranUeNgapId      int64          // Identifier for UE in GNB Context.
+	amfUeNgapId      int64          // Identifier for UE in AMF Context.
+	amfId            int64          // Identifier for AMF in UE/GNB Context.
+	state            int            // State of UE in NAS/GNB Context.
+	sctpConnection   *sctp.SCTPConn // Sctp association in using by the UE.
+	gnbRx            chan UEMessage
+	gnbTx            chan UEMessage
+	pRueId           int64 // PacketRusher unique UE ID
+	tmsi             *nasType.GUTI5G
+	context          Context
+	lock             sync.Mutex
+	newGnb           *GNBContext
+	releaseRequested bool // Set when UE Context Release Request is sent to AMF
 }
 
 type Context struct {
@@ -324,4 +325,12 @@ func (ue *GNBUe) GetAmfUeId() int64 {
 
 func (ue *GNBUe) SetAmfUeId(amfUeId int64) {
 	ue.amfUeNgapId = amfUeId
+}
+
+func (ue *GNBUe) SetReleaseRequested(val bool) {
+	ue.releaseRequested = val
+}
+
+func (ue *GNBUe) GetReleaseRequested() bool {
+	return ue.releaseRequested
 }
