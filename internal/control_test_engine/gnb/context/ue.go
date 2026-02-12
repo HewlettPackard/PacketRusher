@@ -328,9 +328,13 @@ func (ue *GNBUe) SetAmfUeId(amfUeId int64) {
 }
 
 func (ue *GNBUe) SetReleaseRequested(val bool) {
+	ue.lock.Lock()
+	defer ue.lock.Unlock()
 	ue.releaseRequested = val
 }
 
 func (ue *GNBUe) GetReleaseRequested() bool {
+	ue.lock.Lock()
+	defer ue.lock.Unlock()
 	return ue.releaseRequested
 }
