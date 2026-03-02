@@ -69,7 +69,7 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd string, n2
 	gnb.controlInfo.mnc = mnc
 	gnb.controlInfo.tac = tac
 	gnb.controlInfo.gnbId = gnbId
-	gnb.controlInfo.inboundChannel = make(chan UEMessage, 100) // Increased buffer size for rapid operations
+	gnb.controlInfo.inboundChannel = make(chan UEMessage, 100)
 	gnb.sliceInfo.sd = sd
 	gnb.sliceInfo.sst = sst
 	gnb.idUeGenerator = 1
@@ -159,7 +159,11 @@ func (gnb *GNBContext) GetGnbUe(ranUeId int64) (*GNBUe, error) {
 	if !err {
 		return nil, fmt.Errorf("UE is not find in GNB UE POOL")
 	}
-	return ue.(*GNBUe), nil
+	gnbUe, ok := ue.(*GNBUe)
+	if !ok || gnbUe == nil {
+		return nil, fmt.Errorf("UE is nil or invalid type in GNB UE POOL")
+	}
+	return gnbUe, nil
 }
 
 func (gnb *GNBContext) GetGnbUeByPrUeId(pRUeId int64) (*GNBUe, error) {
@@ -167,7 +171,11 @@ func (gnb *GNBContext) GetGnbUeByPrUeId(pRUeId int64) (*GNBUe, error) {
 	if !err {
 		return nil, fmt.Errorf("UE is not find in GNB PR UE POOL")
 	}
-	return ue.(*GNBUe), nil
+	gnbUe, ok := ue.(*GNBUe)
+	if !ok || gnbUe == nil {
+		return nil, fmt.Errorf("UE is nil or invalid type in GNB PR UE POOL")
+	}
+	return gnbUe, nil
 }
 
 func (gnb *GNBContext) GetGnbUeByTeid(teid uint32) (*GNBUe, error) {
@@ -175,7 +183,11 @@ func (gnb *GNBContext) GetGnbUeByTeid(teid uint32) (*GNBUe, error) {
 	if !err {
 		return nil, fmt.Errorf("UE is not find in GNB UE POOL using TEID")
 	}
-	return ue.(*GNBUe), nil
+	gnbUe, ok := ue.(*GNBUe)
+	if !ok || gnbUe == nil {
+		return nil, fmt.Errorf("UE is nil or invalid type in GNB UE POOL using TEID")
+	}
+	return gnbUe, nil
 }
 
 func (gnb *GNBContext) NewGnBAmf(ipPort netip.AddrPort) *GNBAmf {

@@ -91,6 +91,11 @@ func TestGNBContext_ConcurrentUECreationAndDeletion(t *testing.T) {
 		netip.MustParseAddrPort("127.0.0.1:9999"),
 		netip.MustParseAddrPort("127.0.0.1:2152"))
 
+	// Create an AMF for UE operations
+	amf := gnb.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:38412"))
+	require.NotNil(t, amf, "Failed to create AMF")
+	amf.SetStateActive() // AMF must be Active for NewGnBUe to use it
+
 	const numGoroutines = 10 // Reduced to avoid overwhelming the test
 	const operationsPerGoroutine = 5
 
@@ -192,6 +197,11 @@ func TestGNBContext_RapidRegistrationDeregistration(t *testing.T) {
 		netip.MustParseAddrPort("127.0.0.1:9999"),
 		netip.MustParseAddrPort("127.0.0.1:2152"))
 
+	// Create an AMF for UE operations
+	amf := gnb.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:38412"))
+	require.NotNil(t, amf, "Failed to create AMF")
+	amf.SetStateActive() // AMF must be Active for NewGnBUe to use it
+
 	const numCycles = 100
 	const rapidInterval = 200 * time.Millisecond
 
@@ -273,6 +283,11 @@ func TestGNBContext_UEStateValidation(t *testing.T) {
 		netip.MustParseAddrPort("127.0.0.1:9999"),
 		netip.MustParseAddrPort("127.0.0.1:2152"))
 
+	// Create an AMF for UE operations
+	amf := gnb.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:38412"))
+	require.NotNil(t, amf, "Failed to create AMF")
+	amf.SetStateActive() // AMF must be Active for NewGnBUe to use it
+
 	// Create a UE
 	gnbTx := make(chan UEMessage, 10)
 	gnbRx := make(chan UEMessage, 10)
@@ -329,7 +344,7 @@ func TestGNBContext_AMFManagement(t *testing.T) {
 	assert.Equal(t, amf1, foundAmf1)
 	assert.Equal(t, amf2, foundAmf2)
 
-	// Should not find non-existent AMF
-	notFound := gnb.FindGnbAmfByIpPort(netip.MustParseAddrPort("127.0.0.1:99999"))
+	// Should not find non-existent AMF (using valid port number)
+	notFound := gnb.FindGnbAmfByIpPort(netip.MustParseAddrPort("127.0.0.1:38414"))
 	assert.Nil(t, notFound)
 }

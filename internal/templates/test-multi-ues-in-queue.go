@@ -65,9 +65,9 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 		TimeBeforeXnHandover:     timeBeforeXnHandover,
 		TimeBeforeIdle:           timeBeforeIdle,
 		TimeBeforeReconnecting:   timeBeforeReconnecting,
-		NumPduSessions:           numPduSessions,		
-		RegistrationLoop:		  loop,		
-		LoopCount:				  loopCount,
+		NumPduSessions:           numPduSessions,
+		RegistrationLoop:         loop,
+		LoopCount:                loopCount,
 		TimeBeforeReregistration: timeBeforeReregistration,
 	}
 
@@ -83,7 +83,7 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 			close(scenarioChans[ueSimCfg.UeId])
 			scenarioChans[ueSimCfg.UeId] = nil
 		}
-		scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage)
+		scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage, 10)
 		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
 
 		tools.SimulateSingleUE(ueSimCfg, &wg)

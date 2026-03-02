@@ -105,13 +105,21 @@ func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 func verifyPaging(ue *context.UEContext) {
 	gnbTx := make(chan context2.UEMessage, 1)
 
-	ue.GetGnbInboundChannel() <- context2.UEMessage{GNBTx: gnbTx, FetchPagedUEs: true}
-	msg := <-gnbTx
-	for _, pagedUE := range msg.PagedUEs {
-		if ue.Get5gGuti() != nil && pagedUE.FiveGSTMSI != nil && [4]uint8(pagedUE.FiveGSTMSI.FiveGTMSI.Value) == ue.GetTMSI5G() {
-			ueMgrHandler(procedures.UeTesterMessage{Type: procedures.ServiceRequest}, ue)
-			return
+	select {
+	case ue.GetGnbInboundChannel() <- context2.UEMessage{GNBTx: gnbTx, FetchPagedUEs: true}:
+		select {
+		case msg := <-gnbTx:
+			for _, pagedUE := range msg.PagedUEs {
+				if ue.Get5gGuti() != nil && pagedUE.FiveGSTMSI != nil && [4]uint8(pagedUE.FiveGSTMSI.FiveGTMSI.Value) == ue.GetTMSI5G() {
+					ueMgrHandler(procedures.UeTesterMessage{Type: procedures.ServiceRequest}, ue)
+					return
+				}
+			}
+		case <-time.After(1 * time.Second):
+			log.Warn("[UE] Timeout waiting for paged UEs response")
 		}
+	default:
+		log.Debug("[UE] Cannot send paging request to gNB, channel full")
 	}
 }
 

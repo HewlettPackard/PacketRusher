@@ -680,7 +680,7 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 	}
 
 	ue, err := gnb.GetGnbUe(ue_id.Value)
-	if err != nil || ue == nil {
+	if err != nil {
 		log.Warn("[GNB][NGAP] AMF is trying to free the context of an unknown UE with RANUEID ", ue_id.Value, ", ignoring")
 		return
 	}
@@ -1242,7 +1242,7 @@ func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU) 
 func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *context.GNBUe {
 	// check RanUeId and get UE.
 	ue, err := gnb.GetGnbUe(ranUeId)
-	if err != nil || ue == nil {
+	if err != nil {
 		log.Warn("[GNB][NGAP] RAN UE NGAP ID ", ranUeId, " not found or already cleaned up")
 		return nil
 		// TODO SEND ERROR INDICATION

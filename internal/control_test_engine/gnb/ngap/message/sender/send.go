@@ -13,6 +13,10 @@ import (
 
 func SendToAmF(message []byte, conn *sctp.SCTPConn) error {
 
+	if conn == nil {
+		return fmt.Errorf("SCTP connection is nil, cannot send NGAP message")
+	}
+
 	// TODO included information for SCTP association.
 	info := &sctp.SndRcvInfo{
 		Stream: uint16(0),
