@@ -104,7 +104,7 @@ func SendUeContextReleaseComplete(ue *context.GNBUe) {
 	conn := ue.GetSCTP()
 	err = sender.SendToAmF(ngapMsg, conn)
 	if err != nil {
-		log.Fatal("[GNB][AMF] Error sending UE Context Complete: ", err)
+		log.Error("[GNB][AMF] Error sending UE Context Complete: ", err)
 	}
 }
 

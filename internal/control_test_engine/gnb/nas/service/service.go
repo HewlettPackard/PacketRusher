@@ -91,35 +91,48 @@ func gnbListen(gnb *context.GNBContext) {
 
 func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
 	rx := ue.GetGnbRx()
-	for {
-		message, done := <-rx
-		gnbUeContext, err := gnb.GetGnbUe(ue.GetRanUeId())
-		if (gnbUeContext == nil || err != nil) && done {
-			log.Error("[GNB][NAS] Ignoring message from UE ", ue.GetRanUeId(), " as UE Context was cleaned as requested by AMF.")
-			break
-		}
-		if !done {
-			if gnbUeContext != nil {
-				gnbUeContext.SetStateDown()
-			}
-			break
-		}
+	if rx == nil {
+		log.Error("[GNB][NAS] Cannot process connection for UE ", ue.GetRanUeId(), " as RX channel is nil")
+		return
+	}
 
-		// send to dispatch.
-		if message.ConnectionClosed {
-			log.Info("[GNB] Cleaning up context on current gNb")
-			gnbUeContext.SetStateDown()
-			if gnbUeContext.GetHandoverGnodeB() == nil {
-				// We do not clean the context if it's a NGAP Handover, as AMF will request the context clean-up
-				// Otherwise, we do clean the context
-				gnb.DeleteGnBUe(ue)
+	for {
+		select {
+		case message, done := <-rx:
+			if !done {
+				// Channel is closed, UE is terminating
+				log.Debug("[GNB][NAS] Channel closed for UE ", ue.GetRanUeId())
+				gnbUeContext, err := gnb.GetGnbUe(ue.GetRanUeId())
+				if err == nil {
+					gnbUeContext.SetStateDown()
+				}
+				return
 			}
-		} else if message.IsNas {
-			nas.Dispatch(ue, message.Nas, gnb)
-		} else if message.Idle {
-			trigger.SendUeContextReleaseRequest(ue)
-		} else {
-			log.Error("[GNB] Received unknown message from UE")
+
+			// Validate UE context still exists before processing message
+			gnbUeContext, err := gnb.GetGnbUe(ue.GetRanUeId())
+			if err != nil {
+				log.Warn("[GNB][NAS] Ignoring message from UE ", ue.GetRanUeId(), " as UE Context was cleaned.")
+				continue
+			}
+
+			// Process the message
+			if message.ConnectionClosed {
+				log.Info("[GNB] Cleaning up context on current gNb for UE ", ue.GetRanUeId())
+				gnbUeContext.SetStateDown()
+				if gnbUeContext.GetHandoverGnodeB() == nil {
+					// We do not clean the context if it's a NGAP Handover, as AMF will request the context clean-up
+					// Otherwise, we do clean the context
+					gnb.DeleteGnBUe(ue)
+				}
+				return
+			} else if message.IsNas {
+				nas.Dispatch(ue, message.Nas, gnb)
+			} else if message.Idle {
+				trigger.SendUeContextReleaseRequest(ue)
+			} else {
+				log.Debug("[GNB] Received message from UE ", ue.GetRanUeId())
+			}
 		}
 	}
 }

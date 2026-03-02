@@ -1,4 +1,3 @@
-package ngap
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
@@ -20,6 +19,13 @@ func createTestGNBContext() *context.GNBContext {
 	gnb.NewRanGnbContext("test-gnb", "001", "01", "000001", "1", "000001",
 		netip.MustParseAddrPort("127.0.0.1:9999"),
 		netip.MustParseAddrPort("127.0.0.1:2152"))
+	
+	// Create and activate an AMF for UE operations
+	amf := gnb.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:38412"))
+	if amf != nil {
+		amf.SetStateActive()
+	}
+	
 	return gnb
 }
 

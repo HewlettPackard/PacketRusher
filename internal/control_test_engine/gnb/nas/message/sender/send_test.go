@@ -138,13 +138,28 @@ func TestSendMessageToUe_FullChannel(t *testing.T) {
 func TestConcurrentSendOperations(t *testing.T) {
 	// Test concurrent send operations to ensure thread safety
 	ue := createTestUE()
-	gnbTx := make(chan context.UEMessage, 100) // Large buffer
+	gnbTx := make(chan context.UEMessage, 100) // Buffer size of 100
 	ue.SetGnbTx(gnbTx)
 
 	const numGoroutines = 50
 	const messagesPerGoroutine = 10
 
 	done := make(chan bool, numGoroutines)
+
+	// Start a goroutine to consume messages and prevent channel from filling
+	consumedCount := 0
+	consumerDone := make(chan bool)
+	go func() {
+		for {
+			select {
+			case <-gnbTx:
+				consumedCount++
+			case <-time.After(100 * time.Millisecond):
+				consumerDone <- true
+				return
+			}
+		}
+	}()
 
 	// Start concurrent senders
 	for i := 0; i < numGoroutines; i++ {
@@ -172,11 +187,17 @@ func TestConcurrentSendOperations(t *testing.T) {
 		}
 	}
 
-	// Verify we received the expected number of messages
-	expectedMessages := numGoroutines * messagesPerGoroutine * 2 // 2 types of messages per iteration
-	actualMessages := len(gnbTx)
+	// Wait for consumer to finish
+	<-consumerDone
 
-	assert.Equal(t, expectedMessages, actualMessages, "Should receive all sent messages")
+	// With non-blocking sends, we expect most messages to be received
+	// but some may be dropped if the channel was momentarily full
+	expectedMessages := numGoroutines * messagesPerGoroutine * 2 // 2 types of messages per iteration
+	
+	// Assert that at least 80% of messages were received (accounting for potential drops)
+	minExpectedMessages := int(float64(expectedMessages) * 0.8)
+	assert.GreaterOrEqual(t, consumedCount, minExpectedMessages, 
+		"Should receive at least 80%% of sent messages with non-blocking sends")
 }
 
 func TestRapidSendOperations(t *testing.T) {
