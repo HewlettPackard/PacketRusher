@@ -34,12 +34,14 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 	for _, amfConfig := range conf.AMFs {
 		connected := false
 		currentN2IP := conf.GNodeB.ControlIF
+		currentN3IP := conf.GNodeB.DataIF
 
 		for retry := 0; retry < maxRetries && !connected; retry++ {
 			if retry > 0 {
-				// Increment N2 IP address for retry
+				// Increment both N2 and N3 IP addressese for retry
 				currentN2IP = currentN2IP.WithNextAddr()
-				log.Info("[GNB] Retrying with N2 IP: ", currentN2IP.String())
+				currentN3IP = currentN3IP.WithNextAddr()
+				log.Info("[GNB] Retrying with N2 IP: ", currentN2IP.String(), ", N3 IP: ", currentN3IP.String())
 			} else {
 				log.Info("[GNB] Attempting connection with N2 IP: ", currentN2IP.String())
 			}
@@ -53,7 +55,7 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 				conf.GNodeB.SliceSupportList.Sst,
 				conf.GNodeB.SliceSupportList.Sd,
 				currentN2IP.AddrPort,
-				conf.GNodeB.DataIF.AddrPort,
+				currentN3IP.AddrPort,
 			)
 
 			// new AMF context.
