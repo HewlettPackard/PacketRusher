@@ -163,6 +163,22 @@ func (gnb *GNBContext) GetGnbUe(ranUeId int64) (*GNBUe, error) {
 	return gnbUe, nil
 }
 
+func (gnb *GNBContext) GetGnbUeByAmfUeId(amfUeId int64) (*GNBUe, error) {
+	var found *GNBUe
+	gnb.uePool.Range(func(key, value any) bool {
+		ue := value.(*GNBUe)
+		if ue.GetAmfUeId() == amfUeId {
+			found = ue
+			return false
+		}
+		return true
+	})
+	if found == nil {
+		return nil, fmt.Errorf("UE is not found in GNB UE POOL using AMF UE ID")
+	}
+	return found, nil
+}
+
 func (gnb *GNBContext) GetGnbUeByPrUeId(pRUeId int64) (*GNBUe, error) {
 	ue, err := gnb.prUePool.Load(pRUeId)
 	if !err {
