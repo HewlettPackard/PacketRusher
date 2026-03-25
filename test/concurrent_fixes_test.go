@@ -5,224 +5,191 @@
 package test
 
 import (
-	"my5G-RANTester/internal/control_test_engine/gnb/context"
+	gnbctx "my5G-RANTester/internal/control_test_engine/gnb/context"
+	"my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
+	"net/netip"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
+// newTestGNBContext creates a GNBContext suitable for unit testing.
+func newTestGNBContext(t *testing.T) *gnbctx.GNBContext {
+	t.Helper()
+	gnb := &gnbctx.GNBContext{}
+	gnb.NewRanGnbContext("test-gnb", "001", "01", "000001", "1", "000001",
+		netip.MustParseAddrPort("127.0.0.1:9999"),
+		netip.MustParseAddrPort("127.0.0.1:2152"))
+	amf := gnb.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:38412"))
+	require.NotNil(t, amf)
+	amf.SetStateActive()
+	return gnb
+}
+
+// TestConcurrentIDGeneration verifies that concurrent calls to NewGnBUe produce
+// unique RAN UE IDs. This exercises the actual atomic ID generators in GNBContext.
+// Run with -race to detect data races: go test -race ./test/...
 func TestConcurrentIDGeneration(t *testing.T) {
-	// Test that our fixes prevent race conditions during concurrent ID generation
-	// This test verifies that the mutex protection works correctly
-	// Note: This is a simplified test that doesn't require AMF connection
+	gnb := newTestGNBContext(t)
 
 	const numGoroutines = 100
-	const idsPerGoroutine = 10
-
 	var wg sync.WaitGroup
-	generatedIds := make([][]int, numGoroutines)
+	ids := make([]int64, numGoroutines)
 
-	// Simulate concurrent ID generation similar to what happens in the real code
-	var idCounter int64
-	var idMutex sync.Mutex
-
-	generateID := func() int64 {
-		idMutex.Lock()
-		defer idMutex.Unlock()
-		idCounter++
-		return idCounter
-	}
-
-	// Generate IDs concurrently (simulating the fixed mutex-protected behavior)
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
-		go func(goroutineId int) {
+		go func(idx int) {
 			defer wg.Done()
-
-			ids := make([]int, idsPerGoroutine)
-			for j := 0; j < idsPerGoroutine; j++ {
-				ids[j] = int(generateID())
+			gnbTx := make(chan gnbctx.UEMessage, 10)
+			gnbRx := make(chan gnbctx.UEMessage, 10)
+			ue, err := gnb.NewGnBUe(gnbTx, gnbRx, int64(idx+1000), nil)
+			if assert.NoError(t, err) && assert.NotNil(t, ue) {
+				ids[idx] = ue.GetRanUeId()
 			}
-			generatedIds[goroutineId] = ids
 		}(i)
 	}
-
 	wg.Wait()
 
-	// Verify all IDs are unique (no race conditions)
-	allIds := make(map[int]bool)
-	totalIds := 0
-
-	for i := 0; i < numGoroutines; i++ {
-		for j := 0; j < idsPerGoroutine; j++ {
-			id := generatedIds[i][j]
-			if id != 0 {
-				assert.False(t, allIds[id], "Duplicate ID found: %d", id)
-				allIds[id] = true
-				totalIds++
-			}
+	seen := make(map[int64]bool, numGoroutines)
+	for _, id := range ids {
+		if id == 0 {
+			continue // UE creation failed (counted by assert above)
 		}
+		assert.False(t, seen[id], "Duplicate RAN UE ID generated concurrently: %d", id)
+		seen[id] = true
 	}
-
-	expectedIds := numGoroutines * idsPerGoroutine
-	t.Logf("Successfully generated %d unique IDs concurrently", totalIds)
-	assert.Equal(t, expectedIds, totalIds, "Should have generated all IDs without duplicates")
 }
 
+// TestRapidUEOperations simulates the rapid registration/deregistration cycle
+// described in issue #187 (concurrent NewGnBUe / GetGnbUe / DeleteGnBUe).
+// It must be run with -race to be useful: go test -race ./test/...
 func TestRapidUEOperations(t *testing.T) {
-	// Test that rapid operations with channels don't cause deadlocks or panics
-	// This simulates the improved buffering and non-blocking behavior
+	gnb := newTestGNBContext(t)
 
-	const numOperations = 100
-	const channelBuffer = 100 // Our improved buffer size
-	const rapidInterval = 1 * time.Millisecond
-
+	const numCycles = 50
 	var wg sync.WaitGroup
-	successfulOperations := 0
-	var opMutex sync.Mutex
 
-	// Simulate rapid channel operations (like our improved implementation)
-	for i := 0; i < numOperations; i++ {
+	for i := 0; i < numCycles; i++ {
 		wg.Add(1)
-		go func(opId int) {
+		go func(prUeId int64) {
 			defer wg.Done()
+			gnbTx := make(chan gnbctx.UEMessage, 10)
+			gnbRx := make(chan gnbctx.UEMessage, 10)
 
-			// Create channels with improved buffering
-			msgChan := make(chan context.UEMessage, channelBuffer)
-
-			// Simulate rapid message sending (non-blocking)
-			msg := context.UEMessage{
-				IsNas: true,
-				Nas:   []byte("test message"),
+			ue, err := gnb.NewGnBUe(gnbTx, gnbRx, prUeId, nil)
+			if !assert.NoError(t, err) || !assert.NotNil(t, ue) {
+				return
 			}
 
-			// Try non-blocking send (simulating our select-based approach)
-			select {
-			case msgChan <- msg:
-				opMutex.Lock()
-				successfulOperations++
-				opMutex.Unlock()
-			default:
-				// Channel full, would drop message (expected behavior)
-			}
+			ranId := ue.GetRanUeId()
 
-			time.Sleep(rapidInterval)
-			close(msgChan)
-		}(i)
+			// UE must be retrievable immediately after creation.
+			retrieved, err := gnb.GetGnbUe(ranId)
+			assert.NoError(t, err)
+			assert.Equal(t, ue, retrieved)
+
+			// Delete (deregistration).
+			gnb.DeleteGnBUe(ue)
+
+			// UE must no longer be retrievable.
+			_, err = gnb.GetGnbUe(ranId)
+			assert.Error(t, err, "deleted UE should not be found")
+		}(int64(i + 2000))
 	}
-
 	wg.Wait()
-
-	t.Logf("Successfully completed %d rapid operations without blocking", successfulOperations)
-	assert.Greater(t, successfulOperations, 0, "Should have completed some operations")
 }
 
-func TestChannelNonBlocking(t *testing.T) {
-	// Test that our non-blocking channel implementation prevents deadlocks
-	// This validates the select-with-default pattern we implemented
+// TestSendToUeBlocksUntilConsumed verifies that SendToUe blocks when the channel
+// is full (preserving the message) rather than silently dropping it.
+func TestSendToUeBlocksUntilConsumed(t *testing.T) {
+	ue := &gnbctx.GNBUe{}
+	gnbTx := make(chan gnbctx.UEMessage, 1)
+	ue.SetRanUeId(99)
+	ue.SetGnbTx(gnbTx)
 
-	const bufferSize = 10
-	const numMessages = 100
+	// Pre-fill the channel so SendToUe will initially block.
+	gnbTx <- gnbctx.UEMessage{}
 
-	// Create a channel with limited buffer (like UE message channels)
-	msgChan := make(chan context.UEMessage, bufferSize)
+	sent := make(chan struct{})
+	go func() {
+		sender.SendToUe(ue, []byte("hello"))
+		close(sent)
+	}()
 
-	start := time.Now()
-	sentCount := 0
-	droppedCount := 0
+	// Drain the pre-filled message so SendToUe can proceed.
+	<-gnbTx
 
-	// Test non-blocking sends (simulating our improved send.go implementation)
-	for i := 0; i < numMessages; i++ {
-		msg := context.UEMessage{
-			IsNas: true,
-			Nas:   []byte("test message"),
-		}
-
-		// Non-blocking send with select-default pattern (our fix)
-		select {
-		case msgChan <- msg:
-			sentCount++
-		default:
-			// Channel full, message dropped (expected non-blocking behavior)
-			droppedCount++
-		}
-	}
-
-	elapsed := time.Since(start)
-	t.Logf("Completed %d non-blocking operations in %v", numMessages, elapsed)
-	t.Logf("Sent: %d, Dropped: %d (due to full buffer)", sentCount, droppedCount)
-
-	// Should complete almost instantly (non-blocking)
-	assert.Less(t, elapsed, 100*time.Millisecond, "Non-blocking sends should complete quickly")
-	assert.Equal(t, bufferSize, sentCount, "Should have sent exactly buffer-size messages")
-	assert.Equal(t, numMessages-bufferSize, droppedCount, "Remaining messages should be dropped")
-
-	close(msgChan)
+	// SendToUe must complete and the message must arrive.
+	<-sent
+	require.Equal(t, 1, len(gnbTx))
+	msg := <-gnbTx
+	assert.True(t, msg.IsNas)
+	assert.Equal(t, []byte("hello"), msg.Nas)
 }
 
+// TestSendToUeDropsWhenChannelNil verifies that SendToUe silently drops the
+// message (no panic) when the channel has been closed by DeleteGnBUe.
+func TestSendToUeDropsWhenChannelNil(t *testing.T) {
+	ue := &gnbctx.GNBUe{}
+	ue.SetRanUeId(99)
+	ue.SetGnbTx(nil) // simulate post-DeleteGnBUe state
+
+	// Must not panic.
+	sender.SendToUe(ue, []byte("dropped"))
+}
+
+// TestRaceConditionPrevention creates and retrieves UEs from multiple goroutines
+// simultaneously. When run with -race this will catch any remaining data races
+// in the ID generators or UE pool: go test -race ./test/...
 func TestRaceConditionPrevention(t *testing.T) {
-	// Test that our mutex fixes prevent race conditions during concurrent access
-	// This test simulates concurrent operations similar to the real implementation
+	gnb := newTestGNBContext(t)
 
-	const numGoroutines = 50
+	const numWorkers = 50
 	var wg sync.WaitGroup
+	createdUEs := make([]*gnbctx.GNBUe, numWorkers)
 
-	// Simulate a shared resource with mutex protection (like our ID generators)
-	type protectedResource struct {
-		mutex   sync.Mutex
-		counter int64
-		items   map[int64]bool
-	}
-
-	resource := &protectedResource{
-		items: make(map[int64]bool),
-	}
-
-	generateID := func() int64 {
-		resource.mutex.Lock()
-		defer resource.mutex.Unlock()
-		resource.counter++
-		id := resource.counter
-		resource.items[id] = true
-		return id
-	}
-
-	// Perform concurrent operations that test mutex protection
-	generatedIDs := make([]int64, 0, numGoroutines*2)
-	var resultMutex sync.Mutex
-
-	for i := 0; i < numGoroutines; i++ {
+	// Create UEs concurrently.
+	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go func(id int) {
+		go func(idx int) {
 			defer wg.Done()
-
-			// Generate IDs concurrently (tests mutex protection)
-			id1 := generateID()
-			id2 := generateID()
-
-			// Verify IDs are different (basic sanity check)
-			assert.NotEqual(t, id1, id2, "Generated IDs should be different")
-
-			resultMutex.Lock()
-			generatedIDs = append(generatedIDs, id1, id2)
-			resultMutex.Unlock()
+			gnbTx := make(chan gnbctx.UEMessage, 10)
+			gnbRx := make(chan gnbctx.UEMessage, 10)
+			ue, err := gnb.NewGnBUe(gnbTx, gnbRx, int64(idx+3000), nil)
+			if assert.NoError(t, err) {
+				createdUEs[idx] = ue
+			}
 		}(i)
 	}
-
 	wg.Wait()
 
-	// Verify no duplicate IDs were generated (proves mutex protection works)
-	uniqueIDs := make(map[int64]bool)
-	for _, id := range generatedIDs {
-		assert.False(t, uniqueIDs[id], "Duplicate ID detected: %d", id)
-		uniqueIDs[id] = true
+	// Retrieve UEs concurrently.
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			ue := createdUEs[idx]
+			if ue == nil {
+				return
+			}
+			retrieved, err := gnb.GetGnbUe(ue.GetRanUeId())
+			assert.NoError(t, err)
+			assert.Equal(t, ue, retrieved)
+		}(i)
 	}
+	wg.Wait()
 
-	expectedCount := numGoroutines * 2
-	assert.Equal(t, expectedCount, len(generatedIDs), "Should have generated expected number of IDs")
-	assert.Equal(t, expectedCount, len(uniqueIDs), "All IDs should be unique")
-
-	t.Logf("Race condition prevention test completed successfully with %d unique IDs generated", len(uniqueIDs))
+	// Delete UEs concurrently.
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			if createdUEs[idx] != nil {
+				gnb.DeleteGnBUe(createdUEs[idx])
+			}
+		}(i)
+	}
+	wg.Wait()
 }

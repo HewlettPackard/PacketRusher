@@ -1248,12 +1248,6 @@ func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *co
 		// TODO SEND ERROR INDICATION
 	}
 
-	// Validate UE is not in Down state
-	if ue.GetState() == context.Down {
-		log.Warn("[GNB][NGAP] UE ", ranUeId, " is in Down state, ignoring NGAP message")
-		return nil
-	}
-
 	ue.SetAmfUeId(amfUeId)
 
 	return ue

@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/free5gc/aper"
@@ -24,20 +25,19 @@ import (
 )
 
 type GNBContext struct {
-	dataInfo         DataInfo    // gnb data plane information
-	controlInfo      ControlInfo // gnb control plane information
-	uePool           sync.Map    // map[int64]*GNBUe, UeRanNgapId as key
-	prUePool         sync.Map    // map[int64]*GNBUe, PrUeId as key
-	amfPool          sync.Map    // map[int64]*GNBAmf, AmfId as key
-	teidPool         sync.Map    // map[uint32]*GNBUe, downlinkTeid as key
-	sliceInfo        Slice
-	idUeGenerator    int64  // ran UE id.
-	idAmfGenerator   int64  // ran amf id
-	teidGenerator    uint32 // ran UE downlink Teid
-	ueIpGenerator    uint8  // ran ue ip.
-	pagedUEs         []PagedUE
-	pagedUELock      sync.Mutex
-	idGeneratorMutex sync.Mutex // mutex for protecting ID generators
+	dataInfo       DataInfo    // gnb data plane information
+	controlInfo    ControlInfo // gnb control plane information
+	uePool         sync.Map    // map[int64]*GNBUe, UeRanNgapId as key
+	prUePool       sync.Map    // map[int64]*GNBUe, PrUeId as key
+	amfPool        sync.Map    // map[int64]*GNBAmf, AmfId as key
+	teidPool       sync.Map    // map[uint32]*GNBUe, downlinkTeid as key
+	sliceInfo      Slice
+	idUeGenerator  atomic.Int64  // ran UE id, incremented atomically.
+	idAmfGenerator atomic.Int64  // ran amf id, incremented atomically.
+	teidGenerator  atomic.Uint32 // ran UE downlink Teid, incremented atomically.
+	ueIpGenerator  uint8         // ran ue ip.
+	pagedUEs       []PagedUE
+	pagedUELock    sync.Mutex
 }
 
 type DataInfo struct {
@@ -72,10 +72,7 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd string, n2
 	gnb.controlInfo.inboundChannel = make(chan UEMessage, 100)
 	gnb.sliceInfo.sd = sd
 	gnb.sliceInfo.sst = sst
-	gnb.idUeGenerator = 1
-	gnb.idAmfGenerator = 1
 	gnb.controlInfo.gnbIpPort = n2
-	gnb.teidGenerator = 1
 	gnb.ueIpGenerator = 3
 	gnb.dataInfo.gnbIpPort = n3
 }
@@ -266,43 +263,18 @@ func (gnb *GNBContext) selectAmFByActive() *GNBAmf {
 }
 
 func (gnb *GNBContext) getRanUeId() int64 {
-	gnb.idGeneratorMutex.Lock()
-	defer gnb.idGeneratorMutex.Unlock()
-
-	id := gnb.idUeGenerator
-
-	// increment RanUeId
-	gnb.idUeGenerator++
-
-	return id
+	return gnb.idUeGenerator.Add(1)
 }
 
 func (gnb *GNBContext) GetUeTeid(ue *GNBUe) uint32 {
-	gnb.idGeneratorMutex.Lock()
-	defer gnb.idGeneratorMutex.Unlock()
-
-	id := gnb.teidGenerator
-
-	// store UE in the TEID Pool of GNB.
+	id := gnb.teidGenerator.Add(1)
 	gnb.teidPool.Store(id, ue)
-
-	// increment UE teid.
-	gnb.teidGenerator++
-
 	return id
 }
 
 // for AMFs Pools.
 func (gnb *GNBContext) getRanAmfId() int64 {
-	gnb.idGeneratorMutex.Lock()
-	defer gnb.idGeneratorMutex.Unlock()
-
-	id := gnb.idAmfGenerator
-
-	// increment Amf Id
-	gnb.idAmfGenerator++
-
-	return id
+	return gnb.idAmfGenerator.Add(1)
 }
 
 func (gnb *GNBContext) SetN2(n2 *sctp.SCTPConn) {

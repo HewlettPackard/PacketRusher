@@ -83,7 +83,7 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 			close(scenarioChans[ueSimCfg.UeId])
 			scenarioChans[ueSimCfg.UeId] = nil
 		}
-		scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage, 10)
+		scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage)
 		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
 
 		tools.SimulateSingleUE(ueSimCfg, &wg)
