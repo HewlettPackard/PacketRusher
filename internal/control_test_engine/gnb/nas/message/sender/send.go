@@ -12,38 +12,40 @@ import (
 
 func SendToUe(ue *context.GNBUe, message []byte) {
 	ue.Lock()
-	defer ue.Unlock()
-
 	gnbTx := ue.GetGnbTx()
+	ue.Unlock()
+
 	if gnbTx == nil {
 		log.Warn("[GNB] Cannot send NAS message to UE ", ue.GetRanUeId(), " as channel is closed")
 		return
 	}
 
-	// Use non-blocking send to prevent deadlock during rapid operations
-	select {
-	case gnbTx <- context.UEMessage{IsNas: true, Nas: message}:
-		log.Debug("[GNB] Successfully sent NAS message to UE ", ue.GetRanUeId())
-	default:
-		log.Warn("[GNB] Channel full, dropping NAS message for UE ", ue.GetRanUeId())
-	}
+	// Block until there is space in the channel. Drop only if DeleteGnBUe closes
+	// the channel concurrently (detected via panic recovery).
+	defer func() {
+		if r := recover(); r != nil {
+			log.Warn("[GNB] NAS message dropped for UE ", ue.GetRanUeId(), ": channel closed concurrently")
+		}
+	}()
+	gnbTx <- context.UEMessage{IsNas: true, Nas: message}
 }
 
 func SendMessageToUe(ue *context.GNBUe, message context.UEMessage) {
 	ue.Lock()
-	defer ue.Unlock()
-
 	gnbTx := ue.GetGnbTx()
+	ue.Unlock()
+
 	if gnbTx == nil {
 		log.Warn("[GNB] Cannot send message to UE ", ue.GetRanUeId(), " as channel is closed")
 		return
 	}
 
-	// Use non-blocking send to prevent deadlock during rapid operations
-	select {
-	case gnbTx <- message:
-		log.Debug("[GNB] Successfully sent message to UE ", ue.GetRanUeId())
-	default:
-		log.Warn("[GNB] Channel full, dropping message for UE ", ue.GetRanUeId())
-	}
+	// Block until there is space in the channel. Drop only if DeleteGnBUe closes
+	// the channel concurrently (detected via panic recovery).
+	defer func() {
+		if r := recover(); r != nil {
+			log.Warn("[GNB] Message dropped for UE ", ue.GetRanUeId(), ": channel closed concurrently")
+		}
+	}()
+	gnbTx <- message
 }

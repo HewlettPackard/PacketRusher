@@ -60,16 +60,19 @@ func TestSendToUe_FullChannel(t *testing.T) {
 
 	testMessage := []byte("test NAS message")
 
-	// Send message - should not block due to non-blocking send
-	start := time.Now()
+	// The send must block until a consumer drains the channel.
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		<-gnbTx // drain the pre-filled message
+	}()
+
 	SendToUe(ue, testMessage)
-	duration := time.Since(start)
 
-	// Should complete quickly since it's non-blocking
-	assert.Less(t, duration, 100*time.Millisecond, "Send should not block")
-
-	// Channel should still have only the original message
-	assert.Equal(t, 1, len(gnbTx), "Channel should still be full")
+	// The message must have been delivered (not dropped).
+	assert.Equal(t, 1, len(gnbTx), "Message must be delivered after channel is drained")
+	msg := <-gnbTx
+	assert.True(t, msg.IsNas)
+	assert.Equal(t, testMessage, msg.Nas)
 }
 
 func TestSendMessageToUe_ValidChannel(t *testing.T) {
@@ -123,16 +126,18 @@ func TestSendMessageToUe_FullChannel(t *testing.T) {
 		PrUeId: 12345,
 	}
 
-	// Send message - should not block due to non-blocking send
-	start := time.Now()
+	// The send must block until a consumer drains the channel.
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		<-gnbTx // drain the pre-filled message
+	}()
+
 	SendMessageToUe(ue, testMessage)
-	duration := time.Since(start)
 
-	// Should complete quickly since it's non-blocking
-	assert.Less(t, duration, 100*time.Millisecond, "Send should not block")
-
-	// Channel should still have only the original message
-	assert.Equal(t, 1, len(gnbTx), "Channel should still be full")
+	// The message must have been delivered (not dropped).
+	assert.Equal(t, 1, len(gnbTx), "Message must be delivered after channel is drained")
+	msg := <-gnbTx
+	assert.Equal(t, testMessage.PrUeId, msg.PrUeId)
 }
 
 func TestConcurrentSendOperations(t *testing.T) {
@@ -190,14 +195,10 @@ func TestConcurrentSendOperations(t *testing.T) {
 	// Wait for consumer to finish
 	<-consumerDone
 
-	// With non-blocking sends, we expect most messages to be received
-	// but some may be dropped if the channel was momentarily full
+	// Sends are now blocking: all messages must be delivered to the consumer.
 	expectedMessages := numGoroutines * messagesPerGoroutine * 2 // 2 types of messages per iteration
-	
-	// Assert that at least 80% of messages were received (accounting for potential drops)
-	minExpectedMessages := int(float64(expectedMessages) * 0.8)
-	assert.GreaterOrEqual(t, consumedCount, minExpectedMessages, 
-		"Should receive at least 80%% of sent messages with non-blocking sends")
+	assert.Equal(t, expectedMessages, consumedCount,
+		"All sent messages must be received with blocking sends")
 }
 
 func TestRapidSendOperations(t *testing.T) {
@@ -227,25 +228,9 @@ func TestRapidSendOperations(t *testing.T) {
 	assert.Equal(t, numMessages, len(gnbTx), "Should receive all rapidly sent messages")
 }
 
-func TestChannelCloseDuringOperation(t *testing.T) {
-	// Test behavior when channel is closed during operation
-	ue := createTestUE()
-	gnbTx := make(chan context.UEMessage, 10)
-	ue.SetGnbTx(gnbTx)
-
-	// Start a goroutine that will close the channel after a delay
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		close(gnbTx)
-		ue.SetGnbTx(nil) // Simulate channel cleanup
-	}()
-
-	// Send messages continuously
-	for i := 0; i < 100; i++ {
-		testMessage := []byte("test message")
-		SendToUe(ue, testMessage) // Should not panic even if channel gets closed
-		time.Sleep(1 * time.Millisecond)
-	}
-
-	// Test passes if no panic occurs
-}
+// Note: a test for "channel closed during a concurrent send" is intentionally
+// omitted: concurrently calling close(ch) while another goroutine is blocked on
+// ch <- msg is flagged as a data race by the race detector even though the Go
+// runtime handles it gracefully (the blocked send panics and our recover catches
+// it). The coverage for that code path is exercised by the integration tests
+// run with -race in test/concurrent_fixes_test.go.

@@ -19,13 +19,13 @@ func createTestGNBContext() *context.GNBContext {
 	gnb.NewRanGnbContext("test-gnb", "001", "01", "000001", "1", "000001",
 		netip.MustParseAddrPort("127.0.0.1:9999"),
 		netip.MustParseAddrPort("127.0.0.1:2152"))
-	
+
 	// Create and activate an AMF for UE operations
 	amf := gnb.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:38412"))
 	if amf != nil {
 		amf.SetStateActive()
 	}
-	
+
 	return gnb
 }
 
@@ -39,10 +39,10 @@ func createTestUE(gnb *context.GNBContext, prUeId int64) *context.GNBUe {
 func TestGetUeFromContext_ValidUE(t *testing.T) {
 	gnb := createTestGNBContext()
 	ue := createTestUE(gnb, 12345)
-	
+
 	ranUeId := ue.GetRanUeId()
 	amfUeId := int64(67890)
-	
+
 	// Test with valid UE
 	retrievedUe := getUeFromContext(gnb, ranUeId, amfUeId)
 	assert.NotNil(t, retrievedUe, "Should retrieve valid UE")
@@ -52,11 +52,11 @@ func TestGetUeFromContext_ValidUE(t *testing.T) {
 
 func TestGetUeFromContext_NonExistentUE(t *testing.T) {
 	gnb := createTestGNBContext()
-	
+
 	// Test with non-existent UE ID
 	nonExistentRanUeId := int64(99999)
 	amfUeId := int64(67890)
-	
+
 	retrievedUe := getUeFromContext(gnb, nonExistentRanUeId, amfUeId)
 	assert.Nil(t, retrievedUe, "Should return nil for non-existent UE")
 }
@@ -64,28 +64,30 @@ func TestGetUeFromContext_NonExistentUE(t *testing.T) {
 func TestGetUeFromContext_DownStateUE(t *testing.T) {
 	gnb := createTestGNBContext()
 	ue := createTestUE(gnb, 12345)
-	
+
 	ranUeId := ue.GetRanUeId()
 	amfUeId := int64(67890)
-	
+
 	// Set UE to Down state
 	ue.SetStateDown()
-	
-	// Test with UE in Down state
+
+	// getUeFromContext must still return the UE even in Down state: individual
+	// handlers (e.g. HandlerPduSessionReleaseCommand) must be able to act on
+	// mid-teardown UEs so that the AMF receives a proper response.
 	retrievedUe := getUeFromContext(gnb, ranUeId, amfUeId)
-	assert.Nil(t, retrievedUe, "Should return nil for UE in Down state")
+	assert.NotNil(t, retrievedUe, "Should still return a Down-state UE so handlers can send a response")
 }
 
 func TestGetUeFromContext_DeletedUE(t *testing.T) {
 	gnb := createTestGNBContext()
 	ue := createTestUE(gnb, 12345)
-	
+
 	ranUeId := ue.GetRanUeId()
 	amfUeId := int64(67890)
-	
+
 	// Delete the UE
 	gnb.DeleteGnBUe(ue)
-	
+
 	// Test with deleted UE
 	retrievedUe := getUeFromContext(gnb, ranUeId, amfUeId)
 	assert.Nil(t, retrievedUe, "Should return nil for deleted UE")
@@ -94,9 +96,9 @@ func TestGetUeFromContext_DeletedUE(t *testing.T) {
 func TestHandlerUeContextReleaseCommand_ValidUE(t *testing.T) {
 	gnb := createTestGNBContext()
 	ue := createTestUE(gnb, 12345)
-	
+
 	ranUeId := ue.GetRanUeId()
-	
+
 	// Create UE Context Release Command message
 	message := &ngapType.NGAPPDU{
 		Present: ngapType.NGAPPDUPresentInitiatingMessage,
@@ -128,15 +130,15 @@ func TestHandlerUeContextReleaseCommand_ValidUE(t *testing.T) {
 			},
 		},
 	}
-	
+
 	// Verify UE exists before release
 	retrievedUe, err := gnb.GetGnbUe(ranUeId)
 	require.NoError(t, err, "UE should exist before release")
 	require.NotNil(t, retrievedUe, "UE should not be nil before release")
-	
+
 	// Call handler
 	HandlerUeContextReleaseCommand(gnb, message)
-	
+
 	// Verify UE is deleted after release
 	retrievedUe, err = gnb.GetGnbUe(ranUeId)
 	assert.Error(t, err, "UE should not exist after release")
@@ -145,9 +147,9 @@ func TestHandlerUeContextReleaseCommand_ValidUE(t *testing.T) {
 
 func TestHandlerUeContextReleaseCommand_NonExistentUE(t *testing.T) {
 	gnb := createTestGNBContext()
-	
+
 	nonExistentRanUeId := int64(99999)
-	
+
 	// Create UE Context Release Command message for non-existent UE
 	message := &ngapType.NGAPPDU{
 		Present: ngapType.NGAPPDUPresentInitiatingMessage,
@@ -179,10 +181,10 @@ func TestHandlerUeContextReleaseCommand_NonExistentUE(t *testing.T) {
 			},
 		},
 	}
-	
+
 	// Call handler - should not panic or cause issues
 	HandlerUeContextReleaseCommand(gnb, message)
-	
+
 	// Verify no UE was affected
 	retrievedUe, err := gnb.GetGnbUe(nonExistentRanUeId)
 	assert.Error(t, err, "Non-existent UE should remain non-existent")
@@ -191,7 +193,7 @@ func TestHandlerUeContextReleaseCommand_NonExistentUE(t *testing.T) {
 
 func TestHandlerUeContextReleaseCommand_MissingUEID(t *testing.T) {
 	gnb := createTestGNBContext()
-	
+
 	// Create UE Context Release Command message without UE ID
 	message := &ngapType.NGAPPDU{
 		Present: ngapType.NGAPPDUPresentInitiatingMessage,
@@ -208,33 +210,33 @@ func TestHandlerUeContextReleaseCommand_MissingUEID(t *testing.T) {
 			},
 		},
 	}
-	
+
 	// Call handler - should not panic
 	HandlerUeContextReleaseCommand(gnb, message)
-	
+
 	// No specific assertions needed - the test passes if no panic occurs
 }
 
 func TestNGAPHandlers_ConcurrentProcessing(t *testing.T) {
 	// Test concurrent processing of NGAP messages to ensure thread safety
 	gnb := createTestGNBContext()
-	
+
 	const numUEs = 50
 	ues := make([]*context.GNBUe, numUEs)
-	
+
 	// Create multiple UEs
 	for i := 0; i < numUEs; i++ {
 		ues[i] = createTestUE(gnb, int64(i+1000))
 	}
-	
+
 	// Concurrently process UE context release commands
 	done := make(chan bool, numUEs)
-	
+
 	for i := 0; i < numUEs; i++ {
 		go func(ueIndex int) {
 			ue := ues[ueIndex]
 			ranUeId := ue.GetRanUeId()
-			
+
 			// Create and process UE Context Release Command
 			message := &ngapType.NGAPPDU{
 				Present: ngapType.NGAPPDUPresentInitiatingMessage,
@@ -266,22 +268,22 @@ func TestNGAPHandlers_ConcurrentProcessing(t *testing.T) {
 					},
 				},
 			}
-			
+
 			HandlerUeContextReleaseCommand(gnb, message)
 			done <- true
 		}(i)
 	}
-	
+
 	// Wait for all goroutines to complete
 	for i := 0; i < numUEs; i++ {
 		<-done
 	}
-	
+
 	// Verify all UEs were deleted
 	for i := 0; i < numUEs; i++ {
 		ue := ues[i]
 		ranUeId := ue.GetRanUeId()
-		
+
 		retrievedUe, err := gnb.GetGnbUe(ranUeId)
 		assert.Error(t, err, "UE %d should be deleted", i)
 		assert.Nil(t, retrievedUe, "UE %d should be nil after deletion", i)
