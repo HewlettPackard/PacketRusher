@@ -13,6 +13,10 @@
 #include "pktinfo.h"
 #include "log.h"
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+#include <net/inet_dscp.h>
+#endif
+
 u64 network_and_transport_header_len(struct sk_buff *skb) {
     u64 hdrlen;
     struct iphdr *iph;
@@ -74,7 +78,12 @@ struct rtable *ip4_find_route(struct sk_buff *skb, struct iphdr *iph,
     fl4->flowi4_oif = sk->sk_bound_dev_if;
     fl4->daddr = daddr;
     fl4->saddr = (saddr ? saddr : inet_sk(sk)->inet_saddr);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+    fl4->flowi4_dscp = inet_sk_dscp(inet_sk(sk));
+    fl4->flowi4_scope = ip_sock_rt_scope(sk);
+#else
     fl4->flowi4_tos = RT_TOS(inet_sk(sk)->tos) | sock_flag(sk, SOCK_LOCALROUTE);
+#endif
     fl4->flowi4_proto = sk->sk_protocol;
 
     rt = ip_route_output_key(dev_net(gtp_dev), fl4);
@@ -136,7 +145,12 @@ struct rtable *ip4_find_route_simple(struct sk_buff *skb,
     fl4->flowi4_oif = sk->sk_bound_dev_if;
     fl4->daddr = daddr;
     fl4->saddr = (saddr ? saddr : inet_sk(sk)->inet_saddr);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+    fl4->flowi4_dscp = inet_sk_dscp(inet_sk(sk));
+    fl4->flowi4_scope = ip_sock_rt_scope(sk);
+#else
     fl4->flowi4_tos = RT_TOS(inet_sk(sk)->tos) | sock_flag(sk, SOCK_LOCALROUTE);
+#endif
     fl4->flowi4_proto = sk->sk_protocol;
 
     rt = ip_route_output_key(dev_net(gtp_dev), fl4);
@@ -212,6 +226,7 @@ void gtp5g_fwd_emark_skb_ipv4(struct sk_buff *skb,
     gtp1->flags = GTPV1; /* v1, GTP-non-prime. */
     gtp1->type = GTPV1_MSG_TYPE_EMARK;
     gtp1->tid = epkt_info->teid;
+    gtp1->length = 0;
 
     rt = ip4_find_route_simple(skb, epkt_info->sk, dev, 
         epkt_info->role_addr /* Src Addr */ ,
@@ -234,7 +249,12 @@ void gtp5g_fwd_emark_skb_ipv4(struct sk_buff *skb,
         epkt_info->gtph_port, 
         epkt_info->gtph_port,
         true, 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,17,0)
+        true,
+        0);
+#else
         true);
+#endif
 }
 
 void gtp5g_xmit_skb_ipv4(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
@@ -256,7 +276,12 @@ void gtp5g_xmit_skb_ipv4(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
         pktinfo->gtph_port, 
         pktinfo->gtph_port,
         true, 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,17,0)
+        true,
+        0);
+#else
         true);
+#endif
 }
 
 inline void gtp5g_set_pktinfo_ipv4(struct gtp5g_pktinfo *pktinfo,
@@ -331,7 +356,11 @@ void gtp5g_push_header(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
         gtp1opt->NPDU = 0;
         gtp1opt->next_ehdr_type = next_ehdr_type;
         // Increment the GTP-U payload length by size of optional headers length
-        payload_len += (sizeof(*gtp1opt) + sizeof(*ext_pdu_sess));
+        payload_len += sizeof(*gtp1opt);
+    }
+    // Increment the GTP-U payload length by size of extensions length
+    if (ext_flag) {
+        payload_len += sizeof(*ext_pdu_sess);
     }
 
     /* Bits 8  7  6  5  4  3  2  1

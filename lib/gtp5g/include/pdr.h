@@ -4,13 +4,16 @@
 #include <linux/kernel.h>
 #include <linux/net.h>
 #include <linux/rculist.h>
+#include <linux/rcupdate.h>
 #include <linux/range.h>
 #include <linux/skbuff.h>
 #include <linux/un.h>
 #include <net/ip.h>
+#include <linux/bitops.h>
 
 #include "urr.h"
 #include "trTCM.h"
+#include "framed_route.h"
 
 #define SEID_U32ID_HEX_STR_LEN 24
 
@@ -44,11 +47,15 @@ struct sdf_filter {
 #define SRC_INTF_ACCESS 0
 #define SRC_INTF_CORE 1
 
+/* Note: struct framed_route_node is defined in framed_route.h */
+
 struct pdi {
     u8 srcIntf;
     struct in_addr *ue_addr_ipv4;
     struct local_f_teid *f_teid;
     struct sdf_filter *sdf;
+    u32 framed_route_num;           /* Number of framed routes */
+    struct framed_route_node **framed_route_nodes; /* Hash nodes for each route */
 };
 
 #define QER_ID_SIZE sizeof(u32)
@@ -104,6 +111,8 @@ void pdr_context_delete(struct pdr *);
 struct pdr *find_pdr_by_id(struct gtp5g_dev *, u64, u16);
 struct pdr *pdr_find_by_gtp1u(struct gtp5g_dev *, struct sk_buff *, unsigned int, u32, u8);
 struct pdr *pdr_find_by_ipv4(struct gtp5g_dev *, struct sk_buff *, unsigned int, __be32);
+struct pdr *pdr_find_by_framed_route(struct gtp5g_dev *, struct sk_buff *,
+    unsigned int, __be32, u32);
 int find_qer_id_in_pdr(struct pdr *, u32);
 int find_urr_id_in_pdr(struct pdr *, u32);
 
@@ -122,6 +131,8 @@ void set_seq_enable(int);
 
 bool is_uplink(struct pdr *);
 bool is_downlink(struct pdr *);
+
+/* Note: parse_framed_route_cidr and netmask_to_prefix are in framed_route.h */
 
 static inline bool pdr_addr_is_netlink(struct pdr *pdr)
 {

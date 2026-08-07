@@ -38,7 +38,7 @@ The following is a quick start guide, for more details on the installation, conf
 
 ### Requirements
 - Ubuntu 20.04-24.04
-  - All Linux distibutions with kernel >= 5.4 should work, but untested.
+  - All Linux distributions with kernel from 5.4 up to the 7.0.x series should work, but untested.
   - There might be issues with frankenstein kernel from RHEL/CentOS/Rocky, feel free to open a bug if you encounter one!
 - Windows is not supported (Windows does not support SCTP)
 - Go 1.23.0 or more recent

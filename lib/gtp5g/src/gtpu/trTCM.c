@@ -8,6 +8,8 @@
 #define MTU 1500
 #define MILLISECONDS_PER_SECOND 1000
 #define NANOSECONDS_PER_SECOND 1000000000
+#define AVG_WINDOW 1000 // ms
+#define BURST_DURATION 200 // ms
 
 TrafficPolicer* newTrafficPolicer(u64 kbitRate) {
     TrafficPolicer* p = (TrafficPolicer*)kmalloc(sizeof(TrafficPolicer), GFP_KERNEL);
@@ -20,13 +22,14 @@ TrafficPolicer* newTrafficPolicer(u64 kbitRate) {
     
     p->byteRate = kbitRate * 125 ; // Kbit/s to byte/s (*1000/8)
 
-    // 8ms as burst size
-    p->cbs = p->byteRate * 8 / MILLISECONDS_PER_SECOND; // bytes
+    // CBS size = CIR * AVG_WINDOW
+    p->cbs = p->byteRate * (AVG_WINDOW / MILLISECONDS_PER_SECOND); // bytes
     if (p->cbs < MTU) {
         p->cbs = MTU;
     }
 
-    p->ebs = p->cbs * 2; // bytes, 2 times of cbs size
+    // EBS size = CIR * BURST_DURATION
+    p->ebs = p->byteRate * BURST_DURATION / MILLISECONDS_PER_SECOND; // bytes
 
     // fill buckets at the begining
     p->tc = p->cbs; 
@@ -43,10 +46,11 @@ Color policePacket(TrafficPolicer* p, int pktLen) {
     u64 refillTokens = 0;
     u64 tc, te = 0;
     u64 elapsed = 0;
-    u64 now = ktime_get_ns();
+    u64 now = 0;
 
     spin_lock(&p->lock); 
 
+    now = ktime_get_ns();
     elapsed = now - p->lastUpdate;
     p->lastUpdate = now;
 
@@ -71,17 +75,17 @@ Color policePacket(TrafficPolicer* p, int pktLen) {
         tc = p->cbs; 
     }
    
-    if (p->tc >= pktLen) {
+    if (tc >= pktLen) {
         p->tc = tc - pktLen;
         p->te = te;
-        spin_unlock(&p->lock); 
+        spin_unlock(&p->lock);
         return Green;
     }
 
-    if (p->te >= pktLen) {
+    if (te >= pktLen) {
         p->tc = tc;
         p->te = te - pktLen;
-        spin_unlock(&p->lock); 
+        spin_unlock(&p->lock);
         return Yellow;
     }
 

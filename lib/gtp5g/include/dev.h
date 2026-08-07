@@ -6,10 +6,10 @@
 #include <linux/socket.h>
 
 struct usage_statistic {
-    atomic_t ul_byte;
-    atomic_t dl_byte;
-    atomic_t ul_pkt;
-    atomic_t dl_pkt;
+    atomic64_t ul_byte;
+    atomic64_t dl_byte;
+    atomic64_t ul_pkt;
+    atomic64_t dl_pkt;
 };
 
 struct gtp5g_dev {
@@ -26,6 +26,7 @@ struct gtp5g_dev {
 
     struct hlist_head *i_teid_hash; // Used for GTP-U packet detect
     struct hlist_head *addr_hash;   // Used for IPv4 packet detect
+    struct hlist_head *framed_route_hash; // Used for framed route detect
     
     /* IEs list related to PDR */
     struct hlist_head *related_far_hash; // PDR list waiting the FAR to handle

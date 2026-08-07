@@ -1,3 +1,4 @@
+#include <linux/version.h>
 #include <net/rtnetlink.h>
 #include <net/ip.h>
 #include <net/udp.h>
@@ -10,6 +11,10 @@
 #include "gtp.h"
 #include "log.h"
 #include "proc.h"
+
+#ifndef NETIF_F_LLTX
+#define NETIF_F_LLTX 0
+#endif
 
 const struct nla_policy gtp5g_policy[IFLA_GTP5G_MAX + 1] = {
     [IFLA_GTP5G_FD1]             = { .type = NLA_U32 },
@@ -55,10 +60,20 @@ static int gtp5g_validate(struct nlattr *tb[], struct nlattr *data[],
     return 0;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,15,0)
+static int gtp5g_newlink(struct net_device *dev,
+    struct rtnl_newlink_params *params,
+    struct netlink_ext_ack *extack)
+#else
 static int gtp5g_newlink(struct net *src_net, struct net_device *dev,
     struct nlattr *tb[], struct nlattr *data[],
     struct netlink_ext_ack *extack)
+#endif
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,15,0)
+    struct nlattr **data;
+    data = params->data;
+#endif
     struct gtp5g_dev *gtp;
     struct gtp5g_net *gn;
     struct sock *sk;
@@ -90,8 +105,14 @@ static int gtp5g_newlink(struct net *src_net, struct net_device *dev,
     
     if (!data[IFLA_GTP5G_PDR_HASHSIZE])
         hashsize = 1024;
-    else
+    else {
         hashsize = nla_get_u32(data[IFLA_GTP5G_PDR_HASHSIZE]);
+        if (!hashsize) {
+            if (sk)
+                gtp5g_encap_disable(sk);
+            return -EINVAL;
+        }
+    }
 
     err = dev_hashtable_new(gtp, hashsize);
     if (err < 0) {
