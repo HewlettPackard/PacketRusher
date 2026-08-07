@@ -9,6 +9,7 @@
 #define PKT_TO_APP 1
 #define PKT_FORWARDED 0
 #define PKT_DROPPED -1
+#define PKT_DROPPED_AND_FREED -2
 
 enum gtp5g_msg_type_attrs {
     GTP5G_BUFFER = 1,
@@ -26,6 +27,7 @@ enum gtp5g_buffer_attrs {
     GTP5G_BUFFER_ID,
     GTP5G_BUFFER_SEID,
     GTP5G_BUFFER_ACTION,
+    GTP5G_BUFFER_SEQ_NUMBER,
 
     /* Add newly supported feature ON ABOVE
      * for compatability with older version of

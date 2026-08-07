@@ -1,4 +1,7 @@
 #include <linux/version.h>
+#include <linux/types.h>
+#include <linux/inet.h>
+#include <linux/string.h>
 
 #include "dev.h"
 #include "link.h"
@@ -11,7 +14,8 @@
 #include "hash.h"
 #include "genl.h"
 #include "log.h"
-#include <linux/types.h>
+#include "util.h"
+
 
 int qos_enable = 0; // set QoS disable as default value
 
@@ -56,6 +60,9 @@ static void pdr_context_free(struct rcu_head *head)
             kfree(pdr->qer_ids);
         if (pdr->urr_ids)
             kfree(pdr->urr_ids);
+        
+        /* Clean up framed route nodes (use_rcu=false since we're in RCU callback) */
+        framed_route_cleanup_pdi(pdi, false);
 
         sdf = pdi->sdf;
         if (sdf) {
@@ -86,6 +93,9 @@ static void pdr_context_free(struct rcu_head *head)
 
 void pdr_context_delete(struct pdr *pdr)
 {
+    struct pdi *pdi;
+    int j;
+
     if (!pdr)
         return;
 
@@ -97,6 +107,14 @@ void pdr_context_delete(struct pdr *pdr)
 
     if (!hlist_unhashed(&pdr->hlist_addr))
         hlist_del_rcu(&pdr->hlist_addr);
+
+    /* Remove all framed route nodes from hash table (don't free yet) */
+    pdi = pdr->pdi;
+    if (pdi && pdi->framed_route_nodes) {
+        for (j = 0; j < pdi->framed_route_num; j++) {
+            framed_route_hash_del(pdi->framed_route_nodes[j]);
+        }
+    }
 
     call_rcu(&pdr->rcu_head, pdr_context_free);
 }
@@ -133,8 +151,13 @@ int unix_sock_client_new(struct pdr *pdr)
         return err;
     }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+    err = (*psock)->ops->connect(*psock, (struct sockaddr_unsized *)addr,
+            sizeof(addr->sun_family) + strlen(addr->sun_path), 0);
+#else
     err = (*psock)->ops->connect(*psock, (struct sockaddr *)addr,
             sizeof(addr->sun_family) + strlen(addr->sun_path), 0);
+#endif
     if (err) {
         unix_sock_client_delete(pdr);
         return err;
@@ -173,12 +196,9 @@ struct pdr *find_pdr_by_id(struct gtp5g_dev *gtp, u64 seid, u16 pdr_id)
     return NULL;
 }
 
-static int ipv4_match(__be32 target_addr, __be32 ifa_addr, __be32 ifa_mask)
-{
-    return !((target_addr ^ ifa_addr) & ifa_mask);
-}
+/* Note: ipv4_match is now an inline function in framed_route.h */
 
-static bool ports_match(struct range *match_list, int list_len, __be16 port)
+static bool ports_match(const struct range *match_list, int list_len, __be16 port)
 {
     int i;
 
@@ -192,17 +212,24 @@ static bool ports_match(struct range *match_list, int list_len, __be16 port)
     return false;
 }
 
-static int sdf_filter_match(struct sdf_filter *sdf, struct sk_buff *skb,
-        unsigned int hdrlen, u8 direction)
+/* Note: ip_match_with_framed_routes is now in framed_route.c */
+
+static int sdf_filter_match(struct pdr *pdr, struct sk_buff *skb, 
+    unsigned int hdrlen, u8 direction)
 {
     #define IP_PROTO_RESERVED 0xff
     struct iphdr *iph;
     struct ip_filter_rule *rule;
+    struct sdf_filter *sdf;
+    struct pdi *pdi;
     const __be16 *pptr;
     __be16 _ports[2];
 
-    if (!sdf)
+    if (!pdr || !pdr->pdi || !pdr->pdi->sdf)
         return 1;
+
+    pdi = pdr->pdi;
+    sdf = pdi->sdf;
 
     if (!pskb_may_pull(skb, hdrlen + sizeof(struct iphdr)))
         goto mismatch;
@@ -217,11 +244,24 @@ static int sdf_filter_match(struct sdf_filter *sdf, struct sk_buff *skb,
         if (rule->proto != IP_PROTO_RESERVED && rule->proto != iph->protocol)
             goto mismatch;
 
-        if (!ipv4_match(iph->saddr, rule->src.s_addr, rule->smask.s_addr))
-            goto mismatch;
+        // Check source and destination IP (with framed route support)
+        if (is_uplink(pdr)) { // Uplink
+            // Source: match rule OR framed routes
+            if (!ip_match_with_framed_routes(iph->saddr, rule->src.s_addr, rule->smask.s_addr, pdi))
+                goto mismatch;
 
-        if (!ipv4_match(iph->daddr, rule->dest.s_addr, rule->dmask.s_addr))
-            goto mismatch;
+            // Destination: exactly match rule
+            if (!ipv4_match(iph->daddr, rule->dest.s_addr, rule->dmask.s_addr))
+                goto mismatch;
+        } else { // Downlink
+            // Source: exactly match rule
+            if (!ipv4_match(iph->saddr, rule->src.s_addr, rule->smask.s_addr))
+                goto mismatch;
+
+            // Destination: match rule OR framed routes
+            if (!ip_match_with_framed_routes(iph->daddr, rule->dest.s_addr, rule->dmask.s_addr, pdi))
+                goto mismatch;
+        } 
 
         if (rule->sport_num + rule->dport_num > 0) {
             if (!(pptr = skb_header_pointer(skb, hdrlen + sizeof(struct iphdr), sizeof(_ports), _ports)))
@@ -254,6 +294,45 @@ mismatch:
     return 0;
 }
 
+// This function checks whether an IP matches.
+// It uses the PDR direction to decide matching UE address
+// with the src address or dst address of receving packet.
+// If it is matched, it returns True; otherwise, it returns False.
+bool ip_match(struct iphdr *iph, struct pdr *pdr)
+{
+    struct pdi *pdi = pdr->pdi;
+    struct framed_route_node *node;
+    __be32 target_addr;
+    int j;
+
+    if (!pdi)
+        return false;
+
+    // Determine target address based on PDR direction (uplink or downlink)
+    target_addr = is_uplink(pdr) ? iph->saddr : iph->daddr;
+
+    // First, try to match by ue_addr_ipv4
+    if (pdi->ue_addr_ipv4 && pdi->ue_addr_ipv4->s_addr == target_addr)
+        return true;
+
+    // If ue_addr_ipv4 doesn't match, check if target_addr is in framed route range
+    if (!pdi->framed_route_nodes || pdi->framed_route_num == 0)
+        return false;
+
+    // Check each framed route
+    for (j = 0; j < pdi->framed_route_num; j++) {
+        node = pdi->framed_route_nodes[j];
+        if (!node)
+            continue;
+
+        // Check if target IP is in this network range
+        if (ipv4_match(target_addr, node->network_addr, node->netmask))
+            return true;
+    }
+
+    return false;
+}
+
 struct pdr *pdr_find_by_gtp1u(struct gtp5g_dev *gtp, struct sk_buff *skb,
         unsigned int hdrlen, u32 teid, u8 type)
 {
@@ -261,56 +340,67 @@ struct pdr *pdr_find_by_gtp1u(struct gtp5g_dev *gtp, struct sk_buff *skb,
     struct iphdr *outer_iph;
 #endif
     struct iphdr *iph;
-    __be32 *target_addr = NULL;
     struct hlist_head *head;
     struct pdr *pdr;
     struct pdi *pdi;
 
-    if (!gtp)
+    if (!gtp) {
         return NULL;
+    }
 
-    if (ntohs(skb->protocol) != ETH_P_IP)
+    if (ntohs(skb->protocol) != ETH_P_IP) {
         return NULL;
+    }
 
     if (type == GTPV1_MSG_TYPE_TPDU) {
-        if (!pskb_may_pull(skb, hdrlen + sizeof(struct iphdr)))
+        if (!pskb_may_pull(skb, hdrlen + sizeof(struct iphdr))) {
             return NULL;
-        iph = (struct iphdr *)(skb->data + hdrlen);
-        target_addr = (gtp->role == GTP5G_ROLE_UPF ? &iph->saddr : &iph->daddr);
+        }
     }
 
     head = &gtp->i_teid_hash[u32_hashfn(teid) % gtp->hash_size];
     hlist_for_each_entry_rcu(pdr, head, hlist_i_teid) {
         pdi = pdr->pdi;
-        if (!pdi)
+        if (!pdi) {
             continue;
+        }
 
         // GTP-U packet must check teid
-        if (!(pdi->f_teid && pdi->f_teid->teid == teid))
+        if (!(pdi->f_teid && pdi->f_teid->teid == teid)) {
             continue;
+        }
 
-        if (type != GTPV1_MSG_TYPE_TPDU)
+        if (type != GTPV1_MSG_TYPE_TPDU) {
             return pdr;
+        }
 
-        // check outer IP dest addr to distinguish between N3 and N9 packet whil e act as i-upf
+        // check outer IP dest addr to distinguish between N3 and N9 packet while act as i-upf
 #ifdef MATCH_IP
     #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 0, 0)
-            outer_iph = (struct iphdr *)(skb->head + skb->network_header);
-            if (!(pdi->f_teid && pdi->f_teid->gtpu_addr_ipv4.s_addr == outer_iph->daddr))
-                continue;
+        outer_iph = (struct iphdr *)(skb->head + skb->network_header);
+        if (!(pdi->f_teid && pdi->f_teid->gtpu_addr_ipv4.s_addr == outer_iph->daddr)) {
+            continue;
+        }
     #else
-            outer_iph = (struct iphdr *)(skb->network_header);
-            if (!(pdi->f_teid && pdi->f_teid->gtpu_addr_ipv4.s_addr == outer_iph->daddr))
-                continue;
+        outer_iph = (struct iphdr *)(skb->network_header);
+        if (!(pdi->f_teid && pdi->f_teid->gtpu_addr_ipv4.s_addr == outer_iph->daddr)) {
+            continue;
+        }
     #endif
 #endif
-        if (pdi->ue_addr_ipv4)
-            if (!(pdr->af == AF_INET && target_addr && *target_addr == pdi->ue_addr_ipv4->s_addr))
+        // Check UE IP/framed routes only when either is configured on this PDR.
+        iph = (struct iphdr *)(skb->data + hdrlen); // inner IP header
+        if (pdr->af == AF_INET &&
+            (pdi->ue_addr_ipv4 || (pdi->framed_route_nodes && pdi->framed_route_num > 0))) {
+            // ip_match handles both ue_addr_ipv4 and framed routes.
+            if (!ip_match(iph, pdr)) {
                 continue;
+            }
+        }
 
-        if (pdi->sdf)
-            if (!sdf_filter_match(pdi->sdf, skb, hdrlen, GTP5G_SDF_FILTER_OUT))
-                continue;
+        if (!sdf_filter_match(pdr, skb, hdrlen, GTP5G_SDF_FILTER_OUT)) {
+            continue;
+        }
 
         GTP5G_INF(NULL, "Match PDR ID:%d\n", pdr->id);
 
@@ -331,14 +421,73 @@ struct pdr *pdr_find_by_ipv4(struct gtp5g_dev *gtp, struct sk_buff *skb,
 
     hlist_for_each_entry_rcu(pdr, head, hlist_addr) {
         pdi = pdr->pdi;
+        if (!pdi || !pdi->ue_addr_ipv4)
+            continue;
 
         // TODO: Move the value we check into first level
         if (!(pdr->af == AF_INET && pdi->ue_addr_ipv4->s_addr == addr))
             continue;
 
-        if (pdi->sdf)
-            if (!sdf_filter_match(pdi->sdf, skb, hdrlen, GTP5G_SDF_FILTER_OUT))
-                continue;
+        if (!sdf_filter_match(pdr, skb, hdrlen, GTP5G_SDF_FILTER_OUT)) {
+            continue;
+        }
+
+
+        return pdr;
+    }
+
+    return NULL;
+}
+
+/* Note: parse_framed_route_cidr is now in framed_route.c */
+
+struct pdr *pdr_find_by_framed_route(struct gtp5g_dev *gtp, struct sk_buff *skb,
+        unsigned int hdrlen, __be32 addr, u32 prefix_len)
+{
+    struct hlist_head *head;
+    struct pdr *pdr;
+    struct framed_route_node *node;
+    __be32 netmask;
+    __be32 masked_addr;
+    u32 mask_value;
+
+    if (!gtp || !gtp->framed_route_hash)
+        return NULL;
+
+    if (prefix_len > 32)
+        prefix_len = 32;
+
+    if (prefix_len == 0)
+        mask_value = 0;
+    else
+        mask_value = 0xFFFFFFFF << (32 - prefix_len);
+
+    netmask = htonl(mask_value);
+    masked_addr = addr & netmask;
+
+    head = &gtp->framed_route_hash[ipv4_hashfn(masked_addr) % gtp->hash_size];
+
+    /* Search framed_route_nodes by masked network address.
+     * Only downlink PDRs are in this hash, so no need to check is_uplink().
+     */
+    hlist_for_each_entry_rcu(node, head, hlist) {
+        if (!node->pdr) {
+            continue;
+        }
+
+        pdr = node->pdr;
+
+        if (node->netmask != netmask)
+            continue;
+
+        /* Match by network address */
+        if (node->network_addr != masked_addr) {
+            continue;
+        }
+
+        if (!sdf_filter_match(pdr, skb, hdrlen, GTP5G_SDF_FILTER_OUT)) {
+            continue;
+        }
 
         return pdr;
     }
@@ -363,6 +512,7 @@ void pdr_update_hlist_table(struct pdr *pdr, struct gtp5g_dev *gtp)
     struct pdr *last_ppdr;
     struct pdi *pdi;
     struct local_f_teid *f_teid;
+    int j;
 
     if (!hlist_unhashed(&pdr->hlist_i_teid))
         hlist_del_rcu(&pdr->hlist_i_teid);
@@ -373,6 +523,12 @@ void pdr_update_hlist_table(struct pdr *pdr, struct gtp5g_dev *gtp)
     pdi = pdr->pdi;
     if (!pdi)
         return;
+
+    /* Remove old framed route nodes from hash (Refactoring #4) */
+    if (pdi->framed_route_nodes) {
+        for (j = 0; j < pdi->framed_route_num; j++)
+            framed_route_hash_del(pdi->framed_route_nodes[j]);
+    }
 
     f_teid = pdi->f_teid;
     if (f_teid) {
@@ -401,6 +557,23 @@ void pdr_update_hlist_table(struct pdr *pdr, struct gtp5g_dev *gtp)
             hlist_add_head_rcu(&pdr->hlist_addr, head);
         else
             hlist_add_behind_rcu(&pdr->hlist_addr, &last_ppdr->hlist_addr);
+    }
+
+    /*
+     * Add downlink PDR's framed routes to hash table (Refactoring #4).
+     * Uplink PDRs don't need framed route hash lookup since they use
+     * i_teid_hash for matching.
+     */
+    if (is_downlink(pdr) && pdi->framed_route_nodes && pdi->framed_route_num > 0) {
+        for (j = 0; j < pdi->framed_route_num; j++) {
+            struct framed_route_node *fr_node = pdi->framed_route_nodes[j];
+
+            if (!fr_node)
+                continue;
+
+            fr_node->pdr = pdr;
+            framed_route_hash_add(gtp, fr_node, pdr->precedence);
+        }
     }
 }
 

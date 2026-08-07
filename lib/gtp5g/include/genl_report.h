@@ -62,5 +62,5 @@ int gtp5g_genl_fill_ur(struct sk_buff *, struct usage_report *);
 int gtp5g_genl_fill_usage_report(struct sk_buff *, u32, u32, u32, struct usage_report *);
 int gtp5g_genl_fill_multi_usage_reports(struct sk_buff *, u32, u32, u32, struct usage_report **, u32);
 
-void convert_urr_to_report(struct urr *, struct usage_report *);
+void convert_urr_to_report(struct urr *urr, struct VolumeMeasurement *, struct usage_report *);
 #endif // __GENL_URR_H__

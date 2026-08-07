@@ -34,7 +34,7 @@ int gtp5g_genl_add_far(struct sk_buff *skb, struct genl_info *info)
     int netnsfd;
     u64 seid;
     u32 far_id;
-    int err;
+    int err = 0;
     u8 flag;
     struct gtp5g_emark_pktinfo epkt_info;
 
@@ -52,9 +52,8 @@ int gtp5g_genl_add_far(struct sk_buff *skb, struct genl_info *info)
 
     gtp = gtp5g_find_dev(sock_net(skb->sk), ifindex, netnsfd);
     if (!gtp) {
-        rcu_read_unlock();
-        rtnl_unlock();
-        return -ENODEV;
+        err = -ENODEV;
+        goto out;
     }
 
     if (info->attrs[GTP5G_FAR_SEID]) {
@@ -66,31 +65,26 @@ int gtp5g_genl_add_far(struct sk_buff *skb, struct genl_info *info)
     if (info->attrs[GTP5G_FAR_ID]) {
         far_id = nla_get_u32(info->attrs[GTP5G_FAR_ID]);
     } else {
-        rcu_read_unlock();
-        rtnl_unlock();
-        return -ENODEV;
+        err = -ENODEV;
+        goto out;
     }
 
     far = find_far_by_id(gtp, seid, far_id);
     if (far) {
         if (info->nlhdr->nlmsg_flags & NLM_F_EXCL) {
-            rcu_read_unlock();
-            rtnl_unlock();
-            return -EEXIST;
+            err = -EEXIST;
+            goto out;
         }
         if (!(info->nlhdr->nlmsg_flags & NLM_F_REPLACE)) {
-            rcu_read_unlock();
-            rtnl_unlock();
-            return -EOPNOTSUPP;
+            err = -EOPNOTSUPP;
+            goto out;
         }
 
         flag = 0;
         err = far_fill(far, gtp, info, &flag, &epkt_info);
         if (err) {
             far_context_delete(far);
-            rcu_read_unlock();
-            rtnl_unlock();
-            return err;
+            goto out;
         }
 
         // Send GTP-U End marker to gNB
@@ -100,59 +94,50 @@ int gtp5g_genl_add_far(struct sk_buff *skb, struct genl_info *info)
              * */
             struct sk_buff *skb = __netdev_alloc_skb(gtp->dev, 52, GFP_KERNEL);
             if (!skb) {
-                rcu_read_unlock();
-                rtnl_unlock();
-                return 0;
+                goto out;
             }
             skb_reserve(skb, 2);
             skb->protocol = eth_type_trans(skb, gtp->dev);
             gtp5g_fwd_emark_skb_ipv4(skb, gtp->dev, &epkt_info);
         }
-        rcu_read_unlock();
-        rtnl_unlock();
-        return 0;
+        goto out;
     }
 
     if (info->nlhdr->nlmsg_flags & NLM_F_REPLACE) {
-        rcu_read_unlock();
-        rtnl_unlock();
-        return -ENOENT;
+        err = -ENOENT;
+        goto out;
     }
 
     if (info->nlhdr->nlmsg_flags & NLM_F_APPEND) {
-        rcu_read_unlock();
-        rtnl_unlock();
-        return -EOPNOTSUPP;
+        err = -EOPNOTSUPP;
+        goto out;
     }
 
     // Check only at the creation part
     if (!info->attrs[GTP5G_FAR_APPLY_ACTION]) {
-        rcu_read_unlock();
-        rtnl_unlock();
-        return -EINVAL;
+        err = -EINVAL;
+        goto out;
     }
 
     far = kzalloc(sizeof(*far), GFP_ATOMIC);
     if (!far) {
-        rcu_read_unlock();
-        rtnl_unlock();
-        return -ENOMEM;
+        err = -ENOMEM;
+        goto out;
     }
     far->dev = gtp->dev;
 
     err = far_fill(far, gtp, info, NULL, NULL);
     if (err) {
         far_context_delete(far);
-        rcu_read_unlock();
-        rtnl_unlock();
-        return err;
+        goto out;
     }
 
     far_append(seid, far_id, far, gtp);
  
+out:
     rcu_read_unlock();
     rtnl_unlock();
-    return 0;
+    return err;
 }  
 
 int gtp5g_genl_del_far(struct sk_buff *skb, struct genl_info *info)

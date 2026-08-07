@@ -1,4 +1,3 @@
-
 RHEL8 := $(shell cat /etc/redhat-release 2>/dev/null | grep -c " 8." )
 ifneq (,$(findstring 1, $(RHEL8)))
 	RHEL8FLAG := -DRHEL8
@@ -35,10 +34,10 @@ endif
 
 MY_CFLAGS += -g -DDEBUG $(RHEL8FLAG)
 # MY_CFLAGS += -DMATCH_IP # match IP address(in F-TEID) or not
-EXTRA_CFLAGS += -Wno-misleading-indentation -Wuninitialized
+ccflags-y += -Wno-misleading-indentation -Wuninitialized
 CC += ${MY_CFLAGS}
 
-EXTRA_CFLAGS += -I $(MAKEFILE_DIR)/include
+ccflags-y += -I $(MAKEFILE_DIR)/include
 
 5G_MOD := src/gtp5g.o
 
@@ -69,7 +68,8 @@ EXTRA_CFLAGS += -I $(MAKEFILE_DIR)/include
 			src/pfcp/qer.o \
 			src/pfcp/urr.o \
 			src/pfcp/bar.o \
-			src/pfcp/seid.o
+			src/pfcp/seid.o \
+			src/pfcp/framed_route.o
 
 5G_PROC := src/proc.o
 

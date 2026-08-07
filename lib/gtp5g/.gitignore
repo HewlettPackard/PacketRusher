@@ -1,5 +1,6 @@
 # Compile output
 *.o
+*.o.d
 *.ko
 *.cmd
 *.mod
@@ -13,3 +14,5 @@ tags
 # VSCode
 .vscode
 
+# CLion
+.idea/

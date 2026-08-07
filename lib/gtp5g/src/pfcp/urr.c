@@ -255,36 +255,33 @@ int urr_set_pdr(struct pdr *pdr, struct gtp5g_dev *gtp)
 }
 
 /* 
- `get_usage_report_counter` will return one of the two counters.
+ `get_period_vol_counter` will return one of the two counters.
  
- To avoid sending incorrect reports, there are two counters (bytes, bytes2) for each period.
+ To avoid sending incorrect reports, there are two counters (vol1, vol2) for each period.
  These counters will take turns recording the packet count.
  
  For usage report => counter of the previous period
  For packet counting => counter of the current period 
 */  
-struct VolumeMeasurement *get_usage_report_counter(struct urr *urr, bool previous_counter)
+struct VolumeMeasurement *get_period_vol_counter(struct urr *urr, bool use_vol2)
 {
-    u32 now = ktime_get_real() / NSEC_PER_SEC;
-
-    // If the period is zero, always return the first counter.
-    if (urr->period == 0) {
-       return &urr->bytes; 
+    if (use_vol2) {
+        return &urr->vol2;
     }
+    return &urr->vol1;
+}
 
-    if ((now/urr->period)%2 == 1) {
-        if (previous_counter) {
-            return &urr->bytes;
-        } else{
-            return &urr->bytes2;
-        } 
-    } else {
-        if (previous_counter) {
-            return &urr->bytes2;
-        } else{
-            return &urr->bytes;
-        } 
-    }
+struct VolumeMeasurement *get_and_switch_period_vol_counter(struct urr *urr)
+{
+    unsigned int start;
 
-    return &urr->bytes;
+    // Reader: use retry loop to safely switch which buffer the writer should use
+    // and read from the buffer that writer is NOT currently using
+    do {
+        start = u64_stats_fetch_begin(&urr->period_vol_counter_sync);
+        urr->use_vol2 = !urr->use_vol2; // Combine read and switch in one operation
+    } while (u64_stats_fetch_retry(&urr->period_vol_counter_sync, start));
+
+    // Return the buffer that writer was NOT using when we read vol_to_read
+    return get_period_vol_counter(urr, !urr->use_vol2);
 }

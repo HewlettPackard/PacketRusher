@@ -42,24 +42,29 @@ struct gtp5g_dev *gtp5g_find_dev(struct net *src_net, int ifindex, int netnsfd)
     return gtp;
 }
 
+static inline bool is_pkt_action_valid(int pkt_action) {
+    /* Only count tx stats when packet was actually forwarded; drop/error paths must be excluded */
+    return pkt_action == PKT_FORWARDED;
+}
+
 void update_usage_statistic(struct gtp5g_dev *gtp, u64 rxVol, u64 txVol,
     int pkt_action, uint srcIntf)
 {
     switch (srcIntf) {
     case SRC_INTF_ACCESS: // uplink
-        atomic_add(rxVol, &gtp->rx.ul_byte);
-        atomic_inc(&gtp->rx.ul_pkt);
-        if (pkt_action != PKT_DROPPED) {
-            atomic_add(txVol, &gtp->tx.ul_byte);
-            atomic_inc(&gtp->tx.ul_pkt);
+        atomic64_add(rxVol, &gtp->rx.ul_byte);
+        atomic64_inc(&gtp->rx.ul_pkt);
+        if (is_pkt_action_valid(pkt_action)) {
+            atomic64_add(txVol, &gtp->tx.ul_byte);
+            atomic64_inc(&gtp->tx.ul_pkt);
         }
         break;
     case SRC_INTF_CORE: // downlink
-        atomic_add(rxVol, &gtp->rx.dl_byte);
-        atomic_inc(&gtp->rx.dl_pkt);
-        if (pkt_action != PKT_DROPPED) {
-            atomic_add(txVol, &gtp->tx.dl_byte);
-            atomic_inc(&gtp->tx.dl_pkt);
+        atomic64_add(rxVol, &gtp->rx.dl_byte);
+        atomic64_inc(&gtp->rx.dl_pkt);
+        if (is_pkt_action_valid(pkt_action)) {
+            atomic64_add(txVol, &gtp->tx.dl_byte);
+            atomic64_inc(&gtp->tx.dl_pkt);
         }
         break;
     default:
@@ -101,7 +106,6 @@ static netdev_tx_t gtp5g_dev_xmit(struct sk_buff *skb, struct net_device *dev)
     int ret = 0;
     u64 rxVol = skb->len;
 
-    /* Ensure there is sufficient headroom */
     if (skb_cow_head(skb, dev->needed_headroom)) {
         goto tx_err;
     }
@@ -114,7 +118,13 @@ static netdev_tx_t gtp5g_dev_xmit(struct sk_buff *skb, struct net_device *dev)
     switch (proto) {
     case ETH_P_IP:
         ret = gtp5g_handle_skb_ipv4(skb, dev, &pktinfo);
-        update_usage_statistic(gtp, rxVol, skb->len, ret, SRC_INTF_CORE); // DL
+        /* The skb is only still ours on the PKT_FORWARDED path (it is
+         * transmitted by the caller below). Every other outcome may already
+         * have released it -- e.g. gtp5g_buf_skb_ipv4() frees the skb -- so
+         * skb->len must not be touched there.
+         * */
+        update_usage_statistic(gtp, rxVol,
+            (ret == PKT_FORWARDED) ? skb->len : 0, ret, SRC_INTF_CORE); // DL
         break;
     default:
         ret = -EOPNOTSUPP;
@@ -150,66 +160,72 @@ int dev_hashtable_new(struct gtp5g_dev *gtp, int hsize)
 {
     int i;
 
-    gtp->addr_hash = kmalloc_array(hsize, sizeof(struct hlist_head),
+    gtp->addr_hash = kvmalloc_array(hsize, sizeof(struct hlist_head),
         GFP_KERNEL);
     if (gtp->addr_hash == NULL)
         return -ENOMEM;
 
-    gtp->i_teid_hash = kmalloc_array(hsize, sizeof(struct hlist_head),
+    gtp->i_teid_hash = kvmalloc_array(hsize, sizeof(struct hlist_head),
         GFP_KERNEL);
     if (gtp->i_teid_hash == NULL)
         goto err1;
 
-    gtp->pdr_id_hash = kmalloc_array(hsize, sizeof(struct hlist_head),
+    gtp->framed_route_hash = kvmalloc_array(hsize, sizeof(struct hlist_head),
         GFP_KERNEL);
-    if (gtp->pdr_id_hash == NULL)
+    if (gtp->framed_route_hash == NULL)
         goto err2;
 
-    gtp->far_id_hash = kmalloc_array(hsize, sizeof(struct hlist_head),
+    gtp->pdr_id_hash = kvmalloc_array(hsize, sizeof(struct hlist_head),
         GFP_KERNEL);
-    if (gtp->far_id_hash == NULL)
+    if (gtp->pdr_id_hash == NULL)
         goto err3;
 
-    gtp->qer_id_hash = kmalloc_array(hsize, sizeof(struct hlist_head),
+    gtp->far_id_hash = kvmalloc_array(hsize, sizeof(struct hlist_head),
         GFP_KERNEL);
-    if (gtp->qer_id_hash == NULL)
+    if (gtp->far_id_hash == NULL)
         goto err4;
 
-    gtp->bar_id_hash = kmalloc_array(hsize, sizeof(struct hlist_head),
-            GFP_KERNEL);
-    if (!gtp->bar_id_hash)
+    gtp->qer_id_hash = kvmalloc_array(hsize, sizeof(struct hlist_head),
+        GFP_KERNEL);
+    if (gtp->qer_id_hash == NULL)
         goto err5;
 
-    gtp->urr_id_hash = kmalloc_array(hsize, sizeof(struct hlist_head),
+    gtp->bar_id_hash = kvmalloc_array(hsize, sizeof(struct hlist_head),
             GFP_KERNEL);
-    if (!gtp->urr_id_hash)
+    if (!gtp->bar_id_hash)
         goto err6;
 
-    gtp->related_far_hash = kmalloc_array(hsize, sizeof(struct hlist_head),
-        GFP_KERNEL);
-    if (gtp->related_far_hash == NULL)
+    gtp->urr_id_hash = kvmalloc_array(hsize, sizeof(struct hlist_head),
+            GFP_KERNEL);
+    if (!gtp->urr_id_hash)
         goto err7;
 
-    gtp->related_qer_hash = kmalloc_array(hsize, sizeof(struct hlist_head),
+    gtp->related_far_hash = kvmalloc_array(hsize, sizeof(struct hlist_head),
         GFP_KERNEL);
-    if (gtp->related_qer_hash == NULL)
+    if (gtp->related_far_hash == NULL)
         goto err8;
 
-    gtp->related_bar_hash = kmalloc_array(hsize, sizeof(struct hlist_head),
-            GFP_KERNEL);
-    if (!gtp->related_bar_hash)
+    gtp->related_qer_hash = kvmalloc_array(hsize, sizeof(struct hlist_head),
+        GFP_KERNEL);
+    if (gtp->related_qer_hash == NULL)
         goto err9;
 
-    gtp->related_urr_hash = kmalloc_array(hsize, sizeof(struct hlist_head),
+    gtp->related_bar_hash = kvmalloc_array(hsize, sizeof(struct hlist_head),
+            GFP_KERNEL);
+    if (!gtp->related_bar_hash)
+        goto err10;
+
+    gtp->related_urr_hash = kvmalloc_array(hsize, sizeof(struct hlist_head),
             GFP_KERNEL);
     if (!gtp->related_urr_hash)
-        goto err10;
+        goto err11;
 
     gtp->hash_size = hsize;
 
     for (i = 0; i < hsize; i++) {
         INIT_HLIST_HEAD(&gtp->addr_hash[i]);
         INIT_HLIST_HEAD(&gtp->i_teid_hash[i]);
+        INIT_HLIST_HEAD(&gtp->framed_route_hash[i]);
         INIT_HLIST_HEAD(&gtp->pdr_id_hash[i]);
         INIT_HLIST_HEAD(&gtp->far_id_hash[i]);
         INIT_HLIST_HEAD(&gtp->qer_id_hash[i]);
@@ -222,26 +238,28 @@ int dev_hashtable_new(struct gtp5g_dev *gtp, int hsize)
     }
 
     return 0;
+err11:
+    kvfree(gtp->related_bar_hash);
 err10:
-    kfree(gtp->related_bar_hash);
+    kvfree(gtp->related_qer_hash);
 err9:
-    kfree(gtp->related_qer_hash);
+    kvfree(gtp->related_far_hash);
 err8:
-    kfree(gtp->related_far_hash);
+    kvfree(gtp->urr_id_hash);
 err7:
-    kfree(gtp->urr_id_hash);
+    kvfree(gtp->bar_id_hash);
 err6:
-    kfree(gtp->bar_id_hash);
+    kvfree(gtp->qer_id_hash);
 err5:
-    kfree(gtp->qer_id_hash);
+    kvfree(gtp->far_id_hash);
 err4:
-    kfree(gtp->far_id_hash);
+    kvfree(gtp->pdr_id_hash);
 err3:
-    kfree(gtp->pdr_id_hash);
+    kvfree(gtp->framed_route_hash);
 err2:
-    kfree(gtp->i_teid_hash);
+    kvfree(gtp->i_teid_hash);
 err1:
-    kfree(gtp->addr_hash);
+    kvfree(gtp->addr_hash);
     return -ENOMEM;
 }
 
@@ -268,15 +286,16 @@ void gtp5g_hashtable_free(struct gtp5g_dev *gtp)
     }
 
     synchronize_rcu();
-    kfree(gtp->addr_hash);
-    kfree(gtp->i_teid_hash);
-    kfree(gtp->pdr_id_hash);
-    kfree(gtp->far_id_hash);
-    kfree(gtp->qer_id_hash);
-    kfree(gtp->bar_id_hash);
-    kfree(gtp->urr_id_hash);
-    kfree(gtp->related_far_hash);
-    kfree(gtp->related_qer_hash);
-    kfree(gtp->related_bar_hash);
-    kfree(gtp->related_urr_hash);
+    kvfree(gtp->addr_hash);
+    kvfree(gtp->i_teid_hash);
+    kvfree(gtp->framed_route_hash);
+    kvfree(gtp->pdr_id_hash);
+    kvfree(gtp->far_id_hash);
+    kvfree(gtp->qer_id_hash);
+    kvfree(gtp->bar_id_hash);
+    kvfree(gtp->urr_id_hash);
+    kvfree(gtp->related_far_hash);
+    kvfree(gtp->related_qer_hash);
+    kvfree(gtp->related_bar_hash);
+    kvfree(gtp->related_urr_hash);
 }
