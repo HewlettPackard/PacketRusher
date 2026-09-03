@@ -419,6 +419,19 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 		sender.SendMessageToUe(ue, msg)
 	}
 
+	// Every requested session was skipped, so there is nothing to acknowledge. Building a
+	// Setup Response from an empty list yields a SEQUENCE with no items, which the encoder
+	// rejects on its lower bound -- and that was fatal, taking the whole simulator and
+	// every other UE on this gNB with it. TS 38.413 wants these reported in a PDU Session
+	// Resource Failed To Setup list, but that IE is an empty stub here: it references a
+	// transfer builder that was never written. Until that exists, staying up and saying so
+	// beats sending a malformed message or dying.
+	if len(configuredPduSessions) == 0 {
+		log.Error("[GNB][NGAP] No PDU session could be set up for RAN UE ", ue.GetRanUeId(),
+			"; sending no Setup Response (failed-to-setup reporting is unimplemented)")
+		return
+	}
+
 	// send PDU Session Resource Setup Response.
 	trigger.SendPduSessionResourceSetupResponse(configuredPduSessions, ue, gnb)
 }

@@ -23,7 +23,10 @@ func SendPduSessionResourceSetupResponse(pduSessions []*context.GnbPDUSession, u
 	// send PDU Session Resource Setup Response.
 	ngapMsg, err := pdu_session_management.PDUSessionResourceSetupResponse(pduSessions, ue, gnb)
 	if err != nil {
-		log.Fatal("[GNB][NGAP] Error sending PDU Session Resource Setup Response: ", err)
+		// A single UE's message must not end the process: one gNB carries hundreds of
+		// others, and killing it discards every working session along with the bad one.
+		log.Error("[GNB][NGAP] Error building PDU Session Resource Setup Response: ", err)
+		return
 	}
 
 	ue.SetStateReady()
@@ -32,7 +35,7 @@ func SendPduSessionResourceSetupResponse(pduSessions []*context.GnbPDUSession, u
 	conn := ue.GetSCTP()
 	err = sender.SendToAmF(ngapMsg, conn)
 	if err != nil {
-		log.Fatal("[GNB][AMF] Error sending PDU Session Resource Setup Response.: ", err)
+		log.Error("[GNB][AMF] Error sending PDU Session Resource Setup Response: ", err)
 	}
 }
 
