@@ -7,6 +7,7 @@ package context
 import (
 	"fmt"
 	"net/netip"
+	"sync"
 
 	"github.com/free5gc/aper"
 	"github.com/ishidawataru/sctp"
@@ -18,6 +19,10 @@ const Active = 0x01
 const Overload = 0x02
 
 type GNBAmf struct {
+	// mu guards state, tnla, name, relativeAmfCapacity and the PLMN and slice lists: NG
+	// Setup rewrites them on every re-established association, and AMF Configuration
+	// Update rewrites the TNLA fields, while UE and dispatch goroutines read them.
+	mu                  sync.RWMutex
 	amfIpPort           netip.AddrPort // AMF ip and port
 	amfId               int64          // AMF id
 	tnla                TNLAssociation // AMF sctp associations
@@ -56,23 +61,43 @@ type PlmnSupported struct {
 }
 
 func (amf *GNBAmf) GetSliceSupport(index int) (string, string) {
+	amf.mu.RLock()
+	defer amf.mu.RUnlock()
 
 	mov := amf.slices
-	for i := 0; i < index; i++ {
+	for i := 0; i < index && mov != nil; i++ {
 		mov = mov.next
+	}
+	if mov == nil {
+		return "", ""
 	}
 
 	return mov.sst, mov.sd
 }
 
 func (amf *GNBAmf) GetPlmnSupport(index int) (string, string) {
+	amf.mu.RLock()
+	defer amf.mu.RUnlock()
 
 	mov := amf.plmns
-	for i := 0; i < index; i++ {
+	for i := 0; i < index && mov != nil; i++ {
 		mov = mov.next
+	}
+	if mov == nil {
+		return "", ""
 	}
 
 	return mov.mcc, mov.mnc
+}
+
+// ResetSupported empties the PLMN and slice lists before an NG Setup Response refills
+// them, so that each re-established association does not append the same entries again.
+func (amf *GNBAmf) ResetSupported() {
+	amf.mu.Lock()
+	defer amf.mu.Unlock()
+
+	amf.plmns, amf.lenPlmn = nil, 0
+	amf.slices, amf.lenSlice = nil, 0
 }
 
 func convertMccMnc(plmn string) (mcc string, mnc string) {
@@ -88,6 +113,8 @@ func convertMccMnc(plmn string) (mcc string, mnc string) {
 }
 
 func (amf *GNBAmf) AddedPlmn(plmn string) {
+	amf.mu.Lock()
+	defer amf.mu.Unlock()
 
 	if amf.lenPlmn == 0 {
 		newElem := &PlmnSupported{}
@@ -122,6 +149,8 @@ func (amf *GNBAmf) AddedPlmn(plmn string) {
 }
 
 func (amf *GNBAmf) AddedSlice(sst string, sd string) {
+	amf.mu.Lock()
+	defer amf.mu.Unlock()
 
 	if amf.lenSlice == 0 {
 		newElem := &SliceSupported{}
@@ -156,6 +185,8 @@ func (amf *GNBAmf) AddedSlice(sst string, sd string) {
 }
 
 func (amf *GNBAmf) GetTNLA() TNLAssociation {
+	amf.mu.RLock()
+	defer amf.mu.RUnlock()
 	return amf.tnla
 }
 func (tnla *TNLAssociation) GetSCTP() *sctp.SCTPConn {
@@ -175,35 +206,71 @@ func (tnla *TNLAssociation) Release() error {
 }
 
 func (amf *GNBAmf) SetStateInactive() {
+	amf.mu.Lock()
 	amf.state = Inactive
+	amf.mu.Unlock()
 }
 
 func (amf *GNBAmf) SetStateActive() {
+	amf.mu.Lock()
 	amf.state = Active
+	amf.mu.Unlock()
 }
 
 func (amf *GNBAmf) SetStateOverload() {
+	amf.mu.Lock()
 	amf.state = Overload
+	amf.mu.Unlock()
 }
 
 func (amf *GNBAmf) GetState() int {
+	amf.mu.RLock()
+	defer amf.mu.RUnlock()
 	return amf.state
 }
 
 func (amf *GNBAmf) GetSCTPConn() *sctp.SCTPConn {
+	amf.mu.RLock()
+	defer amf.mu.RUnlock()
 	return amf.tnla.sctpConn
 }
 
 func (amf *GNBAmf) SetSCTPConn(conn *sctp.SCTPConn) {
+	amf.mu.Lock()
 	amf.tnla.sctpConn = conn
+	amf.mu.Unlock()
 }
 
 func (amf *GNBAmf) SetTNLAWeight(weight int64) {
+	amf.mu.Lock()
 	amf.tnla.tnlaWeightFactor = weight
+	amf.mu.Unlock()
+}
+
+func (amf *GNBAmf) GetTNLAWeight() int64 {
+	amf.mu.RLock()
+	defer amf.mu.RUnlock()
+	return amf.tnla.tnlaWeightFactor
 }
 
 func (amf *GNBAmf) SetTNLAUsage(usage aper.Enumerated) {
+	amf.mu.Lock()
 	amf.tnla.usage = usage
+	amf.mu.Unlock()
+}
+
+// CloseIfNotActive closes conn if it is still this AMF's association and NG Setup has
+// not completed on it, deciding under the same lock SetStateActive takes, so that a
+// setup completing at the deadline is not closed after the fact.
+func (amf *GNBAmf) CloseIfNotActive(conn *sctp.SCTPConn) bool {
+	amf.mu.Lock()
+	defer amf.mu.Unlock()
+
+	if amf.state == Active || amf.tnla.sctpConn != conn {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }
 
 func (amf *GNBAmf) SetTNLAStreams(streams uint16) {
@@ -231,6 +298,8 @@ func (amf *GNBAmf) setAmfId(id int64) {
 }
 
 func (amf *GNBAmf) GetAmfName() string {
+	amf.mu.RLock()
+	defer amf.mu.RUnlock()
 	return amf.name
 }
 
@@ -259,30 +328,44 @@ func (amf *GNBAmf) SetPointer(pointer aper.BitString) {
 }
 
 func (amf *GNBAmf) SetAmfName(name string) {
+	amf.mu.Lock()
 	amf.name = name
+	amf.mu.Unlock()
 }
 
 func (amf *GNBAmf) GetAmfCapacity() int64 {
+	amf.mu.RLock()
+	defer amf.mu.RUnlock()
 	return amf.relativeAmfCapacity
 }
 
 func (amf *GNBAmf) SetAmfCapacity(capacity int64) {
+	amf.mu.Lock()
 	amf.relativeAmfCapacity = capacity
+	amf.mu.Unlock()
 }
 
 func (amf *GNBAmf) GetLenPlmns() int {
+	amf.mu.RLock()
+	defer amf.mu.RUnlock()
 	return amf.lenPlmn
 }
 
 func (amf *GNBAmf) GetLenSlice() int {
+	amf.mu.RLock()
+	defer amf.mu.RUnlock()
 	return amf.lenSlice
 }
 
 func (amf *GNBAmf) SetLenPlmns(value int) {
+	amf.mu.Lock()
+	defer amf.mu.Unlock()
 	amf.lenPlmn = value
 }
 
 func (amf *GNBAmf) SetLenSlice(value int) {
+	amf.mu.Lock()
+	defer amf.mu.Unlock()
 	amf.lenSlice = value
 }
 
