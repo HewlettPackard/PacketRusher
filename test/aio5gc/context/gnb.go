@@ -59,6 +59,10 @@ func (gnb *GNBContext) SetSCTPConn(conn *sctp.SCTPConn) {
 	gnb.conn = conn
 }
 
+func (gnb *GNBContext) GetSCTPConn() *sctp.SCTPConn {
+	return gnb.conn
+}
+
 func (gnb *GNBContext) SendMsg(packet []byte) {
 	info := &sctp.SndRcvInfo{
 		Stream: uint16(0),

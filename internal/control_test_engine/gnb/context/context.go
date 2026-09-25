@@ -56,7 +56,8 @@ type ControlInfo struct {
 	gnbId          string
 	gnbIpPort      netip.AddrPort
 	inboundChannel chan UEMessage
-	n2             *sctp.SCTPConn
+	n2             atomic.Pointer[sctp.SCTPConn]
+	terminated     atomic.Bool
 }
 
 type PagedUE struct {
@@ -99,13 +100,8 @@ func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUe
 	// set state to UE.
 	ue.SetStateInitialized()
 
-	// store UE in the UE Pool of GNB.
-	gnb.uePool.Store(ranId, ue)
-	if prUeId != 0 {
-		gnb.prUePool.Store(prUeId, ue)
-	}
-
-	// select AMF with Capacity is more than 0.
+	// select AMF with Capacity is more than 0. Done before the UE is stored, so that a UE
+	// arriving while no association is up is not left behind in the pools.
 	amf := gnb.selectAmFByActive()
 	if amf == nil {
 		return nil, errors.New("no AMF available for this UE")
@@ -114,6 +110,12 @@ func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUe
 	// set amfId and SCTP association for UE.
 	ue.SetAmfId(amf.GetAmfId())
 	ue.SetSCTP(amf.GetSCTPConn())
+
+	// store UE in the UE Pool of GNB.
+	gnb.uePool.Store(ranId, ue)
+	if prUeId != 0 {
+		gnb.prUePool.Store(prUeId, ue)
+	}
 
 	// return UE Context.
 	return ue, nil
@@ -251,6 +253,13 @@ func (gnb *GNBContext) DeleteGnBAmf(amfId int64) {
 	gnb.amfPool.Delete(amfId)
 }
 
+// HasGnbAmf reports whether the AMF is still one this gNB serves through, as opposed to
+// one InitGnb abandoned or an AMF Configuration Update removed.
+func (gnb *GNBContext) HasGnbAmf(amfId int64) bool {
+	_, ok := gnb.amfPool.Load(amfId)
+	return ok
+}
+
 func (gnb *GNBContext) selectAmFByCapacity() *GNBAmf {
 	var amfSelect *GNBAmf
 	var maxWeightFactor int64 = -1
@@ -270,8 +279,8 @@ func (gnb *GNBContext) selectAmFByActive() *GNBAmf {
 	var amfSelect *GNBAmf
 	var maxWeightFactor int64 = -1
 	for amf := range gnb.IterGnbAmf() {
-		if amf.GetState() == Active && maxWeightFactor < amf.tnla.tnlaWeightFactor {
-			maxWeightFactor = amf.tnla.tnlaWeightFactor
+		if weight := amf.GetTNLAWeight(); amf.GetState() == Active && maxWeightFactor < weight {
+			maxWeightFactor = weight
 			amfSelect = amf
 		}
 	}
@@ -294,11 +303,32 @@ func (gnb *GNBContext) getRanAmfId() int64 {
 }
 
 func (gnb *GNBContext) SetN2(n2 *sctp.SCTPConn) {
-	gnb.controlInfo.n2 = n2
+	gnb.controlInfo.n2.Store(n2)
 }
 
 func (gnb *GNBContext) GetN2() *sctp.SCTPConn {
-	return gnb.controlInfo.n2
+	return gnb.controlInfo.n2.Load()
+}
+
+// IsTerminated reports whether Terminate has been called, so that the loss of an association
+// the gNB closed itself is not mistaken for one to re-establish.
+func (gnb *GNBContext) IsTerminated() bool {
+	return gnb.controlInfo.terminated.Load()
+}
+
+// ReleaseUesOfAmf deletes the context of every UE served through the given AMF and returns how
+// many there were. A UE-associated logical NG-connection does not outlive its TNL association,
+// so once the association is gone these contexts refer to nothing on the AMF side.
+func (gnb *GNBContext) ReleaseUesOfAmf(amfId int64) int {
+	released := 0
+	gnb.uePool.Range(func(_, value any) bool {
+		if ue, ok := value.(*GNBUe); ok && ue.GetAmfId() == amfId {
+			gnb.DeleteGnBUe(ue)
+			released++
+		}
+		return true
+	})
+	return released
 }
 
 func (gnb *GNBContext) setGnbId(id string) {
@@ -434,6 +464,7 @@ func (gnb *GNBContext) GetMccAndMncInOctets() []byte {
 }
 
 func (gnb *GNBContext) Terminate() {
+	gnb.controlInfo.terminated.Store(true)
 
 	// close all connections
 	close(gnb.GetInboundChannel())
