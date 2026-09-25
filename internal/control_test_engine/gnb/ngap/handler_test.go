@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"testing"
 
+	"github.com/free5gc/aper"
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -288,4 +289,141 @@ func TestNGAPHandlers_ConcurrentProcessing(t *testing.T) {
 		assert.Error(t, err, "UE %d should be deleted", i)
 		assert.Nil(t, retrievedUe, "UE %d should be nil after deletion", i)
 	}
+}
+
+// pduSessionResourceSetupRequest builds a request for one PDU session on the given slice,
+// carrying the transfer IEs the handler reads (UL tunnel, QoS flow, session type).
+func pduSessionResourceSetupRequest(t *testing.T, ue *context.GNBUe, sst []byte, sd []byte) *ngapType.NGAPPDU {
+	t.Helper()
+
+	transfer := ngapType.PDUSessionResourceSetupRequestTransfer{}
+	transfer.ProtocolIEs.List = []ngapType.PDUSessionResourceSetupRequestTransferIEs{
+		{
+			Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDULNGUUPTNLInformation},
+			Value: ngapType.PDUSessionResourceSetupRequestTransferIEsValue{
+				Present: ngapType.PDUSessionResourceSetupRequestTransferIEsPresentULNGUUPTNLInformation,
+				ULNGUUPTNLInformation: &ngapType.UPTransportLayerInformation{
+					Present: ngapType.UPTransportLayerInformationPresentGTPTunnel,
+					GTPTunnel: &ngapType.GTPTunnel{
+						TransportLayerAddress: ngapType.TransportLayerAddress{
+							Value: aper.BitString{Bytes: []byte{10, 0, 0, 1}, BitLength: 32},
+						},
+						GTPTEID: ngapType.GTPTEID{Value: []byte{0, 0, 0, 1}},
+					},
+				},
+			},
+		},
+		{
+			Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDPDUSessionType},
+			Value: ngapType.PDUSessionResourceSetupRequestTransferIEsValue{
+				Present:        ngapType.PDUSessionResourceSetupRequestTransferIEsPresentPDUSessionType,
+				PDUSessionType: &ngapType.PDUSessionType{Value: ngapType.PDUSessionTypePresentIpv4},
+			},
+		},
+		{
+			Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDQosFlowSetupRequestList},
+			Value: ngapType.PDUSessionResourceSetupRequestTransferIEsValue{
+				Present: ngapType.PDUSessionResourceSetupRequestTransferIEsPresentQosFlowSetupRequestList,
+				QosFlowSetupRequestList: &ngapType.QosFlowSetupRequestList{
+					List: []ngapType.QosFlowSetupRequestItem{
+						{
+							QosFlowIdentifier: ngapType.QosFlowIdentifier{Value: 1},
+							QosFlowLevelQosParameters: ngapType.QosFlowLevelQosParameters{
+								QosCharacteristics: ngapType.QosCharacteristics{
+									Present:       ngapType.QosCharacteristicsPresentNonDynamic5QI,
+									NonDynamic5QI: &ngapType.NonDynamic5QIDescriptor{FiveQI: ngapType.FiveQI{Value: 9}},
+								},
+								AllocationAndRetentionPriority: ngapType.AllocationAndRetentionPriority{
+									PriorityLevelARP: ngapType.PriorityLevelARP{Value: 1},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	encodedTransfer, err := aper.MarshalWithParams(transfer, "valueExt")
+	require.NoError(t, err)
+
+	return &ngapType.NGAPPDU{
+		Present: ngapType.NGAPPDUPresentInitiatingMessage,
+		InitiatingMessage: &ngapType.InitiatingMessage{
+			Value: ngapType.InitiatingMessageValue{
+				Present: ngapType.InitiatingMessagePresentPDUSessionResourceSetupRequest,
+				PDUSessionResourceSetupRequest: &ngapType.PDUSessionResourceSetupRequest{
+					ProtocolIEs: ngapType.ProtocolIEContainerPDUSessionResourceSetupRequestIEs{
+						List: []ngapType.PDUSessionResourceSetupRequestIEs{
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDAMFUENGAPID},
+								Value: ngapType.PDUSessionResourceSetupRequestIEsValue{
+									Present:     ngapType.PDUSessionResourceSetupRequestIEsPresentAMFUENGAPID,
+									AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890},
+								},
+							},
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDRANUENGAPID},
+								Value: ngapType.PDUSessionResourceSetupRequestIEsValue{
+									Present:     ngapType.PDUSessionResourceSetupRequestIEsPresentRANUENGAPID,
+									RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
+								},
+							},
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDPDUSessionResourceSetupListSUReq},
+								Value: ngapType.PDUSessionResourceSetupRequestIEsValue{
+									Present: ngapType.PDUSessionResourceSetupRequestIEsPresentPDUSessionResourceSetupListSUReq,
+									PDUSessionResourceSetupListSUReq: &ngapType.PDUSessionResourceSetupListSUReq{
+										List: []ngapType.PDUSessionResourceSetupItemSUReq{
+											{
+												PDUSessionID: ngapType.PDUSessionID{Value: 1},
+												SNSSAI: ngapType.SNSSAI{
+													SST: ngapType.SST{Value: sst},
+													SD:  &ngapType.SD{Value: sd},
+												},
+												PDUSessionResourceSetupRequestTransfer: encodedTransfer,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// When every requested session is skipped -- here because the slice is not one the UE
+// selected -- the Setup Response would be built from an empty list, which the encoder
+// rejects. That used to be fatal to the whole simulator. The handler must return without
+// sending anything and without exiting.
+func TestHandlerPduSessionResourceSetupRequest_NoSessionSetUp(t *testing.T) {
+	gnb := createTestGNBContext()
+	ue := createTestUE(gnb, 12345)
+	ue.CreateUeContext("not informed", "", []string{"01"}, []string{"010203"}, nil)
+
+	HandlerPduSessionResourceSetupRequest(gnb, pduSessionResourceSetupRequest(t, ue, []byte{0x02}, []byte{0x01, 0x02, 0x03}))
+
+	pduSession, err := ue.GetPduSession(1)
+	require.NoError(t, err)
+	assert.Nil(t, pduSession, "no PDU session should exist for an unselected slice")
+	assert.NotEqual(t, context.Ready, ue.GetState(), "no Setup Response should have been built")
+	assert.Empty(t, ue.GetGnbTx(), "nothing should have been sent to the UE")
+}
+
+// The guard above must not stop a legitimate Setup Response: with one session set up,
+// the response is built (the UE becomes Ready) and the session is handed to the UE.
+func TestHandlerPduSessionResourceSetupRequest_SessionSetUp(t *testing.T) {
+	gnb := createTestGNBContext()
+	ue := createTestUE(gnb, 12345)
+	ue.CreateUeContext("not informed", "", []string{"01"}, []string{"010203"}, nil)
+
+	HandlerPduSessionResourceSetupRequest(gnb, pduSessionResourceSetupRequest(t, ue, []byte{0x01}, []byte{0x01, 0x02, 0x03}))
+
+	pduSession, err := ue.GetPduSession(1)
+	require.NoError(t, err)
+	require.NotNil(t, pduSession, "the PDU session should have been created")
+	assert.Equal(t, context.Ready, ue.GetState(), "the Setup Response should have been built")
+	assert.Len(t, ue.GetGnbTx(), 1, "the session should have been handed to the UE")
 }
