@@ -497,7 +497,9 @@ func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, messag
 	err := false
 	var plmn string
 
-	// check information about AMF and add in AMF context.
+	// check information about AMF and add in AMF context. A re-established association
+	// runs NG Setup again, so start from empty lists rather than appending.
+	amf.ResetSupported()
 	valueMessage := message.SuccessfulOutcome.Value.NGSetupResponse
 
 	for _, ies := range valueMessage.ProtocolIEs.List {

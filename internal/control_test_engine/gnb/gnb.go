@@ -87,6 +87,10 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 				select {
 				case <-timeoutChan:
 					log.Warn("[GNB] NG Setup timeout after ", ngSetupTimeout, " (attempt ", retry+1, "/", maxRetries, "), AMF state: ", amf.GetState())
+					// Abandon this AMF context before closing its association, so its
+					// listener does not re-establish it if a late NG Setup Response
+					// arrives; the next attempt creates a new one.
+					gnb.DeleteGnBAmf(amf.GetAmfId())
 					// Close SCTP connection
 					if conn := amf.GetSCTPConn(); conn != nil {
 						log.Info("[GNB] Closing SCTP connection...")

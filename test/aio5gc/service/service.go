@@ -8,7 +8,6 @@ import (
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg/ngap"
 	"net/netip"
-	"os"
 
 	log "github.com/sirupsen/logrus"
 
@@ -51,8 +50,9 @@ func listenAndServe(conn *sctp.SCTPConn, bufsize int, gnb *context.GNBContext, f
 	for {
 		_, err := conn.Read(buf)
 		if err != nil {
+			// The association is gone; the gNB may dial a new one, which Accept serves.
 			log.Printf("[5GC] Read failed: %v", err)
-			os.Exit(1)
+			return err
 		}
 		ngap.Dispatch(buf, gnb, fgc)
 	}
