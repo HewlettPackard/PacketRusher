@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
+	"strings"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
@@ -16,7 +17,7 @@ import (
 )
 
 // TS 24.501 8.2.26
-func getSecurityModeComplete(nasMessageContainer []uint8) (nasPdu []byte) {
+func getSecurityModeComplete(nasMessageContainer []uint8, imeisv string) (nasPdu []byte) {
 
 	m := nas.NewMessage()
 	m.GmmMessage = nas.NewGmmMessage()
@@ -33,9 +34,7 @@ func getSecurityModeComplete(nasMessageContainer []uint8) (nasPdu []byte) {
 	securityModeComplete.IMEISV.SetLen(9)
 	securityModeComplete.SetOddEvenIdic(0)
 	securityModeComplete.SetTypeOfIdentity(nasMessage.MobileIdentity5GSTypeImeisv)
-	securityModeComplete.SetIdentityDigit1(1)
-	securityModeComplete.SetIdentityDigitP_1(1)
-	securityModeComplete.SetIdentityDigitP(1)
+	setImeisvDigits(securityModeComplete.IMEISV, imeisv)
 
 	if nasMessageContainer != nil {
 		securityModeComplete.NASMessageContainer = nasType.NewNASMessageContainer(nasMessage.SecurityModeCompleteNASMessageContainerType)
@@ -75,10 +74,43 @@ func SecurityModeComplete(ue *context.UEContext, rinmr uint8) ([]byte, error) {
 		registrationRequest = GetRegistrationRequest(nasMessage.RegistrationType5GSInitialRegistration, nil, nil, true, ue)
 	}
 
-	pdu := getSecurityModeComplete(registrationRequest)
+	pdu := getSecurityModeComplete(registrationRequest, imeisvFromMsin(ue.GetMsin()))
 	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, pdu, nas.SecurityHeaderTypeIntegrityProtectedAndCipheredWithNew5gNasSecurityContext, true, true)
 	if err != nil {
 		return nil, fmt.Errorf("Error encoding %s IMSI UE  NAS Security Mode Complete message", ue.UeSecurity.Supi)
 	}
 	return pdu, nil
+}
+
+// imeisvFromMsin derives a 16-digit IMEISV from the UE's MSIN, so that every simulated UE
+// reports a distinct PEI: the MSIN, left-padded with zeros, fills the 14 TAC and SNR digits,
+// followed by software version 01.
+func imeisvFromMsin(msin string) string {
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, msin)
+	if len(digits) > 14 {
+		digits = digits[len(digits)-14:]
+	}
+	return strings.Repeat("0", 14-len(digits)) + digits + "01"
+}
+
+// setImeisvDigits BCD-encodes a 16-digit IMEISV after the octet carrying digit 1, the odd/even
+// indicator and the type of identity. digits must be exactly 16 decimal digits, as
+// imeisvFromMsin returns. TS 24.501 9.11.3.4: bits 5 to 8 of the last octet are
+// filled with an end mark coded as "1111". Without it the digit count is 17 and a strict
+// decoder rejects the PEI.
+func setImeisvDigits(imeisv *nasType.IMEISV, digits string) {
+	imeisv.SetIdentityDigit1(digits[0] - '0')
+	for i := 1; i < 9; i++ {
+		low := digits[2*i-1] - '0'
+		high := uint8(0x0f)
+		if 2*i < len(digits) {
+			high = digits[2*i] - '0'
+		}
+		imeisv.Octet[i] = high<<4 | low
+	}
 }
