@@ -294,6 +294,10 @@ func TestNGAPHandlers_ConcurrentProcessing(t *testing.T) {
 // pduSessionResourceSetupRequest builds a request for one PDU session on the given slice,
 // carrying the transfer IEs the handler reads (UL tunnel, QoS flow, session type).
 func pduSessionResourceSetupRequest(t *testing.T, ue *context.GNBUe, sst []byte, sd []byte) *ngapType.NGAPPDU {
+	return pduSessionResourceSetupRequestWith(t, ue, sst, sd, true)
+}
+
+func pduSessionResourceSetupRequestWith(t *testing.T, ue *context.GNBUe, sst []byte, sd []byte, withUlTunnel bool) *ngapType.NGAPPDU {
 	t.Helper()
 
 	transfer := ngapType.PDUSessionResourceSetupRequestTransfer{}
@@ -342,6 +346,9 @@ func pduSessionResourceSetupRequest(t *testing.T, ue *context.GNBUe, sst []byte,
 				},
 			},
 		},
+	}
+	if !withUlTunnel {
+		transfer.ProtocolIEs.List = transfer.ProtocolIEs.List[1:]
 	}
 	encodedTransfer, err := aper.MarshalWithParams(transfer, "valueExt")
 	require.NoError(t, err)
@@ -426,4 +433,72 @@ func TestHandlerPduSessionResourceSetupRequest_SessionSetUp(t *testing.T) {
 	require.NotNil(t, pduSession, "the PDU session should have been created")
 	assert.Equal(t, context.Ready, ue.GetState(), "the Setup Response should have been built")
 	assert.Len(t, ue.GetGnbTx(), 1, "the session should have been handed to the UE")
+}
+
+// A transfer without an UL NG-U tunnel leaves the UPF address empty. That used to be indexed
+// unconditionally, and the panic ended the process; the session must be skipped instead.
+func TestHandlerPduSessionResourceSetupRequest_NoUlTunnel(t *testing.T) {
+	gnb := createTestGNBContext()
+	ue := createTestUE(gnb, 12345)
+	ue.CreateUeContext("not informed", "", []string{"01"}, []string{"010203"}, nil)
+
+	HandlerPduSessionResourceSetupRequest(gnb, pduSessionResourceSetupRequestWith(t, ue, []byte{0x01}, []byte{0x01, 0x02, 0x03}, false))
+
+	pduSession, err := ue.GetPduSession(1)
+	require.NoError(t, err)
+	assert.Nil(t, pduSession, "a session without an UL tunnel should be skipped")
+	assert.NotEqual(t, context.Ready, ue.GetState(), "no Setup Response should have been built")
+	assert.Empty(t, ue.GetGnbTx(), "nothing should have been sent to the UE")
+}
+
+// NAS-PDU is optional in a PDU Session Resource Release Command. An IE that is present but
+// empty used to be dereferenced after being logged, and the panic ended the process; it
+// must be treated as absent.
+func TestHandlerPduSessionReleaseCommand_EmptyNasPdu(t *testing.T) {
+	gnb := createTestGNBContext()
+	ue := createTestUE(gnb, 12345)
+
+	message := &ngapType.NGAPPDU{
+		Present: ngapType.NGAPPDUPresentInitiatingMessage,
+		InitiatingMessage: &ngapType.InitiatingMessage{
+			Value: ngapType.InitiatingMessageValue{
+				Present: ngapType.InitiatingMessagePresentPDUSessionResourceReleaseCommand,
+				PDUSessionResourceReleaseCommand: &ngapType.PDUSessionResourceReleaseCommand{
+					ProtocolIEs: ngapType.ProtocolIEContainerPDUSessionResourceReleaseCommandIEs{
+						List: []ngapType.PDUSessionResourceReleaseCommandIEs{
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDAMFUENGAPID},
+								Value: ngapType.PDUSessionResourceReleaseCommandIEsValue{
+									Present:     ngapType.PDUSessionResourceReleaseCommandIEsPresentAMFUENGAPID,
+									AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890},
+								},
+							},
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDRANUENGAPID},
+								Value: ngapType.PDUSessionResourceReleaseCommandIEsValue{
+									Present:     ngapType.PDUSessionResourceReleaseCommandIEsPresentRANUENGAPID,
+									RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
+								},
+							},
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDNASPDU},
+								Value: ngapType.PDUSessionResourceReleaseCommandIEsValue{
+									Present: ngapType.PDUSessionResourceReleaseCommandIEsPresentNASPDU,
+								},
+							},
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDPDUSessionResourceToReleaseListRelCmd},
+								Value: ngapType.PDUSessionResourceReleaseCommandIEsValue{
+									Present:                               ngapType.PDUSessionResourceReleaseCommandIEsPresentPDUSessionResourceToReleaseListRelCmd,
+									PDUSessionResourceToReleaseListRelCmd: &ngapType.PDUSessionResourceToReleaseListRelCmd{},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	assert.NotPanics(t, func() { HandlerPduSessionReleaseCommand(gnb, message) })
 }
