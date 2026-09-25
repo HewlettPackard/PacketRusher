@@ -15,6 +15,7 @@ require (
 	github.com/goccy/go-yaml v1.16.0
 	github.com/gopacket/gopacket v1.3.1
 	github.com/ishidawataru/sctp v0.0.0-20250303034628-ecf9ed6df987
+	github.com/khirono/go-nl v1.0.5
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 	github.com/sirupsen/logrus v1.9.3
@@ -32,7 +33,6 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/khirono/go-genl v1.0.1 // indirect
-	github.com/khirono/go-nl v1.0.5 // indirect
 	github.com/khirono/go-rtnllink v1.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

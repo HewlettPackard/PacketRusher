@@ -8,6 +8,7 @@ import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
+	gtpService "my5G-RANTester/internal/control_test_engine/ue/gtp/service"
 	"os"
 	"os/signal"
 	"sync"
@@ -18,10 +19,10 @@ import (
 
 func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb bool, loop bool, loopCount int, timeBeforeReregistration int, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int) {
 	if tunnelMode != config.TunnelDisabled {
-		if !dedicatedGnb {
+		if !dedicatedGnb && tunnelMode != config.TunnelShared {
 			log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
 		}
-		if timeBetweenRegistration < 500 {
+		if timeBetweenRegistration < 500 && tunnelMode != config.TunnelShared {
 			log.Fatal("When using the --tunnel option, --timeBetweenRegistration must be equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
 		}
 	}
@@ -33,6 +34,12 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	wg := sync.WaitGroup{}
 
 	cfg := config.GetConfig()
+
+	if tunnelMode == config.TunnelShared {
+		// Must run before the gNB binds its N3 address, and must touch only this
+		// gNB's device so sibling processes on the same host survive.
+		gtpService.RemoveStaleSharedLink(cfg.GNodeB.DataIF.Addr())
+	}
 
 	var numGnb int
 	if dedicatedGnb {
