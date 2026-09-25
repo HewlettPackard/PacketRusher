@@ -86,6 +86,7 @@ type UEPDUSession struct {
 	routeTun      *netlink.Route
 	vrf           *netlink.Vrf
 	stopSignal    chan bool
+	releaseTunnel func()
 	Wait          chan bool
 	T3580Retries  int
 
@@ -353,6 +354,20 @@ func (pduSession *UEPDUSession) GetGnbIp() netip.Addr {
 
 func (pduSession *UEPDUSession) SetStopSignal(stopSignal chan bool) {
 	pduSession.stopSignal = stopSignal
+}
+
+// SetTunnelRelease records how to give back what this session holds on a device it shares
+// with other UEs: its address, its GTP-U rules and their identifiers.
+func (pduSession *UEPDUSession) SetTunnelRelease(release func()) {
+	pduSession.releaseTunnel = release
+}
+
+// ReleaseTunnel gives back what SetTunnelRelease recorded, once.
+func (pduSession *UEPDUSession) ReleaseTunnel() {
+	if release := pduSession.releaseTunnel; release != nil {
+		pduSession.releaseTunnel = nil
+		release()
+	}
 }
 
 func (pduSession *UEPDUSession) GetStopSignal() chan bool {
@@ -675,9 +690,17 @@ func (ue *UEContext) Terminate() {
 			ueRoute := pduSession.GetTunRoute()
 			ueVrf := pduSession.GetVrfDevice()
 
-			if ueTun != nil {
+			// In shared mode the "UE tunnel interface" is the gNB's single GTP-U
+			// device, which every other UE on that gNB is also using. Deleting it
+			// here would tear down all of their tunnels because one UE went away.
+			// Only what this UE was lent comes off: its address, and its rules and
+			// their identifiers so a later UE can reuse them. The device is left in
+			// place and removed by the next run before its gNB binds.
+			if ueTun != nil && ue.TunnelMode != config.TunnelShared {
 				_ = netlink.LinkSetDown(ueTun)
 				_ = netlink.LinkDel(ueTun)
+			} else if ueTun != nil {
+				pduSession.ReleaseTunnel()
 			}
 
 			if ueRule != nil {

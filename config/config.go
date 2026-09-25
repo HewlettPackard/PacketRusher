@@ -30,6 +30,11 @@ const (
 	TunnelTun
 	// TunnelPlain creates a TUN device and a VRF device.
 	TunnelVrf
+	// TunnelShared creates one TUN device per gNB rather than per UE, so that many
+	// UEs can carry traffic through a single gNB. Routing is policy-rule based: a
+	// device can only have one master, so per-UE VRF enslavement is not available
+	// in this mode.
+	TunnelShared
 )
 
 var config *Config

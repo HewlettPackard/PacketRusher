@@ -132,9 +132,15 @@ func main() {
 
 					tunnelMode := config.TunnelDisabled
 					if c.Bool("tunnel") {
-						if c.Bool("tunnel-vrf") {
+						switch {
+						case !c.Bool("dedicatedGnb"):
+							// One device per gNB, shared by its UEs. A shared device
+							// cannot be enslaved to a per-UE VRF, so this mode always
+							// routes by policy rule regardless of --tunnel-vrf.
+							tunnelMode = config.TunnelShared
+						case c.Bool("tunnel-vrf"):
 							tunnelMode = config.TunnelVrf
-						} else {
+						default:
 							tunnelMode = config.TunnelTun
 						}
 					}
