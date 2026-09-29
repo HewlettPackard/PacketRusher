@@ -100,7 +100,7 @@ func main() {
 					&cli.IntFlag{Name: "loopCount", Value: 0, Aliases: []string{"lc"}, Usage: "The number of times the loop is executed. 0 to loop infinitely."},
 					&cli.IntFlag{Name: "timeBeforeReregistration", Value: 200, Aliases: []string{"tbrr"}, Usage: "The time in ms before the UE registers again after deregistration if UE is looping."},
 					&cli.BoolFlag{Name: "tunnel", Aliases: []string{"t"}, Usage: "Enable the creation of the GTP-U tunnel interface."},
-					&cli.BoolFlag{Name: "tunnel-vrf", Value: true, Usage: "Enable/disable VRP usage of the GTP-U tunnel interface."},
+					&cli.BoolFlag{Name: "tunnel-vrf", Value: true, Usage: "Enable/disable VRP usage of the GTP-U tunnel interface. Ignored without --dedicatedGnb: UEs sharing a gNB's tunnel device are routed by policy rule."},
 					&cli.BoolFlag{Name: "dedicatedGnb", Aliases: []string{"d"}, Usage: "Enable the creation of a dedicated gNB per UE. Require one IP on N2/N3 per gNB."},
 					&cli.PathFlag{Name: "pcap", Usage: "Capture traffic to given PCAP file when a path is given", Value: "./dump.pcap"},
 				},

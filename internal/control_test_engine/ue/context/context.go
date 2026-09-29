@@ -327,6 +327,10 @@ func (ue *UEContext) DeletePduSession(pduSessionid uint8) error {
 		return errors.New("Unable to find GnbPDUSession ID " + string(pduSessionid))
 	}
 	pduSession := ue.PduSession[pduSessionid-1]
+	// On a device shared with other UEs, give back what this session holds there now:
+	// once the slot is cleared, Terminate no longer sees the session, and a new one
+	// with the same address could not add it again.
+	pduSession.ReleaseTunnel()
 	close(pduSession.Wait)
 	stopSignal := pduSession.GetStopSignal()
 	if stopSignal != nil {
@@ -357,7 +361,8 @@ func (pduSession *UEPDUSession) SetStopSignal(stopSignal chan bool) {
 }
 
 // SetTunnelRelease records how to give back what this session holds on a device it shares
-// with other UEs: its address, its GTP-U rules and their identifiers.
+// with other UEs: its route, policy rule and address, its GTP-U rules and their
+// identifiers.
 func (pduSession *UEPDUSession) SetTunnelRelease(release func()) {
 	pduSession.releaseTunnel = release
 }
@@ -679,6 +684,12 @@ func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
 	ue.UeSecurity.AuthenticationSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
 }
 
+// Seams for the tests: removing a policy rule or route needs privileges they lack.
+var (
+	ruleDel  = netlink.RuleDel
+	routeDel = netlink.RouteDel
+)
+
 func (ue *UEContext) Terminate() {
 	ue.SetStateMM_NULL()
 
@@ -707,11 +718,11 @@ func (ue *UEContext) Terminate() {
 			}
 
 			if ueRule != nil {
-				_ = netlink.RuleDel(ueRule)
+				_ = ruleDel(ueRule)
 			}
 
 			if ueRoute != nil {
-				_ = netlink.RouteDel(ueRoute)
+				_ = routeDel(ueRoute)
 			}
 
 			if ueVrf != nil {
