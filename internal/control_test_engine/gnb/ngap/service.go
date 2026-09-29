@@ -17,9 +17,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// ConnCount offsets the local port of each association; it is advanced by every dial,
-// including re-establishments, which may run concurrently for different AMFs.
+// ConnCount offsets the local port of each AMF's association. It is advanced once per
+// AMF, at its first dial; a re-establishment reuses that AMF's port. Advancing it on
+// every redial walked the port into the range of gNB processes configured on the ports
+// next to this one, and each collision cost a failed dial and a longer backoff.
 var ConnCount atomic.Int32
+
+// DialCount counts every dial, including re-establishments.
+var DialCount atomic.Int32
 
 const (
 	reassociateInitialBackoff = time.Second
@@ -47,7 +52,13 @@ func dialAmf(amf *context.GNBAmf, gnb *context.GNBContext) error {
 	// check AMF IP and AMF port.
 	remote := amf.GetAmfIpPort().String()
 	gnbAddrPort := gnb.GetGnbIpPort()
-	local := netip.AddrPortFrom(gnbAddrPort.Addr(), gnbAddrPort.Port()+uint16(ConnCount.Add(1)-1)).String()
+	port := amf.GetLocalPort()
+	if port == 0 {
+		port = gnbAddrPort.Port() + uint16(ConnCount.Add(1)-1)
+		amf.SetLocalPort(port)
+	}
+	DialCount.Add(1)
+	local := netip.AddrPortFrom(gnbAddrPort.Addr(), port).String()
 
 	log.Info("[GNB][SCTP] Initializing connection: local=", local, " remote=", remote)
 

@@ -37,6 +37,7 @@ type GNBAmf struct {
 	lenSlice            int
 	lenPlmn             int
 	backupAMF           string
+	localPort           uint16 // local SCTP port of the association, kept across re-establishments
 	// TODO implement the other fields of the AMF Context
 }
 
@@ -229,6 +230,19 @@ func (amf *GNBAmf) GetSCTPConn() *sctp.SCTPConn {
 	amf.mu.RLock()
 	defer amf.mu.RUnlock()
 	return amf.tnla.sctpConn
+}
+
+// GetLocalPort is the local SCTP port of this AMF's association, or 0 before its first dial.
+func (amf *GNBAmf) GetLocalPort() uint16 {
+	amf.mu.RLock()
+	defer amf.mu.RUnlock()
+	return amf.localPort
+}
+
+func (amf *GNBAmf) SetLocalPort(port uint16) {
+	amf.mu.Lock()
+	defer amf.mu.Unlock()
+	amf.localPort = port
 }
 
 func (amf *GNBAmf) SetSCTPConn(conn *sctp.SCTPConn) {

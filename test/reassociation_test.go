@@ -83,8 +83,9 @@ func TestGnbRedialsRefusedAssociation(t *testing.T) {
 	_, amf, fiveGC, ln := startWithStoppableAmf(t, "127.0.0.1:9889", "127.0.0.1:2554", amfAddr)
 
 	oldConn := amf.GetSCTPConn()
+	oldPort := oldConn.LocalAddr().(*sctp.SCTPAddr).Port
 	dials := stopAmf(t, fiveGC, ln, oldConn)
-	require.Eventually(t, func() bool { return ngap.ConnCount.Load() >= dials+2 }, 10*time.Second, 50*time.Millisecond,
+	require.Eventually(t, func() bool { return ngap.DialCount.Load() >= dials+2 }, 10*time.Second, 50*time.Millisecond,
 		"the gNB should keep dialling while the AMF refuses the association")
 	require.NotEqual(t, gnbContext.Active, amf.GetState())
 
@@ -96,6 +97,11 @@ func TestGnbRedialsRefusedAssociation(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return amf.GetState() == gnbContext.Active && amf.GetSCTPConn() != oldConn
 	}, 40*time.Second, 100*time.Millisecond, "the gNB should re-establish the association once the AMF accepts it")
+
+	// Moving to another port on each dial would step onto the ports of gNBs configured
+	// next to this one.
+	require.Equal(t, oldPort, amf.GetSCTPConn().LocalAddr().(*sctp.SCTPAddr).Port,
+		"the re-established association should keep its local port")
 }
 
 // The AMF is removed from the gNB while its association is being re-established. The gNB
@@ -110,7 +116,7 @@ func TestGnbStopsRedialingAmfRemovedDuringOutage(t *testing.T) {
 	require.Eventually(t, func() bool { return amf.GetSCTPConn() == nil }, 10*time.Second, 10*time.Millisecond,
 		"the gNB should be re-dialling the AMF")
 	gnb.RemoveGnbAmf(amf)
-	dials := ngap.ConnCount.Load()
+	dials := ngap.DialCount.Load()
 
 	ln, err := service.Listen(amfAddr)
 	require.NoError(t, err)
@@ -118,7 +124,7 @@ func TestGnbStopsRedialingAmfRemovedDuringOutage(t *testing.T) {
 	go service.Serve(ln, fiveGC)
 
 	// Longer than the backoff the dial loop has reached, so a dial it still makes is seen.
-	require.Never(t, func() bool { return amf.GetSCTPConn() != nil || ngap.ConnCount.Load() != dials },
+	require.Never(t, func() bool { return amf.GetSCTPConn() != nil || ngap.DialCount.Load() != dials },
 		8*time.Second, 100*time.Millisecond, "a removed AMF should not be re-dialled")
 }
 
@@ -158,7 +164,7 @@ func stopAmf(t *testing.T, fiveGC *context.Aio5gc, ln *service.Listener, gnbConn
 	require.NoError(t, ln.Close())
 	amfSideGnb, err := fiveGC.GetAMFContext().GetGnb(gnbConn.LocalAddr().String())
 	require.NoError(t, err)
-	dials := ngap.ConnCount.Load()
+	dials := ngap.DialCount.Load()
 	require.NoError(t, amfSideGnb.GetSCTPConn().Close())
 	return dials
 }
