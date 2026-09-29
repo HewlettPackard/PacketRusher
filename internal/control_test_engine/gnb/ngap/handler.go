@@ -266,7 +266,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 			}
 		}
 
-		msg := context.UEMessage{GNBPduSessions: ue.GetPduSessions(), GnbIp: gnb.GetN3GnbIp()}
+		msg := context.UEMessage{GNBPduSessions: ue.GetPduSessions(), GnbIp: gnb.GetN3GnbIp(), GtpDevice: gnb.GetGtpDevice()}
 		sender.SendMessageToUe(ue, msg)
 	}
 
@@ -458,7 +458,7 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 
 		var pduSessions [16]*context.GnbPDUSession
 		pduSessions[0] = pduSession
-		msg := context.UEMessage{GnbIp: gnb.GetN3GnbIp(), GNBPduSessions: pduSessions}
+		msg := context.UEMessage{GnbIp: gnb.GetN3GnbIp(), GtpDevice: gnb.GetGtpDevice(), GNBPduSessions: pduSessions}
 
 		sender.SendMessageToUe(ue, msg)
 	}
@@ -1055,7 +1055,7 @@ func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapT
 		var pduSessions [16]*context.GnbPDUSession
 		pduSessions[0] = pduSession
 
-		msg := context.UEMessage{GNBPduSessions: pduSessions, GnbIp: gnb.GetN3GnbIp()}
+		msg := context.UEMessage{GNBPduSessions: pduSessions, GnbIp: gnb.GetN3GnbIp(), GtpDevice: gnb.GetGtpDevice()}
 
 		sender.SendMessageToUe(ue, msg)
 	}

@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"my5G-RANTester/internal/control_test_engine/gnb/gtp"
+
 	"github.com/free5gc/aper"
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/ngap/ngapConvert"
@@ -38,6 +40,7 @@ type GNBContext struct {
 	ueIpGenerator  uint8         // ran ue ip.
 	pagedUEs       []PagedUE
 	pagedUELock    sync.Mutex
+	gtpDevice      *gtp.Device // GTP-U device shared by this gNB's UEs, if any
 }
 
 type DataInfo struct {
@@ -132,6 +135,18 @@ func (gnb *GNBContext) GetInboundChannel() chan UEMessage {
 
 func (gnb *GNBContext) GetN3GnbIp() netip.Addr {
 	return gnb.dataInfo.gnbIpPort.Addr()
+}
+
+// SetGtpDevice gives this gNB the GTP-U device its UEs' tunnels share. The gNB owns
+// it: it is closed when the gNB terminates.
+func (gnb *GNBContext) SetGtpDevice(dev *gtp.Device) {
+	gnb.gtpDevice = dev
+}
+
+// GetGtpDevice returns the GTP-U device this gNB's UEs share, or nil when each UE
+// has its own or there are no tunnels.
+func (gnb *GNBContext) GetGtpDevice() *gtp.Device {
+	return gnb.gtpDevice
 }
 
 func (gnb *GNBContext) GetUePool() *sync.Map {
@@ -516,6 +531,11 @@ func (gnb *GNBContext) Terminate() {
 			log.Info("[GNB][AMF] N2/TNLA Terminated")
 			conn.Close()
 		}
+	}
+
+	if dev := gnb.GetGtpDevice(); dev != nil {
+		dev.Close()
+		log.Info("[GNB][GTP] Shared GTP-U device removed")
 	}
 
 	log.Info("GNB Terminated")

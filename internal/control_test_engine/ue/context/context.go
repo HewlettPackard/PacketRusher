@@ -685,22 +685,25 @@ func (ue *UEContext) Terminate() {
 	// clean all context of tun interface
 	for _, pduSession := range ue.PduSession {
 		if pduSession != nil {
+			// In shared mode the "UE tunnel interface" is the gNB's single GTP-U
+			// device, which every other UE on that gNB is also using. Deleting it
+			// here would tear down all of their tunnels because one UE went away.
+			// Only what this UE was lent comes off: its route, policy rule and
+			// address, and its rules and their identifiers so a later UE can reuse
+			// them. That also clears the session's hold on them, so nothing below
+			// removes them a second time. The device is the gNB's to remove.
+			if ue.TunnelMode == config.TunnelShared {
+				pduSession.ReleaseTunnel()
+			}
+
 			ueTun := pduSession.GetTunInterface()
 			ueRule := pduSession.GetTunRule()
 			ueRoute := pduSession.GetTunRoute()
 			ueVrf := pduSession.GetVrfDevice()
 
-			// In shared mode the "UE tunnel interface" is the gNB's single GTP-U
-			// device, which every other UE on that gNB is also using. Deleting it
-			// here would tear down all of their tunnels because one UE went away.
-			// Only what this UE was lent comes off: its address, and its rules and
-			// their identifiers so a later UE can reuse them. The device is left in
-			// place and removed by the next run before its gNB binds.
 			if ueTun != nil && ue.TunnelMode != config.TunnelShared {
 				_ = netlink.LinkSetDown(ueTun)
 				_ = netlink.LinkDel(ueTun)
-			} else if ueTun != nil {
-				pduSession.ReleaseTunnel()
 			}
 
 			if ueRule != nil {
