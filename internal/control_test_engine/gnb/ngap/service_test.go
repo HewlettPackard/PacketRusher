@@ -30,8 +30,10 @@ func reestablishedLogs(hook *test.Hook) int {
 // later one sets the AMF up, only it may report the association as re-established; the
 // earlier watcher used to see the AMF Active and report it too.
 func TestAwaitReassociationLeavesALaterAttemptToReport(t *testing.T) {
+	// logrus cannot remove a hook, so swap the set out and restore it afterwards.
+	prev := logrus.StandardLogger().ReplaceHooks(make(logrus.LevelHooks))
+	t.Cleanup(func() { logrus.StandardLogger().ReplaceHooks(prev) })
 	hook := test.NewGlobal()
-	t.Cleanup(hook.Reset)
 
 	gnb := createTestGNBContext()
 	amf := gnb.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:38499"))

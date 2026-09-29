@@ -106,6 +106,10 @@ func dialAmf(amf *context.GNBAmf, gnb *context.GNBContext) error {
 				_ = result.conn.Close()
 			}
 		}()
+		// The dial goroutine keeps its socket bound to this port until SCTP gives up on
+		// the INIT, so a redial from the same port would fail to bind until then. Take a
+		// fresh port next time.
+		amf.SetLocalPort(0)
 		err = fmt.Errorf("SCTP dial timeout after 5 seconds")
 		log.Error("[GNB][SCTP] SCTP dial timeout")
 		return err
