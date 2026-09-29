@@ -250,6 +250,12 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 				}
 			}
 
+			// Without a UL tunnel teidUplink is empty, and reading it would panic.
+			if gtpTunnel == nil {
+				log.Error("[GNB][NGAP] No UL NG-U UP TNL Information for PDU Session ", pduSessionId, ", skipping")
+				continue
+			}
+
 			_, err = ue.CreatePduSession(pduSessionId, upfIp, sst, sd, 0, 1, 0, 0, binary.BigEndian.Uint32(teidUplink), gnb.GetUeTeid(ue))
 			if err != nil {
 				log.Error("[GNB] ", err)
@@ -307,6 +313,13 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 			}
 			pDUSessionResourceSetupList = ies.Value.PDUSessionResourceSetupListSUReq
 		}
+	}
+
+	// The loop above only catches the IE present but empty; an absent one leaves
+	// the list nil.
+	if pDUSessionResourceSetupList == nil {
+		log.Error("[GNB][NGAP] PDU Session Resource Setup Request is missing mandatory PDU SESSION RESOURCE SETUP LIST SU REQ")
+		return
 	}
 
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
@@ -370,7 +383,14 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 					case ngapType.ProtocolIEIDQosFlowSetupRequestList:
 						for _, itemsQos := range ies.Value.QosFlowSetupRequestList.List {
 							qosId = itemsQos.QosFlowIdentifier.Value
-							fiveQi = itemsQos.QosFlowLevelQosParameters.QosCharacteristics.NonDynamic5QI.FiveQI.Value
+							// QoS Characteristics is a CHOICE: a dynamic 5QI leaves NonDynamic5QI
+							// nil and carries its 5QI only optionally.
+							qosCharacteristics := itemsQos.QosFlowLevelQosParameters.QosCharacteristics
+							if qosCharacteristics.NonDynamic5QI != nil {
+								fiveQi = qosCharacteristics.NonDynamic5QI.FiveQI.Value
+							} else if qosCharacteristics.Dynamic5QI != nil && qosCharacteristics.Dynamic5QI.FiveQI != nil {
+								fiveQi = qosCharacteristics.Dynamic5QI.FiveQI.Value
+							}
 							priArp = itemsQos.QosFlowLevelQosParameters.AllocationAndRetentionPriority.PriorityLevelARP.Value
 						}
 
@@ -706,32 +726,39 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 	valueMessage := message.InitiatingMessage.Value.UEContextReleaseCommand
 
 	var cause *ngapType.Cause
-	var ue_id *ngapType.RANUENGAPID
+	var ue_ids *ngapType.UENGAPIDs
 
 	for _, ies := range valueMessage.ProtocolIEs.List {
 
 		switch ies.Id.Value {
 
 		case ngapType.ProtocolIEIDUENGAPIDs:
-			ue_id = &ies.Value.UENGAPIDs.UENGAPIDPair.RANUENGAPID
+			ue_ids = ies.Value.UENGAPIDs
 
 		case ngapType.ProtocolIEIDCause:
 			cause = ies.Value.Cause
 		}
 	}
 
-	if ue_id == nil {
+	// UE NGAP IDs is a CHOICE (TS 38.413 9.2.2.5): the AMF may identify the UE
+	// by the pair or by its AMF UE NGAP ID alone.
+	var ue *context.GNBUe
+	var err error
+	switch {
+	case ue_ids != nil && ue_ids.UENGAPIDPair != nil:
+		ue, err = gnb.GetGnbUe(ue_ids.UENGAPIDPair.RANUENGAPID.Value)
+	case ue_ids != nil && ue_ids.AMFUENGAPID != nil:
+		ue, err = gnb.GetGnbUeByAmfUeId(ue_ids.AMFUENGAPID.Value)
+	default:
 		log.Warn("[GNB][NGAP] UE Context Release Command missing UE ID")
 		return
 	}
-
-	ue, err := gnb.GetGnbUe(ue_id.Value)
-	if err != nil {
-		log.Warn("[GNB][NGAP] AMF is trying to free the context of an unknown UE with RANUEID ", ue_id.Value, ", ignoring")
+	if err != nil || ue == nil {
+		log.Warn("[GNB][NGAP] AMF is trying to free the context of an unknown UE, ignoring")
 		return
 	}
 
-	log.Info("[GNB][NGAP] Releasing UE Context for UE ", ue_id.Value, ", cause: ", causeToString(cause))
+	log.Info("[GNB][NGAP] Releasing UE Context for UE ", ue.GetRanUeId(), ", cause: ", causeToString(cause))
 
 	// Send UEContextReleaseComplete before deleting context
 	trigger.SendUeContextReleaseComplete(ue)
@@ -1005,7 +1032,8 @@ func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapT
 	for _, pduSessionResourceSwitchedItem := range pduSessionResourceSwitchedList.List {
 		pduSessionId := pduSessionResourceSwitchedItem.PDUSessionID.Value
 		pduSession, err := ue.GetPduSession(pduSessionId)
-		if err != nil {
+		// An empty slot is (nil, nil), not an error.
+		if err != nil || pduSession == nil {
 			log.Error("[GNB] Trying to path switch an unknown PDU Session ID ", pduSessionId, ": ", err)
 			continue
 		}
@@ -1124,6 +1152,11 @@ func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, messag
 		log.Error("[GNB] HandoverRequest message from AMF is missing mandatory SourceToTargetTransparentContainer")
 		return
 	}
+	// Checked before a UE is created for the handover, so a bad request leaves nothing behind.
+	if pDUSessionResourceSetupListHOReq == nil {
+		log.Error("[GNB] HandoverRequest message from AMF is missing mandatory PDUSessionResourceSetupListHOReq")
+		return
+	}
 
 	sourceToTargetContainerBytes := sourceToTargetContainer.Value
 	sourceToTargetContainerNgap := &ngapType.SourceNGRANNodeToTargetNGRANNodeTransparentContainer{}
@@ -1176,6 +1209,12 @@ func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, messag
 				upfIp, _ = ngapConvert.IPAddressToString(gtpTunnel.TransportLayerAddress)
 				teidUplink = gtpTunnel.GTPTEID.Value
 			}
+		}
+
+		// Without a UL tunnel teidUplink is empty, and reading it would panic.
+		if gtpTunnel == nil {
+			log.Error("[GNB][NGAP] No UL NG-U UP TNL Information for PDU Session ", pduSessionId, ", skipping")
+			continue
 		}
 
 		_, err = ue.CreatePduSession(pduSessionId, upfIp, sst, sd, 0, 1, 0, 0, binary.BigEndian.Uint32(teidUplink), gnb.GetUeTeid(ue))
@@ -1263,6 +1302,11 @@ func HandlerPaging(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
 		}
 	}
 	_ = tAIListForPaging
+
+	if uEPagingIdentity == nil || uEPagingIdentity.FiveGSTMSI == nil {
+		log.Error("[GNB][NGAP] Paging is missing mandatory UE Paging Identity")
+		return
+	}
 
 	gnb.AddPagedUE(uEPagingIdentity.FiveGSTMSI)
 

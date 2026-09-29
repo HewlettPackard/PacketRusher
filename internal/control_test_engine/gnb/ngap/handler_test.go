@@ -6,6 +6,7 @@ package ngap
 
 import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
+	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"net/netip"
 	"testing"
 
@@ -501,4 +502,404 @@ func TestHandlerPduSessionReleaseCommand_EmptyNasPdu(t *testing.T) {
 	}
 
 	assert.NotPanics(t, func() { HandlerPduSessionReleaseCommand(gnb, message) })
+}
+
+func errorIndication(ue *context.GNBUe) *ngapType.NGAPPDU {
+	return &ngapType.NGAPPDU{
+		Present: ngapType.NGAPPDUPresentInitiatingMessage,
+		InitiatingMessage: &ngapType.InitiatingMessage{
+			Value: ngapType.InitiatingMessageValue{
+				Present: ngapType.InitiatingMessagePresentErrorIndication,
+				ErrorIndication: &ngapType.ErrorIndication{
+					ProtocolIEs: ngapType.ProtocolIEContainerErrorIndicationIEs{
+						List: []ngapType.ErrorIndicationIEs{
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDRANUENGAPID},
+								Value: ngapType.ErrorIndicationIEsValue{
+									Present:     ngapType.ErrorIndicationIEsPresentRANUENGAPID,
+									RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// With a release request pending, an Error Indication for the UE is its answer and the
+// context is released locally.
+func TestHandlerErrorIndication_PendingReleaseDeletesUe(t *testing.T) {
+	gnb := createTestGNBContext()
+	ue := createTestUE(gnb, 12345)
+	ue.SetReleaseRequested(true)
+
+	HandlerErrorIndication(gnb, errorIndication(ue))
+
+	_, err := gnb.GetGnbUe(ue.GetRanUeId())
+	assert.Error(t, err, "the UE context should have been released locally")
+}
+
+// A release request that fails to send is not pending: a later Error Indication must not be
+// taken as its answer and delete the UE. The test UE has no SCTP association, so the send fails.
+func TestSendUeContextReleaseRequest_FailedSendIsNotPending(t *testing.T) {
+	gnb := createTestGNBContext()
+	ue := createTestUE(gnb, 12345)
+	require.Nil(t, ue.GetSCTP())
+
+	trigger.SendUeContextReleaseRequest(ue)
+	assert.False(t, ue.GetReleaseRequested(), "a request that was not sent must not be pending")
+
+	HandlerErrorIndication(gnb, errorIndication(ue))
+
+	retrievedUe, err := gnb.GetGnbUe(ue.GetRanUeId())
+	require.NoError(t, err, "the UE context must survive the Error Indication")
+	assert.Equal(t, ue, retrievedUe)
+}
+
+// A failed send must not cancel an earlier request that was sent and is still pending.
+func TestSendUeContextReleaseRequest_FailedSendKeepsEarlierRequest(t *testing.T) {
+	gnb := createTestGNBContext()
+	ue := createTestUE(gnb, 12345)
+	ue.SetReleaseRequested(true)
+
+	trigger.SendUeContextReleaseRequest(ue)
+
+	assert.True(t, ue.GetReleaseRequested(), "the earlier request should still be pending")
+}
+
+// PDU SESSION RESOURCE SETUP LIST SU REQ is mandatory. An absent one left the list nil, and
+// ranging over it panicked.
+func TestHandlerPduSessionResourceSetupRequest_AbsentList(t *testing.T) {
+	gnb := createTestGNBContext()
+	ue := createTestUE(gnb, 12345)
+	ue.CreateUeContext("not informed", "", []string{"01"}, []string{"010203"}, nil)
+
+	message := pduSessionResourceSetupRequest(t, ue, []byte{0x01}, []byte{0x01, 0x02, 0x03})
+	ies := &message.InitiatingMessage.Value.PDUSessionResourceSetupRequest.ProtocolIEs
+	ies.List = ies.List[:2]
+
+	HandlerPduSessionResourceSetupRequest(gnb, message)
+
+	assert.NotEqual(t, context.Ready, ue.GetState(), "no Setup Response should have been built")
+	assert.Empty(t, ue.GetGnbTx(), "nothing should have been sent to the UE")
+}
+
+// UE Paging Identity is mandatory. An absent one was dereferenced and panicked.
+func TestHandlerPaging_AbsentIdentity(t *testing.T) {
+	gnb := createTestGNBContext()
+
+	message := &ngapType.NGAPPDU{
+		Present: ngapType.NGAPPDUPresentInitiatingMessage,
+		InitiatingMessage: &ngapType.InitiatingMessage{
+			Value: ngapType.InitiatingMessageValue{
+				Present: ngapType.InitiatingMessagePresentPaging,
+				Paging:  &ngapType.Paging{},
+			},
+		},
+	}
+
+	HandlerPaging(gnb, message)
+
+	assert.Empty(t, gnb.GetPagedUEs(), "nothing should have been paged")
+}
+
+// UE NGAP IDs is a CHOICE, and the AMF may identify the UE by its AMF UE NGAP ID alone. That
+// left the ID pair nil, and dereferencing it panicked.
+func TestHandlerUeContextReleaseCommand_AmfUeIdOnly(t *testing.T) {
+	gnb := createTestGNBContext()
+	ue := createTestUE(gnb, 12345)
+	ue.SetAmfUeId(67890)
+
+	message := &ngapType.NGAPPDU{
+		Present: ngapType.NGAPPDUPresentInitiatingMessage,
+		InitiatingMessage: &ngapType.InitiatingMessage{
+			Value: ngapType.InitiatingMessageValue{
+				Present: ngapType.InitiatingMessagePresentUEContextReleaseCommand,
+				UEContextReleaseCommand: &ngapType.UEContextReleaseCommand{
+					ProtocolIEs: ngapType.ProtocolIEContainerUEContextReleaseCommandIEs{
+						List: []ngapType.UEContextReleaseCommandIEs{
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDUENGAPIDs},
+								Value: ngapType.UEContextReleaseCommandIEsValue{
+									Present: ngapType.UEContextReleaseCommandIEsPresentUENGAPIDs,
+									UENGAPIDs: &ngapType.UENGAPIDs{
+										Present:     ngapType.UENGAPIDsPresentAMFUENGAPID,
+										AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	HandlerUeContextReleaseCommand(gnb, message)
+
+	_, err := gnb.GetGnbUe(ue.GetRanUeId())
+	assert.Error(t, err, "the UE identified by its AMF UE NGAP ID should have been released")
+}
+
+// A transfer without an UL NG-U tunnel in an Initial Context Setup Request left the uplink
+// TEID empty, and reading it panicked. The session must be skipped.
+func TestHandlerInitialContextSetupRequest_NoUlTunnel(t *testing.T) {
+	gnb := createTestGNBContext()
+	ue := createTestUE(gnb, 12345)
+
+	// Reuse the transfer of a setup request built without an UL tunnel.
+	setup := pduSessionResourceSetupRequestWith(t, ue, []byte{0x01}, []byte{0x01, 0x02, 0x03}, false)
+	item := setup.InitiatingMessage.Value.PDUSessionResourceSetupRequest.ProtocolIEs.List[2].Value.PDUSessionResourceSetupListSUReq.List[0]
+
+	message := &ngapType.NGAPPDU{
+		Present: ngapType.NGAPPDUPresentInitiatingMessage,
+		InitiatingMessage: &ngapType.InitiatingMessage{
+			Value: ngapType.InitiatingMessageValue{
+				Present: ngapType.InitiatingMessagePresentInitialContextSetupRequest,
+				InitialContextSetupRequest: &ngapType.InitialContextSetupRequest{
+					ProtocolIEs: ngapType.ProtocolIEContainerInitialContextSetupRequestIEs{
+						List: []ngapType.InitialContextSetupRequestIEs{
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDAMFUENGAPID},
+								Value: ngapType.InitialContextSetupRequestIEsValue{
+									Present:     ngapType.InitialContextSetupRequestIEsPresentAMFUENGAPID,
+									AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890},
+								},
+							},
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDRANUENGAPID},
+								Value: ngapType.InitialContextSetupRequestIEsValue{
+									Present:     ngapType.InitialContextSetupRequestIEsPresentRANUENGAPID,
+									RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
+								},
+							},
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDPDUSessionResourceSetupListCxtReq},
+								Value: ngapType.InitialContextSetupRequestIEsValue{
+									Present: ngapType.InitialContextSetupRequestIEsPresentPDUSessionResourceSetupListCxtReq,
+									PDUSessionResourceSetupListCxtReq: &ngapType.PDUSessionResourceSetupListCxtReq{
+										List: []ngapType.PDUSessionResourceSetupItemCxtReq{
+											{
+												PDUSessionID:                           item.PDUSessionID,
+												SNSSAI:                                 item.SNSSAI,
+												PDUSessionResourceSetupRequestTransfer: item.PDUSessionResourceSetupRequestTransfer,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	HandlerInitialContextSetupRequest(gnb, message)
+
+	pduSession, err := ue.GetPduSession(1)
+	require.NoError(t, err)
+	assert.Nil(t, pduSession, "a session without an UL tunnel should be skipped")
+}
+
+func handoverRequest(t *testing.T, gnb *context.GNBContext, prUeId int64, withList bool) *ngapType.NGAPPDU {
+	t.Helper()
+
+	// The handler reads only the IndexToRFSP, which carries the simulator's UE id; the
+	// rest is the minimum the encoder accepts.
+	cell := ngapType.NGRANCGI{
+		Present: ngapType.NGRANCGIPresentNRCGI,
+		NRCGI: &ngapType.NRCGI{
+			PLMNIdentity:   ngapType.PLMNIdentity{Value: aper.OctetString("\x00\xf1\x10")},
+			NRCellIdentity: ngapType.NRCellIdentity{Value: aper.BitString{Bytes: []byte{0, 0, 0, 0x10, 0}, BitLength: 36}},
+		},
+	}
+	container := ngapType.SourceNGRANNodeToTargetNGRANNodeTransparentContainer{
+		RRCContainer: ngapType.RRCContainer{Value: aper.OctetString("\x00\x00\x11")},
+		IndexToRFSP:  &ngapType.IndexToRFSP{Value: prUeId},
+		TargetCellID: cell,
+		UEHistoryInformation: ngapType.UEHistoryInformation{
+			List: []ngapType.LastVisitedCellItem{
+				{
+					LastVisitedCellInformation: ngapType.LastVisitedCellInformation{
+						Present:   ngapType.LastVisitedCellInformationPresentNGRANCell,
+						NGRANCell: &ngapType.LastVisitedNGRANCellInformation{GlobalCellID: cell},
+					},
+				},
+			},
+		},
+	}
+	encodedContainer, err := aper.MarshalWithParams(container, "valueExt")
+	require.NoError(t, err)
+
+	ies := []ngapType.HandoverRequestIEs{
+		{
+			Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDAMFUENGAPID},
+			Value: ngapType.HandoverRequestIEsValue{
+				Present:     ngapType.HandoverRequestIEsPresentAMFUENGAPID,
+				AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890},
+			},
+		},
+		{
+			Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDSourceToTargetTransparentContainer},
+			Value: ngapType.HandoverRequestIEsValue{
+				Present: ngapType.HandoverRequestIEsPresentSourceToTargetTransparentContainer,
+				SourceToTargetTransparentContainer: &ngapType.SourceToTargetTransparentContainer{
+					Value: encodedContainer,
+				},
+			},
+		},
+	}
+	if withList {
+		// Reuse the transfer of a setup request built without an UL tunnel.
+		ue := createTestUE(gnb, prUeId+1)
+		setup := pduSessionResourceSetupRequestWith(t, ue, []byte{0x01}, []byte{0x01, 0x02, 0x03}, false)
+		item := setup.InitiatingMessage.Value.PDUSessionResourceSetupRequest.ProtocolIEs.List[2].Value.PDUSessionResourceSetupListSUReq.List[0]
+		ies = append(ies, ngapType.HandoverRequestIEs{
+			Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDPDUSessionResourceSetupListHOReq},
+			Value: ngapType.HandoverRequestIEsValue{
+				Present: ngapType.HandoverRequestIEsPresentPDUSessionResourceSetupListHOReq,
+				PDUSessionResourceSetupListHOReq: &ngapType.PDUSessionResourceSetupListHOReq{
+					List: []ngapType.PDUSessionResourceSetupItemHOReq{
+						{
+							PDUSessionID:            item.PDUSessionID,
+							SNSSAI:                  item.SNSSAI,
+							HandoverRequestTransfer: item.PDUSessionResourceSetupRequestTransfer,
+						},
+					},
+				},
+			},
+		})
+	}
+
+	return &ngapType.NGAPPDU{
+		Present: ngapType.NGAPPDUPresentInitiatingMessage,
+		InitiatingMessage: &ngapType.InitiatingMessage{
+			Value: ngapType.InitiatingMessageValue{
+				Present: ngapType.InitiatingMessagePresentHandoverRequest,
+				HandoverRequest: &ngapType.HandoverRequest{
+					ProtocolIEs: ngapType.ProtocolIEContainerHandoverRequestIEs{List: ies},
+				},
+			},
+		},
+	}
+}
+
+// PDU Session Resource Setup List HO Req is mandatory. An absent one left the list nil, and
+// ranging over it panicked after a UE had already been created for the handover.
+func TestHandlerHandoverRequest_AbsentList(t *testing.T) {
+	gnb := createTestGNBContext()
+
+	HandlerHandoverRequest(nil, gnb, handoverRequest(t, gnb, 777, false))
+
+	_, err := gnb.GetGnbUeByPrUeId(777)
+	assert.Error(t, err, "a rejected Handover Request should leave no UE behind")
+}
+
+// A transfer without an UL NG-U tunnel in a Handover Request left the uplink TEID empty, and
+// reading it panicked. The session must be skipped.
+func TestHandlerHandoverRequest_NoUlTunnel(t *testing.T) {
+	gnb := createTestGNBContext()
+
+	HandlerHandoverRequest(nil, gnb, handoverRequest(t, gnb, 777, true))
+
+	ue, err := gnb.GetGnbUeByPrUeId(777)
+	require.NoError(t, err)
+	pduSession, err := ue.GetPduSession(1)
+	require.NoError(t, err)
+	assert.Nil(t, pduSession, "a session without an UL tunnel should be skipped")
+}
+
+// QoS Characteristics is a CHOICE. A flow with a dynamic 5QI left NonDynamic5QI nil, and
+// reading its 5QI panicked.
+func TestHandlerPduSessionResourceSetupRequest_Dynamic5QI(t *testing.T) {
+	gnb := createTestGNBContext()
+	ue := createTestUE(gnb, 12345)
+	ue.CreateUeContext("not informed", "", []string{"01"}, []string{"010203"}, nil)
+
+	message := pduSessionResourceSetupRequest(t, ue, []byte{0x01}, []byte{0x01, 0x02, 0x03})
+	item := &message.InitiatingMessage.Value.PDUSessionResourceSetupRequest.ProtocolIEs.List[2].Value.PDUSessionResourceSetupListSUReq.List[0]
+	transfer := ngapType.PDUSessionResourceSetupRequestTransfer{}
+	require.NoError(t, aper.UnmarshalWithParams(item.PDUSessionResourceSetupRequestTransfer, &transfer, "valueExt"))
+	transfer.ProtocolIEs.List[2].Value.QosFlowSetupRequestList.List[0].QosFlowLevelQosParameters.QosCharacteristics = ngapType.QosCharacteristics{
+		Present: ngapType.QosCharacteristicsPresentDynamic5QI,
+		Dynamic5QI: &ngapType.Dynamic5QIDescriptor{
+			PriorityLevelQos:  ngapType.PriorityLevelQos{Value: 1},
+			PacketDelayBudget: ngapType.PacketDelayBudget{Value: 100},
+			PacketErrorRate:   ngapType.PacketErrorRate{PERScalar: 1, PERExponent: 6},
+			FiveQI:            &ngapType.FiveQI{Value: 7},
+		},
+	}
+	encoded, err := aper.MarshalWithParams(transfer, "valueExt")
+	require.NoError(t, err)
+	item.PDUSessionResourceSetupRequestTransfer = encoded
+
+	HandlerPduSessionResourceSetupRequest(gnb, message)
+
+	pduSession, err := ue.GetPduSession(1)
+	require.NoError(t, err)
+	require.NotNil(t, pduSession, "a session with a dynamic 5QI should be set up")
+}
+
+// An empty PDU session slot is (nil, nil). A Path Switch Request Acknowledge naming a session
+// the UE does not have, with an UL tunnel, then wrote through the nil session and panicked.
+func TestHandlerPathSwitchRequestAcknowledge_UnknownSession(t *testing.T) {
+	gnb := createTestGNBContext()
+	ue := createTestUE(gnb, 12345)
+
+	transfer := ngapType.PathSwitchRequestAcknowledgeTransfer{
+		ULNGUUPTNLInformation: &ngapType.UPTransportLayerInformation{
+			Present: ngapType.UPTransportLayerInformationPresentGTPTunnel,
+			GTPTunnel: &ngapType.GTPTunnel{
+				TransportLayerAddress: ngapType.TransportLayerAddress{
+					Value: aper.BitString{Bytes: []byte{10, 0, 0, 1}, BitLength: 32},
+				},
+				GTPTEID: ngapType.GTPTEID{Value: []byte{0, 0, 0, 1}},
+			},
+		},
+	}
+	encoded, err := aper.MarshalWithParams(transfer, "valueExt")
+	require.NoError(t, err)
+
+	message := &ngapType.NGAPPDU{
+		Present: ngapType.NGAPPDUPresentSuccessfulOutcome,
+		SuccessfulOutcome: &ngapType.SuccessfulOutcome{
+			Value: ngapType.SuccessfulOutcomeValue{
+				Present: ngapType.SuccessfulOutcomePresentPathSwitchRequestAcknowledge,
+				PathSwitchRequestAcknowledge: &ngapType.PathSwitchRequestAcknowledge{
+					ProtocolIEs: ngapType.ProtocolIEContainerPathSwitchRequestAcknowledgeIEs{
+						List: []ngapType.PathSwitchRequestAcknowledgeIEs{
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDRANUENGAPID},
+								Value: ngapType.PathSwitchRequestAcknowledgeIEsValue{
+									Present:     ngapType.PathSwitchRequestAcknowledgeIEsPresentRANUENGAPID,
+									RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
+								},
+							},
+							{
+								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDPDUSessionResourceSwitchedList},
+								Value: ngapType.PathSwitchRequestAcknowledgeIEsValue{
+									Present: ngapType.PathSwitchRequestAcknowledgeIEsPresentPDUSessionResourceSwitchedList,
+									PDUSessionResourceSwitchedList: &ngapType.PDUSessionResourceSwitchedList{
+										List: []ngapType.PDUSessionResourceSwitchedItem{
+											{
+												PDUSessionID:                         ngapType.PDUSessionID{Value: 5},
+												PathSwitchRequestAcknowledgeTransfer: encoded,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	HandlerPathSwitchRequestAcknowledge(gnb, message)
+
+	assert.Empty(t, ue.GetGnbTx(), "nothing should have been sent to the UE for an unknown session")
 }
