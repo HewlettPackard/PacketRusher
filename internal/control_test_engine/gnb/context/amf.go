@@ -201,10 +201,6 @@ func (tnla *TNLAssociation) GetUsage() aper.Enumerated {
 	return tnla.usage
 }
 
-func (tnla *TNLAssociation) Release() error {
-	return tnla.sctpConn.Close()
-}
-
 func (amf *GNBAmf) SetStateInactive() {
 	amf.mu.Lock()
 	amf.state = Inactive

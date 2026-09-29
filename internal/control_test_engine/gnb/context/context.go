@@ -58,6 +58,11 @@ type ControlInfo struct {
 	inboundChannel chan UEMessage
 	n2             atomic.Pointer[sctp.SCTPConn]
 	terminated     atomic.Bool
+	// lifecycle orders publishing a new association against Terminate and against
+	// removing its AMF, so that either the dialler sees it is no longer wanted, or the
+	// closer sees the association and closes it. This holds for each AMF, because
+	// Terminate closes every AMF's association, not only the last one set as N2.
+	lifecycle sync.Mutex
 }
 
 type PagedUE struct {
@@ -251,6 +256,33 @@ func (gnb *GNBContext) FindGnbAmfByIpPort(ipPort netip.AddrPort) *GNBAmf {
 
 func (gnb *GNBContext) DeleteGnBAmf(amfId int64) {
 	gnb.amfPool.Delete(amfId)
+}
+
+// RemoveGnbAmf stops serving through the AMF and closes its association, including one a
+// re-establishment publishes concurrently.
+func (gnb *GNBContext) RemoveGnbAmf(amf *GNBAmf) {
+	gnb.controlInfo.lifecycle.Lock()
+	gnb.DeleteGnBAmf(amf.GetAmfId())
+	conn := amf.GetSCTPConn()
+	gnb.controlInfo.lifecycle.Unlock()
+
+	if conn != nil {
+		_ = conn.Close()
+	}
+}
+
+// PublishAssociation makes conn the AMF's association, unless the gNB has been terminated or
+// no longer serves through the AMF; the caller then owns conn and must close it.
+func (gnb *GNBContext) PublishAssociation(amf *GNBAmf, conn *sctp.SCTPConn) bool {
+	gnb.controlInfo.lifecycle.Lock()
+	defer gnb.controlInfo.lifecycle.Unlock()
+
+	if gnb.IsTerminated() || !gnb.HasGnbAmf(amf.GetAmfId()) {
+		return false
+	}
+	amf.SetSCTPConn(conn)
+	gnb.SetN2(conn)
+	return true
 }
 
 // HasGnbAmf reports whether the AMF is still one this gNB serves through, as opposed to
@@ -464,16 +496,26 @@ func (gnb *GNBContext) GetMccAndMncInOctets() []byte {
 }
 
 func (gnb *GNBContext) Terminate() {
+	gnb.controlInfo.lifecycle.Lock()
 	gnb.controlInfo.terminated.Store(true)
+	// N2 is also the conn of the AMF that published it; collect each conn once.
+	conns := []*sctp.SCTPConn{gnb.GetN2()}
+	for amf := range gnb.IterGnbAmf() {
+		if conn := amf.GetSCTPConn(); !slices.Contains(conns, conn) {
+			conns = append(conns, conn)
+		}
+	}
+	gnb.controlInfo.lifecycle.Unlock()
 
 	// close all connections
 	close(gnb.GetInboundChannel())
 	log.Info("[GNB][UE] NAS channel Terminated")
 
-	n2 := gnb.GetN2()
-	if n2 != nil {
-		log.Info("[GNB][AMF] N2/TNLA Terminated")
-		n2.Close()
+	for _, conn := range conns {
+		if conn != nil {
+			log.Info("[GNB][AMF] N2/TNLA Terminated")
+			conn.Close()
+		}
 	}
 
 	log.Info("GNB Terminated")

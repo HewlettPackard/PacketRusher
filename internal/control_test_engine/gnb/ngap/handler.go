@@ -778,10 +778,8 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 					continue
 				}
 
-				log.Info("[GNB][AMF] Remove AMF:", amf.GetAmfName(), " IP:", amf.GetAmfIpPort().Addr())
-				tnla := amf.GetTNLA()
-				tnla.Release() // Close SCTP Conntection
-				gnb.DeleteGnBAmf(oldAmf.GetAmfId())
+				log.Info("[GNB][AMF] Remove AMF:", oldAmf.GetAmfName(), " IP:", oldAmf.GetAmfIpPort().Addr())
+				gnb.RemoveGnbAmf(oldAmf) // Close SCTP Conntection
 			}
 
 		case ngapType.ProtocolIEIDAMFTNLAssociationToUpdateList:
@@ -867,8 +865,6 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 								"]",
 							)
 
-							tnla := oldAmf.GetTNLA()
-
 							// NGAP UE-TNLA Rebinding
 							uePool := gnb.GetUePool()
 							uePool.Range(func(k, v any) bool {
@@ -902,8 +898,7 @@ func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, me
 								return true
 							})
 
-							tnla.Release()
-							gnb.DeleteGnBAmf(oldAmf.GetAmfId())
+							gnb.RemoveGnbAmf(oldAmf)
 
 							break
 						}
