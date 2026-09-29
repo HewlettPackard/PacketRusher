@@ -143,6 +143,25 @@ func (gnb *GNBContext) GetGtpDevice() *gtp.Device {
 	return gnb.gtpDevice.Load()
 }
 
+// CloseGtpDevice waits for this gNB's UEs to give back what they hold on its shared
+// GTP-U device, then removes the device. Their policy rules and routes are host-wide
+// and outlive the process, so the gNB lets them go first. The wait ends once stall
+// passes with no UE releasing, or after limit.
+func (gnb *GNBContext) CloseGtpDevice(stall, limit time.Duration) {
+	dev := gnb.GetGtpDevice()
+	if dev == nil {
+		return
+	}
+
+	log.Info("[GNB][GTP] Waiting up to ", limit, " for UEs to release their tunnels on ", dev.Name())
+	if held := dev.WaitIdle(stall, limit); held > 0 {
+		log.Warn("[GNB][GTP] Removing shared GTP-U device ", dev.Name(), " while ", held, " UEs still hold rules on it")
+	}
+
+	dev.Close()
+	log.Info("[GNB][GTP] Shared GTP-U device ", dev.Name(), " removed")
+}
+
 func (gnb *GNBContext) GetUePool() *sync.Map {
 	return &gnb.uePool
 }
@@ -461,10 +480,7 @@ func (gnb *GNBContext) Terminate() {
 		n2.Close()
 	}
 
-	if dev := gnb.GetGtpDevice(); dev != nil {
-		dev.Close()
-		log.Info("[GNB][GTP] Shared GTP-U device removed")
-	}
+	gnb.CloseGtpDevice(0, 0)
 
 	log.Info("GNB Terminated")
 }

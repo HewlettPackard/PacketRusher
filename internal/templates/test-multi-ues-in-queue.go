@@ -110,4 +110,12 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	}
 
 	time.Sleep(time.Second * 1)
+
+	// Each gNB removes the GTP-U device its UEs shared, once they have released their
+	// tunnels on it. It stops waiting when releases stop coming for 5 s, or after 60 s:
+	// UEs that cannot reach the AMF never release, and in --loop mode UEs register
+	// again after they terminate.
+	for _, gnb := range gnbs {
+		gnb.CloseGtpDevice(5*time.Second, 60*time.Second)
+	}
 }

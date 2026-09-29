@@ -9,7 +9,9 @@ import (
 	"net/netip"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/free5gc/go-gtp5gnl"
 	"github.com/khirono/go-nl"
@@ -38,7 +40,9 @@ func TestTakeAllocatesDisjointRuleIDs(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			got <- dev.Take()
+			ids, err := dev.Take()
+			assert.NoError(t, err)
+			got <- ids
 		}()
 	}
 	wg.Wait()
@@ -63,7 +67,9 @@ func TestTakeAllocatesDisjointRuleIDs(t *testing.T) {
 // The first UE on a shared device gets the identifiers a dedicated device always used, so
 // the dedicated mode's rules are unchanged.
 func TestFirstSharedUeMatchesDedicatedIDs(t *testing.T) {
-	assert.Equal(t, DedicatedRuleIDs(), (&Device{}).Take())
+	ids, err := (&Device{}).Take()
+	require.NoError(t, err)
+	assert.Equal(t, DedicatedRuleIDs(), ids)
 }
 
 // gtp5g refuses a QER that already exists, so concurrent UEs with one QFI must create it
@@ -115,8 +121,8 @@ func TestEnsureQERSeparatesQFIs(t *testing.T) {
 	assert.Len(t, created, 2)
 }
 
-// One failed attempt must not disable QoS marking for every later UE with that QFI, and
-// must not use up an identifier.
+// One failed attempt must not disable QoS marking for every later UE with that QFI; the
+// retry uses the same identifier.
 func TestEnsureQERRetriesAfterFailure(t *testing.T) {
 	dev := &Device{}
 	var tried []uint32
@@ -140,16 +146,106 @@ func TestEnsureQERRetriesAfterFailure(t *testing.T) {
 	assert.Equal(t, uint32(1), id)
 }
 
+// A create the kernel applied without acknowledging leaves a QER with the identifier.
+// Another QFI must not be given it, or its create collides with a QER marking the
+// first QFI.
+func TestEnsureQERNeverReusesAnIdentifierAcrossQFIs(t *testing.T) {
+	dev := &Device{}
+
+	_, ok := dev.EnsureQER(9, func(uint32) error { return errors.New("lost ack") })
+	require.False(t, ok)
+
+	var other uint32
+	id, ok := dev.EnsureQER(5, func(id uint32) error { other = id; return nil })
+	require.True(t, ok)
+	assert.Equal(t, uint32(2), other, "identifier 1 stays reserved for QFI 9")
+	assert.Equal(t, uint32(2), id)
+}
+
+// The retry after a lost acknowledgement finds the QER already there. Its identifier is
+// reserved for this QFI, so the QER there is this QFI's and is usable.
+func TestEnsureQERTakesAlreadyExistsAsCreated(t *testing.T) {
+	dev := &Device{}
+
+	_, ok := dev.EnsureQER(9, func(uint32) error { return errors.New("lost ack") })
+	require.False(t, ok)
+
+	id, ok := dev.EnsureQER(9, func(uint32) error { return syscall.EEXIST })
+	assert.True(t, ok)
+	assert.Equal(t, uint32(1), id)
+}
+
+// A QER that cannot be created is not retried by every UE for the rest of the run.
+func TestEnsureQERGivesUpAfterMaxAttempts(t *testing.T) {
+	dev := &Device{}
+	calls := 0
+	failing := func(uint32) error { calls++; return errors.New("refused") }
+
+	for i := 0; i < maxQERAttempts+5; i++ {
+		_, ok := dev.EnsureQER(9, failing)
+		assert.False(t, ok)
+	}
+
+	assert.Equal(t, maxQERAttempts, calls)
+}
+
+// The PDR identifier is 16 bits and each UE takes two, so a device holds a bounded
+// number of UEs. Past that, a UE gets an error, not identifiers that wrap onto another
+// UE's rules.
+func TestTakeRefusesPastTheLastSlot(t *testing.T) {
+	dev := &Device{nextUE: maxSlots - 1}
+
+	last, err := dev.Take()
+	require.NoError(t, err)
+	assert.Equal(t, uint32(65534), last.PDRUp, "the last slot's uplink PDR is the largest 16-bit identifier it can use")
+
+	_, err = dev.Take()
+	assert.ErrorIs(t, err, ErrDeviceFull)
+
+	dev.giveBack(last)
+	again, err := dev.Take()
+	require.NoError(t, err, "a slot given back can be taken again")
+	assert.Equal(t, last, again)
+}
+
+// The gNB waits for its UEs to give their rules back before it removes the device, but
+// not for ones that never will.
+func TestWaitIdle(t *testing.T) {
+	dev := &Device{}
+	first, err := dev.Take()
+	require.NoError(t, err)
+	second, err := dev.Take()
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, dev.WaitIdle(20*time.Millisecond, time.Second), "nothing given back: stop after the stall")
+
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		dev.giveBack(first)
+		time.Sleep(30 * time.Millisecond)
+		dev.giveBack(second)
+	}()
+	assert.Zero(t, dev.WaitIdle(200*time.Millisecond, 5*time.Second), "releases still coming: wait for them")
+
+	_, err = dev.Take()
+	require.NoError(t, err)
+	begun := time.Now()
+	assert.Equal(t, 1, dev.WaitIdle(time.Hour, 50*time.Millisecond))
+	assert.Less(t, time.Since(begun), time.Second, "the limit bounds the wait")
+}
+
 // A UE that leaves gives its identifiers back, so a --loop run reuses them instead of
 // walking the 16-bit PDR identifier space.
 func TestTakeReusesGivenBackSlot(t *testing.T) {
 	dev := &Device{}
-	first := dev.Take()
-	second := dev.Take()
+	first, _ := dev.Take()
+	second, _ := dev.Take()
 
 	dev.giveBack(first)
-	assert.Equal(t, first, dev.Take(), "a returned slot is taken before a new one")
-	assert.Equal(t, idsForSlot(2), dev.Take(), "with none returned, a new slot opens")
+	again, _ := dev.Take()
+	assert.Equal(t, first, again, "a returned slot is taken before a new one")
+	next, _ := dev.Take()
+	assert.Equal(t, idsForSlot(2), next, "with none returned, a new slot opens")
 	assert.NotEqual(t, first.PDRUp, second.PDRUp)
 }
 

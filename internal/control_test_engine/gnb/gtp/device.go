@@ -49,9 +49,12 @@ type Device struct {
 	// different QFIs, and a PDR must reference a QER carrying its own flow's QFI, so
 	// each QFI gets one QER, created by the first UE that needs it. gtp5g refuses a
 	// QER that already exists, so creating one per UE would fail for every UE after
-	// the first. A failed attempt is retried by the next UE with that QFI.
-	qerMu sync.Mutex
-	qers  map[int64]uint32
+	// the first. An identifier is reserved for a QFI at its first attempt and never
+	// handed to another, so a create that the kernel applied but did not acknowledge
+	// cannot collide with a later QFI's.
+	qerMu   sync.Mutex
+	qers    map[int64]*qerState
+	nextQER uint32
 
 	// One netlink client per device, held for the run, rather than the fresh
 	// conn/mux/client the tuncmd.Cmd* wrappers build for every single call. It installs
@@ -81,7 +84,7 @@ func NewDevice(gnbIP netip.Addr) (*Device, error) {
 		log.Info("[GNB][GTP] Removed stale shared GTP-U device ", name, " from a previous run")
 	}
 
-	d := &Device{name: name, stop: make(chan bool), qers: make(map[int64]uint32)}
+	d := &Device{name: name, stop: make(chan bool)}
 
 	go func() {
 		// Does not return while the GTP-U socket is open, so it owns this goroutine
@@ -241,32 +244,63 @@ func (d *Device) AddQER(args []string) error {
 	return d.addRule(args, gtpTunnel.ParseQEROptions, gtp5gnl.CreateQEROID, gtpTunnel.CmdAddQER)
 }
 
-// EnsureQER returns the identifier of this device's QER for qfi, calling create with a
-// new identifier the first time that QFI is seen. It reports false when the QER is not
-// usable, so the caller leaves it unreferenced; the next UE with that QFI tries again,
-// with the same identifier.
+// qerState is one QFI's QER on a device: its reserved identifier, and how the
+// attempts to create it have gone.
+type qerState struct {
+	id       uint32
+	created  bool
+	failures int
+}
+
+// maxQERAttempts bounds how many UEs try to create one QFI's QER. Past it, UEs with
+// that QFI get tunnels whose uplink carries no QFI marking, and that is logged once.
+const maxQERAttempts = 3
+
+// EnsureQER returns the identifier of this device's QER for qfi, calling create the
+// first time that QFI is seen. It reports false when the QER is not usable, so the
+// caller leaves it unreferenced; the next UE with that QFI tries again with the same
+// identifier, up to maxQERAttempts in all. A create refused because the QER already
+// exists counts as done: the identifier is reserved for this QFI, so the QER there
+// can only be this QFI's, from an attempt whose acknowledgement was lost.
 func (d *Device) EnsureQER(qfi int64, create func(id uint32) error) (uint32, bool) {
 	d.qerMu.Lock()
 	defer d.qerMu.Unlock()
 
-	if id, ok := d.qers[qfi]; ok {
-		return id, true
-	}
-
 	if d.qers == nil {
-		d.qers = make(map[int64]uint32)
+		d.qers = make(map[int64]*qerState)
 	}
 
-	// QFIs are six bits, so a device never holds more than 64 of these.
-	id := uint32(len(d.qers) + 1)
-	if err := create(id); err != nil {
-		log.Error("[UE][GTP] Unable to create the shared QER for QFI ", qfi, ": ", err)
+	q, ok := d.qers[qfi]
+	if !ok {
+		// QFIs are six bits, so a device never holds more than 64 of these.
+		d.nextQER++
+		q = &qerState{id: d.nextQER}
+		d.qers[qfi] = q
+	}
+
+	if q.created {
+		return q.id, true
+	}
+
+	if q.failures >= maxQERAttempts {
 		return 0, false
 	}
 
-	d.qers[qfi] = id
+	if err := create(q.id); err != nil && !errors.Is(err, syscall.EEXIST) {
+		q.failures++
+		if q.failures < maxQERAttempts {
+			log.Error("[UE][GTP] Unable to create the shared QER for QFI ", qfi, ", will retry: ", err)
+		} else {
+			log.Error("[UE][GTP] Unable to create the shared QER for QFI ", qfi, " after ", q.failures,
+				" attempts; UEs with this QFI will carry no QFI marking on the uplink: ", err)
+		}
 
-	return id, true
+		return 0, false
+	}
+
+	q.created = true
+
+	return q.id, true
 }
 
 // RuleIDs are the rule identifiers one UE occupies on a device. PDR and FAR are
@@ -318,10 +352,17 @@ func waitForLink(name string, timeout time.Duration) error {
 	}
 }
 
+// maxSlots is how many UEs one device can hold rules for at once. gtp5g's PDR
+// identifier is 16 bits and each UE takes two, 2n+1 and 2n+2, so the last usable
+// slot is the one whose uplink PDR is 65534.
+const maxSlots = 32767
+
+// ErrDeviceFull reports that a device has no rule identifiers left for another UE.
+var ErrDeviceFull = errors.New("shared GTP-U device has no rule identifiers left")
+
 // Take reserves one UE's worth of rule identifiers, reusing a slot a departed UE gave
-// back before opening a new one. gtp5g's PDR identifier is 16 bits, so one device holds
-// at most 32767 UEs' PDR pairs at once.
-func (d *Device) Take() RuleIDs {
+// back before opening a new one.
+func (d *Device) Take() (RuleIDs, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -330,11 +371,44 @@ func (d *Device) Take() RuleIDs {
 		n = d.free[last]
 		d.free = d.free[:last]
 	} else {
+		if d.nextUE >= maxSlots {
+			return RuleIDs{}, ErrDeviceFull
+		}
 		n = d.nextUE
 		d.nextUE++
 	}
 
-	return idsForSlot(n)
+	return idsForSlot(n), nil
+}
+
+// inUse reports how many slots are taken and not yet given back.
+func (d *Device) inUse() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return int(d.nextUE) - len(d.free)
+}
+
+// WaitIdle waits for every UE to give its rules back, and reports how many still hold
+// them. It gives up once stall passes with no further slot given back, or once limit
+// passes in all: a slot whose rules could not be removed is never given back, and in
+// --loop mode UEs register again after they terminate, so zero may never come.
+func (d *Device) WaitIdle(stall, limit time.Duration) int {
+	start := time.Now()
+	lowest, lowestAt := d.inUse(), start
+	for {
+		n := d.inUse()
+		now := time.Now()
+		if n < lowest {
+			lowest, lowestAt = n, now
+		}
+
+		if n == 0 || now.Sub(lowestAt) >= stall || now.Sub(start) >= limit {
+			return n
+		}
+
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // giveBack makes a slot available to take again. Only call it once the slot's rules
