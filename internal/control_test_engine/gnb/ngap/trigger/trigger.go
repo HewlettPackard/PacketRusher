@@ -89,7 +89,9 @@ func SendUeContextReleaseRequest(ue *context.GNBUe) {
 	}
 
 	// Only once there is a request to send: an Error Indication for this UE is
-	// treated as the answer to it.
+	// treated as the answer to it. Set before the send, so an answer that
+	// arrives before the send returns still finds it.
+	alreadyRequested := ue.GetReleaseRequested()
 	ue.SetReleaseRequested(true)
 
 	// Send UE Context Release Request
@@ -97,6 +99,11 @@ func SendUeContextReleaseRequest(ue *context.GNBUe) {
 	err = sender.SendToAmF(ngapMsg, conn)
 	if err != nil {
 		log.Error("[GNB][AMF] Error sending UE Context Release Request: ", err)
+		// Nothing was sent, so no Error Indication can answer it. An earlier
+		// request that was sent is still pending, so leave its flag alone.
+		if !alreadyRequested {
+			ue.SetReleaseRequested(false)
+		}
 	}
 }
 
