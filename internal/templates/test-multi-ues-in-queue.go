@@ -8,7 +8,6 @@ import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
-	gtpService "my5G-RANTester/internal/control_test_engine/ue/gtp/service"
 	"os"
 	"os/signal"
 	"sync"
@@ -35,11 +34,9 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 
 	cfg := config.GetConfig()
 
-	if tunnelMode == config.TunnelShared {
-		// Must run before the gNB binds its N3 address, and must touch only this
-		// gNB's device so sibling processes on the same host survive.
-		gtpService.RemoveStaleSharedLink(cfg.GNodeB.DataIF.Addr())
-	}
+	// Set before the gNBs are created: in shared mode each gNB creates the GTP-U
+	// device its UEs will use.
+	cfg.Ue.TunnelMode = tunnelMode
 
 	var numGnb int
 	if dedicatedGnb {
@@ -56,8 +53,6 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	// Wait for gNB to be connected before registering UEs
 	// TODO: We should wait for NGSetupResponse instead
 	time.Sleep(1 * time.Second)
-
-	cfg.Ue.TunnelMode = tunnelMode
 
 	scenarioChans := make([]chan procedures.UeTesterMessage, numUes+1)
 

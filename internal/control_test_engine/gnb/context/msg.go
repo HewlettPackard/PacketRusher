@@ -5,6 +5,7 @@
 package context
 
 import (
+	"my5G-RANTester/internal/control_test_engine/gnb/gtp"
 	"net/netip"
 
 	"github.com/free5gc/nas/nasType"
@@ -13,6 +14,7 @@ import (
 type UEMessage struct {
 	GNBPduSessions    [16]*GnbPDUSession
 	GnbIp             netip.Addr
+	GtpDevice         *gtp.Device // the gNB's shared GTP-U device, when it has one
 	GNBRx             chan UEMessage
 	GNBTx             chan UEMessage
 	GNBInboundChannel chan UEMessage

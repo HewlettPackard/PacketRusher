@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"my5G-RANTester/config"
 	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
+	"my5G-RANTester/internal/control_test_engine/gnb/gtp"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 
 	gtpLink "github.com/free5gc/go-gtp5gnl/linkcmd"
@@ -22,9 +23,9 @@ import (
 	"time"
 )
 
-// addPDR, addFAR and addQER prefer the device's long-lived netlink client and fall
+// addPDR and addFAR prefer the shared device's long-lived netlink client and fall
 // back to the per-call wrapper when a UE owns its device outright.
-func addPDR(link *sharedLink, args []string) error {
+func addPDR(link *gtp.Device, args []string) error {
 	if link != nil {
 		return link.AddPDR(args)
 	}
@@ -32,7 +33,7 @@ func addPDR(link *sharedLink, args []string) error {
 	return gtpTunnel.CmdAddPDR(args)
 }
 
-func addFAR(link *sharedLink, args []string) error {
+func addFAR(link *gtp.Device, args []string) error {
 	if link != nil {
 		return link.AddFAR(args)
 	}
@@ -40,20 +41,12 @@ func addFAR(link *sharedLink, args []string) error {
 	return gtpTunnel.CmdAddFAR(args)
 }
 
-func addQER(link *sharedLink, args []string) error {
-	if link != nil {
-		return link.AddQER(args)
-	}
-
-	return gtpTunnel.CmdAddQER(args)
-}
-
 // addPDRVerified installs a PDR and, when PR_VERIFY_RULES=1, confirms it reached the
 // datapath, retrying once. A silent install failure is indistinguishable from success at
 // setup time -- the UE keeps its address, rule and route and simply never passes traffic
 // -- so the only way to catch it is to read the rule back. It returns an error when the
 // PDR is not known to be installed, so the caller stops as it does for a failed FAR.
-func addPDRVerified(link *sharedLink, id uint32, args []string, label string) error {
+func addPDRVerified(link *gtp.Device, id uint32, args []string, label string) error {
 	err := addPDR(link, args)
 	if link == nil || !verifyRules() {
 		if err != nil {
@@ -117,38 +110,57 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	msin := ue.GetMsin()
 	vrfInf := fmt.Sprintf("vrf%s", msin)
 
-	// In shared mode every UE of this gNB rides one device and contributes its own
-	// rules, so the identifiers have to be allocated rather than assumed.
+	// In shared mode every UE of this gNB rides the gNB's device and contributes its
+	// own rules, so the identifiers have to be allocated rather than assumed.
 	var (
 		nameInf   string
-		ids       ruleIDs
-		sharedFor *sharedLink
+		ids       gtp.RuleIDs
+		sharedFor *gtp.Device
 		setupDone bool
+
+		// What this setup installs outside the device, recorded as it goes so that
+		// releasing the session removes exactly these.
+		tunRule  *netlink.Rule
+		tunRoute *netlink.Route
 	)
 
 	if ue.TunnelMode == config.TunnelShared {
-		// A handover sets the tunnel up again for a session that already has one,
-		// possibly on another gNB's device. Give back what it holds first -- its
-		// rules, identifiers and address -- or they stay behind on that device, and
-		// adding the address again on the same device fails.
+		// A handover or a repeated setup sets the tunnel up again for a session that
+		// already has one, possibly on another gNB's device. Give back what it holds
+		// first -- its route, policy rule, address, rules and identifiers. Otherwise
+		// they stay behind: adding the address again on the same device fails, and
+		// if the uplink TEID changed, the old policy rule still matches this UE's
+		// address and sends it to the old table.
 		pduSession.ReleaseTunnel()
 
-		link, err := sharedLinkFor(ueGnbIp)
-		if err != nil {
-			log.Error("[GNB][GTP] Unable to use the shared GTP interface: ", err)
+		dev := msg.GtpDevice
+		if dev == nil {
+			log.Error("[GNB][GTP] gNB has no shared GTP-U device; no tunnel for UE ", msin)
 			return
 		}
 
-		nameInf = link.name
-		ids = link.take()
-		sharedFor = link
+		nameInf = dev.Name()
+		ids = dev.Take()
+		sharedFor = dev
 
 		// Until setup completes, a failure hands everything back at once; afterwards
-		// the UE does, on Terminate or on the next setup of this session.
-		name, slot := link.name, ids
+		// the UE does, on Terminate or on the next setup of this session. Only this
+		// UE's parts come off: the device is the gNB's.
+		slot := ids
 		release := func() {
-			removeAddress(name, ueIp)
-			link.release(slot)
+			if tunRoute != nil {
+				_ = netlink.RouteDel(tunRoute)
+			}
+			if tunRule != nil {
+				_ = netlink.RuleDel(tunRule)
+			}
+			dev.RemoveAddress(ueIp)
+			dev.Release(slot)
+
+			// The session no longer holds these, so nothing else may remove them.
+			pduSession.SetTunRoute(nil)
+			pduSession.SetTunRule(nil)
+			pduSession.SetTunInterface(nil)
 		}
 		defer func() {
 			if setupDone {
@@ -159,7 +171,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		}()
 	} else {
 		nameInf = fmt.Sprintf("val%s", msin)
-		ids = dedicatedRuleIDs()
+		ids = gtp.DedicatedRuleIDs()
 		stopSignal := make(chan bool)
 
 		_ = gtpLink.CmdDel(nameInf)
@@ -184,7 +196,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 
 	// Create FAR for downlink: forward decapsulated packets towards the UE.
 	cmdAddFar := []string{nameInf,
-		strconv.FormatUint(uint64(ids.farDown), 10), // FAR ID
+		strconv.FormatUint(uint64(ids.FARDown), 10), // FAR ID
 		"--action", "2", // Apply Action = FORW
 	}
 	log.Debug("[UE][GTP] Setting up GTP Forwarding Action Rule for ", strings.Join(cmdAddFar, " "))
@@ -195,7 +207,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 
 	// Create FAR for uplink: encapsulate towards the UPF.
 	cmdAddFar = []string{nameInf,
-		strconv.FormatUint(uint64(ids.farUp), 10), // FAR ID
+		strconv.FormatUint(uint64(ids.FARUp), 10), // FAR ID
 		"--action", "2", // Apply Action = FORW
 		"--hdr-creation", "0", strconv.FormatUint(uint64(gnbPduSession.GetTeidUplink()), 10), upfIp, "2152", // Outer Header Creation
 	}
@@ -207,58 +219,66 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 
 	// Create PDR for downlink: GTP-U from the UPF on this gNB's F-TEID.
 	cmdAddPdr := []string{nameInf,
-		strconv.FormatUint(uint64(ids.pdrDown), 10), // PDR ID
+		strconv.FormatUint(uint64(ids.PDRDown), 10), // PDR ID
 		"--pcd", "1", // Precedence = 1
 		"--hdr-rm", "0", // Outer Header Removal = GTP-U/UDP/IPv4
 		"--ue-ipv4", ueIp, // UE IP Address
 		"--f-teid", strconv.FormatUint(uint64(gnbPduSession.GetTeidDownlink()), 10), msg.GnbIp.String(), // F-TEID
-		"--far-id", strconv.FormatUint(uint64(ids.farDown), 10), // FAR ID
+		"--far-id", strconv.FormatUint(uint64(ids.FARDown), 10), // FAR ID
 		"--src-intf", "1", // Source Interface = Core
 	}
 	log.Debug("[UE][GTP] Setting up GTP Packet Detection Rule for ", strings.Join(cmdAddPdr, " "))
-	if err := addPDRVerified(sharedFor, ids.pdrDown, cmdAddPdr, "downlink"); err != nil {
+	if err := addPDRVerified(sharedFor, ids.PDRDown, cmdAddPdr, "downlink"); err != nil {
 		return
 	}
 
 	// Create PDR for uplink: packets from the UE's address.
 	cmdAddPdr = []string{nameInf,
-		strconv.FormatUint(uint64(ids.pdrUp), 10), // PDR ID
+		strconv.FormatUint(uint64(ids.PDRUp), 10), // PDR ID
 		"--pcd", "2", // Precedence = 2
 		"--ue-ipv4", ueIp, // UE IP Address
-		"--far-id", strconv.FormatUint(uint64(ids.farUp), 10), // FAR ID
+		"--far-id", strconv.FormatUint(uint64(ids.FARUp), 10), // FAR ID
 		"--src-intf", "0", // Source Interface = Access
 		"--gtpu-src-ip", ueGnbIp.String(), // GTP-U source IP address (not part of PFCP spec)
 	}
 	if qfi > 0 {
-		cmdAddQer := []string{nameInf,
-			strconv.FormatUint(uint64(ids.qer), 10), // QER ID
-			"--qfi", strconv.FormatInt(qfi, 10),     // QFI
+		cmdAddQer := func(id uint32) []string {
+			return []string{nameInf,
+				strconv.FormatUint(uint64(id), 10),  // QER ID
+				"--qfi", strconv.FormatInt(qfi, 10), // QFI
+			}
 		}
-		log.Debug("[UE][GTP] Setting Up QFI", strings.Join(cmdAddQer, " "))
 
-		// On a shared device the QER belongs to the device, not the UE: every UE here
-		// carries the same QFI, and gtp5g refuses one that already exists. Creating it
-		// per UE therefore failed for every UE after the first -- and because that
-		// error used to abandon the setup, those UEs silently got no address, no rule
-		// and no route while still reporting a session.
-		qerUsable := true
+		// On a shared device QERs belong to the device, one per QFI, not to the UE:
+		// gtp5g refuses a QER that already exists, so creating it per UE failed for
+		// every UE after the first -- and because that error used to abandon the
+		// setup, those UEs silently got no address, no rule and no route while still
+		// reporting a session. Keying by QFI keeps a UE given another QFI from being
+		// marked with the first UE's.
+		qerID, qerUsable := uint32(gtp.DedicatedQERID), true
 		if sharedFor != nil {
-			qerUsable = sharedFor.EnsureQER(func() error { return sharedFor.AddQER(cmdAddQer) })
-		} else if err := addQER(nil, cmdAddQer); err != nil {
-			log.Error("[UE][GTP] Unable to create QER: ", err)
+			qerID, qerUsable = sharedFor.EnsureQER(qfi, func(id uint32) error {
+				log.Debug("[UE][GTP] Setting Up QFI ", strings.Join(cmdAddQer(id), " "))
+				return sharedFor.AddQER(cmdAddQer(id))
+			})
+		} else {
+			log.Debug("[UE][GTP] Setting Up QFI ", strings.Join(cmdAddQer(qerID), " "))
+			if err := gtpTunnel.CmdAddQER(cmdAddQer(qerID)); err != nil {
+				log.Error("[UE][GTP] Unable to create QER: ", err)
 
-			qerUsable = false
+				qerUsable = false
+			}
 		}
 
 		if qerUsable {
 			cmdAddPdr = append(cmdAddPdr,
-				"--qer-id", strconv.FormatUint(uint64(ids.qer), 10), // QER ID
+				"--qer-id", strconv.FormatUint(uint64(qerID), 10), // QER ID
 			)
 		}
 	}
 
 	log.Debug("[UE][GTP] Setting Up GTP Packet Detection Rule for ", strings.Join(cmdAddPdr, " "))
-	if err := addPDRVerified(sharedFor, ids.pdrUp, cmdAddPdr, "uplink"); err != nil {
+	if err := addPDRVerified(sharedFor, ids.PDRUp, cmdAddPdr, "uplink"); err != nil {
 		return
 	}
 
@@ -300,6 +320,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 			log.Error("[UE][DATA] Unable to create routing policy rule for UE: ", err)
 			return
 		}
+		tunRule = rule
 		pduSession.SetTunRule(rule)
 	case config.TunnelVrf:
 		vrfDevice := &netlink.Vrf{
@@ -336,9 +357,13 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		Priority:  1,                                                       // metric 1
 		Table:     int(tableId),                                            // table <ECI>
 	}
+	// Without its route the UE has an address and GTP-U rules but no way to reach
+	// them, so it is not set up: stop here, and in shared mode hand everything back.
 	if err := netlink.RouteReplace(route); err != nil {
-		log.Error("[GNB][GTP] Unable to create Kernel Route ", err)
+		log.Error("[GNB][GTP] Unable to create Kernel Route: ", err, "; no tunnel for UE ", ueIp)
+		return
 	}
+	tunRoute = route
 	pduSession.SetTunRoute(route)
 	setupDone = true
 

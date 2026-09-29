@@ -7,6 +7,7 @@ package gnb
 import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
+	"my5G-RANTester/internal/control_test_engine/gnb/gtp"
 	serviceNas "my5G-RANTester/internal/control_test_engine/gnb/nas/service"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
@@ -115,6 +116,16 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 		if !connected {
 			log.Fatal("[GNB] Failed to establish connection after ", maxRetries, " retries")
 		}
+	}
+
+	// The gNB, not its UEs, owns the GTP-U device they share: it is created on the N3
+	// address the gNB settled on above, before any UE can ask for a tunnel.
+	if conf.Ue.TunnelMode == config.TunnelShared {
+		dev, err := gtp.NewDevice(gnb.GetN3GnbIp())
+		if err != nil {
+			log.Fatal("[GNB][GTP] Unable to create the shared GTP-U device: ", err)
+		}
+		gnb.SetGtpDevice(dev)
 	}
 
 	// start communication with UE (server UNIX sockets).
