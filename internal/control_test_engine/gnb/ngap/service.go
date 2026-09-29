@@ -5,6 +5,7 @@
 package ngap
 
 import (
+	"errors"
 	"fmt"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
@@ -25,6 +26,10 @@ const (
 	reassociateMaxBackoff     = 30 * time.Second
 	reassociateSetupTimeout   = 5 * time.Second
 )
+
+// errAssociationUnwanted is returned by dialAmf when the gNB was terminated, or stopped
+// serving through the AMF, while the dial was in progress.
+var errAssociationUnwanted = errors.New("association no longer wanted")
 
 func InitConn(amf *context.GNBAmf, gnb *context.GNBContext) error {
 	if err := dialAmf(amf, gnb); err != nil {
@@ -84,6 +89,12 @@ func dialAmf(amf *context.GNBAmf, gnb *context.GNBContext) error {
 		conn = result.conn
 		err = result.err
 	case <-time.After(5 * time.Second):
+		// The dial may still complete; nothing will read what it yields, so close it.
+		go func() {
+			if result := <-dialChan; result.conn != nil {
+				_ = result.conn.Close()
+			}
+		}()
 		err = fmt.Errorf("SCTP dial timeout after 5 seconds")
 		log.Error("[GNB][SCTP] SCTP dial timeout")
 		return err
@@ -100,8 +111,11 @@ func dialAmf(amf *context.GNBAmf, gnb *context.GNBContext) error {
 	// set streams and other information about TNLA
 
 	// successful established SCTP (TNLA - N2)
-	amf.SetSCTPConn(conn)
-	gnb.SetN2(conn)
+	if !gnb.PublishAssociation(amf, conn) {
+		_ = conn.Close()
+		log.Warn("[GNB][SCTP] Closing association with AMF ", amf.GetAmfIpPort(), ": ", errAssociationUnwanted)
+		return errAssociationUnwanted
+	}
 
 	conn.SubscribeEvents(sctp.SCTP_EVENT_DATA_IO)
 
@@ -157,14 +171,18 @@ func GnbListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 		// Dial until an association exists, then set it up; the setup response arrives
 		// through readAssociation on the next pass.
 		for {
-			// Checked before every dial: Terminate closes only the association it can see,
-			// so one dialled after it would never be closed.
-			if gnb.IsTerminated() {
+			// Checked before every dial so as not to dial for nothing; dialAmf checks
+			// again as it publishes, since either can change while it dials.
+			if gnb.IsTerminated() || !gnb.HasGnbAmf(amf.GetAmfId()) {
 				return
 			}
 			attempt++
-			if err := dialAmf(amf, gnb); err == nil {
+			err := dialAmf(amf, gnb)
+			if err == nil {
 				break
+			}
+			if errors.Is(err, errAssociationUnwanted) {
+				return
 			}
 			log.Error("[GNB][SCTP] Still no association with AMF ", amf.GetAmfIpPort(), " after ",
 				time.Since(lostAt).Round(time.Second), " (attempt ", attempt, "); retrying in ", backoff)
