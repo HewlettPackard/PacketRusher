@@ -232,6 +232,11 @@ func awaitReassociation(amf *context.GNBAmf, conn *sctp.SCTPConn, lostAt time.Ti
 	for {
 		select {
 		case <-tick.C:
+			// A later attempt has replaced this association: the outcome is that
+			// attempt's to report, not this one's.
+			if amf.GetSCTPConn() != conn {
+				return
+			}
 			if amf.GetState() == context.Active {
 				log.Warn("[GNB][SCTP] Association with AMF ", amf.GetAmfIpPort(), " re-established after ",
 					time.Since(lostAt).Round(time.Second), " (attempt ", attempt, ")")
