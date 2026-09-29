@@ -200,6 +200,8 @@ func (c *AMFContext) FindGnbById(globalRanNodeID models.GlobalRanNodeId) (GNBCon
 	defer gnbMutex.Unlock()
 	for _, gnb := range c.gnbs {
 		if gnb.globalRanNodeID == globalRanNodeID {
+			connMu.RLock()
+			defer connMu.RUnlock()
 			return *gnb, nil
 		}
 	}
