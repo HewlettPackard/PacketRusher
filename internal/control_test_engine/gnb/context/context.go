@@ -40,7 +40,7 @@ type GNBContext struct {
 	ueIpGenerator  uint8         // ran ue ip.
 	pagedUEs       []PagedUE
 	pagedUELock    sync.Mutex
-	gtpDevice      *gtp.Device // GTP-U device shared by this gNB's UEs, if any
+	gtpDevice      atomic.Pointer[gtp.Device] // GTP-U device shared by this gNB's UEs, if any
 }
 
 type DataInfo struct {
@@ -138,15 +138,16 @@ func (gnb *GNBContext) GetN3GnbIp() netip.Addr {
 }
 
 // SetGtpDevice gives this gNB the GTP-U device its UEs' tunnels share. The gNB owns
-// it: it is closed when the gNB terminates.
+// it: it is closed when the gNB terminates. It is set after the NGAP receiver has
+// started, and read from there, hence atomic.
 func (gnb *GNBContext) SetGtpDevice(dev *gtp.Device) {
-	gnb.gtpDevice = dev
+	gnb.gtpDevice.Store(dev)
 }
 
 // GetGtpDevice returns the GTP-U device this gNB's UEs share, or nil when each UE
 // has its own or there are no tunnels.
 func (gnb *GNBContext) GetGtpDevice() *gtp.Device {
-	return gnb.gtpDevice
+	return gnb.gtpDevice.Load()
 }
 
 func (gnb *GNBContext) GetUePool() *sync.Map {
