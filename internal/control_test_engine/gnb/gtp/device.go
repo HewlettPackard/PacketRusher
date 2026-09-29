@@ -35,6 +35,7 @@ import (
 type Device struct {
 	name      string
 	stop      chan bool
+	added     chan struct{} // closed once the goroutine holding the GTP-U socket has returned
 	closeOnce sync.Once
 
 	// mu guards nextUE and free. IDs must be unique within a device, so they are
@@ -84,9 +85,10 @@ func NewDevice(gnbIP netip.Addr) (*Device, error) {
 		log.Info("[GNB][GTP] Removed stale shared GTP-U device ", name, " from a previous run")
 	}
 
-	d := &Device{name: name, stop: make(chan bool)}
+	d := &Device{name: name, stop: make(chan bool), added: make(chan struct{})}
 
 	go func() {
+		defer close(d.added)
 		// Does not return while the GTP-U socket is open, so it owns this goroutine
 		// for the lifetime of the gNB rather than of one UE.
 		if err := gtpLink.CmdAddWithStopCh(name, 1, 131072, gnbIP.String(), "", d.stop); err != nil {
@@ -95,7 +97,7 @@ func NewDevice(gnbIP netip.Addr) (*Device, error) {
 	}()
 
 	if err := waitForLink(name, 5*time.Second); err != nil {
-		close(d.stop)
+		d.stopAdd()
 		return nil, err
 	}
 
@@ -123,9 +125,23 @@ func (d *Device) Close() {
 		d.client, d.link, d.conn, d.mux = nil, nil, nil, nil
 		d.clientMu.Unlock()
 
-		close(d.stop)
+		d.stopAdd()
 		_ = gtpLink.CmdDel(d.name)
 	})
+}
+
+// stopAdd ends the goroutine that holds the GTP-U socket and waits for it to return.
+// go-nl's Mux closes its pipe's write end twice, once in Close and again when Serve
+// returns, both on that goroutine's way out. A descriptor opened in between -- such
+// as the netlink socket of the CmdDel that follows -- can be given the same number and
+// be closed by the second close, and that CmdDel then waits for its reply forever.
+func (d *Device) stopAdd() {
+	close(d.stop)
+	select {
+	case <-d.added:
+	case <-time.After(5 * time.Second):
+		log.Warn("[GNB][GTP] GTP-U socket of ", d.name, " still open after 5s; removing the device anyway")
+	}
 }
 
 // openClient prepares the device's long-lived netlink client.
