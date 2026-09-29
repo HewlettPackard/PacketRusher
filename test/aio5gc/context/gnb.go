@@ -8,6 +8,7 @@ import (
 	"my5G-RANTester/lib/ngap/ngapSctp"
 	"my5G-RANTester/test/aio5gc/lib/types"
 	"os"
+	"sync"
 
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/openapi/models"
@@ -22,6 +23,11 @@ type GNBContext struct {
 	defautlPagingDRX ngapType.PagingDRX
 	conn             *sctp.SCTPConn
 }
+
+// connMu guards every GNBContext's conn: a gNB that re-establishes from the same address
+// gets its record back, and the accept loop replaces conn while others read it. It is a
+// package variable, like gnbMutex, because GNBContext is copied by value.
+var connMu sync.RWMutex
 
 func (gnb *GNBContext) SetGlobalRanNodeID(globalRanNodeID models.GlobalRanNodeId) {
 	gnb.globalRanNodeID = globalRanNodeID
@@ -56,10 +62,14 @@ func (gnb *GNBContext) GetDefautlPagingDRX() ngapType.PagingDRX {
 }
 
 func (gnb *GNBContext) SetSCTPConn(conn *sctp.SCTPConn) {
+	connMu.Lock()
+	defer connMu.Unlock()
 	gnb.conn = conn
 }
 
 func (gnb *GNBContext) GetSCTPConn() *sctp.SCTPConn {
+	connMu.RLock()
+	defer connMu.RUnlock()
 	return gnb.conn
 }
 
@@ -69,7 +79,7 @@ func (gnb *GNBContext) SendMsg(packet []byte) {
 		PPID:   ngapSctp.NGAP_PPID,
 	}
 	if packet != nil {
-		_, err := gnb.conn.SCTPWrite(packet, info)
+		_, err := gnb.GetSCTPConn().SCTPWrite(packet, info)
 		if err != nil {
 			log.Printf("[5GC] write failed: %v", err)
 			os.Exit(1)
