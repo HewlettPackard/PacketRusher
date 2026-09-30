@@ -67,6 +67,7 @@ type Device struct {
 	link     *gtp5gnl.Link
 	conn     *nl.Conn
 	mux      *nl.Mux
+	muxDone  chan struct{} // closed once mux.Serve has returned
 	client   *gtp5gnl.Client
 }
 
@@ -120,9 +121,9 @@ func (d *Device) Close() {
 		d.clientMu.Lock()
 		if d.conn != nil {
 			d.conn.Close()
-			d.mux.Close()
+			closeMux(d.mux, d.muxDone)
 		}
-		d.client, d.link, d.conn, d.mux = nil, nil, nil, nil
+		d.client, d.link, d.conn, d.mux, d.muxDone = nil, nil, nil, nil, nil
 		d.clientMu.Unlock()
 
 		d.stopAdd()
@@ -152,11 +153,11 @@ func (d *Device) openClient() {
 		return
 	}
 
-	go mux.Serve()
+	muxDone := serveMux(mux)
 
 	conn, err := nl.Open(syscall.NETLINK_GENERIC)
 	if err != nil {
-		mux.Close()
+		closeMux(mux, muxDone)
 		log.Warn("[GNB][GTP] netlink client unavailable (conn): ", err)
 
 		return
@@ -165,7 +166,7 @@ func (d *Device) openClient() {
 	client, err := gtp5gnl.NewClient(conn, mux)
 	if err != nil {
 		conn.Close()
-		mux.Close()
+		closeMux(mux, muxDone)
 		log.Warn("[GNB][GTP] netlink client unavailable (client): ", err)
 
 		return
@@ -174,34 +175,57 @@ func (d *Device) openClient() {
 	link, err := gtp5gnl.GetLink(d.name)
 	if err != nil {
 		conn.Close()
-		mux.Close()
+		closeMux(mux, muxDone)
 		log.Warn("[GNB][GTP] netlink client unavailable (link): ", err)
 
 		return
 	}
 
 	d.mux = mux
+	d.muxDone = muxDone
 	d.conn = conn
 	d.client = client
 	d.link = link
 }
 
-// PDRInstalled reports whether the rule really reached the datapath. It answers true
-// when there is no client, so a device without one degrades to the old behaviour
-// rather than declaring every UE broken.
-func (d *Device) PDRInstalled(id uint32) bool {
+// PDRInstalled reports whether the rule really reached the datapath. Without a client
+// there is nothing to read it back with, and checked is false: the caller then has only
+// the create's own result to go on.
+func (d *Device) PDRInstalled(id uint32) (installed, checked bool) {
 	d.clientMu.Lock()
 	defer d.clientMu.Unlock()
 
 	if d.client == nil || d.link == nil {
-		return true
+		return false, false
 	}
 
-	if _, err := gtp5gnl.GetPDR(d.client, d.link, int(id)); err != nil {
-		return false
-	}
+	_, err := gtp5gnl.GetPDR(d.client, d.link, int(id))
 
-	return true
+	return err == nil, true
+}
+
+// serveMux runs mux's Serve and returns a channel closed once Serve has returned.
+func serveMux(mux *nl.Mux) chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = mux.Serve()
+	}()
+
+	return done
+}
+
+// closeMux closes mux and waits for its Serve to return. go-nl's Mux closes its pipe's
+// write end twice, once in Close and again when Serve returns, so a descriptor opened in
+// between can be given the same number and be closed by the second close. Waiting keeps
+// that second close from landing on anything opened afterwards.
+func closeMux(mux *nl.Mux, done chan struct{}) {
+	mux.Close()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		log.Warn("[GNB][GTP] netlink mux did not stop within 5s")
+	}
 }
 
 // Each tuncmd.Cmd* call opens a netlink socket, starts a mux goroutine, builds a

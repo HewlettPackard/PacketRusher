@@ -268,3 +268,29 @@ func TestAddRuleFallsBackWithoutClient(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, args, fellBack)
 }
+
+// closeMux must not return before the mux's Serve has, since Serve closes the pipe's
+// write end a second time on its way out. A descriptor opened after closeMux returns
+// must therefore survive.
+func TestCloseMuxWaitsForServe(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		mux, err := nl.NewMux()
+		require.NoError(t, err)
+		done := serveMux(mux)
+
+		closeMux(mux, done)
+		select {
+		case <-done:
+		default:
+			t.Fatal("closeMux returned before Serve did")
+		}
+
+		var fds [2]int
+		require.NoError(t, syscall.Pipe(fds[:]))
+		time.Sleep(time.Millisecond)
+		_, err = syscall.Write(fds[1], []byte{0})
+		require.NoError(t, err, "a descriptor opened after closeMux was closed underneath it")
+		_ = syscall.Close(fds[0])
+		_ = syscall.Close(fds[1])
+	}
+}
