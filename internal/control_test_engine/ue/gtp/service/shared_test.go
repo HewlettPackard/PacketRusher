@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
 )
 
@@ -81,4 +82,20 @@ func TestSharedTunnelReleaseAfterEarlyFailure(t *testing.T) {
 
 	assert.Zero(t, deletes)
 	assert.Equal(t, []string{"address", "rules"}, dev.calls)
+}
+
+// With PR_VERIFY_RULES=1 and no client to read the rule back with, a failed create must
+// still be reported. The check used to answer "installed" whenever it could not check,
+// and the helper returned nil for a PDR that was never created. Here the create goes
+// through the per-call fallback and fails: with ENODEV for the missing interface when
+// gtp5g is loaded, or earlier, looking up the gtp5g netlink family, when it is not.
+func TestAddPDRVerifiedKeepsCreateErrorWhenItCannotCheck(t *testing.T) {
+	t.Setenv("PR_VERIFY_RULES", "1")
+
+	dev := &gtp.Device{}
+	_, checked := dev.PDRInstalled(2)
+	require.False(t, checked, "a device without a client cannot check")
+
+	err := addPDRVerified(dev, 2, []string{"nosuchgtp0", "2", "--pcd", "2", "--ue-ipv4", "10.0.0.1", "--far-id", "2"}, "uplink")
+	assert.Error(t, err, "the failed create should be reported")
 }

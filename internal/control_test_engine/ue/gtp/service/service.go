@@ -52,7 +52,12 @@ func addPDRVerified(link *gtp.Device, id uint32, args []string, label string) er
 		return err
 	}
 
-	if link.PDRInstalled(id) {
+	installed, checked := link.PDRInstalled(id)
+	if !checked {
+		// Nothing to read the rule back with: the create's own result is all there is.
+		return err
+	}
+	if installed {
 		return nil
 	}
 
@@ -62,7 +67,7 @@ func addPDRVerified(link *gtp.Device, id uint32, args []string, label string) er
 		return fmt.Errorf("retry of %s PDR %d: %w", label, id, err)
 	}
 
-	if !link.PDRInstalled(id) {
+	if installed, checked := link.PDRInstalled(id); checked && !installed {
 		return fmt.Errorf("%s PDR %d still absent after retry; this UE will not pass traffic", label, id)
 	}
 
