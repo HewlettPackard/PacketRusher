@@ -34,5 +34,12 @@ jobs:
       - name: Install Go Deps
         run: go mod download
 
+      # internal/work_load_model links against GSL, and ./internal/... builds it.
+      - name: Install System Deps
+        run: sudo apt-get update && sudo apt-get install -y libgsl-dev
+
       - name: Launch tests
         run: go test -v ./test
+
+      - name: Launch internal tests
+        run: go test -v -race ./internal/...
