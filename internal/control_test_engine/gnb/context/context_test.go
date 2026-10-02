@@ -348,3 +348,22 @@ func TestGNBContext_AMFManagement(t *testing.T) {
 	notFound := gnb.FindGnbAmfByIpPort(netip.MustParseAddrPort("127.0.0.1:38414"))
 	assert.Nil(t, notFound)
 }
+
+func TestAMFIDZeroDoesNotMatchUnassignedUEs(t *testing.T) {
+	gnb := &GNBContext{}
+	gnb.NewRanGnbContext("test-gnb", "001", "01", "000001", "1", "000001", netip.MustParseAddrPort("127.0.0.1:9999"), netip.MustParseAddrPort("127.0.0.1:2152"))
+	amf := gnb.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:38412"))
+	amf.SetStateActive()
+	assigned, err := gnb.NewGnBUe(make(chan UEMessage, 1), make(chan UEMessage, 1), 1, nil)
+	require.NoError(t, err)
+	_, err = gnb.NewGnBUe(make(chan UEMessage, 1), make(chan UEMessage, 1), 2, nil)
+	require.NoError(t, err)
+	_, err = gnb.GetGnbUeByAmfUeId(0)
+	require.Error(t, err, "unset AMF IDs were treated as assigned zero")
+	assigned.SetAmfUeId(0)
+	for i := 0; i < 100; i++ {
+		found, err := gnb.GetGnbUeByAmfUeId(0)
+		require.NoError(t, err)
+		require.Same(t, assigned, found)
+	}
+}

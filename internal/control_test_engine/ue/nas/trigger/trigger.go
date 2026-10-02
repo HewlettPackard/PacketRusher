@@ -16,17 +16,18 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
 
-	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasMessage"
+	nasMessage "github.com/free5gc/nas/ie"
+	nas "github.com/free5gc/nas/message"
 	log "github.com/sirupsen/logrus"
 )
 
 func InitRegistration(ue *context.UEContext) {
+	ue.BeginRegistrationResults()
 	log.Info("[UE] Initiating Registration")
 
 	// registration procedure started.
 	registrationRequest := mm_5gs.GetRegistrationRequest(
-		nasMessage.RegistrationType5GSInitialRegistration,
+		nasMessage.RegType_InitialReg,
 		nil,
 		nil,
 		false,
@@ -34,7 +35,7 @@ func InitRegistration(ue *context.UEContext) {
 
 	var err error
 	if len(ue.UeSecurity.Kamf) != 0 {
-		registrationRequest, err = nas_control.EncodeNasPduWithSecurity(ue, registrationRequest, nas.SecurityHeaderTypeIntegrityProtected, true, false)
+		registrationRequest, err = nas_control.EncodeNasPduWithSecurity(ue, registrationRequest, nas.SecHdrTypeIntegrityProtected, true, false)
 		if err != nil {
 			log.Fatalf("[UE][NAS] Unable to encode with integrity protection Registration Request: %s", err)
 		}
@@ -59,17 +60,25 @@ func InitPduSessionRequest(ue *context.UEContext) {
 }
 
 func InitPduSessionRequestInner(ue *context.UEContext, pduSession *context.UEPDUSession) {
-
-	ulNasTransport, err := mm_5gs.Request_UlNasTransport(pduSession, ue)
-	if err != nil {
+	if err := ue.StartPduSessionRequest(pduSession, func() ([]byte, error) {
+		return mm_5gs.Request_UlNasTransport(pduSession, ue)
+	}); err != nil {
 		log.Fatal("[UE][NAS] Error sending ul nas transport and pdu session establishment request: ", err)
 	}
+}
 
-	// change the state of ue(SM).
-	pduSession.SetStateSM_PDU_SESSION_PENDING()
+func RetryPduSessionRequest(ue *context.UEContext, pduSession *context.UEPDUSession) {
+	if !ue.SchedulePduSessionRetry(pduSession) {
+		log.Debug("[UE][NAS] Skipping PDU session retry: session ended, retry already pending or retry limit reached")
+	}
+}
 
-	// sending to GNB
-	sender.SendToGnb(ue, ulNasTransport)
+func InitPduSessionRetry(ue *context.UEContext, retry context.PduSessionRetry) {
+	if err := ue.StartPduSessionRetry(retry, func() ([]byte, error) {
+		return mm_5gs.Request_UlNasTransport(retry.Session(), ue)
+	}); err != nil {
+		log.Fatal("[UE][NAS] Error retrying PDU session establishment: ", err)
+	}
 }
 
 func InitPduSessionRelease(ue *context.UEContext, pduSession *context.UEPDUSession) {
@@ -152,7 +161,7 @@ func InitServiceRequest(ue *context.UEContext) {
 
 	// trigger ServiceRequest.
 	serviceRequest := mm_5gs.ServiceRequest(ue)
-	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, serviceRequest, nas.SecurityHeaderTypeIntegrityProtected, true, false)
+	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, serviceRequest, nas.SecHdrTypeIntegrityProtected, true, false)
 
 	if err != nil {
 		log.Fatalf("Error encoding %s IMSI UE PduSession Establishment Request Msg", ue.UeSecurity.Supi)

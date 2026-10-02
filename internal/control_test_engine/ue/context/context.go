@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/analytics"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 	"net/netip"
@@ -20,8 +21,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/free5gc/nas/nasType"
-	"github.com/free5gc/nas/security"
+	nasType "github.com/free5gc/nas/ie"
+	security "github.com/free5gc/nas/message"
 
 	"github.com/free5gc/util/milenage"
 	"github.com/free5gc/util/ueauth"
@@ -49,6 +50,7 @@ const SM5G_PDU_SESSION_ACTIVE_PENDING = 0x01
 const SM5G_PDU_SESSION_ACTIVE = 0x02
 
 type UEContext struct {
+	Results           *analytics.Recorder
 	id                uint8
 	prUeId            int64
 	UeSecurity        SECURITY
@@ -56,6 +58,7 @@ type UEContext struct {
 	gnbInboundChannel chan context.UEMessage
 	gnbRx             chan context.UEMessage
 	gnbTx             chan context.UEMessage
+	gnbConnectionLost <-chan struct{}
 	drx               *time.Ticker
 	PduSession        [16]*UEPDUSession
 	amfInfo           Amf
@@ -64,17 +67,16 @@ type UEContext struct {
 	Dnn        string
 	Snssai     models.Snssai
 	TunnelMode config.TunnelMode
+	TunnelMTU  int
 
 	// Sync primitive
 	scenarioChan chan scenario.ScenarioMessage
 
-	// deferred carries work handed back to the UE's own goroutine, which runs it between
-	// the messages it handles, so it never runs alongside them. done is closed when the
-	// UE terminates, so work scheduled for it can stop.
-	deferred chan func()
-	done     chan struct{}
-
-	lock sync.Mutex
+	deferred          chan func()
+	done              chan struct{}
+	lock              sync.Mutex
+	terminated        bool
+	pduSessionRetries chan PduSessionRetry
 }
 
 type Amf struct {
@@ -83,18 +85,26 @@ type Amf struct {
 }
 
 type UEPDUSession struct {
-	Id            uint8
-	GnbPduSession *context.GnbPDUSession
-	ueIP          string
-	ueGnbIP       netip.Addr
-	tun           netlink.Link
-	rule          *netlink.Rule
-	routeTun      *netlink.Route
-	vrf           *netlink.Vrf
-	stopSignal    chan bool
-	releaseTunnel func()
-	Wait          chan bool
-	T3580Retries  int
+	owner           *UEContext
+	retryTimer      *time.Timer
+	retryGeneration uint64
+	retryCancel     chan struct{}
+	results         *analytics.Recorder
+	resultsUE       int64
+	Id              uint8
+	GnbPduSession   *context.GnbPDUSession
+	ueIP            string
+	ueGnbIP         netip.Addr
+	tun             netlink.Link
+	rule            *netlink.Rule
+	routeTun        *netlink.Route
+	vrf             *netlink.Vrf
+	tunnelLock      sync.Mutex
+	ueInterface     netlink.Link
+	releaseTunnel   func(bool)
+	updateTunnel    func(*context.GnbPDUSession, netip.Addr) error
+	Wait            chan bool
+	T3580Retries    int
 
 	// TS 24.501 - 6.1.3.2.1.1 State Machine for Session Management
 	StateSM int
@@ -107,23 +117,23 @@ type SECURITY struct {
 	mnc                  string
 	ULCount              security.Count
 	DLCount              security.Count
-	UeSecurityCapability *nasType.UESecurityCapability
+	UeSecurityCapability *nasType.UESecCapability
 	IntegrityAlg         uint8
 	CipheringAlg         uint8
-	NgKsi                models.NgKsi
+	NgKsi                nasType.NASKeySetId
 	Snn                  string
 	KnasEnc              [16]uint8
 	KnasInt              [16]uint8
 	Kamf                 []uint8
-	AuthenticationSubs   models.AuthenticationSubscription
-	Suci                 nasType.MobileIdentity5GS
+	AuthenticationSubs   models.Udr_DR_AuthenticationSubscription
+	Suci                 nasType.MobileId5GS
 	suciPublicKey        sidf.HomeNetworkPublicKey
 	RoutingIndicator     string
-	Guti                 *nasType.GUTI5G
+	Guti                 *nasType.MobileId5GS
 }
 
 func (ue *UEContext) NewRanUeContext(msin string,
-	ueSecurityCapability *nasType.UESecurityCapability,
+	ueSecurityCapability *nasType.UESecCapability,
 	k, opc, op, amf, sqn, mcc, mnc string, homeNetworkPublicKey sidf.HomeNetworkPublicKey, routingIndicator, dnn string,
 	sst int32, sd string, tunnelMode config.TunnelMode, scenarioChan chan scenario.ScenarioMessage,
 	gnbInboundChannel chan context.UEMessage, id int) {
@@ -143,7 +153,7 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 	// No KSI at first start
 	ue.UeSecurity.NgKsi.Ksi = 7
-	ue.UeSecurity.NgKsi.Tsc = models.ScType_NATIVE
+	ue.UeSecurity.NgKsi.Tsc = nasType.SecCtxTypeNative
 
 	// added key, AuthenticationManagementField and opc or op.
 	ue.SetAuthSubscription(k, opc, op, amf, sqn)
@@ -183,8 +193,13 @@ func (ue *UEContext) NewRanUeContext(msin string,
 }
 
 func (ue *UEContext) CreatePDUSession() (*UEPDUSession, error) {
+	ue.Lock()
+	defer ue.Unlock()
+	if ue.terminated {
+		return nil, errors.New("cannot create a PDU Session after UE termination")
+	}
 	pduSessionIndex := -1
-	for i, pduSession := range ue.PduSession {
+	for i, pduSession := range ue.PduSession[:15] {
 		if pduSession == nil {
 			pduSessionIndex = i
 			break
@@ -195,7 +210,7 @@ func (ue *UEContext) CreatePDUSession() (*UEPDUSession, error) {
 		return nil, errors.New("unable to create an additional PDU Session, we already created the max number of PDU Session")
 	}
 
-	pduSession := &UEPDUSession{}
+	pduSession := &UEPDUSession{owner: ue, results: ue.Results, resultsUE: ue.GetPrUeId()}
 	pduSession.Id = uint8(pduSessionIndex + 1)
 	pduSession.Wait = make(chan bool)
 
@@ -212,7 +227,7 @@ func (ue *UEContext) GetPrUeId() int64 {
 	return ue.prUeId
 }
 
-func (ue *UEContext) GetSuci() nasType.MobileIdentity5GS {
+func (ue *UEContext) GetSuci() nasType.MobileId5GS {
 	return ue.UeSecurity.Suci
 }
 
@@ -240,6 +255,7 @@ func (ue *UEContext) SetStateMM_REGISTERED_INITIATED() {
 }
 
 func (ue *UEContext) SetStateMM_REGISTERED() {
+	ue.Results.Finish(ue.GetPrUeId(), 0, analytics.Registration, analytics.Success)
 	ue.StateMM = MM5G_REGISTERED
 	ue.scenarioChan <- scenario.ScenarioMessage{StateChange: ue.StateMM}
 }
@@ -312,13 +328,17 @@ func (ue *UEContext) Unlock() {
 }
 
 func (ue *UEContext) GetPduSession(pduSessionid uint8) (*UEPDUSession, error) {
-	if pduSessionid < 1 || pduSessionid > 16 || ue.PduSession[pduSessionid-1] == nil {
-		return nil, errors.New("Unable to find GnbPDUSession ID " + string(pduSessionid))
+	ue.Lock()
+	defer ue.Unlock()
+	if pduSessionid < 1 || pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil {
+		return nil, fmt.Errorf("unable to find UE PDU session ID %d", pduSessionid)
 	}
 	return ue.PduSession[pduSessionid-1], nil
 }
 
 func (ue *UEContext) GetPduSessions() [16]*context.GnbPDUSession {
+	ue.Lock()
+	defer ue.Unlock()
 	var pduSessions [16]*context.GnbPDUSession
 
 	for i, pduSession := range ue.PduSession {
@@ -331,19 +351,21 @@ func (ue *UEContext) GetPduSessions() [16]*context.GnbPDUSession {
 }
 
 func (ue *UEContext) DeletePduSession(pduSessionid uint8) error {
-	if pduSessionid < 1 || pduSessionid > 16 || ue.PduSession[pduSessionid-1] == nil {
-		return errors.New("Unable to find GnbPDUSession ID " + string(pduSessionid))
+	ue.Lock()
+	defer ue.Unlock()
+	if pduSessionid < 1 || pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil {
+		return fmt.Errorf("unable to find UE PDU session ID %d", pduSessionid)
 	}
 	pduSession := ue.PduSession[pduSessionid-1]
+	pduSession.cancelRetryLocked()
+	// Deleting a pending session ends its attempt. Release the analytics key
+	// before this ID can be reused so the next establishment starts independently.
+	pduSession.results.Finish(pduSession.resultsUE, pduSession.Id, analytics.SessionEstablishment, analytics.Cancelled)
 	// On a device shared with other UEs, give back what this session holds there now:
 	// once the slot is cleared, Terminate no longer sees the session, and a new one
 	// with the same address could not add it again.
 	pduSession.ReleaseTunnel()
 	close(pduSession.Wait)
-	stopSignal := pduSession.GetStopSignal()
-	if stopSignal != nil {
-		stopSignal <- true
-	}
 	ue.PduSession[pduSessionid-1] = nil
 	return nil
 }
@@ -364,28 +386,47 @@ func (pduSession *UEPDUSession) GetGnbIp() netip.Addr {
 	return pduSession.ueGnbIP
 }
 
-func (pduSession *UEPDUSession) SetStopSignal(stopSignal chan bool) {
-	pduSession.stopSignal = stopSignal
-}
-
-// SetTunnelRelease records how to give back what this session holds on a device it shares
-// with other UEs: its route, policy rule and address, its GTP-U rules and their
-// identifiers.
+// SetTunnelRelease records a session-owned cleanup operation.
 func (pduSession *UEPDUSession) SetTunnelRelease(release func()) {
-	pduSession.releaseTunnel = release
+	pduSession.SetTunnelCleanup(func(bool) { release() })
 }
 
-// ReleaseTunnel gives back what SetTunnelRelease recorded, once.
-func (pduSession *UEPDUSession) ReleaseTunnel() {
-	if release := pduSession.releaseTunnel; release != nil {
-		pduSession.releaseTunnel = nil
-		release()
+// ReplaceTunnelCleanup publishes the new tunnel, then retires the old backend
+// while keeping the UE address, routing policy and VRF alive across handover.
+func (pduSession *UEPDUSession) ReplaceTunnelCleanup(release func(bool)) {
+	pduSession.tunnelLock.Lock()
+	defer pduSession.tunnelLock.Unlock()
+	previous := pduSession.releaseTunnel
+	pduSession.releaseTunnel = release
+	if previous != nil {
+		previous(true)
 	}
 }
 
-func (pduSession *UEPDUSession) GetStopSignal() chan bool {
-	return pduSession.stopSignal
+func (pduSession *UEPDUSession) SetTunnelCleanup(release func(bool)) {
+	pduSession.tunnelLock.Lock()
+	defer pduSession.tunnelLock.Unlock()
+	pduSession.releaseTunnel = release
 }
+
+// ReleaseTunnel waits for cleanup, including the socket worker, exactly once.
+func (pduSession *UEPDUSession) ReleaseTunnel() {
+	pduSession.tunnelLock.Lock()
+	defer pduSession.tunnelLock.Unlock()
+	if release := pduSession.releaseTunnel; release != nil {
+		pduSession.releaseTunnel = nil
+		pduSession.updateTunnel = nil
+		release(false)
+		pduSession.SetTunRoute(nil)
+		pduSession.SetTunRule(nil)
+		pduSession.SetTunInterface(nil)
+		pduSession.SetUEInterface(nil)
+		pduSession.SetVrfDevice(nil)
+	}
+}
+
+func (pduSession *UEPDUSession) SetUEInterface(link netlink.Link) { pduSession.ueInterface = link }
+func (pduSession *UEPDUSession) GetUEInterface() netlink.Link     { return pduSession.ueInterface }
 
 func (pduSession *UEPDUSession) GetPduSesssionId() uint8 {
 	return pduSession.Id
@@ -424,18 +465,51 @@ func (pduSession *UEPDUSession) GetVrfDevice() *netlink.Vrf {
 }
 
 func (pdu *UEPDUSession) SetStateSM_PDU_SESSION_INACTIVE() {
+	if pdu.owner != nil {
+		pdu.owner.Lock()
+		defer pdu.owner.Unlock()
+		if !pdu.owner.hasSessionLocked(pdu) {
+			return
+		}
+	}
+	pdu.cancelRetryLocked()
 	pdu.StateSM = SM5G_PDU_SESSION_INACTIVE
 }
 
 func (pdu *UEPDUSession) SetStateSM_PDU_SESSION_ACTIVE() {
+	if pdu.owner != nil {
+		pdu.owner.Lock()
+		defer pdu.owner.Unlock()
+		if !pdu.owner.hasSessionLocked(pdu) {
+			return
+		}
+	}
+	pdu.cancelRetryLocked()
+	pdu.results.Finish(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment, analytics.Success)
 	pdu.StateSM = SM5G_PDU_SESSION_ACTIVE
 }
 
 func (pdu *UEPDUSession) SetStateSM_PDU_SESSION_PENDING() {
+	if pdu.owner != nil {
+		pdu.owner.Lock()
+		defer pdu.owner.Unlock()
+		if !pdu.owner.hasSessionLocked(pdu) {
+			return
+		}
+	}
+	pdu.setPendingLocked()
+}
+
+func (pdu *UEPDUSession) setPendingLocked() {
+	pdu.results.Begin(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment)
 	pdu.StateSM = SM5G_PDU_SESSION_ACTIVE_PENDING
 }
 
 func (pduSession *UEPDUSession) GetStateSM() int {
+	if pduSession.owner != nil {
+		pduSession.owner.Lock()
+		defer pduSession.owner.Unlock()
+	}
 	return pduSession.StateSM
 }
 
@@ -450,7 +524,7 @@ func (ue *UEContext) deriveSNN() string {
 	return resu
 }
 
-func (ue *UEContext) GetUeSecurityCapability() *nasType.UESecurityCapability {
+func (ue *UEContext) GetUeSecurityCapability() *nasType.UESecCapability {
 	return ue.UeSecurity.UeSecurityCapability
 }
 
@@ -508,7 +582,7 @@ func (ue *UEContext) GetRoutingIndicatorInOctets() []byte {
 	return encodedRoutingIndicator
 }
 
-func (ue *UEContext) EncodeSuci() nasType.MobileIdentity5GS {
+func (ue *UEContext) EncodeSuci() nasType.MobileId5GS {
 	protScheme, _ := strconv.ParseUint(ue.UeSecurity.suciPublicKey.ProtectionScheme, 10, 8)
 	buf6 := byte(protScheme)
 
@@ -536,24 +610,24 @@ func (ue *UEContext) EncodeSuci() nasType.MobileIdentity5GS {
 	buffer[7] = buf7
 	copy(buffer[8:], schemeOutput)
 
-	suci := nasType.MobileIdentity5GS{
-		Buffer: buffer,
-		Len:    uint16(len(buffer)),
+	var suci nasType.MobileId5GS
+	if err := suci.UnmarshalBinary(buffer); err != nil {
+		log.Fatalf("[UE][CONFIG] Unable to encode SUCI: %v", err)
 	}
 
 	return suci
 }
 
 func (ue *UEContext) GetAmfRegionId() uint8 {
-	return ue.UeSecurity.Guti.GetAMFRegionID()
+	return ue.UeSecurity.Guti.AMFRegionID
 }
 
 func (ue *UEContext) GetAmfPointer() uint8 {
-	return ue.UeSecurity.Guti.GetAMFPointer()
+	return ue.UeSecurity.Guti.AMFPointer
 }
 
 func (ue *UEContext) GetAmfSetId() uint16 {
-	return ue.UeSecurity.Guti.GetAMFSetID()
+	return ue.UeSecurity.Guti.AMFSetID
 }
 
 func (ue *UEContext) SetAmfMccAndMnc(mcc string, mnc string) {
@@ -564,34 +638,34 @@ func (ue *UEContext) SetAmfMccAndMnc(mcc string, mnc string) {
 
 func (ue *UEContext) GetTMSI5G() [4]uint8 {
 	if ue.UeSecurity.Guti != nil {
-		return ue.UeSecurity.Guti.GetTMSI5G()
+		return ue.UeSecurity.Guti.TMSI5G
 	}
 	return [4]uint8{}
 }
 
-func (ue *UEContext) Set5gGuti(guti *nasType.GUTI5G) {
+func (ue *UEContext) Set5gGuti(guti *nasType.MobileId5GS) {
 	ue.UeSecurity.Guti = guti
 }
 
-func (ue *UEContext) Get5gGuti() *nasType.GUTI5G {
+func (ue *UEContext) Get5gGuti() *nasType.MobileId5GS {
 	return ue.UeSecurity.Guti
 }
 
-func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscription,
+func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.Udr_DR_AuthenticationSubscription,
 	RAND []byte,
 	snNmae string,
 	AUTN []byte) ([]byte, string) {
 
 	// Get OPC, K, SQN from USIM.
-	OPC, err := hex.DecodeString(authSubs.Opc.OpcValue)
+	OPC, err := hex.DecodeString(authSubs.EncOpcKey)
 	if err != nil {
-		log.Fatal("[UE] OPC error: ", err, authSubs.Opc.OpcValue)
+		log.Fatal("[UE] OPC error: ", err, authSubs.EncOpcKey)
 	}
-	K, err := hex.DecodeString(authSubs.PermanentKey.PermanentKeyValue)
+	K, err := hex.DecodeString(authSubs.EncPermanentKey)
 	if err != nil {
-		log.Fatal("[UE] K error: ", err, authSubs.PermanentKey.PermanentKeyValue)
+		log.Fatal("[UE] K error: ", err, authSubs.EncPermanentKey)
 	}
-	sqnUe, err := hex.DecodeString(authSubs.SequenceNumber)
+	sqnUe, err := hex.DecodeString(authSubs.SequenceNumber.Sqn)
 	if err != nil {
 		log.Fatal("[UE] sqn error: ", err, authSubs.SequenceNumber)
 	}
@@ -612,7 +686,7 @@ func (ue *UEContext) DeriveRESstarAndSetKey(authSubs models.AuthenticationSubscr
 	}
 
 	// updated sqn value.
-	authSubs.SequenceNumber = fmt.Sprintf("%08x", sqnHn)
+	authSubs.SequenceNumber.Sqn = fmt.Sprintf("%08x", sqnHn)
 
 	// derive RES*
 	key := append(CK, IK...)
@@ -675,21 +749,15 @@ func (ue *UEContext) DerivateAlgKey() {
 }
 
 func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
-	ue.UeSecurity.AuthenticationSubs.PermanentKey = &models.PermanentKey{
-		PermanentKeyValue: k,
+	// The upstream model names the key fields Enc*, matching free5GC's local provisioning convention.
+	ue.UeSecurity.AuthenticationSubs = models.Udr_DR_AuthenticationSubscription{
+		EncPermanentKey:               k,
+		EncOpcKey:                     opc,
+		AuthenticationManagementField: amf,
+		SequenceNumber:                &models.Udr_DR_SequenceNumber{Sqn: sqn},
+		AuthenticationMethod:          models.Udr_DR_AuthMethod_5_G_AKA,
 	}
-	ue.UeSecurity.AuthenticationSubs.Opc = &models.Opc{
-		OpcValue: opc,
-	}
-	ue.UeSecurity.AuthenticationSubs.Milenage = &models.Milenage{
-		Op: &models.Op{
-			OpValue: op,
-		},
-	}
-	ue.UeSecurity.AuthenticationSubs.AuthenticationManagementField = amf
 
-	ue.UeSecurity.AuthenticationSubs.SequenceNumber = sqn
-	ue.UeSecurity.AuthenticationSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
 }
 
 // Seams for the tests: removing a policy rule or route needs privileges they lack.
@@ -699,6 +767,18 @@ var (
 )
 
 func (ue *UEContext) Terminate() {
+	ue.Lock()
+	defer ue.Unlock()
+	if ue.terminated {
+		return
+	}
+	ue.terminated = true
+	for _, session := range ue.PduSession {
+		if session != nil {
+			session.cancelRetryLocked()
+		}
+	}
+	ue.Results.CancelUE(ue.GetPrUeId())
 	ue.SetStateMM_NULL()
 
 	// clean all context of tun interface
@@ -711,9 +791,7 @@ func (ue *UEContext) Terminate() {
 			// address, and its rules and their identifiers so a later UE can reuse
 			// them. That also clears the session's hold on them, so nothing below
 			// removes them a second time. The device is the gNB's to remove.
-			if ue.TunnelMode == config.TunnelShared {
-				pduSession.ReleaseTunnel()
-			}
+			pduSession.ReleaseTunnel()
 
 			ueTun := pduSession.GetTunInterface()
 			ueRule := pduSession.GetTunRule()
@@ -740,7 +818,6 @@ func (ue *UEContext) Terminate() {
 		}
 	}
 
-	ue.Lock()
 	if ue.gnbRx != nil {
 		close(ue.gnbRx)
 		ue.gnbRx = nil
@@ -748,9 +825,10 @@ func (ue *UEContext) Terminate() {
 	if ue.drx != nil {
 		ue.drx.Stop()
 	}
-	ue.Unlock()
 	close(ue.scenarioChan)
-	close(ue.done)
+	if ue.done != nil {
+		close(ue.done)
+	}
 
 	log.Info("[UE] UE Terminated")
 }
@@ -808,3 +886,53 @@ func hexCharToByte(c byte) byte {
 
 	return 0
 }
+
+// BeginRegistrationResults records a new attempt, without counting retransmits twice.
+func (ue *UEContext) BeginRegistrationResults() {
+	ue.Results.Begin(ue.GetPrUeId(), 0, analytics.Registration)
+}
+
+func (ue *UEContext) RegistrationFailed() {
+	ue.Results.Finish(ue.GetPrUeId(), 0, analytics.Registration, analytics.Failure)
+}
+
+func (pdu *UEPDUSession) EstablishmentFailed() {
+	if pdu.owner != nil {
+		pdu.owner.Lock()
+		defer pdu.owner.Unlock()
+		if !pdu.owner.hasSessionLocked(pdu) {
+			return
+		}
+	}
+	pdu.results.Finish(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment, analytics.Failure)
+}
+
+// NASSecurityContext exposes upstream security operations while sharing the UE counters.
+func (ue *UEContext) NASSecurityContext() *security.SecCtx {
+	return &security.SecCtx{
+		Side: security.UESide, Bearer: security.Bearer3GPP,
+		UplinkCount: &ue.UeSecurity.ULCount, DownlinkCount: &ue.UeSecurity.DLCount,
+		CipheringAlg: nasType.AlgCiphering(ue.UeSecurity.CipheringAlg),
+		IntegrityAlg: nasType.AlgIntegrity(ue.UeSecurity.IntegrityAlg),
+		KnasEnc:      ue.UeSecurity.KnasEnc, KnasInt: ue.UeSecurity.KnasInt,
+	}
+}
+
+// The backend keeps an immutable snapshot of its last completed rules so an
+// in-place update can roll back independently of mutable gNB session context.
+func (pduSession *UEPDUSession) SetTunnelUpdate(update func(*context.GnbPDUSession, netip.Addr) error) {
+	pduSession.tunnelLock.Lock()
+	defer pduSession.tunnelLock.Unlock()
+	pduSession.updateTunnel = update
+}
+func (pduSession *UEPDUSession) UpdateTunnel(pdu *context.GnbPDUSession, ip netip.Addr) error {
+	pduSession.tunnelLock.Lock()
+	defer pduSession.tunnelLock.Unlock()
+	if pduSession.updateTunnel == nil {
+		return errors.New("existing tunnel has no update operation")
+	}
+	return pduSession.updateTunnel(pdu, ip)
+}
+
+func (ue *UEContext) SetGnbConnectionLost(lost <-chan struct{}) { ue.gnbConnectionLost = lost }
+func (ue *UEContext) GetGnbConnectionLost() <-chan struct{}     { return ue.gnbConnectionLost }

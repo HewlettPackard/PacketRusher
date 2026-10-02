@@ -1,0 +1,20 @@
+services:
+  packetrusher:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: packetrusher
+    image: packetrusher:local
+    volumes:
+      - ${PACKETRUSHER_CONFIG:-./config.bridge.yml}:/packetrusher/config/config.yml:ro
+    command: ["--config", "/packetrusher/config/config.yml", "multi-ue", "-n", "2"]
+    stop_signal: SIGINT
+    stop_grace_period: 70s
+    networks:
+      core:
+        ipv4_address: 10.100.200.200
+
+networks:
+  core:
+    external: true
+    name: ${PACKETRUSHER_NETWORK:-docker_privnet}

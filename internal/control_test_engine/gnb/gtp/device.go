@@ -76,7 +76,7 @@ type Device struct {
 // on that address, so it is removed first. Only this gNB's device is touched: several
 // PacketRusher processes can share a host, one per gNB, and removing every device
 // named like ours would tear down the tunnels of the siblings that are running.
-func NewDevice(gnbIP netip.Addr) (*Device, error) {
+func NewDevice(gnbIP netip.Addr, mtu int) (*Device, error) {
 	name := deviceName(gnbIP)
 
 	if _, err := netlink.LinkByName(name); err == nil {
@@ -100,6 +100,15 @@ func NewDevice(gnbIP netip.Addr) (*Device, error) {
 	if err := waitForLink(name, 5*time.Second); err != nil {
 		d.stopAdd()
 		return nil, err
+	}
+
+	link, err := netlink.LinkByName(name)
+	if err == nil {
+		err = SetTunnelMTU(link, gnbIP, mtu)
+	}
+	if err != nil {
+		d.Close()
+		return nil, fmt.Errorf("configure shared tunnel MTU: %w", err)
 	}
 
 	d.openClient()

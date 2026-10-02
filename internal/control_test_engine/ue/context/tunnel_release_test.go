@@ -96,3 +96,42 @@ func TestTerminateRemovesDedicatedRuleAndRoute(t *testing.T) {
 	assert.Equal(t, 1, *rules)
 	assert.Equal(t, 1, *routes)
 }
+
+func TestDeletePduSessionWaitsForDedicatedCleanup(t *testing.T) {
+	ue := &UEContext{TunnelMode: config.TunnelTun}
+	pdu := &UEPDUSession{Wait: make(chan bool)}
+	ue.PduSession[0] = pdu
+	started, complete, deleted := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	pdu.SetTunnelCleanup(func(retiring bool) { require.False(t, retiring); close(started); <-complete })
+	go func() { _ = ue.DeletePduSession(1); close(deleted) }()
+	<-started
+	select {
+	case <-deleted:
+		t.Fatal("session released before socket cleanup completed")
+	default:
+	}
+	close(complete)
+	<-deleted
+	require.Nil(t, ue.PduSession[0])
+}
+
+func TestReplaceTunnelRetiresBackendThenFinalRelease(t *testing.T) {
+	pdu := &UEPDUSession{}
+	var actions []string
+	pdu.SetTunnelCleanup(func(retiring bool) { require.True(t, retiring); actions = append(actions, "retire source") })
+	pdu.ReplaceTunnelCleanup(func(retiring bool) { require.False(t, retiring); actions = append(actions, "release target") })
+	pdu.ReleaseTunnel()
+	pdu.ReleaseTunnel()
+	require.Equal(t, []string{"retire source", "release target"}, actions)
+}
+
+func TestTerminateReleasesDedicatedSocket(t *testing.T) {
+	ue := newTestUE()
+	ue.TunnelMode = config.TunnelTun
+	pdu := &UEPDUSession{}
+	ue.PduSession[0] = pdu
+	released := false
+	pdu.SetTunnelCleanup(func(retiring bool) { require.False(t, retiring); released = true })
+	ue.Terminate()
+	require.True(t, released)
+}

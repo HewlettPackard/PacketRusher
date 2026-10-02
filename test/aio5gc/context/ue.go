@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/free5gc/nas/nasType"
+	nasType "github.com/free5gc/nas/ie"
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/util/fsm"
 	"github.com/free5gc/util/ueauth"
@@ -23,8 +23,8 @@ type UEContext struct {
 	ranNgapId            int64
 	amfNgapId            int64
 	location             *models.NrLocation
-	ueSecurityCapability *nasType.UESecurityCapability
-	ngKsi                models.NgKsi
+	ueSecurityCapability *nasType.UESecCapability
+	ngKsi                nasType.NASKeySetId
 	Dnn                  string
 	pei                  string
 	securityContext      *SecurityContext
@@ -84,11 +84,11 @@ func (ue *UEContext) GetAmfNgapId() (id int64) {
 	return ue.amfNgapId
 }
 
-func (ue *UEContext) SetNgKsi(ksi models.NgKsi) {
+func (ue *UEContext) SetNgKsi(ksi nasType.NASKeySetId) {
 	ue.ngKsi = ksi
 }
 
-func (ue *UEContext) GetNgKsi() models.NgKsi {
+func (ue *UEContext) GetNgKsi() nasType.NASKeySetId {
 	return ue.ngKsi
 }
 
@@ -100,11 +100,11 @@ func (ue *UEContext) GetUserLocationInfo() *models.NrLocation {
 	return ue.location
 }
 
-func (ue *UEContext) SetSecurityCapability(capability *nasType.UESecurityCapability) {
+func (ue *UEContext) SetSecurityCapability(capability *nasType.UESecCapability) {
 	ue.ueSecurityCapability = capability
 }
 
-func (ue *UEContext) GetSecurityCapability() *nasType.UESecurityCapability {
+func (ue *UEContext) GetSecurityCapability() *nasType.UESecCapability {
 	return ue.ueSecurityCapability
 }
 
@@ -139,18 +139,14 @@ func (ue *UEContext) AddSmContext(newContext *SmContext) error {
 }
 
 func (ue *UEContext) DeleteSmContext(sessionId int32) (SmContext, error) {
-
-	var smContext SmContext
-	sc, err := ue.GetSmContext(sessionId)
-	if err != nil {
-		return SmContext{}, err
-	}
-	smContext = *sc
 	ue.smContextMtx.Lock()
 	defer ue.smContextMtx.Unlock()
+	smContext, found := ue.smContexts[sessionId]
+	if !found {
+		return SmContext{}, fmt.Errorf("[5GC] Could not delete PDU Session %d for UE %s: not found", sessionId, ue.guti)
+	}
 	delete(ue.smContexts, sessionId)
-
-	return smContext, nil
+	return *smContext, nil
 }
 
 func (ue *UEContext) GetSmContext(sessionId int32) (*SmContext, error) {
@@ -176,20 +172,16 @@ func (ue *UEContext) DeleteAllSmContext() {
 	}
 }
 
-// ExecuteForAllSmContexts runs function on each SM context present when it is called.
-// It runs it without holding smContextMtx, so function may itself add or delete SM
-// contexts: ForceReleaseAllPDUSession deletes each one, and DeleteSmContext takes the
-// lock again, which used to deadlock against the one held here.
+// ExecuteForAllSmContexts visits a snapshot so callbacks can release sessions.
 func (ue *UEContext) ExecuteForAllSmContexts(function func(ue *SmContext)) {
 	ue.smContextMtx.Lock()
-	smContexts := make([]*SmContext, 0, len(ue.smContexts))
-	for _, sm := range ue.smContexts {
-		smContexts = append(smContexts, sm)
+	sessions := make([]*SmContext, 0, len(ue.smContexts))
+	for _, session := range ue.smContexts {
+		sessions = append(sessions, session)
 	}
 	ue.smContextMtx.Unlock()
-
-	for _, sm := range smContexts {
-		function(sm)
+	for _, session := range sessions {
+		function(session)
 	}
 }
 

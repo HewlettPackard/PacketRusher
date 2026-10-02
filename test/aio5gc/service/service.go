@@ -21,8 +21,10 @@ var bufsize = 65535
 func RunServer(ServerIpPort netip.AddrPort, fgc *context.Aio5gc) {
 	ln, err := Listen(ServerIpPort)
 	if err != nil {
-		log.Fatalf("[5GC] %v", err)
+		log.Errorf("[5GC] %v", err)
+		return
 	}
+	fgc.RegisterCloser(ln.Close)
 	Serve(ln, fgc)
 }
 
@@ -51,7 +53,9 @@ func Listen(ServerIpPort netip.AddrPort) (*Listener, error) {
 // blocked on it, and the socket keeps accepting until that accept returns, so one last
 // association is dialled to release it; Serve closes it and returns.
 func (l *Listener) Close() error {
-	l.closed.Store(true)
+	if l.closed.Swap(true) {
+		return nil
+	}
 	err := l.ln.Close()
 	if wake, dialErr := sctp.DialSCTP("sctp", nil, l.addr); dialErr == nil {
 		_ = wake.Close()
@@ -61,6 +65,10 @@ func (l *Listener) Close() error {
 
 // Serve accepts associations on l until it is closed.
 func Serve(l *Listener, fgc *context.Aio5gc) {
+	if !fgc.BeginWork() {
+		return
+	}
+	defer fgc.EndWork()
 	for {
 		conn, err := l.ln.Accept()
 		if err == nil && l.closed.Load() {
@@ -79,26 +87,36 @@ func Serve(l *Listener, fgc *context.Aio5gc) {
 		}
 		log.Info("[5GC] Accepted Connection from RemoteAddr: ", remote)
 
-		amf := fgc.GetAMFContext()
-		gnb, err := amf.GetGnb(remote.String())
-		if err != nil {
-			gnb = &context.GNBContext{}
-			amf.AddGnb(remote.String(), gnb)
-		}
+		// Each association has its own immutable connection owner. Replacing the
+		// AMF's lookup entry cannot redirect replies from an old reader to a new socket.
+		gnb := &context.GNBContext{}
 		gnb.SetSCTPConn(conn.(*sctp.SCTPConn))
-		go listenAndServe(conn.(*sctp.SCTPConn), bufsize, gnb, fgc)
+		_ = fgc.GetAMFContext().AddGnb(remote.String(), gnb)
+		fgc.RegisterCloser(conn.Close)
+		if !fgc.BeginWork() {
+			_ = conn.Close()
+			continue
+		}
+		go func() {
+			defer fgc.EndWork()
+			defer conn.Close()
+			_ = listenAndServe(conn.(*sctp.SCTPConn), bufsize, gnb, fgc)
+		}()
+
 	}
 }
 
 func listenAndServe(conn *sctp.SCTPConn, bufsize int, gnb *context.GNBContext, fgc *context.Aio5gc) error {
 	buf := make([]byte, bufsize+128) // add overhead of SCTPSndRcvInfoWrappedConn
 	for {
-		_, err := conn.Read(buf)
+		n, err := conn.Read(buf)
 		if err != nil {
 			// The association is gone; the gNB may dial a new one, which Accept serves.
 			log.Printf("[5GC] Read failed: %v", err)
 			return err
 		}
-		ngap.Dispatch(buf, gnb, fgc)
+		if n > 0 {
+			ngap.Dispatch(buf[:n], gnb, fgc)
+		}
 	}
 }

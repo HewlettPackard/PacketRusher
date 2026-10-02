@@ -7,119 +7,67 @@ package ngap
 import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 
-	"github.com/free5gc/ngap"
+	ngapmsg "github.com/free5gc/ngap/message"
 
-	"github.com/free5gc/ngap/ngapType"
 	log "github.com/sirupsen/logrus"
 )
 
-func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
-
-	if message == nil {
-		// TODO return error
-		log.Info("[GNB][NGAP] NGAP message is nil")
+func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, payload []byte) {
+	msg, err := ngapmsg.Parse(payload)
+	if err != nil || msg == nil {
+		log.Errorf("[GNB][NGAP] Unable to decode message for gNB %s: %v", gnb.GetGnbId(), err)
+		return
 	}
+	dispatchUEMessage(amf, gnb, msg)
+}
 
-	// decode NGAP message.
-	ngapMsg, err := ngap.Decoder(message)
-	if err != nil {
-		log.Error("[GNB][NGAP] Error decoding NGAP message in ", gnb.GetGnbId(), " GNB", ": ", err)
+func dispatchUEMessage(amf *context.GNBAmf, gnb *context.GNBContext, message ngapmsg.Message) {
+	ran, amfID, hasAMF := messageUEIDs(message)
+	var ue *context.GNBUe
+	if ran != 0 {
+		ue, _ = gnb.GetGnbUe(ran)
 	}
+	if ue == nil && hasAMF {
+		ue, _ = gnb.GetGnbUeByAmfUeId(amfID)
+	}
+	if ue != nil {
+		ue.ProcessDownlink(func() { dispatchDecoded(amf, gnb, message) })
+	} else {
+		dispatchDecoded(amf, gnb, message)
+	}
+}
 
-	// check RanUeId and get UE.
-
-	// handle NGAP message.
-	switch ngapMsg.Present {
-
-	case ngapType.NGAPPDUPresentInitiatingMessage:
-
-		switch ngapMsg.InitiatingMessage.ProcedureCode.Value {
-
-		case ngapType.ProcedureCodeDownlinkNASTransport:
-			// handler NGAP Downlink NAS Transport.
-			log.Info("[GNB][NGAP] Receive Downlink NAS Transport")
-			HandlerDownlinkNasTransport(gnb, ngapMsg)
-
-		case ngapType.ProcedureCodeInitialContextSetup:
-			// handler NGAP Initial Context Setup Request.
-			log.Info("[GNB][NGAP] Receive Initial Context Setup Request")
-			HandlerInitialContextSetupRequest(gnb, ngapMsg)
-
-		case ngapType.ProcedureCodePDUSessionResourceSetup:
-			// handler NGAP PDU Session Resource Setup Request.
-			log.Info("[GNB][NGAP] Receive PDU Session Resource Setup Request")
-			HandlerPduSessionResourceSetupRequest(gnb, ngapMsg)
-
-		case ngapType.ProcedureCodePDUSessionResourceRelease:
-			// handler NGAP PDU Session Resource Release
-			log.Info("[GNB][NGAP] Receive PDU Session Release Command")
-			HandlerPduSessionReleaseCommand(gnb, ngapMsg)
-
-		case ngapType.ProcedureCodeUEContextRelease:
-			// handler NGAP UE Context Release
-			log.Info("[GNB][NGAP] Receive UE Context Release Command")
-			HandlerUeContextReleaseCommand(gnb, ngapMsg)
-
-		case ngapType.ProcedureCodeAMFConfigurationUpdate:
-			// handler NGAP AMF Configuration Update
-			log.Info("[GNB][NGAP] Receive AMF Configuration Update")
-			HandlerAmfConfigurationUpdate(amf, gnb, ngapMsg)
-		case ngapType.ProcedureCodeAMFStatusIndication:
-			log.Info("[GNB][NGAP] Receive AMF Status Indication")
-			HandlerAmfStatusIndication(amf, gnb, ngapMsg)
-		case ngapType.ProcedureCodeHandoverResourceAllocation:
-			// handler NGAP Handover Request
-			log.Info("[GNB][NGAP] Receive Handover Request")
-			HandlerHandoverRequest(amf, gnb, ngapMsg)
-
-		case ngapType.ProcedureCodePaging:
-			// handler NGAP Paging
-			log.Info("[GNB][NGAP] Receive Paging")
-			HandlerPaging(gnb, ngapMsg)
-
-		case ngapType.ProcedureCodeErrorIndication:
-			// handler Error Indicator
-			log.Error("[GNB][NGAP] Receive Error Indication")
-			HandlerErrorIndication(gnb, ngapMsg)
-
-		default:
-			log.Warnf("[GNB][NGAP] Received unknown NGAP message 0x%x", ngapMsg.InitiatingMessage.ProcedureCode.Value)
-		}
-
-	case ngapType.NGAPPDUPresentSuccessfulOutcome:
-
-		switch ngapMsg.SuccessfulOutcome.ProcedureCode.Value {
-
-		case ngapType.ProcedureCodeNGSetup:
-			// handler NGAP Setup Response.
-			log.Info("[GNB][NGAP] Receive NG Setup Response")
-			HandlerNgSetupResponse(amf, gnb, ngapMsg)
-
-		case ngapType.ProcedureCodePathSwitchRequest:
-			// handler PathSwitchRequestAcknowledge
-			log.Info("[GNB][NGAP] Receive PathSwitchRequestAcknowledge")
-			HandlerPathSwitchRequestAcknowledge(gnb, ngapMsg)
-
-		case ngapType.ProcedureCodeHandoverPreparation:
-			// handler NGAP AMF Handover Command
-			log.Info("[GNB][NGAP] Receive Handover Command")
-			HandlerHandoverCommand(amf, gnb, ngapMsg)
-
-		default:
-			log.Warnf("[GNB][NGAP] Received unknown NGAP message 0x%x", ngapMsg.SuccessfulOutcome.ProcedureCode.Value)
-		}
-
-	case ngapType.NGAPPDUPresentUnsuccessfulOutcome:
-
-		switch ngapMsg.UnsuccessfulOutcome.ProcedureCode.Value {
-
-		case ngapType.ProcedureCodeNGSetup:
-			// handler NGAP Setup Failure.
-			log.Info("[GNB][NGAP] Receive Ng Setup Failure")
-			HandlerNgSetupFailure(amf, gnb, ngapMsg)
-
-		default:
-			log.Warnf("[GNB][NGAP] Received unknown NGAP message 0x%x", ngapMsg.UnsuccessfulOutcome.ProcedureCode.Value)
-		}
+func dispatchDecoded(amf *context.GNBAmf, gnb *context.GNBContext, msg ngapmsg.Message) {
+	switch value := msg.(type) {
+	case *ngapmsg.DownlinkNASTransport:
+		HandlerDownlinkNasTransport(gnb, value)
+	case *ngapmsg.InitialContextSetupRequest:
+		HandlerInitialContextSetupRequest(gnb, value)
+	case *ngapmsg.PDUSessionResourceSetupRequest:
+		HandlerPduSessionResourceSetupRequest(gnb, value)
+	case *ngapmsg.PDUSessionResourceReleaseCommand:
+		HandlerPduSessionReleaseCommand(gnb, value)
+	case *ngapmsg.UEContextReleaseCommand:
+		HandlerUeContextReleaseCommand(gnb, value)
+	case *ngapmsg.AMFConfigurationUpdate:
+		HandlerAmfConfigurationUpdate(amf, gnb, value)
+	case *ngapmsg.AMFStatusIndication:
+		HandlerAmfStatusIndication(amf, gnb, value)
+	case *ngapmsg.HandoverRequest:
+		HandlerHandoverRequest(amf, gnb, value)
+	case *ngapmsg.Paging:
+		HandlerPaging(gnb, value)
+	case *ngapmsg.ErrorIndication:
+		HandlerErrorIndication(gnb, value)
+	case *ngapmsg.NGSetupResponse:
+		HandlerNgSetupResponse(amf, gnb, value)
+	case *ngapmsg.PathSwitchRequestAcknowledge:
+		HandlerPathSwitchRequestAcknowledge(gnb, value)
+	case *ngapmsg.HandoverCommand:
+		HandlerHandoverCommand(amf, gnb, value)
+	case *ngapmsg.NGSetupFailure:
+		HandlerNgSetupFailure(amf, gnb, value)
+	default:
+		log.Warnf("[GNB][NGAP] Unhandled message %T", msg)
 	}
 }

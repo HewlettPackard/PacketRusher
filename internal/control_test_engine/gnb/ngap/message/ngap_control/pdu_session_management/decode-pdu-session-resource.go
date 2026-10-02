@@ -5,47 +5,37 @@
 package pdu_session_management
 
 import (
-	"github.com/free5gc/aper"
-
-	"github.com/free5gc/ngap/ngapType"
+	"fmt"
+	"github.com/free5gc/ngap/ie"
+	"github.com/free5gc/ngap/message"
+	codec "my5G-RANTester/lib/ngap"
 )
 
-func getGtpTeidFromNgUpUpTnlInformation(payload []byte) ([]byte, error) {
-
-	// per aligned PDUSessionResourceSetupRequestTransfer value( octet string )
-	pdu := &ngapType.PDUSessionResourceSetupRequestTransfer{}
-	err := aper.UnmarshalWithParams(payload, pdu, "valueExt")
-	if err != nil {
-		return nil, err
+func GetGtpTeid(value *message.PDUSessionResourceSetupRequest) ([]byte, error) {
+	if value == nil || value.PDUSessionResourceSetupListSUReq == nil {
+		return nil, fmt.Errorf("missing PDU session setup list")
 	}
-	for _, ies := range pdu.ProtocolIEs.List {
-		// get UL NGUP UP TNL Information.
-		if ies.Id.Value == ngapType.ProtocolIEIDULNGUUPTNLInformation {
-			gtpTeid := []byte(ies.Value.ULNGUUPTNLInformation.GTPTunnel.GTPTEID.Value)
-			return gtpTeid, nil
+	for _, item := range value.PDUSessionResourceSetupListSUReq.List {
+		if item.PDUSessionResourceSetupRequestTransfer == nil {
+			continue
 		}
-	}
-
-	return nil, nil
-}
-
-func getResourceSetupTransferFromPDUSessionResourceSetupRequest(msg *ngapType.PDUSessionResourceSetupRequest) []byte {
-	for _, ie := range msg.ProtocolIEs.List {
-		if ie.Id.Value == ngapType.ProtocolIEIDPDUSessionResourceSetupListSUReq {
-			// get ie PDUSessionResourceSetupListSUReq
-			pDUSessionResourceSetupList := ie.Value.PDUSessionResourceSetupListSUReq
-			for _, item := range pDUSessionResourceSetupList.List {
-				// get PDUSessionResourceSetupRequestTransfer value( octet string )
-				payload := []byte(item.PDUSessionResourceSetupRequestTransfer)
-				return payload
+		transfer := &ie.PDUSessionResourceSetupRequestTransfer{}
+		if err := codec.Unmarshal(*item.PDUSessionResourceSetupRequestTransfer, transfer); err != nil {
+			return nil, err
+		}
+		if transfer.ProtocolIEs == nil {
+			continue
+		}
+		for _, field := range transfer.ProtocolIEs.List {
+			if field.ULNGUUPTNLInformation == nil {
+				continue
 			}
+			tunnel, err := codec.Tunnel(field.ULNGUUPTNLInformation)
+			if err != nil {
+				return nil, err
+			}
+			return tunnel.GTPTEID.Value, nil
 		}
 	}
-	return nil
-}
-
-func GetGtpTeid(ngap *ngapType.NGAPPDU) ([]byte, error) {
-	ngapResource := getResourceSetupTransferFromPDUSessionResourceSetupRequest(ngap.InitiatingMessage.Value.PDUSessionResourceSetupRequest)
-	gtpTeid, err := getGtpTeidFromNgUpUpTnlInformation(ngapResource)
-	return gtpTeid, err
+	return nil, fmt.Errorf("missing uplink GTP tunnel")
 }

@@ -1,297 +1,146 @@
-/**
- * SPDX-License-Identifier: Apache-2.0
- * © Copyright 2023 Hewlett Packard Enterprise Development LP
- */
+/** SPDX-License-Identifier: Apache-2.0 */
 package nas
 
 import (
+	"bytes"
+	"fmt"
+	"github.com/free5gc/nas/ie"
+	nas "github.com/free5gc/nas/message"
+	log "github.com/sirupsen/logrus"
+	"my5G-RANTester/internal/common/auth"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/handler"
-	"reflect"
-
-	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasMessage"
-	"github.com/free5gc/nas/nasType"
-	"github.com/free5gc/nas/security"
-	log "github.com/sirupsen/logrus"
 )
 
-func DispatchNas(ue *context.UEContext, message []byte) {
-
-	var cph bool
-
-	// check if message is null.
-	if message == nil {
-		// TODO return error
-		log.Fatal("[UE][NAS] NAS message is nil")
+// DecodeNAS verifies protected NAS before committing negotiated algorithms or counters.
+func DecodeNAS(ue *context.UEContext, packet []byte) (nas.Message, error) {
+	if ue == nil {
+		return nil, fmt.Errorf("UE context is nil")
 	}
-
-	// decode NAS message.
-	m := new(nas.Message)
-	m.SecurityHeaderType = nas.GetSecurityHeaderType(message) & 0x0f
-
-	payload := make([]byte, len(message))
-	copy(payload, message)
-
-	newSecurityContext := false
-
-	// check if NAS is security protected
-	if m.SecurityHeaderType != nas.SecurityHeaderTypePlainNas {
-
-		log.Info("[UE][NAS] Message with security header")
-
-		// information to check integrity and ciphered.
-
-		// sequence number.
-		sequenceNumber := message[6]
-
-		// mac verification.
-		macReceived := message[2:6]
-
-		// remove security Header
-		payload := payload[7:]
-
-		// check security header type.
-		cph = false
-		switch m.SecurityHeaderType {
-
-		case nas.SecurityHeaderTypeIntegrityProtected:
-			log.Info("[UE][NAS] Message with integrity")
-
-		case nas.SecurityHeaderTypeIntegrityProtectedAndCiphered:
-			log.Info("[UE][NAS] Message with integrity and ciphered")
-			cph = true
-
-		case nas.SecurityHeaderTypeIntegrityProtectedWithNew5gNasSecurityContext:
-			log.Info("[UE][NAS] Message with integrity and with NEW 5G NAS SECURITY CONTEXT")
-			newSecurityContext = true
-
-		case nas.SecurityHeaderTypeIntegrityProtectedAndCipheredWithNew5gNasSecurityContext:
-			log.Error("[UE][NAS] Received message with security header \"Integrity protected and ciphered with new 5G NAS security context\", this is reserved for a SECURITY MODE COMPLETE and UE should not receive this code")
-			return
-		}
-
-		// check security header(Downlink data).
-		if ue.UeSecurity.DLCount.SQN() > sequenceNumber {
-			ue.UeSecurity.DLCount.SetOverflow(ue.UeSecurity.DLCount.Overflow() + 1)
-		}
-		ue.UeSecurity.DLCount.SetSQN(sequenceNumber)
-
-		// check ciphering.
-		if cph {
-			if err := security.NASEncrypt(ue.UeSecurity.CipheringAlg, ue.UeSecurity.KnasEnc, ue.UeSecurity.DLCount.Get(), security.Bearer3GPP,
-				security.DirectionDownlink, payload); err != nil {
-				log.Error("error in encrypt algorithm")
-				return
-			} else {
-				log.Info("[UE][NAS] successful NAS CIPHERING")
-			}
-		}
-
-		// decode NAS message.
-		err := m.PlainNasDecode(&payload)
+	// Plain 5GSM messages carry a session ID where 5GMM carries its security header.
+	if len(packet) > 0 && packet[0] == byte(nas.Epd5GSSessMgmtMsg) {
+		return nas.Parse(packet, nil)
+	}
+	st := nas.GetSecHdrType(packet)
+	if st == nas.SecHdrTypePlainNas {
+		msg, err := nas.Parse(packet, nil)
 		if err != nil {
-			log.Error("[UE][NAS] Decode NAS error", err)
+			return nil, err
 		}
-
-		if newSecurityContext {
-			if m.GmmHeader.GetMessageType() == nas.MsgTypeSecurityModeCommand {
-				ue.UeSecurity.DLCount.Set(0, 0)
-				ue.UeSecurity.CipheringAlg = m.SecurityModeCommand.SelectedNASSecurityAlgorithms.GetTypeOfCipheringAlgorithm()
-				ue.UeSecurity.IntegrityAlg = m.SecurityModeCommand.SelectedNASSecurityAlgorithms.GetTypeOfIntegrityProtectionAlgorithm()
-				ue.DerivateAlgKey()
-			} else {
-				log.Error("[UE][NAS] Received message with security header \"Integrity protected with new 5G NAS security context\", but message type is not SECURITY MODE COMMAND")
-				return
-			}
+		if err := validateSecurityModeCommandHeader(msg, st); err != nil {
+			return nil, err
 		}
-
-		mac32, err := security.NASMacCalculate(ue.UeSecurity.IntegrityAlg,
-			ue.UeSecurity.KnasInt,
-			ue.UeSecurity.DLCount.Get(),
-			security.Bearer3GPP,
-			security.DirectionDownlink, message[6:])
+		return msg, nil
+	}
+	if len(packet) < int(nas.SecHdrLen) {
+		return nil, fmt.Errorf("truncated protected NAS header")
+	}
+	if st == nas.SecHdrTypeIntegrityProtectedAndCipheredWithNew5gNasSecCtx {
+		return nil, fmt.Errorf("downlink NAS uses security header reserved for Security Mode Complete")
+	}
+	candidate := ue.NASSecurityContext().Clone()
+	if st == nas.SecHdrTypeIntegrityProtectedWithNew5gNasSecCtx {
+		preliminary, err := nas.Parse(packet[nas.SecHdrLen:], nil)
 		if err != nil {
-			log.Error("[UE][NAS] NAS MAC error", err)
-			return
+			return nil, err
 		}
-
-		// check integrity
-		if !reflect.DeepEqual(mac32, macReceived) {
-			log.Error("[UE][NAS] NAS MAC verification failed(received:", macReceived, "expected:", mac32)
-			return
-		} else {
-			log.Info("[UE][NAS] successful NAS MAC verification")
+		command, ok := preliminary.(*nas.SecModeCmd)
+		if !ok || command.SelectedNASSecAlgos == nil {
+			return nil, fmt.Errorf("new NAS security context requires Security Mode Command")
 		}
-
-	} else {
-
-		log.Info("[UE][NAS] Message without security header")
-
-		// decode NAS message.
-		err := m.PlainNasDecode(&payload)
-		if err != nil {
-			// TODO return error
-			log.Info("[UE][NAS] Decode NAS error", err)
+		if err := validateSecurityModeCommand(ue, command); err != nil {
+			return nil, err
+		}
+		candidate.CipheringAlg = command.SelectedNASSecAlgos.CipheringAlgo
+		candidate.IntegrityAlg = command.SelectedNASSecAlgos.MsgIntAlgo
+		candidate.DownlinkCount.Set(0, 0)
+		if err = auth.AlgorithmKeyDerivation(uint8(candidate.CipheringAlg), ue.UeSecurity.Kamf, &candidate.KnasEnc, uint8(candidate.IntegrityAlg), &candidate.KnasInt); err != nil {
+			return nil, err
 		}
 	}
+	msg, err := nas.Parse(packet, candidate)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateSecurityModeCommandHeader(msg, st); err != nil {
+		return nil, err
+	}
+	ue.UeSecurity.ULCount, ue.UeSecurity.DLCount = *candidate.UplinkCount, *candidate.DownlinkCount
+	ue.UeSecurity.CipheringAlg, ue.UeSecurity.IntegrityAlg = uint8(candidate.CipheringAlg), uint8(candidate.IntegrityAlg)
+	ue.UeSecurity.KnasEnc, ue.UeSecurity.KnasInt = candidate.KnasEnc, candidate.KnasInt
+	return msg, nil
+}
 
-	switch m.GmmHeader.GetMessageType() {
+// TS 24.501 section 5.4.2.2 requires this outer header even for rekeying.
+func validateSecurityModeCommandHeader(msg nas.Message, st nas.SecHdrType) error {
+	if _, ok := msg.(*nas.SecModeCmd); ok && st != nas.SecHdrTypeIntegrityProtectedWithNew5gNasSecCtx {
+		return fmt.Errorf("Security Mode Command requires integrity protection with a new NAS security context")
+	}
+	return nil
+}
 
-	case nas.MsgTypeAuthenticationRequest:
-		// handler authentication request.
-		log.Info("[UE][NAS] Receive Authentication Request")
+func validateSecurityModeCommand(ue *context.UEContext, command *nas.SecModeCmd) error {
+	capability := ue.GetUeSecurityCapability()
+	if capability == nil || command.ReplayedUESecCapabilities == nil || command.Ngksi == nil || command.Ngksi.Ksi == ie.NASKeyNA {
+		return fmt.Errorf("Security Mode Command is missing the UE security capability or valid key identifier")
+	}
+	ciphering := [...]bool{capability.EA05G, capability.EA1_128_5G, capability.EA2_128_5G, capability.EA3_128_5G}
+	integrity := [...]bool{capability.IA05G, capability.IA1_128_5G, capability.IA2_128_5G, capability.IA3_128_5G}
+	selected := command.SelectedNASSecAlgos
+	if int(selected.CipheringAlgo) >= len(ciphering) || !ciphering[selected.CipheringAlgo] || int(selected.MsgIntAlgo) >= len(integrity) || !integrity[selected.MsgIntAlgo] {
+		return fmt.Errorf("Security Mode Command selected an algorithm the UE did not offer")
+	}
+	offered, err := capability.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	replayed, err := command.ReplayedUESecCapabilities.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(offered, replayed) {
+		return fmt.Errorf("Security Mode Command changed the replayed UE security capability")
+	}
+	return nil
+}
+
+func DispatchNas(ue *context.UEContext, packet []byte) {
+	msg, err := DecodeNAS(ue, packet)
+	if err != nil {
+		log.Errorf("[UE][NAS] Decode failed: %v", err)
+		return
+	}
+	log.Infof("[UE][NAS] Receive %s", msg.MsgType())
+	switch m := msg.(type) {
+	case *nas.AuthReq:
 		handler.HandlerAuthenticationRequest(ue, m)
-
-	case nas.MsgTypeAuthenticationReject:
-		// handler authentication reject.
-		log.Info("[UE][NAS] Receive Authentication Reject")
+	case *nas.AuthRej:
 		handler.HandlerAuthenticationReject(ue, m)
-
-	case nas.MsgTypeIdentityRequest:
-		log.Info("[UE][NAS] Receive Identify Request")
-		// handler identity request.
+	case *nas.IdReq:
 		handler.HandlerIdentityRequest(ue, m)
-
-	case nas.MsgTypeSecurityModeCommand:
-		// handler security mode command.
-		log.Info("[UE][NAS] Receive Security Mode Command")
-		if !newSecurityContext {
-			log.Warn("Received Security Mode Command with security header different from \"Integrity protected with new 5G NAS security context\" ")
-		}
+	case *nas.SecModeCmd:
 		handler.HandlerSecurityModeCommand(ue, m)
-
-	case nas.MsgTypeRegistrationAccept:
-		// handler registration accept.
-		log.Info("[UE][NAS] Receive Registration Accept")
+	case *nas.RegAccept:
 		handler.HandlerRegistrationAccept(ue, m)
-
-	case nas.MsgTypeConfigurationUpdateCommand:
-		log.Info("[UE][NAS] Receive Configuration Update Command")
+	case *nas.CfgUpdateCmd:
 		handler.HandlerConfigurationUpdateCommand(ue, m)
-
-	case nas.MsgTypeDLNASTransport:
-		// handler DL NAS Transport.
-		log.Info("[UE][NAS] Receive DL NAS Transport")
-		handleCause5GMM(m.DLNASTransport.Cause5GMM)
+	case *nas.DLNASTransport:
+		if m.Cause5GMM != nil {
+			log.Errorf("[UE][NAS] 5GMM failure: %s", m.Cause5GMM)
+		}
 		handler.HandlerDlNasTransportPduaccept(ue, m)
-
-	case nas.MsgTypeServiceAccept:
-		// handler service reject
-		log.Info("[UE][NAS] Receive Service Accept")
+	case *nas.SvcAccept:
 		handler.HandlerServiceAccept(ue, m)
-
-	case nas.MsgTypeServiceReject:
-		// handler service reject
-		log.Error("[UE][NAS] Receive Service Reject")
-		handleCause5GMM(&m.ServiceReject.Cause5GMM)
-
-	case nas.MsgTypeRegistrationReject:
-		// handler registration reject
-		log.Error("[UE][NAS] Receive Registration Reject")
-		handleCause5GMM(&m.RegistrationReject.Cause5GMM)
-
-	case nas.MsgTypeStatus5GMM:
-		log.Error("[UE][NAS] Receive Status 5GMM")
-		handleCause5GMM(&m.Status5GMM.Cause5GMM)
-
-	case nas.MsgTypeStatus5GSM:
-		log.Error("[UE][NAS] Receive Status 5GSM")
-		handleCause5GSM(&m.Status5GSM.Cause5GSM)
-
+	case *nas.SvcRej:
+		log.Errorf("[UE][NAS] Service Reject: %s", m.Cause5GMM)
+	case *nas.RegRej:
+		ue.RegistrationFailed()
+		log.Errorf("[UE][NAS] Registration Reject: %s", m.Cause5GMM)
+	case *nas.Status5GMM:
+		log.Errorf("[UE][NAS] 5GMM status: %s", m.Cause5GMM)
+	case *nas.Status5GSM:
+		log.Errorf("[UE][NAS] 5GSM status: %s", m.Cause5GSM)
 	default:
-		log.Warnf("[UE][NAS] Received unknown NAS message 0x%x", m.GmmHeader.GetMessageType())
-	}
-
-}
-
-func handleCause5GSM(cause5SMM *nasType.Cause5GSM) {
-	if cause5SMM != nil {
-		log.Error("[UE][NAS] UE received a 5GSM Failure, cause: ", cause5GMMToString(cause5SMM.Octet))
-	}
-}
-
-func handleCause5GMM(cause5GMM *nasType.Cause5GMM) {
-	if cause5GMM != nil {
-		log.Error("[UE][NAS] UE received a 5GMM Failure, cause: ", cause5GMMToString(cause5GMM.Octet))
-	}
-}
-
-func cause5GMMToString(cause5GMM uint8) string {
-	switch cause5GMM {
-	case nasMessage.Cause5GMMIllegalUE:
-		return "Illegal UE"
-	case nasMessage.Cause5GMMPEINotAccepted:
-		return "PEI not accepted"
-	case nasMessage.Cause5GMMIllegalME:
-		return "5GS services not allowed"
-	case nasMessage.Cause5GMM5GSServicesNotAllowed:
-		return "5GS services not allowed"
-	case nasMessage.Cause5GMMUEIdentityCannotBeDerivedByTheNetwork:
-		return "UE identity cannot be derived by the network"
-	case nasMessage.Cause5GMMImplicitlyDeregistered:
-		return "Implicitly de-registered"
-	case nasMessage.Cause5GMMPLMNNotAllowed:
-		return "PLMN not allowed"
-	case nasMessage.Cause5GMMTrackingAreaNotAllowed:
-		return "Tracking area not allowed"
-	case nasMessage.Cause5GMMRoamingNotAllowedInThisTrackingArea:
-		return "Roaming not allowed in this tracking area"
-	case nasMessage.Cause5GMMNoSuitableCellsInTrackingArea:
-		return "No suitable cells in tracking area"
-	case nasMessage.Cause5GMMMACFailure:
-		return "MAC failure"
-	case nasMessage.Cause5GMMSynchFailure:
-		return "Synch failure"
-	case nasMessage.Cause5GMMCongestion:
-		return "Congestion"
-	case nasMessage.Cause5GMMUESecurityCapabilitiesMismatch:
-		return "UE security capabilities mismatch"
-	case nasMessage.Cause5GMMSecurityModeRejectedUnspecified:
-		return "Security mode rejected, unspecified"
-	case nasMessage.Cause5GMMNon5GAuthenticationUnacceptable:
-		return "Non-5G authentication unacceptable"
-	case nasMessage.Cause5GMMN1ModeNotAllowed:
-		return "N1 mode not allowed"
-	case nasMessage.Cause5GMMRestrictedServiceArea:
-		return "Restricted service area"
-	case nasMessage.Cause5GMMLADNNotAvailable:
-		return "LADN not available"
-	case nasMessage.Cause5GMMMaximumNumberOfPDUSessionsReached:
-		return "Maximum number of PDU sessions reached"
-	case nasMessage.Cause5GMMInsufficientResourcesForSpecificSliceAndDNN:
-		return "Insufficient resources for specific slice and DNN"
-	case nasMessage.Cause5GMMInsufficientResourcesForSpecificSlice:
-		return "Insufficient resources for specific slice"
-	case nasMessage.Cause5GMMngKSIAlreadyInUse:
-		return "ngKSI already in use"
-	case nasMessage.Cause5GMMNon3GPPAccessTo5GCNNotAllowed:
-		return "Non-3GPP access to 5GCN not allowed"
-	case nasMessage.Cause5GMMServingNetworkNotAuthorized:
-		return "Serving network not authorized"
-	case nasMessage.Cause5GMMPayloadWasNotForwarded:
-		return "Payload was not forwarded"
-	case nasMessage.Cause5GMMDNNNotSupportedOrNotSubscribedInTheSlice:
-		return "DNN not supported or not subscribed in the slice"
-	case nasMessage.Cause5GMMInsufficientUserPlaneResourcesForThePDUSession:
-		return "Insufficient user-plane resources for the PDU session"
-	case nasMessage.Cause5GMMSemanticallyIncorrectMessage:
-		return "Semantically incorrect message"
-	case nasMessage.Cause5GMMInvalidMandatoryInformation:
-		return "Invalid mandatory information"
-	case nasMessage.Cause5GMMMessageTypeNonExistentOrNotImplemented:
-		return "Message type non-existent or not implementedE"
-	case nasMessage.Cause5GMMMessageTypeNotCompatibleWithTheProtocolState:
-		return "Message type not compatible with the protocol state"
-	case nasMessage.Cause5GMMInformationElementNonExistentOrNotImplemented:
-		return "Information element non-existent or not implemented"
-	case nasMessage.Cause5GMMConditionalIEError:
-		return "Conditional IE error"
-	case nasMessage.Cause5GMMMessageNotCompatibleWithTheProtocolState:
-		return "Message not compatible with the protocol state"
-	case nasMessage.Cause5GMMProtocolErrorUnspecified:
-		return "Protocol error, unspecified. Please share the pcap with packetrusher@hpe.com."
-	default:
-		return "Protocol error, unspecified. Please share the pcap with packetrusher@hpe.com."
+		log.Warnf("[UE][NAS] Unsupported message %s", msg.MsgType())
 	}
 }

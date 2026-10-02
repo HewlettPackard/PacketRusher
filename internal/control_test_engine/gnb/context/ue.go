@@ -9,8 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/free5gc/nas/nasType"
-	"github.com/free5gc/ngap/ngapType"
+	nasType "github.com/free5gc/nas/ie"
+	ngapType "github.com/free5gc/ngap/ie"
 	"github.com/ishidawataru/sctp"
 )
 
@@ -21,17 +21,24 @@ const Ready = 0x02
 const Down = 0x03
 
 type GNBUe struct {
-	ranUeNgapId      int64          // Identifier for UE in GNB Context.
-	amfUeNgapId      atomic.Int64   // Identifier for UE in AMF Context. Set by NGAP handlers, which run concurrently, and read by UE goroutines.
+	ranUeNgapId      int64 // Identifier for UE in GNB Context.
+	amfUeNgapId      atomic.Int64
+	amfUeIDSet       atomic.Bool    // Identifier for UE in AMF Context.
 	amfId            int64          // Identifier for AMF in UE/GNB Context.
-	state            atomic.Int64   // State of UE in NAS/GNB Context. Written by NGAP handlers, which run concurrently.
+	state            atomic.Int32   // State of UE in NAS/GNB Context.
 	sctpConnection   *sctp.SCTPConn // Sctp association in using by the UE.
 	gnbRx            chan UEMessage
 	gnbTx            chan UEMessage
 	pRueId           int64 // PacketRusher unique UE ID
-	tmsi             *nasType.GUTI5G
+	tmsi             *nasType.MobileId5GS
 	context          Context
 	lock             sync.Mutex
+	processingLock   sync.Mutex
+	txLock           sync.Mutex
+	delivery         *ueDelivery
+	pendingDelivery  *[]ueMessageDelivery // Scoped to the current downlink handler, guarded by txLock.
+	connectionLost   chan struct{}
+	connectionFailed bool
 	newGnb           *GNBContext
 	releaseRequested bool // Set when UE Context Release Request is sent to AMF
 }
@@ -85,8 +92,8 @@ func (ue *GNBUe) CopyFromPreviousContext(oldUeContext *GNBUe) {
 func (ue *GNBUe) CreatePduSession(pduSessionId int64, upfIp string, sst string, sd string, pduType uint64,
 	qosId int64, priArp int64, fiveQi int64, ulTeid uint32, dlTeid uint32) (*GnbPDUSession, error) {
 
-	if pduSessionId < 1 || pduSessionId > 16 {
-		return nil, fmt.Errorf("PDU Session Id must lies between 1 and 16, id: %d", pduSessionId)
+	if pduSessionId < 1 || pduSessionId > 15 {
+		return nil, fmt.Errorf("PDU session ID must be between 1 and 15, id: %d", pduSessionId)
 	}
 
 	if ue.context.pduSession[pduSessionId-1] != nil {
@@ -114,8 +121,8 @@ func (ue *GNBUe) CreatePduSession(pduSessionId int64, upfIp string, sst string, 
 }
 
 func (ue *GNBUe) GetPduSession(pduSessionId int64) (*GnbPDUSession, error) {
-	if pduSessionId < 1 || pduSessionId > 16 {
-		return nil, fmt.Errorf("PDU Session Id must lies between 1 and 16, id: %d", pduSessionId)
+	if pduSessionId < 1 || pduSessionId > 15 {
+		return nil, fmt.Errorf("PDU session ID must be between 1 and 15, id: %d", pduSessionId)
 	}
 
 	return ue.context.pduSession[pduSessionId-1], nil
@@ -130,8 +137,8 @@ func (ue *GNBUe) SetPduSessions(pduSessions [16]*GnbPDUSession) {
 }
 
 func (ue *GNBUe) DeletePduSession(pduSessionId int64) error {
-	if pduSessionId < 1 || pduSessionId > 16 {
-		return fmt.Errorf("PDU Session Id must lies between 1 and 16, id: %d", pduSessionId)
+	if pduSessionId < 1 || pduSessionId > 15 {
+		return fmt.Errorf("PDU session ID must be between 1 and 15, id: %d", pduSessionId)
 	}
 
 	ue.context.pduSession[pduSessionId-1] = nil
@@ -148,6 +155,9 @@ func (ue *GNBUe) GetUeMaskedImeiSv() string {
 }
 
 func (ue *GNBUe) GetSelectedNssai(pduSessionId int64) (string, string) {
+	if pduSessionId < 1 || pduSessionId > 15 {
+		return "NSSAI was not selected", "NSSAI was not selected"
+	}
 	pduSession := ue.context.pduSession[pduSessionId-1]
 	if pduSession != nil {
 		return pduSession.sst, pduSession.sd
@@ -225,11 +235,34 @@ func (ue *GNBUe) SetGnbRx(gnbRx chan UEMessage) {
 }
 
 func (ue *GNBUe) GetGnbTx() chan UEMessage {
+	ue.txLock.Lock()
+	defer ue.txLock.Unlock()
 	return ue.gnbTx
 }
 
 func (ue *GNBUe) SetGnbTx(gnbTx chan UEMessage) {
+	ue.txLock.Lock()
+	if ue.gnbTx == gnbTx {
+		ue.txLock.Unlock()
+		return
+	}
+	previous := ue.delivery
 	ue.gnbTx = gnbTx
+	if gnbTx != nil {
+		ue.delivery = &ueDelivery{channel: gnbTx, done: make(chan struct{})}
+	} else {
+		ue.delivery = nil
+	}
+	if previous != nil {
+		close(previous.done)
+	}
+	ue.txLock.Unlock()
+	// The swap prevents later batches from enrolling in the old generation.
+	// Already enrolled sends need cancellation before its channel can close.
+	if previous != nil {
+		previous.senders.Wait()
+		close(previous.channel)
+	}
 }
 
 func (ue *GNBUe) SetPrUeId(pRueId int64) {
@@ -240,11 +273,11 @@ func (ue *GNBUe) GetPrUeId() int64 {
 	return ue.pRueId
 }
 
-func (ue *GNBUe) SetTMSI(tmsi *nasType.GUTI5G) {
+func (ue *GNBUe) SetTMSI(tmsi *nasType.MobileId5GS) {
 	ue.tmsi = tmsi
 }
 
-func (ue *GNBUe) GetTMSI() *nasType.GUTI5G {
+func (ue *GNBUe) GetTMSI() *nasType.MobileId5GS {
 	return ue.tmsi
 }
 
@@ -326,6 +359,7 @@ func (ue *GNBUe) GetAmfUeId() int64 {
 
 func (ue *GNBUe) SetAmfUeId(amfUeId int64) {
 	ue.amfUeNgapId.Store(amfUeId)
+	ue.amfUeIDSet.Store(true)
 }
 
 func (ue *GNBUe) SetReleaseRequested(val bool) {
@@ -338,4 +372,128 @@ func (ue *GNBUe) GetReleaseRequested() bool {
 	ue.lock.Lock()
 	defer ue.lock.Unlock()
 	return ue.releaseRequested
+}
+
+// LockProcessing serializes uplink NAS and downlink NGAP changes to this UE.
+func (ue *GNBUe) LockProcessing()   { ue.processingLock.Lock() }
+func (ue *GNBUe) UnlockProcessing() { ue.processingLock.Unlock() }
+
+// ProcessDownlink serializes context changes, then delivers the handler's messages
+// outside the processing lock. The ordered NGAP worker waits for delivery before
+// running the next handler, so a release cannot overtake a preceding NAS message.
+// Meanwhile uplink processing can drain RX even when the UE's TX buffer is full.
+func (ue *GNBUe) ProcessDownlink(process func()) {
+	var pending []ueMessageDelivery
+	func() {
+		ue.LockProcessing()
+		ue.txLock.Lock()
+		ue.pendingDelivery = &pending
+		ue.txLock.Unlock()
+		defer func() {
+			ue.txLock.Lock()
+			ue.pendingDelivery = nil
+			ue.txLock.Unlock()
+			ue.UnlockProcessing()
+		}()
+		process()
+	}()
+	for _, message := range pending {
+		ue.deliver(message)
+	}
+}
+
+type ueMessageDelivery struct {
+	delivery *ueDelivery
+	message  UEMessage
+}
+
+type ueDelivery struct {
+	channel chan UEMessage
+	done    chan struct{}
+	senders sync.WaitGroup
+}
+
+// DeliverToUE keeps channel ownership with the gNB. Closing first cancels blocked
+// sends, then waits for them to leave before closing the receive channel.
+func (ue *GNBUe) DeliverToUE(message UEMessage) bool {
+	ue.txLock.Lock()
+	delivery := ue.delivery
+	if delivery == nil {
+		ue.txLock.Unlock()
+		return false
+	}
+	if ue.pendingDelivery != nil {
+		*ue.pendingDelivery = append(*ue.pendingDelivery, ueMessageDelivery{delivery, message})
+		ue.txLock.Unlock()
+		return true
+	}
+	ue.txLock.Unlock()
+	return ue.deliver(ueMessageDelivery{delivery, message})
+}
+
+func (ue *GNBUe) deliver(message ueMessageDelivery) bool {
+	ue.txLock.Lock()
+	delivery := message.delivery
+	// A released or replaced connection must never receive an old batch.
+	if delivery != ue.delivery {
+		ue.txLock.Unlock()
+		return false
+	}
+	delivery.senders.Add(1)
+	ue.txLock.Unlock()
+	defer delivery.senders.Done()
+	select {
+	case <-delivery.done:
+		return false
+	default:
+	}
+	select {
+	case delivery.channel <- message.message:
+		return true
+	case <-delivery.done:
+		return false
+	}
+}
+
+func (ue *GNBUe) CloseUEChannel() {
+	ue.txLock.Lock()
+	delivery := ue.delivery
+	ue.delivery = nil
+	ue.gnbTx = nil
+	if delivery != nil {
+		close(delivery.done)
+	}
+	ue.txLock.Unlock()
+	if delivery != nil {
+		delivery.senders.Wait()
+		close(delivery.channel)
+	}
+}
+
+func (ue *GNBUe) HasAmfUeId() bool { return ue.amfUeIDSet.Load() }
+
+// Normal context release (including Idle) closes TX without failing the UE.
+// Association loss uses a separate signal that cannot be blocked by a full TX.
+func (ue *GNBUe) SetConnectionLost(lost chan struct{}) {
+	ue.txLock.Lock()
+	defer ue.txLock.Unlock()
+	if ue.connectionLost == lost {
+		return
+	}
+	ue.connectionLost = lost
+	if ue.connectionFailed && lost != nil {
+		close(lost)
+	}
+}
+
+func (ue *GNBUe) FailUEChannel() {
+	ue.txLock.Lock()
+	if !ue.connectionFailed {
+		ue.connectionFailed = true
+		if ue.connectionLost != nil {
+			close(ue.connectionLost)
+		}
+	}
+	ue.txLock.Unlock()
+	ue.CloseUEChannel()
 }

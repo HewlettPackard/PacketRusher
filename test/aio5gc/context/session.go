@@ -7,8 +7,8 @@ package context
 import (
 	"errors"
 	"log"
-	"my5G-RANTester/internal/common/tools"
 	"net"
+	"net/netip"
 	"sync"
 
 	"github.com/free5gc/openapi/models"
@@ -16,7 +16,7 @@ import (
 
 type SessionContext struct {
 	dataNetworks    []DataNetwork
-	sessionsRules   []*models.SessionRule
+	sessionsRules   []*models.Pcf_SMPolCtrl_SessionRule
 	lastAllocatedIP net.IP
 	n3              net.IP
 	ipMtx           sync.Mutex
@@ -44,12 +44,12 @@ func (s *SessionContext) NewSessionContext() {
 		},
 	}
 
-	s.sessionsRules = []*models.SessionRule{{
+	s.sessionsRules = []*models.Pcf_SMPolCtrl_SessionRule{{
 		AuthSessAmbr: &models.Ambr{
 			Uplink:   "1 Gbps",
 			Downlink: "1 Gbps",
 		},
-		AuthDefQos: &models.AuthorizedDefaultQos{
+		AuthDefQos: &models.Pcf_SMPolCtrl_AuthorizedDefaultQos{
 			Var5qi: 6,
 			Arp: &models.Arp{
 				PriorityLevel: 8,
@@ -75,7 +75,7 @@ func (s *SessionContext) GetDnnList() []string {
 	return dnn
 }
 
-func (s *SessionContext) GetSessionRules() []*models.SessionRule {
+func (s *SessionContext) GetSessionRules() []*models.Pcf_SMPolCtrl_SessionRule {
 	return s.sessionsRules
 }
 
@@ -91,7 +91,12 @@ func (s *SessionContext) GetDataNetwork(dnn string) (DataNetwork, error) {
 func (s *SessionContext) GetUnallocatedIP() net.IP {
 	s.ipMtx.Lock()
 	defer s.ipMtx.Unlock()
-	ip, err := tools.IncrementIP(s.lastAllocatedIP.String(), "10.0.0.0/8")
+	next := netip.MustParseAddr(s.lastAllocatedIP.String()).Next()
+	var err error
+	if !netip.MustParsePrefix("10.0.0.0/8").Contains(next) {
+		err = errors.New("mock IPv4 pool exhausted")
+	}
+	ip := next.String()
 	if err != nil {
 		log.Fatal("[5GC][NAS] Error while allocating ip for PDU session: " + err.Error())
 	}

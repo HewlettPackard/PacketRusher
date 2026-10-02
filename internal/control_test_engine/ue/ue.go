@@ -6,6 +6,7 @@ package ue
 
 import (
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/analytics"
 	context2 "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
@@ -14,8 +15,6 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
 	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 	"my5G-RANTester/internal/control_test_engine/ue/state"
-	"os"
-	"os/signal"
 	"sync"
 	"time"
 
@@ -24,8 +23,9 @@ import (
 
 func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnbInboundChannel chan context2.UEMessage, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
 	// new UE instance.
-	ue := &context.UEContext{}
+	ue := &context.UEContext{Results: analytics.Current()}
 	scenarioChan := make(chan scenario.ScenarioMessage)
+	ue.TunnelMTU = conf.Ue.TunnelMTU
 
 	// new UE context
 	ue.NewRanUeContext(
@@ -51,11 +51,8 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 	go func() {
 		// starting communication with GNB and listen.
 		service.InitConn(ue, ue.GetGnbInboundChannel())
-		sigStop := make(chan os.Signal, 1)
-		signal.Notify(sigStop, os.Interrupt)
+		runUE(ue, ueMgrChannel)
 
-		// Block until a signal is received.
-		handleUE(ue, ueMgrChannel)
 		ue.Terminate()
 		wg.Done()
 	}()
@@ -63,19 +60,32 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 	return scenarioChan
 }
 
-// handleUE is the UE's goroutine: it handles the UE's messages one at a time until the
-// scenario stops the UE.
-func handleUE(ue *context.UEContext, ueMgrChannel chan procedures.UeTesterMessage) {
+func runUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMessage) {
+	handleUE(ue, ueMgrChannel)
+}
+
+func handleUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMessage) {
+	retries := ue.PduSessionRetries()
+	// Block until a signal is received.
 	loop := true
 	for loop {
 		select {
 		case msg, open := <-ue.GetGnbTx():
 			if !open {
-				log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with gNB was closed")
+				log.Debug("[UE][", ue.GetMsin(), "] gNB context released; waiting for a new connection or scenario action")
 				ue.SetGnbTx(nil)
+				ue.Lock()
+				if rx := ue.GetGnbRx(); rx != nil {
+					close(rx)
+					ue.SetGnbRx(nil)
+				}
+				ue.Unlock()
 				break
 			}
 			gnbMsgHandler(msg, ue)
+		case <-ue.GetGnbConnectionLost():
+			log.Warn("[UE][", ue.GetMsin(), "] Stopping UE after its gNB association failed")
+			loop = false
 		case msg, open := <-ueMgrChannel:
 			if !open {
 				log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with scenario was closed")
@@ -83,17 +93,20 @@ func handleUE(ue *context.UEContext, ueMgrChannel chan procedures.UeTesterMessag
 				break
 			}
 			loop = ueMgrHandler(msg, ue)
+		case work := <-ue.Deferred():
+			work()
+		case retry := <-retries:
+			trigger.InitPduSessionRetry(ue, retry)
 		case <-ue.GetDRX():
 			verifyPaging(ue)
-		case f := <-ue.Deferred():
-			// Work scheduled earlier, such as the retry of a rejected PDU session, runs
-			// here, so it never encodes a NAS message alongside another one.
-			f()
 		}
 	}
 }
 
 func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
+	if msg.ConnectionLost != nil {
+		ue.SetGnbConnectionLost(msg.ConnectionLost)
+	}
 	if msg.IsNas {
 		state.DispatchState(ue, msg.Nas)
 	} else if msg.GNBPduSessions[0] != nil {

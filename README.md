@@ -27,7 +27,7 @@ PacketRusher borrows libraries and data structures from the [free5gc project](ht
   * GUTI Re-registration
   * Supports 5G roaming: Tested with new https://github.com/open5gs/open5gs/issues/2194 Roaming feature
 * Implements high-performant N3 (GTP-U) interface
-  * Generic tunnel supporting all kind of traffic (TCP, UDP, Video…)
+  * Generic tunnel supporting all kind of traffic (TCP, UDP, Video…) — see [tunnel ownership and handover](docs/TunnelLifecycle.md).
     * We tested iperf3 traffic, and Youtube traffic through PacketRusher
     * We roughly reach 5 GB/s per UE, which is more than what a real UE can achieve.
 * Integrated all-in-one mocked 5GC/AMF for PacketRusher's integration testing
@@ -41,17 +41,18 @@ The following is a quick start guide, for more details on the installation, conf
   - All Linux distributions with kernel from 5.4 up to the 7.0.x series should work, but untested.
   - There might be issues with frankenstein kernel from RHEL/CentOS/Rocky, feel free to open a bug if you encounter one!
 - Windows is not supported (Windows does not support SCTP)
-- Go 1.23.0 or more recent
+- Go 1.26.2 or more recent
 - Root privilege
 - Secure boot disabled (for custom kernel module)
 
-PacketRusher is not yet supported on Docker.
+A Linux container workflow is available in [docker/README.md](docker/README.md).
+The host provides SCTP and, for user-plane tunnels, the gtp5g kernel module.
 
 ### Dependencies
 ```bash
 $ sudo apt install build-essential linux-headers-generic make git wget tar linux-modules-extra-$(uname -r)
 # Warning this command will remove your existing local Go installation if you have one:
-$ wget https://go.dev/dl/go1.24.1.linux-amd64.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.24.1.linux-amd64.tar.gz
+$ wget https://go.dev/dl/go1.26.2.linux-amd64.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.26.2.linux-amd64.tar.gz
 # Add go binary to the executable PATH variable:
 $ echo 'export PATH=$PATH:/usr/local/go/bin' >> $HOME/.profile
 ```
@@ -74,7 +75,7 @@ $ make clean && make && sudo make install
 ```bash
 $ cd $PACKETRUSHER
 $ go mod download
-$ go build cmd/packetrusher.go
+$ go build -o packetrusher ./cmd
 $ ./packetrusher --help
 ```
 
@@ -120,3 +121,28 @@ This project is under the [Apache 2.0 License](LICENSE) license.
 By contributing here, [you agree](DCO.md) to license your contribution under the terms of the Apache 2.0 License. All files are released with the Apache License 2.0.
 
 PacketRusher borrows libraries and data structures from the [free5gc project](https://github.com/free5gc/free5gc), and is originally based upon [my5G-RANTester](https://github.com/my5G/my5G-RANTester).
+
+For automatic tunnel MTU calculation and the `ue.tunnelmtu` override, see [Tunnel MTU](docs/tunnel-mtu.md).
+
+### Boolean flags and UE distribution
+
+Boolean flags take no separate value. Enable a flag with `--tunnel` or
+`--tunnel=true`, and disable a flag with `--tunnel-vrf=false`. For example:
+
+```bash
+./packetrusher --config config/config.yml multi-ue -n 2 --tunnel -d --tunnel-vrf=false
+```
+
+Flags may appear in either order. Do not write `--tunnel true` or
+`--tunnel-vrf false`; those values are positional arguments and are rejected
+before configuration loading or network setup.
+
+UE IDs start at 1. The first UE uses the configured gNB ID and N2/N3 addresses;
+the next UE uses the next gNB when multiple gNBs are present. Selection wraps
+back to the first gNB after the last one, and handovers advance through that
+same sequence. With `--dedicatedGnb`, ascending MSINs therefore use ascending
+gNB IDs and N2/N3 addresses.
+
+For JSON/CSV procedure reports and live Prometheus metrics, see [Load-test results](docs/load-test-results.md).
+
+For the current codec APIs and validation commands, see [Dependency migration](docs/dependency-migration.md).

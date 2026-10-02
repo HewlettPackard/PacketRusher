@@ -1,103 +1,77 @@
-/**
- * SPDX-License-Identifier: Apache-2.0
- * © Copyright 2023 Hewlett Packard Enterprise Development LP
- */
+/** SPDX-License-Identifier: Apache-2.0 */
 package nas
 
 import (
-	"errors"
+	"fmt"
+	nas "github.com/free5gc/nas/message"
+	"github.com/free5gc/ngap/ie"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg/nas/codec"
-	nasHandler "my5G-RANTester/test/aio5gc/msg/nas/handler"
-	"strconv"
-
-	"github.com/free5gc/nas"
-	"github.com/free5gc/ngap/ngapType"
-	log "github.com/sirupsen/logrus"
+	handler "my5G-RANTester/test/aio5gc/msg/nas/handler"
 )
 
-func Dispatch(nasPDU *ngapType.NASPDU, ue *context.UEContext, fgc *context.Aio5gc, gnb *context.GNBContext) {
-	payload := nasPDU.Value
-	m := new(nas.Message)
-	m.SecurityHeaderType = nas.GetSecurityHeaderType(payload) & 0x0f
-	var msg *nas.Message
-	var err error
-
-	switch ue.GetState().Current() {
-	case context.Authenticated,
-		context.Registered:
-		if m.SecurityHeaderType != nas.SecurityHeaderTypePlainNas {
-			var integrityProtected bool
-			msg, integrityProtected, err = codec.Decode(ue, payload, false)
-			if !integrityProtected {
-				log.Error("[5GC][NAS] message integrity could not be verified:" + err.Error())
-				return
-			}
-		} else {
-			log.Error("[5GC][NAS] Received plain Nas message UE in state" + ue.GetState().Current())
-			return
-		}
-
-	default:
-		if m.SecurityHeaderType == nas.SecurityHeaderTypePlainNas {
-			msg, err = codec.DecodePlainNasNoIntegrityCheck(payload)
-		} else {
-			log.Error("[5GC][NAS] Received non plain Nas message UE in state" + ue.GetState().Current())
-			return
-		}
+func Dispatch(pdu *ie.NASPDU, ue *context.UEContext, fgc *context.Aio5gc, gnb *context.GNBContext) {
+	if pdu == nil {
+		log.Error("[5GC][NAS] Missing NAS PDU")
+		return
 	}
-
-	// Hook for changing NASHandler behaviour
-	hook := fgc.GetNasHook(msg.GmmHeader.GetMessageType())
-	if hook != nil {
-		handled, err := hook(msg, ue, gnb, fgc)
-		if err != nil {
-			log.Error(err)
+	payload := pdu.Value
+	st := nas.GetSecHdrType(payload)
+	var msg nas.Message
+	var err error
+	switch ue.GetState().Current() {
+	case context.Authenticated, context.Registered:
+		if st == nas.SecHdrTypePlainNas {
+			log.Error("[5GC][NAS] Plain NAS in authenticated state")
+			return
+		}
+		var verified bool
+		msg, verified, err = codec.Decode(ue, payload, false)
+		if err != nil || !verified {
+			log.Errorf("[5GC][NAS] Integrity verification failed: %v", err)
+			return
+		}
+	default:
+		if st != nas.SecHdrTypePlainNas {
+			log.Error("[5GC][NAS] Protected NAS before authentication")
+			return
+		}
+		msg, err = codec.DecodePlainNasNoIntegrityCheck(payload)
+	}
+	if err != nil || msg == nil {
+		log.Errorf("[5GC][NAS] Decode failed: %v", err)
+		return
+	}
+	if hook := fgc.GetNasHook(msg.MsgType()); hook != nil {
+		handled, hookErr := hook(msg, ue, gnb, fgc)
+		if hookErr != nil {
+			log.Error(hookErr)
 		}
 		if handled {
 			return
 		}
 	}
-
-	amf := fgc.GetAMFContext()
-	session := fgc.GetSessionContext()
-
-	// Default Dispacther
-	switch msg.GmmHeader.GetMessageType() {
-	case nas.MsgTypeRegistrationRequest:
-		log.Info("[5GC][NAS] Received Registration Request")
-		err = nasHandler.RegistrationRequest(msg, amf, ue, gnb)
-
-	case nas.MsgTypeIdentityResponse:
-		log.Info("[5GC][NAS] Received Identity Response")
-		err = nasHandler.IdentityResponse(msg, amf, ue, gnb)
-
-	case nas.MsgTypeAuthenticationResponse:
-		log.Info("[5GC][NAS] Received Authentication Response")
-		err = nasHandler.AuthenticationResponse(msg, gnb, ue, amf)
-
-	case nas.MsgTypeSecurityModeComplete:
-		log.Info("[5GC][NAS] Received Security Mode Complete")
-		err = nasHandler.SecurityModeComplete(msg, amf, ue, gnb)
-
-	case nas.MsgTypeRegistrationComplete:
-		log.Info("[5GC][NAS] Received Registration Complete")
-		err = nasHandler.RegistrationComplete(msg, gnb, ue, *amf)
-
-	case nas.MsgTypeULNASTransport:
-		log.Info("[5GC][NAS] Received UL NAS Transport")
-		err = nasHandler.UlNasTransport(msg, gnb, ue, session)
-
-	case nas.MsgTypeConfigurationUpdateComplete:
-		log.Info("[5GC][NAS] Received Configuration Update Complete")
-
-	case nas.MsgTypeDeregistrationRequestUEOriginatingDeregistration:
-		log.Info("[5GC][NAS] Received Deregistration Request: UE Originating Deregistration")
-		err = nasHandler.UEOriginatingDeregistration(msg, amf, ue, gnb)
+	amf, session := fgc.GetAMFContext(), fgc.GetSessionContext()
+	switch m := msg.(type) {
+	case *nas.RegReq:
+		err = handler.RegistrationRequest(m, amf, ue, gnb)
+	case *nas.IdRsp:
+		err = handler.IdentityResponse(m, amf, ue, gnb)
+	case *nas.AuthRsp:
+		err = handler.AuthenticationResponse(m, gnb, ue, amf)
+	case *nas.SecModeComplete:
+		err = handler.SecurityModeComplete(m, amf, ue, gnb)
+	case *nas.RegComplete:
+		err = handler.RegistrationComplete(m, gnb, ue, *amf)
+	case *nas.ULNASTransport:
+		err = handler.UlNasTransport(m, gnb, ue, session)
+	case *nas.CfgUpdateComplete:
+	case *nas.DeregReqUEOrig:
+		err = handler.UEOriginatingDeregistration(m, amf, ue, gnb)
 	default:
-		err = errors.New("[5GC][NAS] unrecognised nas message type: " + strconv.Itoa(int(msg.GmmHeader.GetMessageType())))
+		err = fmt.Errorf("[5GC][NAS] Unsupported message %s", msg.MsgType())
 	}
-
 	if err != nil {
 		log.Error(err)
 	}
