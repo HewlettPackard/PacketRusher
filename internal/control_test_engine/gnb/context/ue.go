@@ -7,6 +7,7 @@ package context
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/free5gc/nas/nasType"
 	"github.com/free5gc/ngap/ngapType"
@@ -21,9 +22,9 @@ const Down = 0x03
 
 type GNBUe struct {
 	ranUeNgapId      int64          // Identifier for UE in GNB Context.
-	amfUeNgapId      int64          // Identifier for UE in AMF Context.
+	amfUeNgapId      atomic.Int64   // Identifier for UE in AMF Context. Set by NGAP handlers, which run concurrently, and read by UE goroutines.
 	amfId            int64          // Identifier for AMF in UE/GNB Context.
-	state            int            // State of UE in NAS/GNB Context.
+	state            atomic.Int64   // State of UE in NAS/GNB Context. Written by NGAP handlers, which run concurrently.
 	sctpConnection   *sctp.SCTPConn // Sctp association in using by the UE.
 	gnbRx            chan UEMessage
 	gnbTx            chan UEMessage
@@ -188,23 +189,23 @@ func (ue *GNBUe) SetSCTP(conn *sctp.SCTPConn) {
 }
 
 func (ue *GNBUe) GetState() int {
-	return ue.state
+	return int(ue.state.Load())
 }
 
 func (ue *GNBUe) SetStateInitialized() {
-	ue.state = Initialized
+	ue.state.Store(Initialized)
 }
 
 func (ue *GNBUe) SetStateOngoing() {
-	ue.state = Ongoing
+	ue.state.Store(Ongoing)
 }
 
 func (ue *GNBUe) SetStateReady() {
-	ue.state = Ready
+	ue.state.Store(Ready)
 }
 
 func (ue *GNBUe) SetStateDown() {
-	ue.state = Down
+	ue.state.Store(Down)
 }
 
 func (ue *GNBUe) SetHandoverGnodeB(gnb *GNBContext) {
@@ -320,11 +321,11 @@ func (ue *GNBUe) SetRanUeId(id int64) {
 }
 
 func (ue *GNBUe) GetAmfUeId() int64 {
-	return ue.amfUeNgapId
+	return ue.amfUeNgapId.Load()
 }
 
 func (ue *GNBUe) SetAmfUeId(amfUeId int64) {
-	ue.amfUeNgapId = amfUeId
+	ue.amfUeNgapId.Store(amfUeId)
 }
 
 func (ue *GNBUe) SetReleaseRequested(val bool) {
