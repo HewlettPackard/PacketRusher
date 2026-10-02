@@ -6,6 +6,7 @@ package ue
 
 import (
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/analytics"
 	context2 "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
@@ -24,7 +25,7 @@ import (
 
 func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnbInboundChannel chan context2.UEMessage, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
 	// new UE instance.
-	ue := &context.UEContext{}
+	ue := &context.UEContext{Results: analytics.Current()}
 	scenarioChan := make(chan scenario.ScenarioMessage)
 
 	// new UE context
@@ -66,9 +67,12 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 // handleUE is the UE's goroutine: it handles the UE's messages one at a time until the
 // scenario stops the UE.
 func handleUE(ue *context.UEContext, ueMgrChannel chan procedures.UeTesterMessage) {
+	retries := ue.PduSessionRetries()
 	loop := true
 	for loop {
 		select {
+		case retry := <-retries:
+			trigger.InitPduSessionRetry(ue, retry)
 		case msg, open := <-ue.GetGnbTx():
 			if !open {
 				log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with gNB was closed")

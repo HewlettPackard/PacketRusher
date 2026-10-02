@@ -7,6 +7,7 @@ package test
 
 import (
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/analytics"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/test/aio5gc"
@@ -25,6 +26,9 @@ import (
 )
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
+	results := analytics.NewRecorder()
+	analytics.SetCurrent(results)
+	t.Cleanup(func() { analytics.SetCurrent(nil) })
 
 	controlIFConfig := netip.MustParseAddrPort("127.0.0.1:9489")
 	dataIFConfig := netip.MustParseAddrPort("127.0.0.1:2154")
@@ -129,6 +133,12 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 				})
 		})
 	assert.Equalf(t, ueCount, i, "Expected %v ue to created in 5GC state but was %v", ueCount, i)
+	for _, procedure := range results.Snapshot().Procedures {
+		assert.Equal(t, uint64(ueCount), procedure.Started)
+		assert.Equal(t, uint64(ueCount), procedure.Success)
+		assert.Zero(t, procedure.Failure)
+		assert.Zero(t, procedure.Pending)
+	}
 
 }
 

@@ -21,11 +21,15 @@ func init() {
 
 }
 
-func main() {
-
+func newApp() *cli.App {
+	beforeResults, afterResults := resultsHooks()
 	app := &cli.App{
+		After: afterResults,
 		Flags: []cli.Flag{
 			&cli.PathFlag{Name: "config", Usage: "Configuration file path. (Default: ./config/config.yml)"},
+			&cli.PathFlag{Name: "report-json", Usage: "Write procedure results to a new JSON file on shutdown"},
+			&cli.PathFlag{Name: "report-csv", Usage: "Write procedure results to a new CSV file on shutdown"},
+			&cli.StringFlag{Name: "metrics-addr", Usage: "Serve Prometheus metrics at /metrics on this address, e.g. 127.0.0.1:9090"},
 		},
 		Commands: []*cli.Command{
 			{
@@ -235,7 +239,14 @@ func main() {
 			},
 		},
 	}
-	err := app.Run(os.Args)
+	for _, command := range app.Commands {
+		command.Before = resultsBefore(command.Before, beforeResults)
+	}
+	return app
+}
+
+func main() {
+	err := newApp().Run(os.Args)
 	if err != nil {
 		log.Fatal(err)
 	}
