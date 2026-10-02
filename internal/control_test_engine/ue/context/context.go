@@ -68,6 +68,12 @@ type UEContext struct {
 	// Sync primitive
 	scenarioChan chan scenario.ScenarioMessage
 
+	// deferred carries work handed back to the UE's own goroutine, which runs it between
+	// the messages it handles, so it never runs alongside them. done is closed when the
+	// UE terminates, so work scheduled for it can stop.
+	deferred chan func()
+	done     chan struct{}
+
 	lock sync.Mutex
 }
 
@@ -169,6 +175,8 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 	ue.gnbInboundChannel = gnbInboundChannel
 	ue.scenarioChan = scenarioChan
+	ue.deferred = make(chan func())
+	ue.done = make(chan struct{})
 
 	// added initial state for MM(NULL)
 	ue.StateMM = MM5G_NULL
@@ -742,8 +750,41 @@ func (ue *UEContext) Terminate() {
 	}
 	ue.Unlock()
 	close(ue.scenarioChan)
+	close(ue.done)
 
 	log.Info("[UE] UE Terminated")
+}
+
+// Deferred carries the work RunOnUE hands to the UE's goroutine, which runs it.
+func (ue *UEContext) Deferred() <-chan func() {
+	return ue.deferred
+}
+
+// RunOnUE hands f to the UE's goroutine and waits until that goroutine has taken it. It
+// reports false, and f never runs, if the UE terminates first: the channel is unbuffered,
+// and the UE's goroutine has stopped reading it by the time Terminate closes done. It must
+// not be called from the UE's goroutine itself.
+func (ue *UEContext) RunOnUE(f func()) bool {
+	select {
+	case ue.deferred <- f:
+		return true
+	case <-ue.done:
+		return false
+	}
+}
+
+// RunOnUEAfter runs f on the UE's goroutine once wait has passed, unless the UE terminates
+// first.
+func (ue *UEContext) RunOnUEAfter(wait time.Duration, f func()) {
+	go func() {
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			ue.RunOnUE(f)
+		case <-ue.done:
+		}
+	}()
 }
 
 func reverse(s string) string {

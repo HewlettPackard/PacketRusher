@@ -6,7 +6,6 @@ package context
 
 import (
 	"my5G-RANTester/config"
-	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -58,7 +57,8 @@ func TestDeletePduSessionReleasesSharedTunnel(t *testing.T) {
 func TestTerminateReleasesSharedTunnelBeforeReadingIt(t *testing.T) {
 	rules, routes := countDeletes(t)
 
-	ue := &UEContext{TunnelMode: config.TunnelShared, scenarioChan: make(chan scenario.ScenarioMessage)}
+	ue := newTestUE()
+	ue.TunnelMode = config.TunnelShared
 	pduSession := &UEPDUSession{}
 	pduSession.SetTunRule(&netlink.Rule{})
 	pduSession.SetTunRoute(&netlink.Route{})
@@ -84,7 +84,8 @@ func TestTerminateReleasesSharedTunnelBeforeReadingIt(t *testing.T) {
 func TestTerminateRemovesDedicatedRuleAndRoute(t *testing.T) {
 	rules, routes := countDeletes(t)
 
-	ue := &UEContext{TunnelMode: config.TunnelTun, scenarioChan: make(chan scenario.ScenarioMessage)}
+	ue := newTestUE()
+	ue.TunnelMode = config.TunnelTun
 	pduSession := &UEPDUSession{}
 	pduSession.SetTunRule(&netlink.Rule{})
 	pduSession.SetTunRoute(&netlink.Route{})

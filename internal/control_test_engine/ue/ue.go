@@ -55,32 +55,42 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 		signal.Notify(sigStop, os.Interrupt)
 
 		// Block until a signal is received.
-		loop := true
-		for loop {
-			select {
-			case msg, open := <-ue.GetGnbTx():
-				if !open {
-					log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with gNB was closed")
-					ue.SetGnbTx(nil)
-					break
-				}
-				gnbMsgHandler(msg, ue)
-			case msg, open := <-ueMgrChannel:
-				if !open {
-					log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with scenario was closed")
-					loop = false
-					break
-				}
-				loop = ueMgrHandler(msg, ue)
-			case <-ue.GetDRX():
-				verifyPaging(ue)
-			}
-		}
+		handleUE(ue, ueMgrChannel)
 		ue.Terminate()
 		wg.Done()
 	}()
 
 	return scenarioChan
+}
+
+// handleUE is the UE's goroutine: it handles the UE's messages one at a time until the
+// scenario stops the UE.
+func handleUE(ue *context.UEContext, ueMgrChannel chan procedures.UeTesterMessage) {
+	loop := true
+	for loop {
+		select {
+		case msg, open := <-ue.GetGnbTx():
+			if !open {
+				log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with gNB was closed")
+				ue.SetGnbTx(nil)
+				break
+			}
+			gnbMsgHandler(msg, ue)
+		case msg, open := <-ueMgrChannel:
+			if !open {
+				log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with scenario was closed")
+				loop = false
+				break
+			}
+			loop = ueMgrHandler(msg, ue)
+		case <-ue.GetDRX():
+			verifyPaging(ue)
+		case f := <-ue.Deferred():
+			// Work scheduled earlier, such as the retry of a rejected PDU session, runs
+			// here, so it never encodes a NAS message alongside another one.
+			f()
+		}
+	}
 }
 
 func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
