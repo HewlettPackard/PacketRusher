@@ -11,13 +11,12 @@ import (
 	"my5G-RANTester/test/aio5gc/msg"
 	"slices"
 
-	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasConvert"
-	"github.com/free5gc/nas/nasMessage"
+	ie "github.com/free5gc/nas/ie"
+	nas "github.com/free5gc/nas/message"
 	"github.com/free5gc/openapi/models"
 )
 
-func UlNasTransport(nasReq *nas.Message, gnb *context.GNBContext, ue *context.UEContext, session *context.SessionContext) error {
+func UlNasTransport(nasReq *nas.ULNASTransport, gnb *context.GNBContext, ue *context.UEContext, session *context.SessionContext) error {
 	var err error
 	switch ue.GetState().Current() {
 	case context.Registered:
@@ -28,14 +27,14 @@ func UlNasTransport(nasReq *nas.Message, gnb *context.GNBContext, ue *context.UE
 	return err
 }
 
-func DefaultUlNasTransport(nasReq *nas.Message, gnb *context.GNBContext, ue *context.UEContext, session *context.SessionContext) error {
+func DefaultUlNasTransport(nasReq *nas.ULNASTransport, gnb *context.GNBContext, ue *context.UEContext, session *context.SessionContext) error {
 
-	ulNasTransport := nasReq.ULNASTransport
+	ulNasTransport := nasReq
 	var err error
 
-	switch ulNasTransport.GetPayloadContainerType() {
+	switch ulNasTransport.PayloadCntrType.Value {
 	// TS 24.501 5.4.5.2.3 case a)
-	case nasMessage.PayloadContainerTypeN1SMInfo:
+	case ie.PayloadCntrType_N1SMInfo:
 		err = transport5GSMMessage(ue, ulNasTransport, session, gnb)
 
 	default:
@@ -48,19 +47,19 @@ func DefaultUlNasTransport(nasReq *nas.Message, gnb *context.GNBContext, ue *con
 	return nil
 }
 
-func transport5GSMMessage(ue *context.UEContext, ulNasTransport *nasMessage.ULNASTransport, session *context.SessionContext, gnb *context.GNBContext) error {
-	requestType := ulNasTransport.RequestType
-	n1smContent := ulNasTransport.PayloadContainer.GetPayloadContainerContents()
+func transport5GSMMessage(ue *context.UEContext, ulNasTransport *nas.ULNASTransport, session *context.SessionContext, gnb *context.GNBContext) error {
+	requestType := ulNasTransport.ReqType
+	n1smContent := ulNasTransport.PayloadCntr.Contents
 	var pduSessionID int32
 
-	if id := ulNasTransport.PduSessionID2Value; id != nil {
-		pduSessionID = int32(id.GetPduSessionID2Value())
+	if id := ulNasTransport.PDUSessID; id != nil {
+		pduSessionID = int32(id.Value)
 	} else {
 		return errors.New("[5GC][NAS] PDU Session ID is nil")
 	}
 
 	if requestType == nil {
-		n1smContent := ulNasTransport.PayloadContainer.GetPayloadContainerContents()
+		n1smContent := ulNasTransport.PayloadCntr.Contents
 		return handleUnspecifiedRequest(n1smContent, ue, pduSessionID, gnb)
 	}
 
@@ -70,26 +69,26 @@ func transport5GSMMessage(ue *context.UEContext, ulNasTransport *nasMessage.ULNA
 	)
 	// If the S-NSSAI IE is not included, select a default snssai
 	if ulNasTransport.SNSSAI != nil {
-		snssai = nasConvert.SnssaiToModels(ulNasTransport.SNSSAI)
+		snssai = models.Snssai{Sst: int32(ulNasTransport.SNSSAI.SST), Sd: ulNasTransport.SNSSAI.SD}
 	} else {
 		snssai = ue.GetDefaultSNssai()
 	}
 
 	dnnList := session.GetDnnList()
 	if ulNasTransport.DNN != nil {
-		if !slices.Contains(dnnList, ulNasTransport.DNN.GetDNN()) {
+		if !slices.Contains(dnnList, ulNasTransport.DNN.Value) {
 			return errors.New("[5GC] Unknown DNN requested")
 		}
-		dnn = ulNasTransport.DNN.GetDNN()
+		dnn = ulNasTransport.DNN.Value
 
 	} else {
 		dnn = dnnList[0]
 	}
 
-	switch requestType.GetRequestTypeValue() {
+	switch requestType.Value {
 	// case iii) if the AMF does not have a PDU session routing context for the PDU session ID and the UE
 	// and the Request type IE is included and is set to "initial request"
-	case nasMessage.ULNASTransportRequestTypeInitialRequest:
+	case ie.ReqType_InitialReq:
 		return handleInitialRequest(n1smContent, ue, session, pduSessionID, snssai, dnn, gnb)
 
 	default:
@@ -102,18 +101,17 @@ func handleUnspecifiedRequest(n1smContent []uint8,
 	pduSessionID int32,
 	gnb *context.GNBContext) error {
 
-	m := nas.NewMessage()
-	err := m.GsmMessageDecode(&n1smContent)
+	m, err := nas.Parse(n1smContent, nil)
 	if err != nil {
 		return errors.New("[5GC][NAS] GsmMessageDecode Error: " + err.Error())
 	}
-	switch m.GsmHeader.GetMessageType() {
-	case nas.MsgTypePDUSessionReleaseRequest:
+	switch m.MsgType() {
+	case nas.MsgTypePDUSessRelReq:
 		smContext, err := context.ReleasePDUSession(ue, pduSessionID)
 		if err != nil {
 			return err
 		}
-		msg.SendPDUSessionReleaseCommand(gnb, ue, smContext, nasMessage.Cause5GSMRegularDeactivation)
+		msg.SendPDUSessionReleaseCommand(gnb, ue, smContext, ie.Cause5GSM_RegularDeactivation)
 
 	default:
 		return errors.New("[5GC][NAS] Unimplemented ulNasTransport Request type")
@@ -129,15 +127,14 @@ func handleInitialRequest(n1smContent []uint8,
 	dnn string,
 	gnb *context.GNBContext) error {
 
-	m := nas.NewMessage()
-	err := m.GsmMessageDecode(&n1smContent)
+	m, err := nas.Parse(n1smContent, nil)
 	if err != nil {
 		return errors.New("[5GC][NAS] GsmMessageDecode Error: " + err.Error())
 	}
-	if m.GsmHeader.GetMessageType() != nas.MsgTypePDUSessionEstablishmentRequest {
+	if m.MsgType() != nas.MsgTypePDUSessEstReq {
 		return errors.New("[5GC][NAS] UL NAS Transport container message expected to be PDU Session Establishment Request but was not")
 	}
-	sessionRequest := m.PDUSessionEstablishmentRequest
+	sessionRequest := m.(*nas.PDUSessEstReq)
 
 	smContext, err := context.CreatePDUSession(sessionRequest, ue, session, pduSessionID, snssai, dnn)
 	if err != nil {

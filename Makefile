@@ -1,4 +1,4 @@
 all:
-	go build cmd/packetrusher.go
+	go build -o packetrusher ./cmd
 clean:
 	rm ./packetrusher

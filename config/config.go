@@ -14,8 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/free5gc/nas/nasMessage"
-	"github.com/free5gc/nas/nasType"
+	nasType "github.com/free5gc/nas/ie"
 	"github.com/goccy/go-yaml"
 	log "github.com/sirupsen/logrus"
 )
@@ -179,24 +178,18 @@ func setLogLevel(cfg Config) {
 
 }
 
-func (config *Config) GetUESecurityCapability() *nasType.UESecurityCapability {
-	UESecurityCapability := &nasType.UESecurityCapability{
-		Iei:    nasMessage.RegistrationRequestUESecurityCapabilityType,
-		Len:    2,
-		Buffer: []uint8{0x00, 0x00},
+func (config *Config) GetUESecurityCapability() *nasType.UESecCapability {
+	UESecurityCapability := &nasType.UESecCapability{
+		Length:     2,
+		EA05G:      config.Ue.Ciphering.Nea0,
+		EA1_128_5G: config.Ue.Ciphering.Nea1,
+		EA2_128_5G: config.Ue.Ciphering.Nea2,
+		EA3_128_5G: config.Ue.Ciphering.Nea3,
+		IA05G:      config.Ue.Integrity.Nia0,
+		IA1_128_5G: config.Ue.Integrity.Nia1,
+		IA2_128_5G: config.Ue.Integrity.Nia2,
+		IA3_128_5G: config.Ue.Integrity.Nia3,
 	}
-
-	// Ciphering algorithms
-	UESecurityCapability.SetEA0_5G(boolToUint8(config.Ue.Ciphering.Nea0))
-	UESecurityCapability.SetEA1_128_5G(boolToUint8(config.Ue.Ciphering.Nea1))
-	UESecurityCapability.SetEA2_128_5G(boolToUint8(config.Ue.Ciphering.Nea2))
-	UESecurityCapability.SetEA3_128_5G(boolToUint8(config.Ue.Ciphering.Nea3))
-
-	// Integrity algorithms
-	UESecurityCapability.SetIA0_5G(boolToUint8(config.Ue.Integrity.Nia0))
-	UESecurityCapability.SetIA1_128_5G(boolToUint8(config.Ue.Integrity.Nia1))
-	UESecurityCapability.SetIA2_128_5G(boolToUint8(config.Ue.Integrity.Nia2))
-	UESecurityCapability.SetIA3_128_5G(boolToUint8(config.Ue.Integrity.Nia3))
 
 	return UESecurityCapability
 }

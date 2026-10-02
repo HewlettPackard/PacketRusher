@@ -17,11 +17,11 @@ import (
 
 	"my5G-RANTester/internal/control_test_engine/gnb/gtp"
 
-	"github.com/free5gc/aper"
-	"github.com/free5gc/nas/nasType"
-	"github.com/free5gc/ngap/ngapConvert"
-	"github.com/free5gc/ngap/ngapType"
-	"github.com/free5gc/openapi/models"
+	nasType "github.com/free5gc/nas/ie"
+	"github.com/free5gc/ngap/aper"
+
+	ngapType "github.com/free5gc/ngap/ie"
+
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
 )
@@ -86,7 +86,7 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd string, n2
 	gnb.dataInfo.gnbIpPort = n3
 }
 
-func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUeId int64, tmsi *nasType.GUTI5G) (*GNBUe, error) {
+func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUeId int64, tmsi *nasType.MobileId5GS) (*GNBUe, error) {
 
 	// TODO if necessary add more information for UE.
 
@@ -493,15 +493,15 @@ func (gnb *GNBContext) GetSliceInBytes() ([]byte, []byte) {
 	return sstBytes, nil
 }
 
-func (gnb *GNBContext) GetPLMNIdentity() ngapType.PLMNIdentity {
-	return ngapConvert.PlmnIdToNgap(models.PlmnId{Mcc: gnb.controlInfo.mcc, Mnc: gnb.controlInfo.mnc})
+func (gnb *GNBContext) GetPLMNIdentity() *ngapType.PLMNIdentity {
+	return &ngapType.PLMNIdentity{Value: gnb.GetMccAndMncInOctets()}
 }
 
-func (gnb *GNBContext) GetNRCellIdentity() ngapType.NRCellIdentity {
+func (gnb *GNBContext) GetNRCellIdentity() *ngapType.NRCellIdentity {
 	nci := gnb.GetGnbIdInBytes()
 	var slice = make([]byte, 2)
 
-	return ngapType.NRCellIdentity{
+	return &ngapType.NRCellIdentity{
 		Value: aper.BitString{
 			Bytes:     append(nci, slice...),
 			BitLength: 36,
@@ -514,20 +514,26 @@ func (gnb *GNBContext) GetMccAndMnc() (string, string) {
 }
 
 func (gnb *GNBContext) GetMccAndMncInOctets() []byte {
-	var res string
-
-	// reverse mcc and mnc
-	mcc := reverse(gnb.controlInfo.mcc)
-	mnc := reverse(gnb.controlInfo.mnc)
-
-	if len(mnc) == 2 {
-		res = fmt.Sprintf("%c%cf%c%c%c", mcc[1], mcc[2], mcc[0], mnc[0], mnc[1])
-	} else {
-		res = fmt.Sprintf("%c%c%c%c%c%c", mcc[1], mcc[2], mnc[2], mcc[0], mnc[0], mnc[1])
+	mcc, mnc := gnb.GetMccAndMnc()
+	if len(mcc) != 3 || (len(mnc) != 2 && len(mnc) != 3) {
+		log.Error("[GNB] MCC must have three digits and MNC two or three digits")
+		return nil
 	}
-
-	resu, _ := hex.DecodeString(res)
-	return resu
+	for _, digit := range mcc + mnc {
+		if digit < '0' || digit > '9' {
+			log.Error("[GNB] MCC and MNC must contain decimal digits")
+			return nil
+		}
+	}
+	// Use the NAS PLMN codec for NGAP too: MNC digit 3 belongs in the high
+	// nibble of octet 2, and a two-digit MNC uses the filler nibble 0xf.
+	plmn := nasType.PlmnId{MCC: mcc, MNC: mnc}
+	encoded := make([]byte, nasType.PlmnIdPktSz)
+	if err := plmn.MarshalBinary(encoded); err != nil {
+		log.Errorf("[GNB] Could not encode PLMN: %v", err)
+		return nil
+	}
+	return encoded
 }
 
 func (gnb *GNBContext) Terminate() {
@@ -556,13 +562,4 @@ func (gnb *GNBContext) Terminate() {
 	gnb.CloseGtpDevice(0, 0)
 
 	log.Info("GNB Terminated")
-}
-
-func reverse(s string) string {
-	// reverse string.
-	var aux string
-	for _, valor := range s {
-		aux = string(valor) + aux
-	}
-	return aux
 }

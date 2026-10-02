@@ -13,7 +13,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_mobility_management"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/sender"
 
-	"github.com/free5gc/ngap/ngapType"
+	ngapType "github.com/free5gc/ngap/ie"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -39,7 +39,7 @@ func SendPduSessionResourceSetupResponse(pduSessions []*context.GnbPDUSession, u
 	}
 }
 
-func SendPduSessionReleaseResponse(pduSessionIds []ngapType.PDUSessionID, ue *context.GNBUe) {
+func SendPduSessionReleaseResponse(pduSessionIds []*ngapType.PDUSessionID, ue *context.GNBUe) {
 	log.Info("[GNB] Initiating PDU Session Release Response")
 
 	if len(pduSessionIds) == 0 {

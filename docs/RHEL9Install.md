@@ -20,7 +20,7 @@ $ sudo modprobe sctp
 
 # Install Golang
 # Warning this command will remove your existing local Go installation if you have one:
-$ wget https://go.dev/dl/go1.21.3.linux-amd64.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.21.3.linux-amd64.tar.gz
+$ wget https://go.dev/dl/go1.26.2.linux-amd64.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.26.2.linux-amd64.tar.gz
 # Add go binary to the executable PATH variable:
 $ echo 'export PATH=$PATH:/usr/local/go/bin' >> $HOME/.profile
 ```
@@ -43,7 +43,7 @@ $ make clean && make && sudo make install
 ```bash
 $ cd $PACKETRUSHER
 $ go mod download
-$ go build cmd/packetrusher.go
+$ go build -o packetrusher ./cmd
 $ ./packetrusher --help
 ```
 

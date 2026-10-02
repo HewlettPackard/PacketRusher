@@ -9,8 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/free5gc/nas/nasType"
-	"github.com/free5gc/ngap/ngapType"
+	nasType "github.com/free5gc/nas/ie"
+	ngapType "github.com/free5gc/ngap/ie"
 	"github.com/ishidawataru/sctp"
 )
 
@@ -29,7 +29,7 @@ type GNBUe struct {
 	gnbRx            chan UEMessage
 	gnbTx            chan UEMessage
 	pRueId           int64 // PacketRusher unique UE ID
-	tmsi             *nasType.GUTI5G
+	tmsi             *nasType.MobileId5GS
 	context          Context
 	lock             sync.Mutex
 	newGnb           *GNBContext
@@ -85,8 +85,8 @@ func (ue *GNBUe) CopyFromPreviousContext(oldUeContext *GNBUe) {
 func (ue *GNBUe) CreatePduSession(pduSessionId int64, upfIp string, sst string, sd string, pduType uint64,
 	qosId int64, priArp int64, fiveQi int64, ulTeid uint32, dlTeid uint32) (*GnbPDUSession, error) {
 
-	if pduSessionId < 1 || pduSessionId > 16 {
-		return nil, fmt.Errorf("PDU Session Id must lies between 1 and 16, id: %d", pduSessionId)
+	if pduSessionId < 1 || pduSessionId > 15 {
+		return nil, fmt.Errorf("PDU session ID must be between 1 and 15, id: %d", pduSessionId)
 	}
 
 	if ue.context.pduSession[pduSessionId-1] != nil {
@@ -114,8 +114,8 @@ func (ue *GNBUe) CreatePduSession(pduSessionId int64, upfIp string, sst string, 
 }
 
 func (ue *GNBUe) GetPduSession(pduSessionId int64) (*GnbPDUSession, error) {
-	if pduSessionId < 1 || pduSessionId > 16 {
-		return nil, fmt.Errorf("PDU Session Id must lies between 1 and 16, id: %d", pduSessionId)
+	if pduSessionId < 1 || pduSessionId > 15 {
+		return nil, fmt.Errorf("PDU session ID must be between 1 and 15, id: %d", pduSessionId)
 	}
 
 	return ue.context.pduSession[pduSessionId-1], nil
@@ -130,8 +130,8 @@ func (ue *GNBUe) SetPduSessions(pduSessions [16]*GnbPDUSession) {
 }
 
 func (ue *GNBUe) DeletePduSession(pduSessionId int64) error {
-	if pduSessionId < 1 || pduSessionId > 16 {
-		return fmt.Errorf("PDU Session Id must lies between 1 and 16, id: %d", pduSessionId)
+	if pduSessionId < 1 || pduSessionId > 15 {
+		return fmt.Errorf("PDU session ID must be between 1 and 15, id: %d", pduSessionId)
 	}
 
 	ue.context.pduSession[pduSessionId-1] = nil
@@ -148,6 +148,9 @@ func (ue *GNBUe) GetUeMaskedImeiSv() string {
 }
 
 func (ue *GNBUe) GetSelectedNssai(pduSessionId int64) (string, string) {
+	if pduSessionId < 1 || pduSessionId > 15 {
+		return "NSSAI was not selected", "NSSAI was not selected"
+	}
 	pduSession := ue.context.pduSession[pduSessionId-1]
 	if pduSession != nil {
 		return pduSession.sst, pduSession.sd
@@ -240,11 +243,11 @@ func (ue *GNBUe) GetPrUeId() int64 {
 	return ue.pRueId
 }
 
-func (ue *GNBUe) SetTMSI(tmsi *nasType.GUTI5G) {
+func (ue *GNBUe) SetTMSI(tmsi *nasType.MobileId5GS) {
 	ue.tmsi = tmsi
 }
 
-func (ue *GNBUe) GetTMSI() *nasType.GUTI5G {
+func (ue *GNBUe) GetTMSI() *nasType.MobileId5GS {
 	return ue.tmsi
 }
 

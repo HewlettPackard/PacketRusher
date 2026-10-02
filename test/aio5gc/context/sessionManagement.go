@@ -5,12 +5,11 @@
 package context
 
 import (
-	"errors"
 	"fmt"
 	"net"
 
-	"github.com/free5gc/nas/nasConvert"
-	"github.com/free5gc/nas/nasMessage"
+	ie "github.com/free5gc/nas/ie"
+	nas "github.com/free5gc/nas/message"
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/util/fsm"
 	"github.com/mohae/deepcopy"
@@ -28,7 +27,7 @@ type SmContext struct {
 	pti                          uint8
 	sessionType                  uint8
 	ProtocolConfigurationOptions *ProtocolConfigurationOptions
-	sessionRule                  *models.SessionRule
+	sessionRule                  *models.Pcf_SMPolCtrl_SessionRule
 	defQosQFI                    uint8
 	state                        *fsm.State
 }
@@ -108,11 +107,11 @@ func (c *SmContext) GetPduSessionType() uint8 {
 	return c.sessionType
 }
 
-func (c *SmContext) GetSessionRule() *models.SessionRule {
+func (c *SmContext) GetSessionRule() *models.Pcf_SMPolCtrl_SessionRule {
 	return c.sessionRule
 }
 
-func (c *SmContext) SetSessionRule(sessionRule *models.SessionRule) {
+func (c *SmContext) SetSessionRule(sessionRule *models.Pcf_SMPolCtrl_SessionRule) {
 	c.sessionRule = sessionRule
 }
 
@@ -127,12 +126,12 @@ func (c *SmContext) SetDefQosQFI(defQosQFI uint8) {
 func (smContext *SmContext) PDUAddressToNAS() ([12]byte, uint8) {
 	var addr [12]byte
 	var addrLen uint8
-	copy(addr[:], smContext.pduAddress)
 	switch smContext.sessionType {
-	case nasMessage.PDUSessionTypeIPv4:
+	case ie.PDUSessType_IPv4:
+		copy(addr[:4], smContext.pduAddress.To4())
 		addrLen = 4 + 1
-	case nasMessage.PDUSessionTypeIPv6:
-	case nasMessage.PDUSessionTypeIPv4IPv6:
+	case ie.PDUSessType_IPv6:
+	case ie.PDUSessType_IPv4v6:
 		addrLen = 12 + 1
 	}
 	return addr, addrLen
@@ -142,7 +141,7 @@ func (c *SmContext) GetState() *fsm.State {
 	return c.state
 }
 
-func CreatePDUSession(sessionRequest *nasMessage.PDUSessionEstablishmentRequest,
+func CreatePDUSession(sessionRequest *nas.PDUSessEstReq,
 	ue *UEContext,
 	session *SessionContext,
 	pduSessionID int32,
@@ -161,30 +160,21 @@ func CreatePDUSession(sessionRequest *nasMessage.PDUSessionEstablishmentRequest,
 	locationCopy := deepcopy.Copy(*ue.GetUserLocationInfo()).(models.NrLocation)
 	newSmContext.SetUserLocation(locationCopy)
 
-	newSmContext.SetPti(sessionRequest.GetPTI())
-	newSmContext.SetPduSessionType(sessionRequest.GetPDUSessionTypeValue())
+	newSmContext.SetPti(sessionRequest.PTI)
+	newSmContext.SetPduSessionType(sessionRequest.PDUSessType.Value)
 	newSmContext.SetSessionRule(session.GetSessionRules()[0])
 	newSmContext.SetDefQosQFI(uint8(1))
 
 	newSmContext.SetPDUAddress(session.GetUnallocatedIP())
-	EPCOContents := sessionRequest.ExtendedProtocolConfigurationOptions.GetExtendedProtocolConfigurationOptionsContents()
-	protocolConfigurationOptions := nasConvert.NewProtocolConfigurationOptions()
-	err = protocolConfigurationOptions.UnMarshal(EPCOContents)
-	if err != nil {
-		return nil, errors.New("[5GC][NAS] Error while decoding protocol configuration options : " + err.Error())
+
+	if options := sessionRequest.ExtendedProtCfgOpts; options != nil && options.FromMs != nil {
+		from := options.FromMs
+		newSmContext.ProtocolConfigurationOptions.DNSIPv4Request = from.DNSV4Req
+		newSmContext.ProtocolConfigurationOptions.DNSIPv6Request = from.DNSV6Req
+		newSmContext.ProtocolConfigurationOptions.PCSCFIPv4Request = from.P_CSCF_IPv4AddrReq
+		newSmContext.ProtocolConfigurationOptions.IPv4LinkMTURequest = from.IPv4LinkMTUReq
 	}
-	for _, container := range protocolConfigurationOptions.ProtocolOrContainerList {
-		switch container.ProtocolOrContainerID {
-		case nasMessage.DNSServerIPv6AddressRequestUL:
-			newSmContext.ProtocolConfigurationOptions.DNSIPv6Request = true
-		case nasMessage.PCSCFIPv4AddressRequestUL:
-			newSmContext.ProtocolConfigurationOptions.PCSCFIPv4Request = true
-		case nasMessage.DNSServerIPv4AddressRequestUL:
-			newSmContext.ProtocolConfigurationOptions.DNSIPv4Request = true
-		case nasMessage.IPv4LinkMTURequestUL:
-			newSmContext.ProtocolConfigurationOptions.IPv4LinkMTURequest = true
-		}
-	}
+
 	err = ue.GetPduFsm().SendEvent(newSmContext.GetState(), EstablishmentAccept, fsm.ArgsType{"ue": ue, "sm": newSmContext}, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		return nil, err
@@ -214,12 +204,12 @@ func ConfirmPDUSessionRelease(ue *UEContext, pduSessionID int32) error {
 	if err != nil {
 		return err
 	}
-	ue.GetPduFsm().SendEvent(sm.state, ReleaseComplete, fsm.ArgsType{"ue": ue, "sm": sm}, log.NewEntry(log.StandardLogger()))
+	err = ue.GetPduFsm().SendEvent(sm.state, ReleaseComplete, fsm.ArgsType{"ue": ue, "sm": sm}, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		return err
 	}
-	ue.DeleteAllSmContext()
-	return nil
+	_, err = ue.DeleteSmContext(pduSessionID)
+	return err
 }
 
 func ForceReleaseAllPDUSession(ue *UEContext) {

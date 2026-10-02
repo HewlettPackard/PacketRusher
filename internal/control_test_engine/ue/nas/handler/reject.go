@@ -10,7 +10,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
 	"time"
 
-	"github.com/free5gc/nas/nasMessage"
+	"github.com/free5gc/nas/message"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -26,8 +26,8 @@ var requestPduSession = trigger.InitPduSessionRequestInner
 // and sent from the UE's goroutine too: the UE's NAS count is read and updated without a
 // lock, so a request sent from another goroutine could take the same count as a message
 // the UE sends meanwhile. A retry still waiting when the UE terminates is not sent.
-func handleEstablishmentReject(ue *context.UEContext, reject *nasMessage.PDUSessionEstablishmentReject) {
-	pduSessionId := reject.GetPDUSessionID()
+func handleEstablishmentReject(ue *context.UEContext, reject *message.PDUSessEstRej) {
+	pduSessionId := reject.PDUSessId
 	pduSession, err := ue.GetPduSession(pduSessionId)
 
 	switch {

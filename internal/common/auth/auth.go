@@ -5,8 +5,8 @@
 package auth
 
 import (
-	"github.com/free5gc/nas/nasType"
-	"github.com/free5gc/nas/security"
+	nasType "github.com/free5gc/nas/ie"
+	security "github.com/free5gc/nas/message"
 	"github.com/free5gc/util/ueauth"
 )
 
@@ -39,27 +39,27 @@ func AlgorithmKeyDerivation(cipheringAlg uint8, kamf []byte, knasEnc *[16]uint8,
 	return nil
 }
 
-func SelectAlgorithms(securityCapability *nasType.UESecurityCapability) (intergritygAlgorithm uint8, cipheringAlgorithm uint8) {
+func SelectAlgorithms(securityCapability *nasType.UESecCapability) (intergritygAlgorithm uint8, cipheringAlgorithm uint8) {
 	// set the algorithms of integrity
-	if securityCapability.GetIA0_5G() == 1 {
-		intergritygAlgorithm = security.AlgIntegrity128NIA0
-	} else if securityCapability.GetIA1_128_5G() == 1 {
-		intergritygAlgorithm = security.AlgIntegrity128NIA1
-	} else if securityCapability.GetIA2_128_5G() == 1 {
-		intergritygAlgorithm = security.AlgIntegrity128NIA2
-	} else if securityCapability.GetIA3_128_5G() == 1 {
-		intergritygAlgorithm = security.AlgIntegrity128NIA3
+	if securityCapability.IA05G {
+		intergritygAlgorithm = uint8(security.AlgIntegrity128NIA0)
+	} else if securityCapability.IA1_128_5G {
+		intergritygAlgorithm = uint8(security.AlgIntegrity128NIA1)
+	} else if securityCapability.IA2_128_5G {
+		intergritygAlgorithm = uint8(security.AlgIntegrity128NIA2)
+	} else if securityCapability.IA3_128_5G {
+		intergritygAlgorithm = uint8(security.AlgIntegrity128NIA3)
 	}
 
 	// set the algorithms of ciphering
-	if securityCapability.GetEA0_5G() == 1 {
-		cipheringAlgorithm = security.AlgCiphering128NEA0
-	} else if securityCapability.GetEA1_128_5G() == 1 {
-		cipheringAlgorithm = security.AlgCiphering128NEA1
-	} else if securityCapability.GetEA2_128_5G() == 1 {
-		cipheringAlgorithm = security.AlgCiphering128NEA2
-	} else if securityCapability.GetEA3_128_5G() == 1 {
-		cipheringAlgorithm = security.AlgCiphering128NEA3
+	if securityCapability.EA05G {
+		cipheringAlgorithm = uint8(security.AlgCiphering128NEA0)
+	} else if securityCapability.EA1_128_5G {
+		cipheringAlgorithm = uint8(security.AlgCiphering128NEA1)
+	} else if securityCapability.EA2_128_5G {
+		cipheringAlgorithm = uint8(security.AlgCiphering128NEA2)
+	} else if securityCapability.EA3_128_5G {
+		cipheringAlgorithm = uint8(security.AlgCiphering128NEA3)
 	}
 
 	return intergritygAlgorithm, cipheringAlgorithm
