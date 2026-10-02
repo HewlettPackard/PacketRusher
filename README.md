@@ -27,7 +27,7 @@ PacketRusher borrows libraries and data structures from the [free5gc project](ht
   * GUTI Re-registration
   * Supports 5G roaming: Tested with new https://github.com/open5gs/open5gs/issues/2194 Roaming feature
 * Implements high-performant N3 (GTP-U) interface
-  * Generic tunnel supporting all kind of traffic (TCP, UDP, Video…)
+  * Generic tunnel supporting all kind of traffic (TCP, UDP, Video…) — see [tunnel ownership and handover](docs/TunnelLifecycle.md).
     * We tested iperf3 traffic, and Youtube traffic through PacketRusher
     * We roughly reach 5 GB/s per UE, which is more than what a real UE can achieve.
 * Integrated all-in-one mocked 5GC/AMF for PacketRusher's integration testing
