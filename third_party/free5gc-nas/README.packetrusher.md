@@ -31,6 +31,9 @@ Original module checksum: `h1:r42lNApvMtAwaHwpb50ZpOXZabGaQvFRy/q3JxS0o/g=`.
   and replaces its previous value on decoder reuse.
 - Update two upstream message test expectations for the newly implemented fields
   and the earlier truncated-envelope error; keep the remaining upstream tests.
+- Validate local and remote QoS packet-filter ports in `ie/qos_rules.go` against
+  0–65535 before converting parsed integers to the 16-bit wire value. Decimal
+  parsing and range tokenization retain the upstream contract.
 
 There are no exceptions to parse errors in PacketRusher or aio5gc. MAC failures,
 malformed input, and remaining unsupported-IE warnings still fail. Both protected
@@ -111,6 +114,8 @@ state transition plus Registration Complete transmission. Profile A/B tests use
 actual production registration and identity builders, including the protected
 Security Mode Complete registration container, and independently authenticate /
 deconceal the received wire identity using SIDF with known home-network keys.
+QoS packet-filter tests assert exact single-port and range bytes at the 0/65535
+bounds and reject overflowing, negative, and malformed port endpoints.
 
 On an upstream update, compare these native packages with the new tag, reapply
 only corrections still needed, rerun the audit and both test commands, and update
