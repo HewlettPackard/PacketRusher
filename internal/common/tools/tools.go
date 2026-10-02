@@ -90,15 +90,17 @@ type UESimulationConfig struct {
 	TimeBeforeReregistration int
 }
 
+// gnbID selects the initial gNB and subsequent handover targets in the same
+// round-robin sequence. UE IDs start at 1; gNB offsets start at 0.
+func (simConfig UESimulationConfig) gnbID(handoverOffset int) string {
+	index := (simConfig.UeId - 1 + handoverOffset) % len(simConfig.Gnbs)
+	return gnbIdGenerator(index, simConfig.Cfg.GNodeB.PlmnList.GnbId)
+}
+
 func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
-	numGnb := len(simConfig.Gnbs)
 	ueCfg := simConfig.Cfg
 	ueCfg.Ue.Msin = IncrementMsin(simConfig.UeId, simConfig.Cfg.Ue.Msin)
 	log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", ueCfg.Ue.Msin, " UE")
-
-	gnbIdGen := func(index int) string {
-		return gnbIdGenerator((simConfig.UeId+index)%numGnb, ueCfg.GNodeB.PlmnList.GnbId)
-	}
 
 	// Launch a coroutine to handle UE's individual scenario
 	go func(scenarioChan chan procedures.UeTesterMessage, ueId int) {
@@ -111,7 +113,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 
 			// Create a new UE coroutine
 			// ue.NewUE returns context of the new UE
-			ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[gnbIdGen(0)].GetInboundChannel(), wg)
+			ueTx := ue.NewUE(ueCfg, ueId, ueRx, simConfig.Gnbs[simConfig.gnbID(0)].GetInboundChannel(), wg)
 
 			// We tell the UE to perform a registration
 			ueRx <- procedures.UeTesterMessage{Type: procedures.Registration}
@@ -148,10 +150,10 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 						ueRx = nil
 					}
 				case <-ngapHandoverChannel:
-					trigger.TriggerNgapHandover(simConfig.Gnbs[gnbIdGen(nextHandoverId)], simConfig.Gnbs[gnbIdGen(nextHandoverId+1)], int64(ueId))
+					trigger.TriggerNgapHandover(simConfig.Gnbs[simConfig.gnbID(nextHandoverId)], simConfig.Gnbs[simConfig.gnbID(nextHandoverId+1)], int64(ueId))
 					nextHandoverId++
 				case <-xnHandoverChannel:
-					trigger.TriggerXnHandover(simConfig.Gnbs[gnbIdGen(nextHandoverId)], simConfig.Gnbs[gnbIdGen(nextHandoverId+1)], int64(ueId))
+					trigger.TriggerXnHandover(simConfig.Gnbs[simConfig.gnbID(nextHandoverId)], simConfig.Gnbs[simConfig.gnbID(nextHandoverId+1)], int64(ueId))
 					nextHandoverId++
 				case <-idleChannel:
 					if ueRx != nil {
