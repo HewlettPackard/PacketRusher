@@ -88,6 +88,10 @@ type UESimulationConfig struct {
 	RegistrationLoop         bool
 	LoopCount                int
 	TimeBeforeReregistration int
+	// Churn, when non-nil, makes this UE a member of a churn cohort: after it
+	// deregisters it parks until the wave driver rearms it, instead of registering
+	// again after TimeBeforeReregistration.
+	Churn *ChurnMember
 }
 
 func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
@@ -102,10 +106,17 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 
 	// Launch a coroutine to handle UE's individual scenario
 	go func(scenarioChan chan procedures.UeTesterMessage, ueId int) {
+		churn := simConfig.Churn
+		if churn != nil {
+			defer churn.Exit()
+		}
 		i := 0
 		for {
 			i++
 			wg.Add(1)
+			if churn != nil {
+				churn.Report(ChurnStarting)
+			}
 
 			ueRx := make(chan procedures.UeTesterMessage)
 
@@ -176,6 +187,9 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 					log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)
 					switch msg.StateChange {
 					case ueCtx.MM5G_REGISTERED:
+						if churn != nil {
+							churn.Report(ChurnRegistered)
+						}
 						if !registered {
 							for i := 0; i < simConfig.NumPduSessions; i++ {
 								ueRx <- procedures.UeTesterMessage{Type: procedures.NewPDUSession}
@@ -192,6 +206,10 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) {
 				break
 			} else if simConfig.LoopCount != 0 && i == simConfig.LoopCount {
 				break
+			} else if churn != nil {
+				if !churn.Park(scenarioChan) {
+					return
+				}
 			} else {
 				time.Sleep(time.Duration(simConfig.TimeBeforeReregistration) * time.Millisecond)
 			}
