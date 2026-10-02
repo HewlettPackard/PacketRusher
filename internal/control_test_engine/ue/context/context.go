@@ -304,7 +304,7 @@ func (ue *UEContext) Unlock() {
 }
 
 func (ue *UEContext) GetPduSession(pduSessionid uint8) (*UEPDUSession, error) {
-	if pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil {
+	if pduSessionid < 1 || pduSessionid > 16 || ue.PduSession[pduSessionid-1] == nil {
 		return nil, errors.New("Unable to find GnbPDUSession ID " + string(pduSessionid))
 	}
 	return ue.PduSession[pduSessionid-1], nil
@@ -323,7 +323,7 @@ func (ue *UEContext) GetPduSessions() [16]*context.GnbPDUSession {
 }
 
 func (ue *UEContext) DeletePduSession(pduSessionid uint8) error {
-	if pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil {
+	if pduSessionid < 1 || pduSessionid > 16 || ue.PduSession[pduSessionid-1] == nil {
 		return errors.New("Unable to find GnbPDUSession ID " + string(pduSessionid))
 	}
 	pduSession := ue.PduSession[pduSessionid-1]
