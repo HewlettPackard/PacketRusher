@@ -15,17 +15,31 @@ import (
 
 func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, message []byte) {
 
-	if message == nil {
-		// TODO return error
-		log.Info("[GNB][NGAP] NGAP message is nil")
-	}
-
-	// decode NGAP message.
 	ngapMsg, err := ngap.Decoder(message)
-	if err != nil {
-		log.Error("[GNB][NGAP] Error decoding NGAP message in ", gnb.GetGnbId(), " GNB", ": ", err)
+	if err != nil || ngapMsg == nil {
+		log.Error("[GNB][NGAP] Error decoding NGAP message in ", gnb.GetGnbId(), " GNB: ", err)
+		return
 	}
+	dispatchUEMessage(amf, gnb, ngapMsg)
+}
 
+func dispatchUEMessage(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+	ran, amfID, hasAMF := messageUEIDs(message)
+	var ue *context.GNBUe
+	if ran != 0 {
+		ue, _ = gnb.GetGnbUe(ran)
+	}
+	if ue == nil && hasAMF {
+		ue, _ = gnb.GetGnbUeByAmfUeId(amfID)
+	}
+	if ue != nil {
+		ue.ProcessDownlink(func() { dispatchDecoded(amf, gnb, message) })
+	} else {
+		dispatchDecoded(amf, gnb, message)
+	}
+}
+
+func dispatchDecoded(amf *context.GNBAmf, gnb *context.GNBContext, ngapMsg *ngapType.NGAPPDU) {
 	// check RanUeId and get UE.
 
 	// handle NGAP message.

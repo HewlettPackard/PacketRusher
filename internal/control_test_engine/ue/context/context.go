@@ -56,6 +56,7 @@ type UEContext struct {
 	gnbInboundChannel chan context.UEMessage
 	gnbRx             chan context.UEMessage
 	gnbTx             chan context.UEMessage
+	gnbConnectionLost <-chan struct{}
 	drx               *time.Ticker
 	PduSession        [16]*UEPDUSession
 	amfInfo           Amf
@@ -808,3 +809,6 @@ func hexCharToByte(c byte) byte {
 
 	return 0
 }
+
+func (ue *UEContext) SetGnbConnectionLost(lost <-chan struct{}) { ue.gnbConnectionLost = lost }
+func (ue *UEContext) GetGnbConnectionLost() <-chan struct{}     { return ue.gnbConnectionLost }
