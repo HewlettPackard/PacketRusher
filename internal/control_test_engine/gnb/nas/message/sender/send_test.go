@@ -228,9 +228,22 @@ func TestRapidSendOperations(t *testing.T) {
 	assert.Equal(t, numMessages, len(gnbTx), "Should receive all rapidly sent messages")
 }
 
-// Note: a test for "channel closed during a concurrent send" is intentionally
-// omitted: concurrently calling close(ch) while another goroutine is blocked on
-// ch <- msg is flagged as a data race by the race detector even though the Go
-// runtime handles it gracefully (the blocked send panics and our recover catches
-// it). The coverage for that code path is exercised by the integration tests
-// run with -race in test/concurrent_fixes_test.go.
+func TestReleaseCancelsBlockedSendWithoutClosingRace(t *testing.T) {
+	for attempt := 0; attempt < 100; attempt++ {
+		ue := createTestUE()
+		tx := make(chan context.UEMessage)
+		ue.SetGnbTx(tx)
+		sent := make(chan struct{})
+		go func() { SendToUe(ue, []byte("pending NAS")); close(sent) }()
+		ue.CloseUEChannel()
+		select {
+		case <-sent:
+		case <-time.After(time.Second):
+			t.Fatal("release did not cancel blocked sender")
+		}
+		if _, open := <-tx; open {
+			t.Fatal("UE channel is still open")
+		}
+		ue.CloseUEChannel() // Repeated release must be safe.
+	}
+}

@@ -21,6 +21,7 @@ type UEMessage struct {
 	IsNas             bool
 	Nas               []byte
 	ConnectionClosed  bool
+	ConnectionLost    chan struct{} // closed only when this logical connection fails
 	PrUeId            int64
 	Tmsi              *nasType.GUTI5G
 	Mcc               string
