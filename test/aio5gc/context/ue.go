@@ -176,11 +176,20 @@ func (ue *UEContext) DeleteAllSmContext() {
 	}
 }
 
+// ExecuteForAllSmContexts runs function on each SM context present when it is called.
+// It runs it without holding smContextMtx, so function may itself add or delete SM
+// contexts: ForceReleaseAllPDUSession deletes each one, and DeleteSmContext takes the
+// lock again, which used to deadlock against the one held here.
 func (ue *UEContext) ExecuteForAllSmContexts(function func(ue *SmContext)) {
 	ue.smContextMtx.Lock()
-	defer ue.smContextMtx.Unlock()
-	for sm := range ue.smContexts {
-		function(ue.smContexts[sm])
+	smContexts := make([]*SmContext, 0, len(ue.smContexts))
+	for _, sm := range ue.smContexts {
+		smContexts = append(smContexts, sm)
+	}
+	ue.smContextMtx.Unlock()
+
+	for _, sm := range smContexts {
+		function(sm)
 	}
 }
 
