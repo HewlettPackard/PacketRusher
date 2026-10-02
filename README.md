@@ -45,7 +45,8 @@ The following is a quick start guide, for more details on the installation, conf
 - Root privilege
 - Secure boot disabled (for custom kernel module)
 
-PacketRusher is not yet supported on Docker.
+A Linux container workflow is available in [docker/README.md](docker/README.md).
+The host provides SCTP and, for user-plane tunnels, the gtp5g kernel module.
 
 ### Dependencies
 ```bash

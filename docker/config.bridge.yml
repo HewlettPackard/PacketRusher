@@ -1,14 +1,15 @@
-# Example for a core reachable on the Linux host. Edit endpoints and credentials.
+# Example for an existing Docker bridge named docker_privnet, subnet 10.100.200.0/24.
+# Reserve .200 for PacketRusher; .201 is the example AMF. Edit for your deployment.
 # PacketRusher Simulated gNodeB Configuration
 gnodeb:
   # IP Address on the N2 Interface (e.g. used between the gNodeB and the AMF)
   controlif:
-    ip: "127.0.0.1"
+    ip: "10.100.200.200"
     port: 9487
 
   # IP Address on the N3 Interface (e.g. used between the gNodeB and the UPF)
   dataif:
-    ip: "127.0.0.1"
+    ip: "10.100.200.200"
     port: 2152
 
   # gNodeB's Identity
@@ -82,7 +83,7 @@ ue:
 
 # List of AMF that PacketRusher will try to connect to
 amfif:
-  - ip: "127.0.0.1"
+  - ip: "10.100.200.201"
     port: 38412
 logs:
   level: 4
