@@ -68,6 +68,18 @@ type UEContext struct {
 	// Sync primitive
 	scenarioChan chan scenario.ScenarioMessage
 
+	// deferred carries work handed back to the UE's own goroutine, which runs it between
+	// the messages it handles, so it never runs alongside them. done is closed when the
+	// UE terminates, so work scheduled for it can stop.
+	deferred chan func()
+	done     chan struct{}
+
+	// The back-off the network set for further PDU session establishment requests
+	// (TS 24.501 6.4.1.4.2, 6.4.1.4.3). Every session of this UE uses the same DNN and
+	// S-NSSAI, so one back-off covers them all. Guarded by lock.
+	backoffUntil       time.Time
+	backoffDeactivated bool
+
 	lock sync.Mutex
 }
 
@@ -169,6 +181,8 @@ func (ue *UEContext) NewRanUeContext(msin string,
 
 	ue.gnbInboundChannel = gnbInboundChannel
 	ue.scenarioChan = scenarioChan
+	ue.deferred = make(chan func())
+	ue.done = make(chan struct{})
 
 	// added initial state for MM(NULL)
 	ue.StateMM = MM5G_NULL
@@ -742,8 +756,72 @@ func (ue *UEContext) Terminate() {
 	}
 	ue.Unlock()
 	close(ue.scenarioChan)
+	close(ue.done)
 
 	log.Info("[UE] UE Terminated")
+}
+
+// Deferred carries the work RunOnUE hands to the UE's goroutine, which runs it.
+func (ue *UEContext) Deferred() <-chan func() {
+	return ue.deferred
+}
+
+// RunOnUE hands f to the UE's goroutine and waits until that goroutine has taken it. It
+// reports false, and f never runs, if the UE terminates first: the channel is unbuffered,
+// and the UE's goroutine has stopped reading it by the time Terminate closes done. It must
+// not be called from the UE's goroutine itself.
+func (ue *UEContext) RunOnUE(f func()) bool {
+	select {
+	case ue.deferred <- f:
+		return true
+	case <-ue.done:
+		return false
+	}
+}
+
+// SetEstablishmentBackoff records the back-off timer value the network sent with a PDU
+// session establishment reject: no further request until wait has passed, or none at all
+// when deactivated. A zero wait clears an earlier timed back-off (TS 24.501 6.4.1.4.2 c),
+// 6.4.1.4.3 c)). Once deactivated, the back-off stays so. For congestion (6.4.1.4.2 b)) a
+// PDU Session Modification or Authentication Command, or a Release Command without the IE,
+// would also lift it; otherwise (6.4.1.4.3 b)) only switch-off or USIM removal would. None
+// of those is modelled here.
+func (ue *UEContext) SetEstablishmentBackoff(wait time.Duration, deactivated bool) {
+	ue.lock.Lock()
+	defer ue.lock.Unlock()
+	if ue.backoffDeactivated {
+		return
+	}
+	ue.backoffDeactivated = deactivated
+	ue.backoffUntil = time.Time{}
+	if !deactivated && wait > 0 {
+		ue.backoffUntil = time.Now().Add(wait)
+	}
+}
+
+// EstablishmentBackoff reports how long a further PDU session establishment request
+// must still wait, and whether the network forbade further requests outright.
+func (ue *UEContext) EstablishmentBackoff() (remaining time.Duration, deactivated bool) {
+	ue.lock.Lock()
+	defer ue.lock.Unlock()
+	if ue.backoffDeactivated {
+		return 0, true
+	}
+	return max(time.Until(ue.backoffUntil), 0), false
+}
+
+// RunOnUEAfter runs f on the UE's goroutine once wait has passed, unless the UE terminates
+// first.
+func (ue *UEContext) RunOnUEAfter(wait time.Duration, f func()) {
+	go func() {
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			ue.RunOnUE(f)
+		case <-ue.done:
+		}
+	}()
 }
 
 func reverse(s string) string {

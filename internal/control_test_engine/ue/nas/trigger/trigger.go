@@ -15,6 +15,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
+	"time"
 
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
@@ -55,8 +56,33 @@ func InitPduSessionRequest(ue *context.UEContext) {
 		return
 	}
 
-	InitPduSessionRequestInner(ue, pduSession)
+	RequestPduSessionWhenAllowed(ue, pduSession)
 }
+
+// RequestPduSessionWhenAllowed sends the PDU session establishment request now, or once
+// a back-off the network set has run out, checking again then in case a later reject
+// extended it (TS 24.501 6.4.1.4.2 a) for congestion causes, 6.4.1.4.3 a) for the others).
+// After the network deactivated the back-off timer it sends nothing and frees the
+// session's slot (6.4.1.4.2 b), 6.4.1.4.3 b)). Without a back-off, which is always the
+// case unless PR_HONOUR_BACKOFF is set, it sends straight away. Call it from the UE's
+// goroutine.
+func RequestPduSessionWhenAllowed(ue *context.UEContext, pduSession *context.UEPDUSession) {
+	remaining, deactivated := ue.EstablishmentBackoff()
+	switch {
+	case deactivated:
+		log.Warn("[UE][NAS] Not requesting PDU Session ", pduSession.Id, ": the network deactivated the back-off timer")
+		_ = ue.DeletePduSession(pduSession.Id)
+	case remaining > 0:
+		log.Info("[UE][NAS] Holding PDU Session ", pduSession.Id, " request for ", remaining.Round(time.Second), ", the network's back-off")
+		ue.RunOnUEAfter(remaining, func() { RequestPduSessionWhenAllowed(ue, pduSession) })
+	default:
+		sendEstablishmentRequest(ue, pduSession)
+	}
+}
+
+// sendEstablishmentRequest builds and sends the request. A variable so that tests can
+// observe the sends without a NAS security context.
+var sendEstablishmentRequest = InitPduSessionRequestInner
 
 func InitPduSessionRequestInner(ue *context.UEContext, pduSession *context.UEPDUSession) {
 
