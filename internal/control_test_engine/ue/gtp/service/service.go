@@ -322,7 +322,17 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	}
 
 	// Find TUN network interface.
-	link, _ := netlink.LinkByName(nameInf)
+	link, err := netlink.LinkByName(nameInf)
+	if err != nil {
+		failed("[UE][GTP] Unable to find tunnel interface: ", err)
+		return
+	}
+	if sharedFor == nil {
+		if err := gtp.SetTunnelMTU(link, ueGnbIp, ue.TunnelMTU); err != nil {
+			failed("[UE][GTP] Unable to configure tunnel MTU: ", err)
+			return
+		}
+	}
 	pduSession.SetTunInterface(link)
 
 	// Add UE IP Address onto the TUN network interface.

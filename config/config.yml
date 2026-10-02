@@ -52,6 +52,10 @@ ue:
   # Ignored ith default Null-Scheme configuration
   homeNetworkPublicKeyID: 1
   
+  # Inner IPv4 tunnel MTU. 0 uses the N3 interface MTU minus 44 bytes.
+  # Set a smaller value, e.g. 1400, to match the UPF or a lower path MTU.
+  tunnelmtu: 0
+
   # UE's SIM credentials
   key: "00112233445566778899AABBCCDDEEFF"
   opc: "00112233445566778899AABBCCDDEEFF"

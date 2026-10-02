@@ -64,6 +64,7 @@ type UEContext struct {
 	Dnn        string
 	Snssai     models.Snssai
 	TunnelMode config.TunnelMode
+	TunnelMTU  int
 
 	// Sync primitive
 	scenarioChan chan scenario.ScenarioMessage
