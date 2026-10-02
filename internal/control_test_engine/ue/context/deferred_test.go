@@ -79,3 +79,33 @@ func TestTerminateCancelsWaitingJobs(t *testing.T) {
 	}
 	assert.Empty(t, ran, "no job ran after Terminate")
 }
+
+func TestEstablishmentBackoff(t *testing.T) {
+	ue := newTestUE()
+
+	remaining, deactivated := ue.EstablishmentBackoff()
+	assert.Zero(t, remaining)
+	assert.False(t, deactivated)
+
+	ue.SetEstablishmentBackoff(time.Hour, false)
+	remaining, deactivated = ue.EstablishmentBackoff()
+	assert.Greater(t, remaining, 59*time.Minute)
+	assert.False(t, deactivated)
+
+	// TS 24.501 6.4.1.4.2 c): a zero value stops the timer.
+	ue.SetEstablishmentBackoff(0, false)
+	remaining, _ = ue.EstablishmentBackoff()
+	assert.Zero(t, remaining)
+
+	ue.SetEstablishmentBackoff(0, true)
+	_, deactivated = ue.EstablishmentBackoff()
+	assert.True(t, deactivated)
+
+	// 6.4.1.4.2 b): a later value, even zero, does not lift a deactivated back-off.
+	ue.SetEstablishmentBackoff(0, false)
+	_, deactivated = ue.EstablishmentBackoff()
+	assert.True(t, deactivated)
+	ue.SetEstablishmentBackoff(time.Minute, false)
+	_, deactivated = ue.EstablishmentBackoff()
+	assert.True(t, deactivated)
+}

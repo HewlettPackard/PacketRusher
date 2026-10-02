@@ -125,3 +125,92 @@ func TestHandleEstablishmentRejectStopsAfterFiveRetries(t *testing.T) {
 	assert.Equal(t, maxRejectRetries, session.T3580Retries)
 	noHandOff(t, ue, "no sixth retry")
 }
+
+// A reject carrying the Back-off timer value IE (tag 0x37, 1 hour) records the network's
+// back-off on the UE, from the wire.
+func TestDlNasTransportRejectRecordsTheNetworkBackoff(t *testing.T) {
+	t.Setenv("PR_HONOUR_BACKOFF", "1")
+	countRetries(t)
+	ue := newTestUE()
+	session, err := ue.CreatePDUSession()
+	require.NoError(t, err)
+
+	HandlerDlNasTransportPduaccept(ue, dlReject(session.Id, rejectBytes(session.Id, 26, 0x37, 0x01, 0x21)))
+
+	assert.Equal(t, 1, session.T3580Retries)
+	remaining, _ := ue.EstablishmentBackoff()
+	assert.Greater(t, remaining, 59*time.Minute)
+}
+
+// With the network's timer the wait is the network's, and it holds the UE's other
+// requests too.
+func TestHandleEstablishmentRejectFollowsTheNetworkTimer(t *testing.T) {
+	t.Setenv("PR_HONOUR_BACKOFF", "1")
+	sent := countRetries(t)
+	ue := newTestUE()
+	session, err := ue.CreatePDUSession()
+	require.NoError(t, err)
+
+	handleEstablishmentReject(ue, withBackoff(reject(session.Id), nasMessage.GPRSTimer3UnitMultiplesOf1Hour, 1))
+
+	remaining, deactivated := ue.EstablishmentBackoff()
+	assert.Greater(t, remaining, 59*time.Minute, "recorded on the UE")
+	assert.False(t, deactivated)
+	assert.Equal(t, 1, session.T3580Retries)
+	noHandOff(t, ue, "the retry waits for the network's hour")
+	assert.Empty(t, *sent)
+}
+
+func TestHandleEstablishmentRejectDeactivatedBlocksTheUE(t *testing.T) {
+	t.Setenv("PR_HONOUR_BACKOFF", "1")
+	sent := countRetries(t)
+	ue := newTestUE()
+	session, err := ue.CreatePDUSession()
+	require.NoError(t, err)
+
+	handleEstablishmentReject(ue, withBackoff(reject(session.Id), gprsTimer3UnitDeactivated, 0))
+
+	_, deactivated := ue.EstablishmentBackoff()
+	assert.True(t, deactivated, "the UE's further requests are blocked")
+	_, err = ue.GetPduSession(session.Id)
+	assert.Error(t, err, "the session's slot is freed")
+	noHandOff(t, ue, "nothing should be scheduled after a deactivated timer")
+	assert.Empty(t, *sent)
+}
+
+// A later reject's timer does not lift a deactivated back-off: that is not one of the
+// events that lift it (TS 24.501 6.4.1.4.2 b)).
+func TestHandleEstablishmentRejectKeepsTheUEBlockedAfterALaterTimer(t *testing.T) {
+	t.Setenv("PR_HONOUR_BACKOFF", "1")
+	countRetries(t)
+	ue := newTestUE()
+	first, err := ue.CreatePDUSession()
+	require.NoError(t, err)
+	second, err := ue.CreatePDUSession()
+	require.NoError(t, err)
+
+	handleEstablishmentReject(ue, withBackoff(reject(first.Id), gprsTimer3UnitDeactivated, 0))
+	handleEstablishmentReject(ue, withBackoff(reject(second.Id), nasMessage.GPRSTimer3UnitMultiplesOf1Minute, 1))
+
+	_, deactivated := ue.EstablishmentBackoff()
+	assert.True(t, deactivated)
+}
+
+// The network's back-off applies to the UE whatever happens to the rejected session.
+func TestHandleEstablishmentRejectRecordsTheBackoffForAnySession(t *testing.T) {
+	t.Setenv("PR_HONOUR_BACKOFF", "1")
+	countRetries(t)
+
+	unknown := newTestUE()
+	handleEstablishmentReject(unknown, withBackoff(reject(3), nasMessage.GPRSTimer3UnitMultiplesOf1Hour, 1))
+	remaining, _ := unknown.EstablishmentBackoff()
+	assert.Greater(t, remaining, 59*time.Minute, "for an unknown session")
+
+	exhausted := newTestUE()
+	session, err := exhausted.CreatePDUSession()
+	require.NoError(t, err)
+	session.T3580Retries = maxRejectRetries
+	handleEstablishmentReject(exhausted, withBackoff(reject(session.Id), gprsTimer3UnitDeactivated, 0))
+	_, deactivated := exhausted.EstablishmentBackoff()
+	assert.True(t, deactivated, "for a session that has used its retries")
+}
