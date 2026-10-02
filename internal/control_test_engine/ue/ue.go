@@ -14,8 +14,6 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
 	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 	"my5G-RANTester/internal/control_test_engine/ue/state"
-	"os"
-	"os/signal"
 	"sync"
 	"time"
 
@@ -51,11 +49,8 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 	go func() {
 		// starting communication with GNB and listen.
 		service.InitConn(ue, ue.GetGnbInboundChannel())
-		sigStop := make(chan os.Signal, 1)
-		signal.Notify(sigStop, os.Interrupt)
-
-		// Block until a signal is received.
 		handleUE(ue, ueMgrChannel)
+
 		ue.Terminate()
 		wg.Done()
 	}()
@@ -63,19 +58,32 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 	return scenarioChan
 }
 
-// handleUE is the UE's goroutine: it handles the UE's messages one at a time until the
-// scenario stops the UE.
-func handleUE(ue *context.UEContext, ueMgrChannel chan procedures.UeTesterMessage) {
+func runUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMessage) {
+	handleUE(ue, ueMgrChannel)
+}
+
+// handleUE runs messages and deferred work serially on the UE's goroutine until
+// the scenario stops it or its gNB association fails.
+func handleUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMessage) {
 	loop := true
 	for loop {
 		select {
 		case msg, open := <-ue.GetGnbTx():
 			if !open {
-				log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with gNB was closed")
+				log.Debug("[UE][", ue.GetMsin(), "] gNB context released; waiting for a new connection or scenario action")
 				ue.SetGnbTx(nil)
+				ue.Lock()
+				if rx := ue.GetGnbRx(); rx != nil {
+					close(rx)
+					ue.SetGnbRx(nil)
+				}
+				ue.Unlock()
 				break
 			}
 			gnbMsgHandler(msg, ue)
+		case <-ue.GetGnbConnectionLost():
+			log.Warn("[UE][", ue.GetMsin(), "] Stopping UE after its gNB association failed")
+			loop = false
 		case msg, open := <-ueMgrChannel:
 			if !open {
 				log.Warn("[UE][", ue.GetMsin(), "] Stopping UE as communication with scenario was closed")
@@ -86,14 +94,16 @@ func handleUE(ue *context.UEContext, ueMgrChannel chan procedures.UeTesterMessag
 		case <-ue.GetDRX():
 			verifyPaging(ue)
 		case f := <-ue.Deferred():
-			// Work scheduled earlier, such as the retry of a rejected PDU session, runs
-			// here, so it never encodes a NAS message alongside another one.
+			// Work such as a rejected session's retry shares the UE's NAS counters.
 			f()
 		}
 	}
 }
 
 func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
+	if msg.ConnectionLost != nil {
+		ue.SetGnbConnectionLost(msg.ConnectionLost)
+	}
 	if msg.IsNas {
 		state.DispatchState(ue, msg.Nas)
 	} else if msg.GNBPduSessions[0] != nil {

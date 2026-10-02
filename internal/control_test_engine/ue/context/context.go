@@ -56,6 +56,7 @@ type UEContext struct {
 	gnbInboundChannel chan context.UEMessage
 	gnbRx             chan context.UEMessage
 	gnbTx             chan context.UEMessage
+	gnbConnectionLost <-chan struct{}
 	drx               *time.Ticker
 	PduSession        [16]*UEPDUSession
 	amfInfo           Amf
@@ -813,3 +814,6 @@ func (ue *UEContext) NASSecurityContext() *security.SecCtx {
 		KnasEnc:      ue.UeSecurity.KnasEnc, KnasInt: ue.UeSecurity.KnasInt,
 	}
 }
+
+func (ue *UEContext) SetGnbConnectionLost(lost <-chan struct{}) { ue.gnbConnectionLost = lost }
+func (ue *UEContext) GetGnbConnectionLost() <-chan struct{}     { return ue.gnbConnectionLost }

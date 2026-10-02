@@ -21,7 +21,11 @@ func SendToGnbMsg(ue *context.UEContext, message context2.UEMessage) {
 	if gnbRx == nil {
 		log.Warn("[UE] Do not send NAS messages to gNB as channel is closed")
 	} else {
-		gnbRx <- message
+		select {
+		case gnbRx <- message:
+		case <-ue.GetGnbConnectionLost():
+			log.Warn("[UE] Do not send NAS messages after the gNB association failed")
+		}
 	}
 	ue.Unlock()
 }

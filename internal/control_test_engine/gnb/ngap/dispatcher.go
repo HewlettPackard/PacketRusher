@@ -14,10 +14,30 @@ import (
 
 func Dispatch(amf *context.GNBAmf, gnb *context.GNBContext, payload []byte) {
 	msg, err := ngapmsg.Parse(payload)
-	if err != nil {
+	if err != nil || msg == nil {
 		log.Errorf("[GNB][NGAP] Unable to decode message for gNB %s: %v", gnb.GetGnbId(), err)
 		return
 	}
+	dispatchUEMessage(amf, gnb, msg)
+}
+
+func dispatchUEMessage(amf *context.GNBAmf, gnb *context.GNBContext, message ngapmsg.Message) {
+	ran, amfID, hasAMF := messageUEIDs(message)
+	var ue *context.GNBUe
+	if ran != 0 {
+		ue, _ = gnb.GetGnbUe(ran)
+	}
+	if ue == nil && hasAMF {
+		ue, _ = gnb.GetGnbUeByAmfUeId(amfID)
+	}
+	if ue != nil {
+		ue.ProcessDownlink(func() { dispatchDecoded(amf, gnb, message) })
+	} else {
+		dispatchDecoded(amf, gnb, message)
+	}
+}
+
+func dispatchDecoded(amf *context.GNBAmf, gnb *context.GNBContext, msg ngapmsg.Message) {
 	switch value := msg.(type) {
 	case *ngapmsg.DownlinkNASTransport:
 		HandlerDownlinkNasTransport(gnb, value)

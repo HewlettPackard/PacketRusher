@@ -218,9 +218,10 @@ func TriggerXnHandover(oldGnb *context.GNBContext, newGnb *context.GNBContext, p
 
 	newGnbRx := make(chan context.UEMessage, 1)
 	newGnbTx := make(chan context.UEMessage, 1)
-	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, PrUeId: gnbUeContext.GetPrUeId(), UEContext: gnbUeContext, IsHandover: true}
+	connectionLost := make(chan struct{})
+	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, ConnectionLost: connectionLost, PrUeId: gnbUeContext.GetPrUeId(), UEContext: gnbUeContext, IsHandover: true}
 
-	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, GNBInboundChannel: newGnb.GetInboundChannel()}
+	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, ConnectionLost: connectionLost, GNBInboundChannel: newGnb.GetInboundChannel()}
 
 	ueSender.SendMessageToUe(gnbUeContext, msg)
 }
