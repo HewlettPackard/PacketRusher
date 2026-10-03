@@ -9,7 +9,7 @@ import (
 
 // Release builds inject these values with -ldflags. Ordinary go builds use VCS
 // metadata embedded by the Go toolchain, without requiring git at runtime.
-var Version, Revision, BuildTime string
+var Version, Revision, BuildTime, Modified string
 
 type Info struct {
 	Version      string `json:"version"`
@@ -24,10 +24,10 @@ type Info struct {
 
 func Current() Info {
 	b, _ := debug.ReadBuildInfo()
-	return derive(b, Version, Revision, BuildTime)
+	return derive(b, Version, Revision, BuildTime, Modified)
 }
 
-func derive(b *debug.BuildInfo, version, revision, built string) Info {
+func derive(b *debug.BuildInfo, version, revision, built, modified string) Info {
 	info := Info{Version: version, Revision: revision, BuildTime: built, GoVersion: runtime.Version(), GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}
 	if b != nil {
 		if b.GoVersion != "" {
@@ -58,6 +58,9 @@ func derive(b *debug.BuildInfo, version, revision, built string) Info {
 				}
 			}
 		}
+	}
+	if modified != "" {
+		info.Modified, _ = strconv.ParseBool(modified)
 	}
 	if info.Revision == "" {
 		info.Revision = "unknown"
