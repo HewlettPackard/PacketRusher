@@ -223,7 +223,8 @@ def probe(binary, state):
             capture = None
             result["user_plane"] = gtpu_proof(state/"n3.pcap", nonce)
             result['missing_dn'] = gtpu_proof(state/'n3.pcap',negative_nonce,(3,),False)
-            require(control("deregister")["state"] == "parked", "manual deregistration did not park")
+            retired = control('deregister')
+            require(retired['state'] == 'parked' and not retired['ready'] and not retired['connected'] and retired['active_pdu_sessions'] == [], 'manual deregistration did not retire the active PDU and connection')
         # Free5GC automatic termination must take the positive readiness path,
         # well before the legacy30s unresolved-readiness cleanup fallback.
         await_core_count(profile,state,"deregistered",0,12)
