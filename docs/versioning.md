@@ -9,6 +9,8 @@ Ordinary `go build ./cmd` builds report the VCS revision and dirty state embedde
 by Go. Unversioned builds identify themselves as `devel`; builds without source
 metadata report an unknown revision. They do not advertise a fixed release.
 `make` uses `scripts/build.sh`, selecting an exact checked-out tag when available.
+The script reads revision and dirty state from the same Git checkout and disables
+implicit Go VCS discovery, which can select an outer repository for nested worktrees.
 The build script accepts `PACKETRUSHER_VERSION`, `PACKETRUSHER_REVISION` and
 `PACKETRUSHER_BUILD_TIME` for source archives or Docker builds without `.git`.
 

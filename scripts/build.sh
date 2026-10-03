@@ -6,6 +6,10 @@ package=my5G-RANTester/internal/buildinfo
 build_version=${PACKETRUSHER_VERSION:-}
 build_revision=${PACKETRUSHER_REVISION:-}
 build_time=${PACKETRUSHER_BUILD_TIME:-}
+build_modified=false
+if [[ -n "$(git status --porcelain --untracked-files=all 2>/dev/null || true)" ]]; then
+    build_modified=true
+fi
 if [[ -z "$build_version" ]]; then
     build_version=$(git describe --tags --exact-match 2>/dev/null || true)
 fi
@@ -29,6 +33,7 @@ if [[ -n "$build_time" && ! "$build_time" =~ ^[0-9T:+Z.-]+$ ]]; then
     echo 'PACKETRUSHER_BUILD_TIME must be an ISO-8601 timestamp' >&2
     exit 2
 fi
-flags="-s -w -buildid= -X $package.Version=$build_version -X $package.Revision=$build_revision"
+flags="-s -w -buildid= -X $package.Version=$build_version -X $package.Revision=$build_revision -X $package.Modified=$build_modified"
 if [[ -n "$build_time" ]]; then flags+=" -X $package.BuildTime=$build_time"; fi
-go build -trimpath -ldflags "$flags" -o "$output" ./cmd
+# The explicit checkout identity also handles worktrees nested in another repo.
+go build -buildvcs=false -trimpath -ldflags "$flags" -o "$output" ./cmd
