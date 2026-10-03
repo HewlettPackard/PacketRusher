@@ -36,6 +36,31 @@ const (
 	TunnelShared
 )
 
+// TunnelBackend selects the datapath independently of UE routing mode.
+type TunnelBackend string
+
+const (
+	TunnelBackendKernel    TunnelBackend = "gtp5g"
+	TunnelBackendUserspace TunnelBackend = "userspace"
+)
+
+func ParseTunnelBackend(value string) (TunnelBackend, error) {
+	switch value {
+	case "", string(TunnelBackendKernel):
+		return TunnelBackendKernel, nil
+	case string(TunnelBackendUserspace):
+		return TunnelBackendUserspace, nil
+	default:
+		return "", fmt.Errorf("tunnel backend %q must be gtp5g or userspace", value)
+	}
+}
+
+// OverrideTunnelBackend applies a CLI override to the loaded configuration.
+func OverrideTunnelBackend(backend TunnelBackend) Config {
+	config.Ue.TunnelBackend = backend
+	return *config
+}
+
 var config *Config
 
 type Config struct {
@@ -81,6 +106,7 @@ type Ue struct {
 	TunnelMode             TunnelMode     `yaml:"-"`
 	TunnelMTU              int            `yaml:"tunnelmtu"`
 	PDUSessionType         PDUSessionType `yaml:"pdusessiontype"`
+	TunnelBackend          TunnelBackend  `yaml:"tunnelbackend"`
 }
 
 type Hplmn struct {
@@ -145,6 +171,12 @@ func readConfig(configPath string) Config {
 	if err != nil {
 		log.Fatal("Could not unmarshal yaml config at \"", configPath, "\". ", err.Error())
 	}
+
+	backend, err := ParseTunnelBackend(string(cfg.Ue.TunnelBackend))
+	if err != nil {
+		log.Fatal(err)
+	}
+	cfg.Ue.TunnelBackend = backend
 
 	if cfg.Ue.TunnelMTU < 0 {
 		log.Fatal("ue.tunnelmtu must be zero (automatic) or a positive IP MTU")

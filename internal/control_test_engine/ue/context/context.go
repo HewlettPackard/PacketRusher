@@ -69,6 +69,7 @@ type UEContext struct {
 	TunnelMode     config.TunnelMode
 	TunnelMTU      int
 	PDUSessionType config.PDUSessionType
+	TunnelBackend  config.TunnelBackend
 
 	// Sync primitive
 	scenarioChan chan scenario.ScenarioMessage

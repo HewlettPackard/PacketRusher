@@ -59,6 +59,9 @@ ue:
   # Set a smaller value, e.g. 1400, to match the UPF or a lower path MTU.
   tunnelmtu: 0
 
+  # gtp5g (default) or userspace (Linux TUN + UDP, no gtp5g module).
+  tunnelbackend: gtp5g
+
   # UE's SIM credentials
   key: "00112233445566778899AABBCCDDEEFF"
   opc: "00112233445566778899AABBCCDDEEFF"
