@@ -252,10 +252,14 @@ func TestScenarioDeregistrationParksAndRegistrationRearms(t *testing.T) {
 		if coreUE.GetState().Current() != core.Deregistered {
 			return false
 		}
-		for _, session := range coreUE.GetSmContexts() {
+		sessionsInactive := true
+		coreUE.ExecuteForAllSmContexts(func(session *core.SmContext) {
 			if session.GetState().Current() != core.Inactive {
-				return false
+				sessionsInactive = false
 			}
+		})
+		if !sessionsInactive {
+			return false
 		}
 		_, err := fgc.GetAMFContext().FindRegisteredUEByMsin(conf.Ue.Msin)
 		return err != nil
