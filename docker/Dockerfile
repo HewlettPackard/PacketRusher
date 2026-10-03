@@ -1,43 +1,22 @@
-#---------------------------------------------------------------------
-# BUILDER IMAGE
-#---------------------------------------------------------------------
-ARG BASE_IMAGE=ubuntu:focal
-FROM $BASE_IMAGE as builder
+ARG GO_VERSION=1.26.2
+FROM golang:${GO_VERSION}-bookworm AS builder
 
-RUN apt-get update && apt install wget -y
+WORKDIR /src
+COPY . .
+# Local module replacements must be present when Go resolves dependencies.
+RUN go mod download
+RUN CGO_ENABLED=0 go build -trimpath -o /out/packetrusher ./cmd
 
-RUN wget https://go.dev/dl/go1.26.2.linux-amd64.tar.gz && tar -C /usr/local -xzf go1.26.2.linux-amd64.tar.gz
-ENV GOROOT=/usr/local/go
-RUN mkdir goproject
-ENV GOPATH=/goproject
-ENV PATH=$GOPATH/bin:$GOROOT/bin:$PATH
+FROM debian:bookworm-slim AS packetrusher
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+       ca-certificates iproute2 iputils-ping iperf3 \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY . /packetrusher
+WORKDIR /packetrusher
+COPY --from=builder /out/packetrusher /packetrusher/packetrusher
+COPY docker/config.yml /packetrusher/config/config.yml
 
-RUN cd /packetrusher \
-    && go mod download \
-    && cd cmd && go build -o app
-
-#---------------------------------------------------------------------
-# TARGET IMAGE
-#---------------------------------------------------------------------
-ARG BASE_IMAGE=ubuntu:focal
-FROM $BASE_IMAGE AS packetrusher
-
-RUN apt update && apt install iproute2 iputils-ping iperf3 -y
-
-WORKDIR /usr/local
-COPY --from=builder /usr/local/go .
-ENV GOROOT=/usr/local/go
-RUN mkdir goproject
-ENV GOPATH=/goproject
-ENV PATH=$GOPATH/bin:$GOROOT/bin:$PATH
-
-WORKDIR /packetrusher/config/
-COPY --from=builder /packetrusher/docker/config.yml .
-
-WORKDIR /packetrusher/cmd
-COPY --from=builder /packetrusher/cmd/app .
-COPY --from=builder /packetrusher/docker/entrypoint.sh .
-
-ENTRYPOINT ["/packetrusher/cmd/entrypoint.sh"]
+STOPSIGNAL SIGINT
+ENTRYPOINT ["/packetrusher/packetrusher"]
+CMD ["--help"]
