@@ -104,13 +104,15 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
 		Cfg:                      conf,
-		TimeBeforeDeregistration: 400,
+		TimeBeforeDeregistration: 0,
 		TimeBeforeNgapHandover:   0,
 		TimeBeforeXnHandover:     0,
 		NumPduSessions:           1,
 		RegistrationLoop:         false,
 	}
 
+	simulations := make([]*tools.UESimulation, 0, ueCount)
+	t.Cleanup(func() { stopTestSimulations(t, simulations) })
 	for ueSimCfg.UeId = 1; ueSimCfg.UeId <= ueCount; ueSimCfg.UeId++ {
 		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
 
@@ -124,13 +126,34 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		amfContext := fiveGC.GetAMFContext()
 		amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
 
-		tools.SimulateSingleUE(ueSimCfg, &wg)
+		simulations = append(simulations, tools.SimulateSingleUE(ueSimCfg, &wg))
 
 		// Before creating a new UE, we wait for 5 ms
 		time.Sleep(time.Duration(5) * time.Millisecond)
 	}
 
-	time.Sleep(time.Duration(5000) * time.Millisecond)
+	// Terminate only after the client has really accepted every PDU session,
+	// rather than assuming registration completes before a short wall-clock
+	// timer. Keep the original success and deregistration assertions below.
+	require.Eventually(t, func() bool {
+		for _, procedure := range results.Snapshot().Procedures {
+			if procedure.Procedure == analytics.SessionEstablishment {
+				return procedure.Success == uint64(ueCount)
+			}
+		}
+		return false
+	}, 30*time.Second, 10*time.Millisecond, "all clients must accept a PDU session")
+	for _, simulation := range simulations {
+		require.True(t, simulation.Send(procedures.UeTesterMessage{Type: procedures.Terminate}))
+	}
+	waitTestSimulations(t, simulations)
+	require.Eventually(t, func() bool {
+		allDeregistered := true
+		fiveGC.GetAMFContext().ExecuteForAllUe(func(ue *context.UEContext) {
+			allDeregistered = allDeregistered && ue.GetState().Is(context.Deregistered)
+		})
+		return allDeregistered
+	}, 5*time.Second, 10*time.Millisecond, "the mock core must process deregistration")
 	i := 0
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
@@ -236,9 +259,19 @@ func TestUERegistrationLoop(t *testing.T) {
 	amfContext := fiveGC.GetAMFContext()
 	amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
 
-	tools.SimulateSingleUE(ueSimCfg, &wg)
+	simulation := tools.SimulateSingleUE(ueSimCfg, &wg)
+	t.Cleanup(func() { stopTestSimulations(t, []*tools.UESimulation{simulation}) })
 
-	time.Sleep(time.Duration(15000) * time.Millisecond)
+	// Join the whole loop before inspecting it or closing its gNB inbound
+	// channel. A fixed sleep can expire while the next UE is still attaching.
+	waitTestSimulations(t, []*tools.UESimulation{simulation})
+	require.Eventually(t, func() bool {
+		allDeregistered := true
+		fiveGC.GetAMFContext().ExecuteForAllUe(func(ue *context.UEContext) {
+			allDeregistered = allDeregistered && ue.GetState().Is(context.Deregistered)
+		})
+		return allDeregistered
+	}, 5*time.Second, 10*time.Millisecond, "the mock core must process the last deregistration")
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
 			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
@@ -248,4 +281,25 @@ func TestUERegistrationLoop(t *testing.T) {
 			require.NotNil(t, check)
 			assert.Equal(t, 5, check.authCounter, "each loop must authenticate once")
 		})
+}
+
+func waitTestSimulations(t *testing.T, simulations []*tools.UESimulation) {
+	t.Helper()
+	deadline := time.NewTimer(30 * time.Second)
+	defer deadline.Stop()
+	for _, simulation := range simulations {
+		select {
+		case <-simulation.Done():
+		case <-deadline.C:
+			t.Fatal("UE scenarios did not finish before the test deadline")
+		}
+	}
+}
+
+func stopTestSimulations(t *testing.T, simulations []*tools.UESimulation) {
+	t.Helper()
+	for _, simulation := range simulations {
+		simulation.Send(procedures.UeTesterMessage{Type: procedures.Kill})
+	}
+	waitTestSimulations(t, simulations)
 }
