@@ -109,7 +109,7 @@ func newApp() *cli.App {
 					&cli.IntFlag{Name: "timeBeforeXnHandover", Value: 0, Aliases: []string{"xnh"}, Usage: "The time in ms, before triggering a UE handover using Xn Handover. 0 to disable handover. This requires at least two gNodeB, eg: two N2/N3 IPs."},
 					&cli.IntFlag{Name: "timeBeforeIdle", Value: 0, Aliases: []string{"idl"}, Usage: "The time in ms, before switching UE to Idle. 0 to disable Idling."},
 					&cli.IntFlag{Name: "timeBeforeReconnecting", Value: 1000, Aliases: []string{"tbr"}, Usage: "The time in ms, before reconnecting to gNodeB after switching to Idle state. Default is 1000 ms. Only work in conjunction with timeBeforeIdle."},
-					&cli.IntFlag{Name: "numPduSessions", Value: 1, Aliases: []string{"nPdu"}, Usage: "The number of PDU Sessions to create"},
+					&cli.IntFlag{Name: "numPduSessions", Value: 1, Aliases: []string{"nPdu"}, Usage: "PDU sessions per UE (0 for registration-only, 1..15 for sessions)"},
 					&cli.BoolFlag{Name: "loop", Aliases: []string{"l"}, Usage: "Register UEs in a loop."},
 					&cli.IntFlag{Name: "loopCount", Value: 0, Aliases: []string{"lc"}, Usage: "The number of times the loop is executed. 0 to loop infinitely."},
 					&cli.IntFlag{Name: "timeBeforeReregistration", Value: 200, Aliases: []string{"tbrr"}, Usage: "The time in ms before the UE registers again after deregistration if UE is looping."},
@@ -284,8 +284,11 @@ func validateArguments(c *cli.Context) error {
 	if c.Int("number-of-gnbs") < 0 || c.Int("number-of-gnbs") > 0 && c.Bool("dedicatedGnb") {
 		return fmt.Errorf("--number-of-gnbs requires a non-dedicated gNB configuration")
 	}
-	if n := c.Int("numPduSessions"); n < 1 || n > 15 {
-		return fmt.Errorf("--numPduSessions must be between 1 and 15")
+	if n := c.Int("numPduSessions"); n < 0 || n > 15 {
+		return fmt.Errorf("--numPduSessions must be between 0 and 15")
+	}
+	if c.Int("numPduSessions") == 0 && c.Bool("tunnel") {
+		return fmt.Errorf("--tunnel requires at least one PDU session")
 	}
 	for _, flag := range []string{
 		"loopCount", "timeBetweenRegistration", "timeBeforeDeregistration",

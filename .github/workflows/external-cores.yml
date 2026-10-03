@@ -1,0 +1,53 @@
+name: Real core interoperability
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  external-core:
+    name: ${{ matrix.core }} real core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        core: [free5gc, open5gs]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.2'
+          cache: true
+      - name: Check hosted VM capabilities
+        run: |
+          docker info
+          docker compose version
+          sudo modprobe sctp
+          test ! -d /sys/module/gtp5g
+          if [[ ! -c /dev/net/tun ]]; then
+            sudo mkdir -p /dev/net
+            sudo mknod -m 666 /dev/net/tun c 10 200
+          fi
+      - name: Prepare dependencies and validate probe guards
+        run: |
+          go mod download
+          python3 -m unittest discover -s test/external-cores -p '*_test.py' -v
+          bash -n test/external-cores/run.sh test/external-cores/native.sh
+      - name: Run real core
+        env:
+          CORE: ${{ matrix.core }}
+        run: test/external-cores/run.sh "$CORE" "$RUNNER_TEMP/external-$CORE"
+      - name: Preserve core and packet evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: external-${{ matrix.core }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/external-${{ matrix.core }}/
+          if-no-files-found: error
+          retention-days: 14

@@ -10,3 +10,5 @@
 packetrusher
 app
 dist/
+test/external-cores/.runtime/
+test/external-cores/__pycache__/

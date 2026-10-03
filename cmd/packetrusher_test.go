@@ -58,8 +58,9 @@ func TestRejectArgumentsBeforeStartingCommand(t *testing.T) {
 		{"unexpected argument", []string{"gnb", "extra"}, "unexpected positional arguments"},
 		{"zero UEs", []string{"multi-ue", "-n", "0"}, "--number-of-ues must be at least 1"},
 		{"negative UEs", []string{"multi-ue", "-n=-1"}, "--number-of-ues must be at least 1"},
-		{"zero PDU sessions", []string{"multi-ue", "-n", "1", "--numPduSessions=0"}, "--numPduSessions must be between 1 and 15"},
-		{"too many PDU sessions", []string{"multi-ue", "-n", "1", "--numPduSessions=16"}, "--numPduSessions must be between 1 and 15"},
+		{"negative PDU sessions", []string{"multi-ue", "-n", "1", "--numPduSessions=-1"}, "--numPduSessions must be between 0 and 15"},
+		{"zero sessions with tunnel", []string{"multi-ue", "-n", "1", "--numPduSessions=0", "--tunnel"}, "--tunnel requires at least one PDU session"},
+		{"too many PDU sessions", []string{"multi-ue", "-n", "1", "--numPduSessions=16"}, "--numPduSessions must be between 0 and 15"},
 		{"negative duration", []string{"multi-ue", "-n", "1", "--timeBetweenRegistration=-1"}, "--timeBetweenRegistration cannot be negative"},
 		{"negative loop count", []string{"multi-ue", "-n", "1", "--loopCount=-1"}, "--loopCount cannot be negative"},
 	}
@@ -75,5 +76,32 @@ func TestRejectArgumentsBeforeStartingCommand(t *testing.T) {
 				t.Fatal("invalid arguments reached the command action")
 			}
 		})
+	}
+}
+
+func TestRegistrationOnlyHasNoPDUAndKeepsDefault(t *testing.T) {
+	for _, explicit := range []bool{false, true} {
+		called := false
+		app := parserApp(t, func(c *cli.Context) error {
+			called = true
+			want := 1
+			if explicit {
+				want = 0
+			}
+			if c.Int("numPduSessions") != want {
+				t.Fatalf("sessions=%d, want %d", c.Int("numPduSessions"), want)
+			}
+			return nil
+		})
+		args := []string{"packetrusher", "multi-ue", "-n", "1"}
+		if explicit {
+			args = append(args, "--numPduSessions=0")
+		}
+		if err := app.Run(args); err != nil {
+			t.Fatal(err)
+		}
+		if !called {
+			t.Fatal("registration-only validation did not reach action")
+		}
 	}
 }

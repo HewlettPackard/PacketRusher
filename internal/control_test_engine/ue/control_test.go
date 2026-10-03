@@ -83,6 +83,7 @@ func TestIdleAndReconnectControlsUseProductionConnectionHandshake(t *testing.T) 
 				t.Fatal(err)
 			}
 			gu.SetStateReady()
+			gu.SetAmfUeId(0) // AMF-assigned zero is a valid established identity.
 			if withGuti {
 				guti := &ie.MobileId5GS{}
 				if err := guti.FromGUTIStr("0010100000000000001"); err != nil {
@@ -155,6 +156,51 @@ func TestIdleAndReconnectControlsUseProductionConnectionHandshake(t *testing.T) 
 				t.Fatalf("old connection generation retained: %+v", inspected.Attachment)
 			}
 		})
+	}
+}
+
+func TestRegistrationOnlyReadinessRequiresLiveRegisteredAMFContext(t *testing.T) {
+	node := &gnb.GNBContext{}
+	node.NewRanGnbContext("000008", "001", "01", "000001", "01", "", netip.MustParseAddrPort("127.0.0.1:1"), netip.MustParseAddrPort("127.0.0.1:2"))
+	amf := node.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:3"))
+	amf.SetStateActive()
+	tx, rx := make(chan gnb.UEMessage, 1), make(chan gnb.UEMessage, 1)
+	gu, err := node.NewGnBUe(tx, rx, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(gu.CloseUEChannel)
+	ue := &ueContext.UEContext{}
+	ue.NewRanUeContext("0000000001", &ie.UESecCapability{}, "", "", "", "", "", "001", "01", sidf.HomeNetworkPublicKey{}, "0000", "internet", 1, "", config.TunnelDisabled, make(chan ueScenario.ScenarioMessage, 16), node.GetInboundChannel(), 1)
+	ue.SetGnbInboundChannel(node.GetInboundChannel())
+	ue.SetGnbTx(tx)
+	ue.StateMM = ueContext.MM5G_REGISTERED
+	r := &procedures.ControlRequest{ExpectedPDUSessions: 0, Gnbs: map[string]*gnb.GNBContext{"000008": node}}
+	if attachment(r, ue).Ready {
+		t.Fatal("missing AMF identity became ready")
+	}
+	gu.SetAmfUeId(0)
+	if a := attachment(r, ue); !a.Ready || len(a.ActivePDUSessions) != 0 || gu.GetState() != gnb.Initialized {
+		t.Fatalf("registered-only live context is not ready without a PDU response: %+v", a)
+	}
+	ue.StateMM = ueContext.MM5G_REGISTERED_INITIATED
+	if attachment(r, ue).Ready {
+		t.Fatal("registration still in progress became ready")
+	}
+	ue.StateMM = ueContext.MM5G_REGISTERED
+	amf.SetStateInactive()
+	if attachment(r, ue).Ready {
+		t.Fatal("unavailable AMF association became ready")
+	}
+	amf.SetStateActive()
+	r.ExpectedPDUSessions = 1
+	if attachment(r, ue).Ready {
+		t.Fatal("missing requested PDU became ready")
+	}
+	r.ExpectedPDUSessions = 0
+	gu.CloseUEChannel()
+	if attachment(r, ue).Ready {
+		t.Fatal("retired connection became ready")
 	}
 }
 

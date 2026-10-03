@@ -1,0 +1,1022 @@
+{
+  "amf": {
+    "info": {
+      "version": "1.0.9",
+      "description": "AMF initial local configuration"
+    },
+    "configuration": {
+      "amfName": "AMF",
+      "ngapIpList": [
+        "amf.free5gc.org"
+      ],
+      "ngapPort": 38412,
+      "sbi": {
+        "scheme": "http",
+        "registerIPv4": "amf.free5gc.org",
+        "bindingIPv4": "amf.free5gc.org",
+        "port": 8000,
+        "tls": {
+          "pem": "cert/amf.pem",
+          "key": "cert/amf.key"
+        }
+      },
+      "serviceNameList": [
+        "namf-comm",
+        "namf-evts",
+        "namf-mt",
+        "namf-loc",
+        "namf-oam",
+        "namf-callback"
+      ],
+      "servedGuamiList": [
+        {
+          "plmnId": {
+            "mcc": "208",
+            "mnc": "93"
+          },
+          "amfId": "cafe00"
+        }
+      ],
+      "supportTaiList": [
+        {
+          "plmnId": {
+            "mcc": "208",
+            "mnc": "93"
+          },
+          "tac": "000001"
+        }
+      ],
+      "plmnSupportList": [
+        {
+          "plmnId": {
+            "mcc": "208",
+            "mnc": "93"
+          },
+          "snssaiList": [
+            {
+              "sst": 1,
+              "sd": "010203"
+            },
+            {
+              "sst": 1,
+              "sd": "112233"
+            }
+          ]
+        }
+      ],
+      "supportDnnList": [
+        "internet"
+      ],
+      "nrfUri": "http://nrf.free5gc.org:8000",
+      "nrfCertPem": "cert/nrf.pem",
+      "security": {
+        "integrityOrder": [
+          "NIA2"
+        ],
+        "cipheringOrder": [
+          "NEA0"
+        ]
+      },
+      "networkName": {
+        "full": "free5GC",
+        "short": "free"
+      },
+      "ngapIE": {
+        "mobilityRestrictionList": {
+          "enable": true
+        },
+        "maskedIMEISV": {
+          "enable": true
+        },
+        "redirectionVoiceFallback": {
+          "enable": false
+        }
+      },
+      "nasIE": {
+        "networkFeatureSupport5GS": {
+          "enable": true,
+          "length": 1,
+          "imsVoPS": 0,
+          "emc": 0,
+          "emf": 0,
+          "iwkN26": 0,
+          "mpsi": 0,
+          "emcN3": 0,
+          "mcsi": 0
+        }
+      },
+      "t3502Value": 720,
+      "t3512Value": 3600,
+      "non3gppDeregTimerValue": 3240,
+      "t3513": {
+        "enable": true,
+        "expireTime": "6s",
+        "maxRetryTimes": 4
+      },
+      "t3522": {
+        "enable": true,
+        "expireTime": "6s",
+        "maxRetryTimes": 4
+      },
+      "t3550": {
+        "enable": true,
+        "expireTime": "6s",
+        "maxRetryTimes": 4
+      },
+      "t3555": {
+        "enable": true,
+        "expireTime": "6s",
+        "maxRetryTimes": 4
+      },
+      "t3560": {
+        "enable": true,
+        "expireTime": "6s",
+        "maxRetryTimes": 4
+      },
+      "t3565": {
+        "enable": true,
+        "expireTime": "6s",
+        "maxRetryTimes": 4
+      },
+      "t3570": {
+        "enable": true,
+        "expireTime": "6s",
+        "maxRetryTimes": 4
+      },
+      "locality": "area1",
+      "sctp": {
+        "numOstreams": 3,
+        "maxInstreams": 5,
+        "maxAttempts": 2,
+        "maxInitTimeout": 2
+      },
+      "defaultUECtxReq": false
+    },
+    "logger": {
+      "enable": true,
+      "level": "info",
+      "reportCaller": false
+    }
+  },
+  "ausf": {
+    "info": {
+      "version": "1.0.3",
+      "description": "AUSF initial local configuration"
+    },
+    "configuration": {
+      "sbi": {
+        "scheme": "http",
+        "registerIPv4": "ausf.free5gc.org",
+        "bindingIPv4": "ausf.free5gc.org",
+        "port": 8000,
+        "tls": {
+          "pem": "cert/ausf.pem",
+          "key": "cert/ausf.key"
+        }
+      },
+      "serviceNameList": [
+        "nausf-auth"
+      ],
+      "nrfUri": "http://nrf.free5gc.org:8000",
+      "nrfCertPem": "cert/nrf.pem",
+      "plmnSupportList": [
+        {
+          "mcc": "208",
+          "mnc": "93"
+        },
+        {
+          "mcc": "123",
+          "mnc": "45"
+        }
+      ],
+      "groupId": "ausfGroup001",
+      "eapAkaSupiImsiPrefix": false
+    },
+    "logger": {
+      "enable": true,
+      "level": "info",
+      "reportCaller": false
+    }
+  },
+  "nrf": {
+    "info": {
+      "version": "1.0.2",
+      "description": "NRF initial local configuration"
+    },
+    "configuration": {
+      "MongoDBName": "free5gc",
+      "MongoDBUrl": "mongodb://db:27017",
+      "sbi": {
+        "scheme": "http",
+        "registerIPv4": "nrf.free5gc.org",
+        "bindingIPv4": "nrf.free5gc.org",
+        "port": 8000,
+        "cert": {
+          "pem": "cert/nrf.pem",
+          "key": "cert/nrf.key"
+        },
+        "rootcert": {
+          "pem": "cert/root.pem",
+          "key": "cert/root.key"
+        },
+        "oauth": true
+      },
+      "DefaultPlmnId": {
+        "mcc": "208",
+        "mnc": "93"
+      },
+      "serviceNameList": [
+        "nnrf-nfm",
+        "nnrf-disc"
+      ]
+    },
+    "logger": {
+      "enable": true,
+      "level": "info",
+      "reportCaller": false
+    }
+  },
+  "udm": {
+    "info": {
+      "version": "1.0.3",
+      "description": "UDM initial local configuration"
+    },
+    "configuration": {
+      "serviceNameList": [
+        "nudm-sdm",
+        "nudm-uecm",
+        "nudm-ueau",
+        "nudm-ee",
+        "nudm-pp"
+      ],
+      "sbi": {
+        "scheme": "http",
+        "registerIPv4": "udm.free5gc.org",
+        "bindingIPv4": "udm.free5gc.org",
+        "port": 8000,
+        "tls": {
+          "pem": "cert/udm.pem",
+          "key": "cert/udm.key"
+        }
+      },
+      "nrfUri": "http://nrf.free5gc.org:8000",
+      "nrfCertPem": "cert/nrf.pem",
+      "SuciProfile": [
+        {
+          "ProtectionScheme": 1,
+          "PrivateKey": "c53c22208b61860b06c62e5406a7b330c2b577aa5558981510d128247d38bd1d",
+          "PublicKey": "5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650"
+        },
+        {
+          "ProtectionScheme": 2,
+          "PrivateKey": "F1AB1074477EBCC7F554EA1C5FC368B1616730155E0041AC447D6301975FECDA",
+          "PublicKey": "0472DA71976234CE833A6907425867B82E074D44EF907DFB4B3E21C1C2256EBCD15A7DED52FCBB097A4ED250E036C7B9C8C7004C4EEDC4F068CD7BF8D3F900E3B4"
+        }
+      ]
+    },
+    "logger": {
+      "enable": true,
+      "level": "info",
+      "reportCaller": false
+    }
+  },
+  "udr": {
+    "info": {
+      "version": "1.1.0",
+      "description": "UDR initial local configuration"
+    },
+    "configuration": {
+      "sbi": {
+        "scheme": "http",
+        "registerIPv4": "udr.free5gc.org",
+        "bindingIPv4": "udr.free5gc.org",
+        "port": 8000,
+        "tls": {
+          "pem": "cert/udr.pem",
+          "key": "cert/udr.key"
+        }
+      },
+      "dbConnectorType": "mongodb",
+      "mongodb": {
+        "name": "free5gc",
+        "url": "mongodb://db:27017"
+      },
+      "nrfUri": "http://nrf.free5gc.org:8000",
+      "nrfCertPem": "cert/nrf.pem"
+    },
+    "logger": {
+      "enable": true,
+      "level": "info",
+      "reportCaller": false
+    }
+  },
+  "nssf": {
+    "info": {
+      "version": "1.0.2",
+      "description": "NSSF initial local configuration"
+    },
+    "configuration": {
+      "nssfName": "NSSF",
+      "sbi": {
+        "scheme": "http",
+        "registerIPv4": "nssf.free5gc.org",
+        "bindingIPv4": "nssf.free5gc.org",
+        "port": 8000,
+        "tls": {
+          "pem": "cert/nssf.pem",
+          "key": "cert/nssf.key"
+        }
+      },
+      "serviceNameList": [
+        "nnssf-nsselection",
+        "nnssf-nssaiavailability"
+      ],
+      "nrfUri": "http://nrf.free5gc.org:8000",
+      "nrfCertPem": "cert/nrf.pem",
+      "supportedPlmnList": [
+        {
+          "mcc": "208",
+          "mnc": "93"
+        }
+      ],
+      "supportedNssaiInPlmnList": [
+        {
+          "plmnId": {
+            "mcc": "208",
+            "mnc": "93"
+          },
+          "supportedSnssaiList": [
+            {
+              "sst": 1,
+              "sd": "010203"
+            },
+            {
+              "sst": 1,
+              "sd": "112233"
+            },
+            {
+              "sst": 1,
+              "sd": "000003"
+            },
+            {
+              "sst": 2,
+              "sd": "000001"
+            },
+            {
+              "sst": 2,
+              "sd": "000002"
+            }
+          ]
+        }
+      ],
+      "nsiList": [
+        {
+          "snssai": {
+            "sst": 1
+          },
+          "nsiInformationList": [
+            {
+              "nrfId": "http://nrf.free5gc.org:8000/nnrf-nfm/v1/nf-instances",
+              "nsiId": 10
+            }
+          ]
+        },
+        {
+          "snssai": {
+            "sst": 1,
+            "sd": "000001"
+          },
+          "nsiInformationList": [
+            {
+              "nrfId": "http://nrf.free5gc.org:8000/nnrf-nfm/v1/nf-instances",
+              "nsiId": 11
+            }
+          ]
+        },
+        {
+          "snssai": {
+            "sst": 1,
+            "sd": "000002"
+          },
+          "nsiInformationList": [
+            {
+              "nrfId": "http://nrf.free5gc.org:8000/nnrf-nfm/v1/nf-instances",
+              "nsiId": 12
+            },
+            {
+              "nrfId": "http://nrf.free5gc.org:8000/nnrf-nfm/v1/nf-instances",
+              "nsiId": 12
+            }
+          ]
+        },
+        {
+          "snssai": {
+            "sst": 1,
+            "sd": "000003"
+          },
+          "nsiInformationList": [
+            {
+              "nrfId": "http://nrf.free5gc.org:8000/nnrf-nfm/v1/nf-instances",
+              "nsiId": 13
+            }
+          ]
+        },
+        {
+          "snssai": {
+            "sst": 2
+          },
+          "nsiInformationList": [
+            {
+              "nrfId": "http://nrf.free5gc.org:8000/nnrf-nfm/v1/nf-instances",
+              "nsiId": 20
+            }
+          ]
+        },
+        {
+          "snssai": {
+            "sst": 2,
+            "sd": "000001"
+          },
+          "nsiInformationList": [
+            {
+              "nrfId": "http://nrf.free5gc.org:8000/nnrf-nfm/v1/nf-instances",
+              "nsiId": 21
+            }
+          ]
+        },
+        {
+          "snssai": {
+            "sst": 1,
+            "sd": "010203"
+          },
+          "nsiInformationList": [
+            {
+              "nrfId": "http://nrf.free5gc.org:8000/nnrf-nfm/v1/nf-instances",
+              "nsiId": 22
+            }
+          ]
+        },
+        {
+          "snssai": {
+            "sst": 1,
+            "sd": "112233"
+          },
+          "nsiInformationList": [
+            {
+              "nrfId": "http://nrf.free5gc.org:8000/nnrf-nfm/v1/nf-instances",
+              "nsiId": 23
+            }
+          ]
+        }
+      ],
+      "amfSetList": [
+        {
+          "amfSetId": 1,
+          "amfList": [
+            "ffa2e8d7-3275-49c7-8631-6af1df1d9d26",
+            "0e8831c3-6286-4689-ab27-1e2161e15cb1",
+            "a1fba9ba-2e39-4e22-9c74-f749da571d0d"
+          ],
+          "nrfAmfSet": "http://nrf.free5gc.org:8000/nnrf-nfm/v1/nf-instances",
+          "supportedNssaiAvailabilityData": [
+            {
+              "tai": {
+                "plmnId": {
+                  "mcc": "466",
+                  "mnc": "92"
+                },
+                "tac": "33456"
+              },
+              "supportedSnssaiList": [
+                {
+                  "sst": 1,
+                  "sd": "000001"
+                },
+                {
+                  "sst": 1,
+                  "sd": "000002"
+                },
+                {
+                  "sst": 2,
+                  "sd": "000001"
+                }
+              ]
+            },
+            {
+              "tai": {
+                "plmnId": {
+                  "mcc": "466",
+                  "mnc": "92"
+                },
+                "tac": "33457"
+              },
+              "supportedSnssaiList": [
+                {
+                  "sst": 1
+                },
+                {
+                  "sst": 1,
+                  "sd": "000001"
+                },
+                {
+                  "sst": 1,
+                  "sd": "000002"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "amfSetId": 2,
+          "nrfAmfSet": "http://nrf.free5gc.org:8084/nnrf-nfm/v1/nf-instances",
+          "supportedNssaiAvailabilityData": [
+            {
+              "tai": {
+                "plmnId": {
+                  "mcc": "466",
+                  "mnc": "92"
+                },
+                "tac": "33456"
+              },
+              "supportedSnssaiList": [
+                {
+                  "sst": 1
+                },
+                {
+                  "sst": 1,
+                  "sd": "000001"
+                },
+                {
+                  "sst": 1,
+                  "sd": "000003"
+                },
+                {
+                  "sst": 2,
+                  "sd": "000001"
+                }
+              ]
+            },
+            {
+              "tai": {
+                "plmnId": {
+                  "mcc": "466",
+                  "mnc": "92"
+                },
+                "tac": "33458"
+              },
+              "supportedSnssaiList": [
+                {
+                  "sst": 1
+                },
+                {
+                  "sst": 1,
+                  "sd": "000001"
+                },
+                {
+                  "sst": 2
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "amfList": [
+        {
+          "nfId": "469de254-2fe5-4ca0-8381-af3f500af77c",
+          "supportedNssaiAvailabilityData": [
+            {
+              "tai": {
+                "plmnId": {
+                  "mcc": "466",
+                  "mnc": "92"
+                },
+                "tac": "33456"
+              },
+              "supportedSnssaiList": [
+                {
+                  "sst": 1
+                },
+                {
+                  "sst": 1,
+                  "sd": "000002"
+                },
+                {
+                  "sst": 2
+                }
+              ]
+            },
+            {
+              "tai": {
+                "plmnId": {
+                  "mcc": "466",
+                  "mnc": "92"
+                },
+                "tac": "33457"
+              },
+              "supportedSnssaiList": [
+                {
+                  "sst": 1,
+                  "sd": "000001"
+                },
+                {
+                  "sst": 1,
+                  "sd": "000002"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "nfId": "fbe604a8-27b2-417e-bd7c-8a7be2691f8d",
+          "supportedNssaiAvailabilityData": [
+            {
+              "tai": {
+                "plmnId": {
+                  "mcc": "466",
+                  "mnc": "92"
+                },
+                "tac": "33458"
+              },
+              "supportedSnssaiList": [
+                {
+                  "sst": 1
+                },
+                {
+                  "sst": 1,
+                  "sd": "000001"
+                },
+                {
+                  "sst": 1,
+                  "sd": "000003"
+                },
+                {
+                  "sst": 2
+                }
+              ]
+            },
+            {
+              "tai": {
+                "plmnId": {
+                  "mcc": "466",
+                  "mnc": "92"
+                },
+                "tac": "33459"
+              },
+              "supportedSnssaiList": [
+                {
+                  "sst": 1
+                },
+                {
+                  "sst": 1,
+                  "sd": "000001"
+                },
+                {
+                  "sst": 2
+                },
+                {
+                  "sst": 2,
+                  "sd": "000001"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "nfId": "b9e6e2cb-5ce8-4cb6-9173-a266dd9a2f0c",
+          "supportedNssaiAvailabilityData": [
+            {
+              "tai": {
+                "plmnId": {
+                  "mcc": "466",
+                  "mnc": "92"
+                },
+                "tac": "33456"
+              },
+              "supportedSnssaiList": [
+                {
+                  "sst": 1
+                },
+                {
+                  "sst": 1,
+                  "sd": "000001"
+                },
+                {
+                  "sst": 1,
+                  "sd": "000002"
+                },
+                {
+                  "sst": 2
+                }
+              ]
+            },
+            {
+              "tai": {
+                "plmnId": {
+                  "mcc": "466",
+                  "mnc": "92"
+                },
+                "tac": "33458"
+              },
+              "supportedSnssaiList": [
+                {
+                  "sst": 1
+                },
+                {
+                  "sst": 1,
+                  "sd": "000001"
+                },
+                {
+                  "sst": 2
+                },
+                {
+                  "sst": 2,
+                  "sd": "000001"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "taList": [
+        {
+          "tai": {
+            "plmnId": {
+              "mcc": "466",
+              "mnc": "92"
+            },
+            "tac": "33456"
+          },
+          "accessType": "3GPP_ACCESS",
+          "supportedSnssaiList": [
+            {
+              "sst": 1
+            },
+            {
+              "sst": 1,
+              "sd": "000001"
+            },
+            {
+              "sst": 1,
+              "sd": "000002"
+            },
+            {
+              "sst": 2
+            }
+          ]
+        },
+        {
+          "tai": {
+            "plmnId": {
+              "mcc": "466",
+              "mnc": "92"
+            },
+            "tac": "33457"
+          },
+          "accessType": "3GPP_ACCESS",
+          "supportedSnssaiList": [
+            {
+              "sst": 1
+            },
+            {
+              "sst": 1,
+              "sd": "000001"
+            },
+            {
+              "sst": 1,
+              "sd": "000002"
+            },
+            {
+              "sst": 2
+            }
+          ]
+        },
+        {
+          "tai": {
+            "plmnId": {
+              "mcc": "466",
+              "mnc": "92"
+            },
+            "tac": "33458"
+          },
+          "accessType": "3GPP_ACCESS",
+          "supportedSnssaiList": [
+            {
+              "sst": 1
+            },
+            {
+              "sst": 1,
+              "sd": "000001"
+            },
+            {
+              "sst": 1,
+              "sd": "000003"
+            },
+            {
+              "sst": 2
+            }
+          ],
+          "restrictedSnssaiList": [
+            {
+              "homePlmnId": {
+                "mcc": "310",
+                "mnc": "560"
+              },
+              "sNssaiList": [
+                {
+                  "sst": 1,
+                  "sd": "000003"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tai": {
+            "plmnId": {
+              "mcc": "466",
+              "mnc": "92"
+            },
+            "tac": "33459"
+          },
+          "accessType": "3GPP_ACCESS",
+          "supportedSnssaiList": [
+            {
+              "sst": 1
+            },
+            {
+              "sst": 1,
+              "sd": "000001"
+            },
+            {
+              "sst": 2
+            },
+            {
+              "sst": 2,
+              "sd": "000001"
+            }
+          ],
+          "restrictedSnssaiList": [
+            {
+              "homePlmnId": {
+                "mcc": "310",
+                "mnc": "560"
+              },
+              "sNssaiList": [
+                {
+                  "sst": 2,
+                  "sd": "000001"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "mappingListFromPlmn": [
+        {
+          "operatorName": "NTT Docomo",
+          "homePlmnId": {
+            "mcc": "440",
+            "mnc": "10"
+          },
+          "mappingOfSnssai": [
+            {
+              "servingSnssai": {
+                "sst": 1,
+                "sd": "000001"
+              },
+              "homeSnssai": {
+                "sst": 1,
+                "sd": "1"
+              }
+            },
+            {
+              "servingSnssai": {
+                "sst": 1,
+                "sd": "000002"
+              },
+              "homeSnssai": {
+                "sst": 1,
+                "sd": "000003"
+              }
+            },
+            {
+              "servingSnssai": {
+                "sst": 1,
+                "sd": "000003"
+              },
+              "homeSnssai": {
+                "sst": 1,
+                "sd": "000004"
+              }
+            },
+            {
+              "servingSnssai": {
+                "sst": 2,
+                "sd": "000001"
+              },
+              "homeSnssai": {
+                "sst": 2,
+                "sd": "000002"
+              }
+            }
+          ]
+        },
+        {
+          "operatorName": "AT&T Mobility",
+          "homePlmnId": {
+            "mcc": "310",
+            "mnc": "560"
+          },
+          "mappingOfSnssai": [
+            {
+              "servingSnssai": {
+                "sst": 1,
+                "sd": "000001"
+              },
+              "homeSnssai": {
+                "sst": 1,
+                "sd": "000002"
+              }
+            },
+            {
+              "servingSnssai": {
+                "sst": 1,
+                "sd": "000002"
+              },
+              "homeSnssai": {
+                "sst": 1,
+                "sd": "000003"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "logger": {
+      "enable": true,
+      "level": "info",
+      "reportCaller": false
+    }
+  },
+  "pcf": {
+    "info": {
+      "version": "1.0.2",
+      "description": "PCF initial local configuration"
+    },
+    "configuration": {
+      "pcfName": "PCF",
+      "sbi": {
+        "scheme": "http",
+        "registerIPv4": "pcf.free5gc.org",
+        "bindingIPv4": "pcf.free5gc.org",
+        "port": 8000,
+        "tls": {
+          "pem": "cert/pcf.pem",
+          "key": "cert/pcf.key"
+        }
+      },
+      "timeFormat": "2019-01-02 15:04:05",
+      "defaultBdtRefId": "BdtPolicyId-",
+      "nrfUri": "http://nrf.free5gc.org:8000",
+      "nrfCertPem": "cert/nrf.pem",
+      "bsf": {
+        "enable": false
+      },
+      "serviceList": [
+        {
+          "serviceName": "npcf-am-policy-control"
+        },
+        {
+          "serviceName": "npcf-smpolicycontrol",
+          "suppFeat": "3fff"
+        },
+        {
+          "serviceName": "npcf-bdtpolicycontrol"
+        },
+        {
+          "serviceName": "npcf-policyauthorization",
+          "suppFeat": 3
+        },
+        {
+          "serviceName": "npcf-eventexposure"
+        },
+        {
+          "serviceName": "npcf-ue-policy-control"
+        },
+        {
+          "serviceName": "npcf-callback"
+        }
+      ],
+      "mongodb": {
+        "name": "free5gc",
+        "url": "mongodb://db:27017"
+      },
+      "locality": "area1"
+    },
+    "logger": {
+      "enable": true,
+      "level": "info",
+      "reportCaller": false
+    }
+  }
+}

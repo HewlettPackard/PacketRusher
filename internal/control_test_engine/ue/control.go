@@ -22,7 +22,14 @@ func attachment(r *procedures.ControlRequest, ue *context.UEContext) procedures.
 		if node.GetInboundChannel() == ue.GetGnbInboundChannel() {
 			a.GNB = id
 			if gu, err := node.GetGnbUeByPrUeId(ue.GetPrUeId()); err == nil {
-				a.Ready = gu.GetState() == gnb.Ready && node.NGSetupReady()
+				ready := gu.GetState() == gnb.Ready
+				if r.ExpectedPDUSessions == 0 {
+					// Registration-only has no PDU setup response to mark Ready.
+					// Require the live AMF-assigned context; MM registration and
+					// connection readiness are still checked below.
+					ready = gu.HasAmfUeId() && gu.GetGnbTx() != nil
+				}
+				a.Ready = ready && node.NGSetupReady()
 			}
 			break
 		}
