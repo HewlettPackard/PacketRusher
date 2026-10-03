@@ -58,6 +58,9 @@ measure handover/deregistration latency. A missing response remains pending
 until termination; it is not silently classified as a protocol rejection.
 
 Transport refusals must match the current session and establishment transaction.
+An unscoped 5GMM Status without a session ID and PTI cannot safely identify a
+PDU establishment attempt. It is logged, but does not complete a per-session
+outcome; a still-pending attempt is cancelled when its scenario shuts down.
 The existing NAS sender uses PTI 1 for each establishment; a delayed wire response
 that is identical to a new request after session-ID reuse cannot be distinguished
 without changing that transaction allocation. Non-pending sessions, stale context
