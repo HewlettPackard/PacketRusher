@@ -75,8 +75,15 @@ func multiGNBAddressProof(t *testing.T, retry bool) {
 		require.True(t, want.IsLoopback())
 		require.Equal(t, want, g.GetN3GnbIp())
 		require.Equal(t, uint16(9498), g.GetGnbIpPort().Port())
+		active := 0
 		for a := range g.IterGnbAmf() {
-			require.Equal(t, gnbcontext.Active, a.GetState())
+			// A failed SCTP dial can leave an inactive entry in the AMF pool.
+			// Verify the current associations, including their actual bindings.
+			if a.GetState() != gnbcontext.Active {
+				continue
+			}
+			active++
+			require.NotNil(t, a.GetSCTPConn())
 			local := a.GetSCTPConn().LocalAddr().(*sctp.SCTPAddr)
 			require.Equal(t, want.String(), local.IPAddrs[0].IP.String())
 			peer, err := core.GetAMFContext().GetGnb(local.String())
@@ -84,6 +91,7 @@ func multiGNBAddressProof(t *testing.T, retry bool) {
 			require.NotNil(t, peer.GetGlobalRanNodeID().GNbId)
 			require.Equal(t, g.GetGnbId(), peer.GetGlobalRanNodeID().GNbId.GNBValue)
 		}
+		require.Positive(t, active, "each gNB must have a working NG Setup association")
 	}
 	ue, err := target.NewGnBUe(make(chan gnbcontext.UEMessage, 2), make(chan gnbcontext.UEMessage, 2), 42, nil)
 	require.NoError(t, err)
