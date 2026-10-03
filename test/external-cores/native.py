@@ -55,8 +55,8 @@ def run(core, prefix, binary, state, sessions=None, backend="userspace", upf=Non
     state = Path(state).resolve()
     generate(core, state, native=True, prefix=prefix, sessions=sessions, backend=backend, upf=upf)
     profile = json.loads((state/'profile.json').read_text())
-    if profile['upf_implementation'] == 'free5gc' and not Path('/sys/module/gtp5g').is_dir():
-        raise RuntimeError('the genuine free5GC UPF requires gtp5g in the disposable guest; PacketRusher eBPF does not replace the UPF')
+    if (profile['upf_implementation'] == 'free5gc' or backend == 'gtp5g') and not Path('/sys/module/gtp5g').is_dir():
+        raise RuntimeError('the genuine free5GC UPF or selected kernel backend requires gtp5g in the disposable guest; PacketRusher eBPF does not replace the UPF')
     processes, files = [], []
     probe_process = None
     for signum in (signal.SIGINT, signal.SIGTERM):
@@ -136,7 +136,7 @@ if __name__ == '__main__':
     parser.add_argument('--packetrusher',required=True)
     parser.add_argument('--state',required=True)
     parser.add_argument('--sessions',type=int,choices=[0,1])
-    parser.add_argument('--backend',choices=['userspace','ebpf'],default='userspace')
+    parser.add_argument('--backend',choices=['userspace','ebpf','gtp5g'],default='userspace')
     parser.add_argument('--upf',choices=['free5gc','open5gs'])
     parser.add_argument('--upf-prefix')
     args=parser.parse_args()

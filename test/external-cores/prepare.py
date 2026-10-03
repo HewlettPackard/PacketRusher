@@ -13,12 +13,12 @@ FREE_IPS = {"nrf": "172.30.5.11", "ausf": "172.30.5.12", "udm": "172.30.5.13", "
 SMF_IP = "172.30.5.17"
 
 
-def profile_options(core, sessions=None, backend="userspace", upf=None):
+def profile_options(core, sessions=None, backend="userspace", upf=None, native=False):
     sessions = (0 if core == "free5gc" else 1) if sessions is None else sessions
     if core not in {"free5gc", "open5gs"} or sessions not in {0, 1}:
         raise ValueError("profiles require a supported real core and zero or one PDU")
-    if backend not in {"userspace", "ebpf"}:
-        raise ValueError("external user-plane profiles require userspace or ebpf")
+    if backend not in {"userspace", "ebpf"} and not (native and backend == "gtp5g"):
+        raise ValueError("gtp5g requires an explicit native profile; hosted profiles use userspace or ebpf")
     if core == "open5gs" and sessions != 1:
         raise ValueError("Open5GS acceptance requires a real PDU and traffic")
     if sessions == 0 and (backend != "userspace" or upf is not None):
@@ -45,7 +45,7 @@ def replace(value, mapping):
     return value
 
 def generate(core, output, native=False, prefix="/opt/open5gs", sessions=None, backend="userspace", upf=None):
-    sessions, backend, upf = profile_options(core, sessions, backend, upf)
+    sessions, backend, upf = profile_options(core, sessions, backend, upf, native)
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     config = output / "config"
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     parser.add_argument("--native", action="store_true")
     parser.add_argument("--prefix", default="/opt/open5gs")
     parser.add_argument("--sessions", type=int, choices=[0, 1])
-    parser.add_argument("--backend", choices=["userspace", "ebpf"], default="userspace")
+    parser.add_argument("--backend", choices=["userspace", "ebpf", "gtp5g"], default="userspace")
     parser.add_argument("--upf", choices=["free5gc", "open5gs"])
     args = parser.parse_args()
     generate(args.core, args.output, args.native, args.prefix, args.sessions, args.backend, args.upf)
