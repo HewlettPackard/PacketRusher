@@ -12,14 +12,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Keep rejection handling on the UE's event loop. The timer queues a session
-// token; only the event loop may validate its lifetime and encode the retry.
+// maxRejectRetries is how many times a rejected PDU session is requested again.
+const maxRejectRetries = 5
+
+// handleEstablishmentReject records a failed attempt and schedules a retry on the
+// UE goroutine. The typed token preserves session lifetime and cancellation; the
+// retry count advances only when that goroutine executes an eligible attempt.
 func handleEstablishmentReject(ue *context.UEContext, reject *message.PDUSessEstRej) {
-	session, err := ue.GetPduSession(reject.PDUSessId)
+	pduSessionId := reject.PDUSessId
+	pduSession, err := ue.GetPduSession(pduSessionId)
+
 	if err != nil {
-		log.Error(err)
+		log.Error("[UE][NAS] Cannot retry PDU Session Request for PDU Session ", pduSessionId, " after Reject as ", err)
 		return
 	}
-	session.EstablishmentFailed()
-	trigger.RetryPduSessionRequest(ue, session)
+	pduSession.EstablishmentFailed()
+	trigger.RetryPduSessionRequest(ue, pduSession)
 }

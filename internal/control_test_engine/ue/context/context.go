@@ -942,6 +942,20 @@ func (pdu *UEPDUSession) EstablishmentFailed() {
 	pdu.results.Finish(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment, analytics.Failure)
 }
 
+// EstablishmentTransportFailed accounts for an explicitly refused uplink request
+// only when its transaction still belongs to the current pending session.
+func (pdu *UEPDUSession) EstablishmentTransportFailed(pti uint8) {
+	if pdu.owner == nil {
+		return
+	}
+	pdu.owner.Lock()
+	defer pdu.owner.Unlock()
+	if pti != 1 || !pdu.owner.hasSessionLocked(pdu) || pdu.StateSM != SM5G_PDU_SESSION_ACTIVE_PENDING {
+		return
+	}
+	pdu.results.Finish(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment, analytics.Failure)
+}
+
 // NASSecurityContext exposes upstream security operations while sharing the UE counters.
 func (ue *UEContext) NASSecurityContext() *security.SecCtx {
 	return &security.SecCtx{

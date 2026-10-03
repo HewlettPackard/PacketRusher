@@ -17,6 +17,7 @@ import (
 
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb/gtp"
+	ngapCodec "my5G-RANTester/lib/ngap"
 
 	nasType "github.com/free5gc/nas/ie"
 	"github.com/free5gc/ngap/aper"
@@ -202,7 +203,7 @@ func (gnb *GNBContext) GetPrUePool() *sync.Map {
 func (gnb *GNBContext) DeleteGnBUe(ue *GNBUe) {
 	gnb.uePool.Delete(ue.ranUeNgapId)
 	gnb.prUePool.CompareAndDelete(ue.GetPrUeId(), ue)
-	for _, pduSession := range ue.context.pduSession {
+	for _, pduSession := range ue.GetPduSessions() {
 		if pduSession != nil {
 			gnb.teidPool.Delete(pduSession.GetTeidDownlink())
 		}
@@ -563,21 +564,8 @@ func (gnb *GNBContext) GetMccAndMnc() (string, string) {
 
 func (gnb *GNBContext) GetMccAndMncInOctets() []byte {
 	mcc, mnc := gnb.GetMccAndMnc()
-	if len(mcc) != 3 || (len(mnc) != 2 && len(mnc) != 3) {
-		log.Error("[GNB] MCC must have three digits and MNC two or three digits")
-		return nil
-	}
-	for _, digit := range mcc + mnc {
-		if digit < '0' || digit > '9' {
-			log.Error("[GNB] MCC and MNC must contain decimal digits")
-			return nil
-		}
-	}
-	// Use the NAS PLMN codec for NGAP too: MNC digit 3 belongs in the high
-	// nibble of octet 2, and a two-digit MNC uses the filler nibble 0xf.
-	plmn := nasType.PlmnId{MCC: mcc, MNC: mnc}
-	encoded := make([]byte, nasType.PlmnIdPktSz)
-	if err := plmn.MarshalBinary(encoded); err != nil {
+	encoded, err := ngapCodec.EncodePLMN(mcc, mnc)
+	if err != nil {
 		log.Errorf("[GNB] Could not encode PLMN: %v", err)
 		return nil
 	}

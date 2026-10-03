@@ -105,8 +105,9 @@ var (
 	setTunnelMaster    = netlink.LinkSetMaster
 	setTunnelUp        = netlink.LinkSetUp
 	replaceTunnelRoute = netlink.RouteReplace
-	makeUEEndpoint     = createUEEndpoint
 	setTunnelMTU       = gtp.SetTunnelMTU
+	setUEEndpointMTU   = netlink.LinkSetMTU
+	makeUEEndpoint     = createUEEndpoint
 	restoreTunnelMTU   = netlink.LinkSetMTU
 	sharedDeviceFor    = func(msg gnbContext.UEMessage) sharedGTPDevice {
 		if msg.GtpDevice == nil {
@@ -515,11 +516,15 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		Table:     int(tableId), // table <ECI>
 	}
 	if dedicated != nil {
-		err = replaceRouteWithEndpointMTU(route, addressLink, ueGnbIp, ue.TunnelMTU, !dedicated.endpointOwned)
+		err = replaceRouteWithEndpointMTU(route, addressLink, link.Attrs().MTU, !dedicated.endpointOwned)
 	} else {
 		err = replaceTunnelRoute(route)
 	}
 	if err != nil {
+		if errors.Is(err, errTunnelRollback) {
+			pduSession.ReleaseTunnel()
+			log.Error("[UE][GTP] Released tunnel after unsuccessful endpoint MTU rollback")
+		}
 		failed("[GNB][GTP] Unable to create Kernel Route ", err)
 		return
 	}
@@ -573,17 +578,19 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	}
 }
 
-// The endpoint belongs to the source until the new default route commits. An
-// unsuccessful handover must restore its MTU along with the source binding.
-func replaceRouteWithEndpointMTU(route *netlink.Route, endpoint netlink.Link, source netip.Addr, configured int, preserve bool) error {
+// A retained UE endpoint still belongs to the source until the new route commits.
+// Match the target backend's already validated MTU, and restore the source MTU
+// if either the endpoint update or route replacement fails.
+func replaceRouteWithEndpointMTU(route *netlink.Route, endpoint netlink.Link, mtu int, preserve bool) error {
 	previous := endpoint.Attrs().MTU
-	err := setTunnelMTU(endpoint, source, configured)
+	err := setUEEndpointMTU(endpoint, mtu)
 	if err == nil {
+		endpoint.Attrs().MTU = mtu
 		err = replaceTunnelRoute(route)
 	}
 	if err != nil && preserve {
-		if restoreErr := restoreTunnelMTU(endpoint, previous); restoreErr != nil {
-			return errors.Join(err, fmt.Errorf("source endpoint MTU rollback failed: %w", restoreErr))
+		if restoreErr := setUEEndpointMTU(endpoint, previous); restoreErr != nil {
+			return errors.Join(err, fmt.Errorf("%w: source endpoint MTU rollback failed: %w", errTunnelRollback, restoreErr))
 		}
 		endpoint.Attrs().MTU = previous
 	}

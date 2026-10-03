@@ -22,18 +22,21 @@ import (
 	"my5G-RANTester/test/aio5gc/lib/convert"
 )
 
-// Verify actual production NGAP wire and core/UE authentication together. The
-// old gNB encoder rotated three-digit MNCs; its old decoder hid that wire bug.
+// NGAP packs MCC then MNC digits in order (TS 38.413 9.3.3.5), while NAS
+// places MNC digit 3 in octet 2. Assert independent literals for both protocols;
+// an encoder/decoder round trip alone hides a shared PLMN packing error.
 func TestNGAPPLMNAuthentication(t *testing.T) {
-	for _, tc := range []struct{ mcc, mnc, wire string }{
-		{"208", "93", "02f839"},
-		{"208", "123", "023821"},
-		{"208", "010", "020810"},
-		{"001", "01", "00f110"},
-		{"001", "001", "001100"},
-		{"001", "000", "000100"},
-		{"310", "260", "130062"},
-		{"310", "26", "13f062"},
+	for _, tc := range []struct{ mcc, mnc, ngapWire, nasWire string }{
+		{"208", "93", "02f839", "02f839"},
+		{"208", "123", "021832", "023821"},
+		{"208", "010", "020801", "020810"},
+		{"001", "01", "00f110", "00f110"},
+		{"001", "001", "000110", "001100"},
+		{"001", "000", "000100", "000100"},
+		{"310", "260", "132006", "130062"},
+		{"310", "26", "13f062", "13f062"},
+		{"999", "070", "990907", "990970"},
+		{"999", "07", "99f970", "99f970"},
 	} {
 		t.Run(tc.mcc+"/"+tc.mnc, func(t *testing.T) {
 			gnb := new(gnbctx.GNBContext)
@@ -47,8 +50,8 @@ func TestNGAPPLMNAuthentication(t *testing.T) {
 				t.Fatal(err)
 			}
 			location := decoded.(*ngap.InitialUEMessage).UserLocationInformation.Choice.(*ngapIE.UserLocationInformationNR)
-			if got := hex.EncodeToString(location.TAI.PLMNIdentity.Value); got != tc.wire {
-				t.Fatalf("PLMN wire = %s, want %s", got, tc.wire)
+			if got := hex.EncodeToString(location.TAI.PLMNIdentity.Value); got != tc.ngapWire {
+				t.Fatalf("NGAP PLMN wire = %s, want %s", got, tc.ngapWire)
 			}
 			model := convert.NRLocationToModels(location)
 			if model.Tai.PlmnId.Mcc != tc.mcc || model.Tai.PlmnId.Mnc != tc.mnc {
@@ -74,8 +77,8 @@ func TestNGAPPLMNAuthentication(t *testing.T) {
 			ue := new(uectx.UEContext)
 			ue.NewRanUeContext("000000120", cfg.GetUESecurityCapability(), "00112233445566778899AABBCCDDEEFF", "00112233445566778899AABBCCDDEEFF", "", "8000", "000000000000", tc.mcc, tc.mnc, sidf.HomeNetworkPublicKey{ProtectionScheme: "0", PublicKeyID: "0"}, "0000", "internet", 1, "000001", config.TunnelDisabled, nil, nil, 1)
 			ue.SetAmfMccAndMnc(tc.mcc, tc.mnc)
-			if got := hex.EncodeToString(ue.GetMccAndMncInOctets()); got != tc.wire {
-				t.Fatalf("UE PLMN = %s, want %s", got, tc.wire)
+			if got := hex.EncodeToString(ue.GetMccAndMncInOctets()); got != tc.nasWire {
+				t.Fatalf("NAS UE PLMN = %s, want %s", got, tc.nasWire)
 			}
 			res, status := ue.DeriveRESstarAndSetKey(ue.UeSecurity.AuthenticationSubs, challenge.AuthParamRAND5GAuthChlg.Rand, ue.UeSecurity.Snn, challenge.AuthParamAUTN5GAuthChlg.Autn)
 			if status != "successful" || hex.EncodeToString(res) != security.GetXresStar() {

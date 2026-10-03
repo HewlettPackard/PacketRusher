@@ -85,6 +85,11 @@ type UESimulationConfig struct {
 	Cfg                      config.Config
 	ScenarioChan             chan procedures.UeTesterMessage
 	TimeBeforeDeregistration int
+	// DeregistrationTrigger optionally replaces the wall-clock timer. Each value
+	// gracefully ends the current iteration, without stopping registration loops.
+	// Closing it disables explicit triggers; scenario shutdown remains receivable.
+	// A nil channel preserves the normal TimeBeforeDeregistration behavior.
+	DeregistrationTrigger    <-chan struct{}
 	TimeBeforeNgapHandover   int
 	TimeBeforeXnHandover     int
 	TimeBeforeIdle           int
@@ -144,6 +149,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 		defer wg.Done()
 		defer close(simulation.done)
 		scenarioChan := simConfig.ScenarioChan
+		deregistrationTrigger := simConfig.DeregistrationTrigger
 		stopping := false
 		initialGNB := simConfig.gnbID(0)
 	iterations:
@@ -161,6 +167,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 			}
 			var deregistrationChannel, ngapHandoverChannel, xnHandoverChannel, idleChannel <-chan time.Time
 			var reconnectChannel <-chan time.Time
+			iterationTrigger := deregistrationTrigger
 			iterationCtx, cancelIteration := context.WithCancel(context.Background())
 			generation := uint64(iteration)
 			launchControl := func(action, target string) {
@@ -236,6 +243,16 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 					if ueRx != nil && !stopping {
 						launchControl("terminate", "")
 					}
+				case _, open := <-iterationTrigger:
+					iterationTrigger = nil // At most one trigger per iteration.
+					if open {
+						if ueRx != nil && !stopping {
+							launchControl("terminate", "")
+						}
+					} else {
+						// A closed trigger stays disabled in subsequent iterations.
+						deregistrationTrigger = nil
+					}
 				case <-ngapHandoverChannel:
 					ngapHandoverChannel = nil
 					if !stopping {
@@ -274,7 +291,9 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 					}
 					log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)
 					if msg.StateChange == ueCtx.MM5G_REGISTERED && !registered {
-						deregistrationChannel = after(simConfig.TimeBeforeDeregistration)
+						if simConfig.DeregistrationTrigger == nil {
+							deregistrationChannel = after(simConfig.TimeBeforeDeregistration)
+						}
 						ngapHandoverChannel = after(simConfig.TimeBeforeNgapHandover)
 						xnHandoverChannel = after(simConfig.TimeBeforeXnHandover)
 						idleChannel = after(simConfig.TimeBeforeIdle)
