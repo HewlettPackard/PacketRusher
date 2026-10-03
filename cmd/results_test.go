@@ -64,13 +64,22 @@ func TestRejectedCommandLeavesReportPathsAvailable(t *testing.T) {
 	app := newApp()
 	app.Writer, app.ErrWriter = io.Discard, io.Discard
 	app.Command("multi-ue").Action = func(*cli.Context) error { called = true; return nil }
-	err := app.Run([]string{"packetrusher", "--report-json", jsonPath, "--report-csv", csvPath, "multi-ue", "-n=invalid"})
-	require.ErrorContains(t, err, "invalid value")
-	require.False(t, called, "rejected commands must not start a scenario")
-	require.Nil(t, analytics.Current())
-	for _, path := range []string{jsonPath, csvPath} {
-		_, err := os.Stat(path)
-		require.ErrorIs(t, err, os.ErrNotExist)
+	for _, args := range [][]string{
+		{"-n=invalid"},
+		{"-n", "0"},
+		{"-n", "1", "--numPduSessions", "16"},
+		{"-n", "1", "--timeBeforeIdle", "-1"},
+		{"-n", "1", "--tunnel", "true"},
+		{"-n", "1", "--tunnel-vrf", "false"},
+	} {
+		invocation := append([]string{"packetrusher", "--report-json", jsonPath, "--report-csv", csvPath, "multi-ue"}, args...)
+		require.Error(t, app.Run(invocation), "invalid arguments: %v", args)
+		require.False(t, called, "rejected commands must not start a scenario")
+		require.Nil(t, analytics.Current())
+		for _, path := range []string{jsonPath, csvPath} {
+			_, err := os.Stat(path)
+			require.ErrorIs(t, err, os.ErrNotExist)
+		}
 	}
 
 	// Correct the syntax and reuse the same output paths with the real parser.

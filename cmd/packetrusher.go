@@ -5,7 +5,7 @@ import (
 	"my5G-RANTester/internal/templates"
 	pcap "my5G-RANTester/internal/utils"
 
-	// "fmt"
+	"fmt"
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
@@ -104,7 +104,7 @@ func newApp() *cli.App {
 					&cli.IntFlag{Name: "loopCount", Value: 0, Aliases: []string{"lc"}, Usage: "The number of times the loop is executed. 0 to loop infinitely."},
 					&cli.IntFlag{Name: "timeBeforeReregistration", Value: 200, Aliases: []string{"tbrr"}, Usage: "The time in ms before the UE registers again after deregistration if UE is looping."},
 					&cli.BoolFlag{Name: "tunnel", Aliases: []string{"t"}, Usage: "Enable the creation of the GTP-U tunnel interface."},
-					&cli.BoolFlag{Name: "tunnel-vrf", Value: true, Usage: "Enable/disable VRP usage of the GTP-U tunnel interface. Ignored without --dedicatedGnb: UEs sharing a gNB's tunnel device are routed by policy rule."},
+					&cli.BoolFlag{Name: "tunnel-vrf", Value: true, Usage: "Enable/disable VRF usage of the GTP-U tunnel interface. Ignored without --dedicatedGnb: UEs sharing a gNB's tunnel device are routed by policy rule."},
 					&cli.BoolFlag{Name: "dedicatedGnb", Aliases: []string{"d"}, Usage: "Enable the creation of a dedicated gNB per UE. Require one IP on N2/N3 per gNB."},
 					&cli.PathFlag{Name: "pcap", Usage: "Capture traffic to given PCAP file when a path is given", Value: "./dump.pcap"},
 				},
@@ -240,9 +240,37 @@ func newApp() *cli.App {
 		},
 	}
 	for _, command := range app.Commands {
-		command.Before = resultsBefore(command.Before, beforeResults)
+		command.Before = resultsBefore(validateArguments, beforeResults)
 	}
 	return app
+}
+
+// validateArguments runs before configuration loading or network setup. Boolean
+// flags consume no following argument, so a separate "true" or "false" would
+// otherwise silently prevent urfave/cli v2 from parsing the remaining flags.
+func validateArguments(c *cli.Context) error {
+	if c.Args().Len() != 0 {
+		return fmt.Errorf("unexpected positional arguments %q: boolean flags take no separate value; use --tunnel, --tunnel=true, or --tunnel-vrf=false", c.Args().Slice())
+	}
+	if c.Command.Name != "multi-ue-pdu" {
+		return nil
+	}
+	if c.Int("number-of-ues") < 1 {
+		return fmt.Errorf("--number-of-ues must be at least 1")
+	}
+	if n := c.Int("numPduSessions"); n < 1 || n > 15 {
+		return fmt.Errorf("--numPduSessions must be between 1 and 15")
+	}
+	for _, flag := range []string{
+		"loopCount", "timeBetweenRegistration", "timeBeforeDeregistration",
+		"timeBeforeNgapHandover", "timeBeforeXnHandover", "timeBeforeIdle",
+		"timeBeforeReconnecting", "timeBeforeReregistration",
+	} {
+		if c.Int(flag) < 0 {
+			return fmt.Errorf("--%s cannot be negative", flag)
+		}
+	}
+	return nil
 }
 
 func main() {
