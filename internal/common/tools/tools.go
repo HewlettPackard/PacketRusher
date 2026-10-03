@@ -40,9 +40,9 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 	cfg.GNodeB.PlmnList.GnbId, _ = cfg.GNodeB.PlmnList.GNBIDAt(0)
 	basePLMN := cfg.GNodeB.PlmnList
 	for i := 1; i <= count; i++ {
+		wg.Add(1)
 		created := gnb.InitGnb(cfg, wg)
 		gnbs[cfg.GNodeB.PlmnList.GnbId] = created
-		wg.Add(1)
 
 		// TODO: We could find the interfaces where N2/N3 are
 		// and check that the incremented IPs, still belong to the interfaces' subnet

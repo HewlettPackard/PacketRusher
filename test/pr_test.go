@@ -2,330 +2,150 @@
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
  */
-
 package test
 
 import (
-	"my5G-RANTester/config"
+	stdcontext "context"
 	"my5G-RANTester/internal/analytics"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/test/aio5gc"
-	"my5G-RANTester/test/aio5gc/context"
-	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
-	"net/netip"
-	"sync"
+	core "my5G-RANTester/test/aio5gc/context"
+	"my5G-RANTester/test/aio5gc/testkit"
 	"testing"
 	"time"
 
-	"github.com/free5gc/openapi/models"
-	"github.com/free5gc/util/fsm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func registrationFixture(t *testing.T, ctx stdcontext.Context) *testkit.Fixture {
+	t.Helper()
+	builder := new(aio5gc.FiveGCBuilder).WithConfig(testkit.LocalConfig())
+	fixture, err := testkit.Start(ctx, builder, 1)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, fixture.Close()) })
+	return fixture
+}
+func allCoreDeregistered(count int) func(core.Snapshot) bool {
+	return func(snapshot core.Snapshot) bool {
+		if len(snapshot.UEs) != count {
+			return false
+		}
+		for _, ue := range snapshot.UEs {
+			if ue.State != core.Deregistered {
+				return false
+			}
+			for _, pdu := range ue.Sessions {
+				if pdu.State != core.Inactive {
+					return false
+				}
+			}
+		}
+		return true
+	}
+}
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	results := analytics.NewRecorder()
 	analytics.SetCurrent(results)
 	t.Cleanup(func() { analytics.SetCurrent(nil) })
-
-	controlIFConfig := netip.MustParseAddrPort("127.0.0.1:9489")
-	dataIFConfig := netip.MustParseAddrPort("127.0.0.1:2154")
-	amfListConfig := []*config.AMF{
-		{IPv4Port: config.IPv4Port{AddrPort: netip.MustParseAddrPort("127.0.0.1:38414")}},
-	}
-
-	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfListConfig)
-
-	type UECheck struct {
-		HasAuthOnce  bool
-		PduActivated map[int32]bool
-	}
-
-	ueChecks := map[string]*UECheck{}
-	var checksMu sync.Mutex
-
-	// Setup 5GC
-	builder := aio5gc.FiveGCBuilder{}
-	fiveGC, err := builder.
-		WithConfig(conf).
-		WithPDUCallback(context.Active, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
-			if event != fsm.EntryEvent {
-				return
-			}
-			checksMu.Lock()
-			defer checksMu.Unlock()
-			ue := args["ue"].(*context.UEContext)
-			sm := args["sm"].(*context.SmContext)
-			check := ueChecks[ue.GetSecurityContext().GetMsin()]
-			if check.PduActivated == nil {
-				check.PduActivated = map[int32]bool{}
-			}
-			check.PduActivated[sm.GetPduSessionId()] = true
-		}).
-		WithUeCallback(context.Authenticated, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
-			if event != fsm.EntryEvent {
-				return
-			}
-			checksMu.Lock()
-			defer checksMu.Unlock()
-			ue := args["ue"].(*context.UEContext)
-			check, ok := ueChecks[ue.GetSecurityContext().GetMsin()]
-			if !ok {
-				check = &UECheck{}
-				ueChecks[ue.GetSecurityContext().GetMsin()] = check
-			}
-			check.HasAuthOnce = true
-		}).
-		Build()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = fiveGC.Close() })
-
-	// Setup gNodeB
-	gnbCount := 1
-	wg := sync.WaitGroup{}
-	gnbs := tools.CreateGnbs(gnbCount, conf, &wg)
-	t.Cleanup(func() {
-		for _, gnb := range gnbs {
-			gnb.Terminate()
-		}
-	})
-
-	time.Sleep(1 * time.Second)
-
-	keys := make([]string, 0)
-	for k := range gnbs {
-		keys = append(keys, k)
-	}
-
-	// Setup UE
-	ueCount := 10
-	scenarioChans := make([]chan procedures.UeTesterMessage, ueCount+1)
-	ueSimCfg := tools.UESimulationConfig{
-		Gnbs:                     gnbs,
-		Cfg:                      conf,
-		TimeBeforeDeregistration: 0,
-		TimeBeforeNgapHandover:   0,
-		TimeBeforeXnHandover:     0,
-		NumPduSessions:           1,
-		RegistrationLoop:         false,
-	}
-
+	ctx, cancel := stdcontext.WithTimeout(stdcontext.Background(), 30*time.Second)
+	defer cancel()
+	fixture := registrationFixture(t, ctx)
+	const ueCount = 10
 	simulations := make([]*tools.UESimulation, 0, ueCount)
-	t.Cleanup(func() { stopTestSimulations(t, simulations) })
-	for ueSimCfg.UeId = 1; ueSimCfg.UeId <= ueCount; ueSimCfg.UeId++ {
-		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
-
-		imsi := tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin)
-
-		securityContext := context.SecurityContext{}
-		securityContext.SetMsin(imsi)
-		securityContext.SetAuthSubscription(ueSimCfg.Cfg.Ue.Key, ueSimCfg.Cfg.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
-		securityContext.SetAbba([]uint8{0x00, 0x00})
-
-		amfContext := fiveGC.GetAMFContext()
-		amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
-
-		simulations = append(simulations, tools.SimulateSingleUE(ueSimCfg, &wg))
-
-		// Before creating a new UE, we wait for 5 ms
-		time.Sleep(time.Duration(5) * time.Millisecond)
+	for id := 1; id <= ueCount; id++ {
+		require.NoError(t, fixture.Provision(id))
+		simulation, err := fixture.StartUE(tools.UESimulationConfig{UeId: id, NumPduSessions: 1})
+		require.NoError(t, err)
+		simulations = append(simulations, simulation)
 	}
-
-	// Terminate only after the client has really accepted every PDU session,
-	// rather than assuming registration completes before a short wall-clock
-	// timer. Keep the original success and deregistration assertions below.
-	require.Eventually(t, func() bool {
-		for _, procedure := range results.Snapshot().Procedures {
-			if procedure.Procedure == analytics.SessionEstablishment {
-				return procedure.Success == uint64(ueCount)
-			}
-		}
-		return false
-	}, 30*time.Second, 10*time.Millisecond, "all clients must accept a PDU session")
+	// Actual UE actors must accept every encoded PDU response before teardown.
+	for _, simulation := range simulations {
+		attachment, err := simulation.Execute(ctx, "wait", "")
+		require.NoError(t, err)
+		require.Equal(t, []uint8{1}, attachment.ActivePDUSessions)
+	}
 	for _, simulation := range simulations {
 		require.True(t, simulation.Send(procedures.UeTesterMessage{Type: procedures.Terminate}))
 	}
-	waitTestSimulations(t, simulations, 30*time.Second)
-	require.Eventually(t, func() bool {
-		allDeregistered := true
-		fiveGC.GetAMFContext().ExecuteForAllUe(func(ue *context.UEContext) {
-			allDeregistered = allDeregistered && ue.GetState().Is(context.Deregistered)
-		})
-		return allDeregistered
-	}, 5*time.Second, 10*time.Millisecond, "the mock core must process deregistration")
-	i := 0
-	fiveGC.GetAMFContext().ExecuteForAllUe(
-		func(ue *context.UEContext) {
-			i++
-			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
-			checksMu.Lock()
-			defer checksMu.Unlock()
-			check := ueChecks[ue.GetSecurityContext().GetMsin()]
-			require.NotNil(t, check)
-			assert.Equal(t, map[int32]bool{1: true}, check.PduActivated, "PDU session must have been activated before deregistration")
-			assert.True(t, check.HasAuthOnce, "UE has never changed state")
-			ue.ExecuteForAllSmContexts(
-				func(sm *context.SmContext) {
-					assert.Equalf(t, context.Inactive, sm.GetState().Current(), "Expected all pdu sessions to be in Inactive state but was not")
-					assert.True(t, check.PduActivated[sm.GetPduSessionId()], "Expected all pdu to be activate once but was not")
-				})
-		})
-	assert.Equalf(t, ueCount, i, "Expected %v ue to created in 5GC state but was %v", ueCount, i)
+	waitTestSimulations(t, simulations, time.Until(deadlineOf(ctx)))
+	snapshot, err := fixture.Core.Wait(ctx, allCoreDeregistered(ueCount))
+	require.NoError(t, err)
+	assert.Len(t, snapshot.UEs, ueCount)
+	require.Empty(t, snapshot.Errors)
+	for _, ue := range snapshot.UEs {
+		assert.Equal(t, core.Deregistered, ue.State)
+		assert.Equal(t, uint64(1), ue.Entries[core.Authenticated], "each UE must authenticate once")
+		require.Len(t, ue.Sessions, 1)
+		assert.Equal(t, uint64(1), ue.Sessions[1].Entries[core.Active], "PDU session must have been active before deregistration")
+		assert.Equal(t, core.Inactive, ue.Sessions[1].State)
+	}
+	// Retain assertions on the actual live context pool and analytics recorder.
+	fixture.Core.GetAMFContext().ExecuteForAllUe(func(ue *core.UEContext) {
+		assert.Equal(t, core.Deregistered, ue.GetState().Current())
+		ue.ExecuteForAllSmContexts(func(sm *core.SmContext) { assert.Equal(t, core.Inactive, sm.GetState().Current()) })
+	})
 	for _, procedure := range results.Snapshot().Procedures {
 		assert.Equal(t, uint64(ueCount), procedure.Started)
 		assert.Equal(t, uint64(ueCount), procedure.Success)
 		assert.Zero(t, procedure.Failure)
 		assert.Zero(t, procedure.Pending)
 	}
-
 }
 
 func TestUERegistrationLoop(t *testing.T) {
 	results := analytics.NewRecorder()
 	analytics.SetCurrent(results)
 	t.Cleanup(func() { analytics.SetCurrent(nil) })
-
-	controlIFConfig := netip.MustParseAddrPort("127.0.0.1:9490")
-	dataIFConfig := netip.MustParseAddrPort("127.0.0.1:2155")
-	amfListConfig := []*config.AMF{
-		{IPv4Port: config.IPv4Port{AddrPort: netip.MustParseAddrPort("127.0.0.1:38415")}},
-	}
-
-	type UECheck struct {
-		authCounter int
-	}
-	ueChecks := map[string]*UECheck{}
-	var checksMu sync.Mutex
-
-	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfListConfig)
-
-	// Setup 5GC
-	builder := aio5gc.FiveGCBuilder{}
-	fiveGC, err := builder.
-		WithConfig(conf).
-		WithUeCallback(context.Authenticated, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
-			if event != fsm.EntryEvent {
-				return
-			}
-			checksMu.Lock()
-			defer checksMu.Unlock()
-			ue := args["ue"].(*context.UEContext)
-			check, ok := ueChecks[ue.GetSecurityContext().GetMsin()]
-			if !ok {
-				check = &UECheck{}
-				ueChecks[ue.GetSecurityContext().GetMsin()] = check
-			}
-			check.authCounter++
-		}).
-		Build()
+	ctx, cancel := stdcontext.WithTimeout(stdcontext.Background(), 45*time.Second)
+	defer cancel()
+	fixture := registrationFixture(t, ctx)
+	require.NoError(t, fixture.Provision(1))
+	trigger := make(chan struct{})
+	const loops = 5
+	simulation, err := fixture.StartUE(tools.UESimulationConfig{UeId: 1, NumPduSessions: 1, TimeBeforeDeregistration: 2000, DeregistrationTrigger: trigger, RegistrationLoop: true, LoopCount: loops})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = fiveGC.Close() })
-
-	// Setup gNodeB
-	gnbCount := 1
-	wg := sync.WaitGroup{}
-	gnbs := tools.CreateGnbs(gnbCount, conf, &wg)
-	t.Cleanup(func() {
-		for _, gnb := range gnbs {
-			gnb.Terminate()
-		}
-	})
-
-	time.Sleep(1 * time.Second)
-
-	keys := make([]string, 0)
-	for k := range gnbs {
-		keys = append(keys, k)
-	}
-
-	// Setup UE
-	scenarioChans := make([]chan procedures.UeTesterMessage, 2)
-	deregistrationTrigger := make(chan struct{})
-	ueSimCfg := tools.UESimulationConfig{
-		UeId:                     1,
-		Gnbs:                     gnbs,
-		Cfg:                      conf,
-		TimeBeforeDeregistration: 2000,
-		DeregistrationTrigger:    deregistrationTrigger,
-		TimeBeforeNgapHandover:   0,
-		TimeBeforeXnHandover:     0,
-		NumPduSessions:           1,
-		RegistrationLoop:         true,
-		LoopCount:                5,
-	}
-	scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage)
-	ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
-
-	securityContext := context.SecurityContext{}
-	securityContext.SetMsin(tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin))
-	securityContext.SetAuthSubscription(ueSimCfg.Cfg.Ue.Key, ueSimCfg.Cfg.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
-	securityContext.SetAbba([]uint8{0x00, 0x00})
-
-	amfContext := fiveGC.GetAMFContext()
-	amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
-
-	simulation := tools.SimulateSingleUE(ueSimCfg, &wg)
-	t.Cleanup(func() { stopTestSimulations(t, []*tools.UESimulation{simulation}) })
-
-	// Each iteration must really finish registration and accept its PDU session
-	// before we exercise graceful teardown. A timer started before attach can
-	// deliberately abort an authenticated UE during SCTP recovery instead.
-	deadline := time.Now().Add(45 * time.Second)
-	for iteration := 1; iteration <= ueSimCfg.LoopCount; iteration++ {
-		require.Eventually(t, func() bool {
-			completed := 0
-			for _, procedure := range results.Snapshot().Procedures {
-				if procedure.Procedure == analytics.Registration || procedure.Procedure == analytics.SessionEstablishment {
-					if procedure.Success == uint64(iteration) {
-						completed++
-					}
-				}
-			}
-			return completed == 2
-		}, time.Until(deadline), 10*time.Millisecond, "iteration %d must complete both client procedures", iteration)
-		timer := time.NewTimer(time.Until(deadline))
+	for iteration := 1; iteration <= loops; iteration++ {
+		// Core transitions identify the expected iteration; client readiness then
+		// proves its native NAS accept has been processed before the explicit gate.
+		_, err := fixture.Core.Wait(ctx, func(snapshot core.Snapshot) bool {
+			return len(snapshot.UEs) == iteration && snapshot.UEs[iteration-1].State == core.Registered && snapshot.UEs[iteration-1].Sessions[1].State == core.Active
+		})
+		require.NoError(t, err)
+		attachment, err := simulation.Execute(ctx, "wait", "")
+		require.NoError(t, err)
+		require.Equal(t, []uint8{1}, attachment.ActivePDUSessions)
 		select {
-		case deregistrationTrigger <- struct{}{}:
+		case trigger <- struct{}{}:
 		case <-simulation.Done():
-			timer.Stop()
 			t.Fatalf("scenario ended before iteration %d teardown", iteration)
-		case <-timer.C:
-			t.Fatalf("scenario did not accept iteration %d teardown before the deadline", iteration)
+		case <-ctx.Done():
+			t.Fatalf("iteration %d teardown: %v", iteration, ctx.Err())
 		}
-		timer.Stop()
 	}
-
-	// Join the whole loop before inspecting it or closing its gNB inbound
-	// channel. A fixed sleep can expire while the next UE is still attaching.
-	waitTestSimulations(t, []*tools.UESimulation{simulation}, time.Until(deadline))
-	require.Eventually(t, func() bool {
-		allDeregistered := true
-		fiveGC.GetAMFContext().ExecuteForAllUe(func(ue *context.UEContext) {
-			allDeregistered = allDeregistered && ue.GetState().Is(context.Deregistered)
-		})
-		return allDeregistered
-	}, 5*time.Second, 10*time.Millisecond, "the mock core must process the last deregistration")
-	ueCount := 0
-	fiveGC.GetAMFContext().ExecuteForAllUe(
-		func(ue *context.UEContext) {
-			ueCount++
-			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
-			checksMu.Lock()
-			defer checksMu.Unlock()
-			check := ueChecks[ue.GetSecurityContext().GetMsin()]
-			require.NotNil(t, check)
-			assert.Equal(t, 5, check.authCounter, "each loop must authenticate once")
-		})
-	assert.Equal(t, ueSimCfg.LoopCount, ueCount, "each loop must create a core UE context")
+	waitTestSimulations(t, []*tools.UESimulation{simulation}, time.Until(deadlineOf(ctx)))
+	snapshot, err := fixture.Core.Wait(ctx, allCoreDeregistered(loops))
+	require.NoError(t, err)
+	require.Empty(t, snapshot.Errors)
+	authCount := uint64(0)
+	for _, ue := range snapshot.UEs {
+		assert.Equal(t, core.Deregistered, ue.State)
+		authCount += ue.Entries[core.Authenticated]
+	}
+	assert.Equal(t, uint64(loops), authCount, "each loop must authenticate once")
+	assert.Len(t, snapshot.UEs, loops)
+	fixture.Core.GetAMFContext().ExecuteForAllUe(func(ue *core.UEContext) { assert.Equal(t, core.Deregistered, ue.GetState().Current()) })
 	for _, procedure := range results.Snapshot().Procedures {
-		assert.Equal(t, uint64(ueSimCfg.LoopCount), procedure.Started)
-		assert.Equal(t, uint64(ueSimCfg.LoopCount), procedure.Success)
+		assert.Equal(t, uint64(loops), procedure.Started)
+		assert.Equal(t, uint64(loops), procedure.Success)
 		assert.Zero(t, procedure.Failure)
 		assert.Zero(t, procedure.Cancelled)
 		assert.Zero(t, procedure.Pending)
 	}
 }
+func deadlineOf(ctx stdcontext.Context) time.Time { deadline, _ := ctx.Deadline(); return deadline }
 
 func waitTestSimulations(t *testing.T, simulations []*tools.UESimulation, timeout time.Duration) {
 	t.Helper()
@@ -339,7 +159,6 @@ func waitTestSimulations(t *testing.T, simulations []*tools.UESimulation, timeou
 		}
 	}
 }
-
 func stopTestSimulations(t *testing.T, simulations []*tools.UESimulation) {
 	t.Helper()
 	for _, simulation := range simulations {

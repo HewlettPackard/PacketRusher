@@ -5,16 +5,16 @@ import (
 	"fmt"
 	nas "github.com/free5gc/nas/message"
 	"github.com/free5gc/ngap/ie"
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg/nas/codec"
 	handler "my5G-RANTester/test/aio5gc/msg/nas/handler"
 )
 
-func Dispatch(pdu *ie.NASPDU, ue *context.UEContext, fgc *context.Aio5gc, gnb *context.GNBContext) {
+func Dispatch(pdu *ie.NASPDU, ue *context.UEContext, fgc *context.Aio5gc, gnb *context.GNBContext) error {
+	ue.LockProtocol()
+	defer ue.UnlockProtocol()
 	if pdu == nil {
-		log.Error("[5GC][NAS] Missing NAS PDU")
-		return
+		return fmt.Errorf("[5GC][NAS] Missing NAS PDU")
 	}
 	payload := pdu.Value
 	st := nas.GetSecHdrType(payload)
@@ -23,33 +23,29 @@ func Dispatch(pdu *ie.NASPDU, ue *context.UEContext, fgc *context.Aio5gc, gnb *c
 	switch ue.GetState().Current() {
 	case context.Authenticated, context.Registered:
 		if st == nas.SecHdrTypePlainNas {
-			log.Error("[5GC][NAS] Plain NAS in authenticated state")
-			return
+			return fmt.Errorf("[5GC][NAS] Plain NAS in authenticated state")
 		}
 		var verified bool
 		msg, verified, err = codec.Decode(ue, payload, false)
 		if err != nil || !verified {
-			log.Errorf("[5GC][NAS] Integrity verification failed: %v", err)
-			return
+			return fmt.Errorf("[5GC][NAS] Integrity verification failed: %v", err)
 		}
 	default:
 		if st != nas.SecHdrTypePlainNas {
-			log.Error("[5GC][NAS] Protected NAS before authentication")
-			return
+			return fmt.Errorf("[5GC][NAS] Protected NAS before authentication")
 		}
 		msg, err = codec.DecodePlainNasNoIntegrityCheck(payload)
 	}
 	if err != nil || msg == nil {
-		log.Errorf("[5GC][NAS] Decode failed: %v", err)
-		return
+		return fmt.Errorf("[5GC][NAS] Decode failed: %v", err)
 	}
 	if hook := fgc.GetNasHook(msg.MsgType()); hook != nil {
 		handled, hookErr := hook(msg, ue, gnb, fgc)
 		if hookErr != nil {
-			log.Error(hookErr)
+			return fmt.Errorf("NAS scenario hook: %w", hookErr)
 		}
 		if handled {
-			return
+			return nil
 		}
 	}
 	amf, session := fgc.GetAMFContext(), fgc.GetSessionContext()
@@ -72,7 +68,5 @@ func Dispatch(pdu *ie.NASPDU, ue *context.UEContext, fgc *context.Aio5gc, gnb *c
 	default:
 		err = fmt.Errorf("[5GC][NAS] Unsupported message %s", msg.MsgType())
 	}
-	if err != nil {
-		log.Error(err)
-	}
+	return err
 }

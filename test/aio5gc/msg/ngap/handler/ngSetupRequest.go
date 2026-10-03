@@ -28,6 +28,5 @@ func NGSetupRequest(req *message.NGSetupRequest, gnb *context.GNBContext, fgc *c
 	if req.DefaultPagingDRX != nil {
 		gnb.SetDefautlPagingDRX(*req.DefaultPagingDRX)
 	}
-	msg.SendNGSetupResponse(gnb, fgc.GetAMFContext())
-	return nil
+	return msg.SendNGSetupResponse(gnb, fgc.GetAMFContext())
 }

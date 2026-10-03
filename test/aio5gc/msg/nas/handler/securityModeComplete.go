@@ -51,7 +51,7 @@ func DefaultSecurityModeComplete(nasReq *nas.SecModeComplete, ue *context.UECont
 		ue.SetSecurityCapability(registrationRequest.UESecCapability)
 		ue.AllocateGuti(amf)
 		ue.GetSecurityContext().UpdateSecurityContext()
-		msg.SendRegistrationAccept(gnb, ue, amf)
+		return msg.SendRegistrationAccept(gnb, ue, amf)
 	default:
 		return errors.New("nas message container Iei type error")
 	}

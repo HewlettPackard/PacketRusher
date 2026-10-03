@@ -135,15 +135,15 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 	// start communication with UE (server UNIX sockets).
 	serviceNas.InitServer(gnb)
 
+	sigGnb := make(chan os.Signal, 1)
+	signal.Notify(sigGnb, os.Interrupt)
 	go func() {
-		// control the signals
-		sigGnb := make(chan os.Signal, 1)
-		signal.Notify(sigGnb, os.Interrupt)
-
-		// Block until a signal is received.
-		<-sigGnb
-		//gnb.Terminate()
-		wg.Done()
+		defer signal.Stop(sigGnb)
+		defer wg.Done()
+		select {
+		case <-sigGnb:
+		case <-gnb.Done():
+		}
 	}()
 
 	return gnb

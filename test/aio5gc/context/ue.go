@@ -21,6 +21,9 @@ import (
 )
 
 type UEContext struct {
+	protocolMu           sync.Mutex
+	bindingMu            sync.RWMutex
+	gnb                  *GNBContext
 	ranNgapId            atomic.Int64
 	amfNgapId            int64
 	location             *models.NrLocation
@@ -33,6 +36,7 @@ type UEContext struct {
 	guti                 string
 	tmsi                 int32
 	smContexts           map[int32]*SmContext
+	retiredSessions      map[int32]bool
 	smContextMtx         sync.Mutex
 	state                *fsm.State
 	ueFsm                *fsm.FSM
@@ -135,6 +139,7 @@ func (ue *UEContext) AddSmContext(newContext *SmContext) error {
 		id := strconv.Itoa(int(sessionId))
 		return errors.New("[5GC] Could not create PDU Session " + id + " for UE " + ue.guti + ": already in use")
 	}
+	delete(ue.retiredSessions, sessionId)
 	ue.smContexts[sessionId] = newContext
 	return nil
 }
@@ -145,6 +150,12 @@ func (ue *UEContext) DeleteSmContext(sessionId int32) (SmContext, error) {
 	smContext, found := ue.smContexts[sessionId]
 	if !found {
 		return SmContext{}, fmt.Errorf("[5GC] Could not delete PDU Session %d for UE %s: not found", sessionId, ue.guti)
+	}
+	if smContext.state.Is(Inactive) {
+		if ue.retiredSessions == nil {
+			ue.retiredSessions = make(map[int32]bool)
+		}
+		ue.retiredSessions[sessionId] = true
 	}
 	delete(ue.smContexts, sessionId)
 	return *smContext, nil
@@ -235,4 +246,29 @@ func (ue *UEContext) GetUeFsm() *fsm.FSM {
 
 func (ue *UEContext) GetPduFsm() *fsm.FSM {
 	return ue.pduFsm
+}
+
+// LockProtocol serializes native NAS security counters and UE procedures even
+// when two association readers address the same core UE.
+func (ue *UEContext) LockProtocol()   { ue.protocolMu.Lock() }
+func (ue *UEContext) UnlockProtocol() { ue.protocolMu.Unlock() }
+
+// BindGNB is the explicit scenario handover boundary. RAN IDs are local to an
+// association; the pair is changed together rather than inferred from RAN ID.
+func (ue *UEContext) BindGNB(gnb *GNBContext, ranID int64) {
+	ue.bindingMu.Lock()
+	defer ue.bindingMu.Unlock()
+	ue.gnb = gnb
+	ue.ranNgapId.Store(ranID)
+}
+func (ue *UEContext) MatchesGNB(gnb *GNBContext, ranID int64) bool {
+	ue.bindingMu.RLock()
+	defer ue.bindingMu.RUnlock()
+	return (ue.gnb == nil || ue.gnb == gnb) && ue.ranNgapId.Load() == ranID
+}
+
+func (ue *UEContext) sessionWasReleased(id int32) bool {
+	ue.smContextMtx.Lock()
+	defer ue.smContextMtx.Unlock()
+	return ue.retiredSessions[id]
 }

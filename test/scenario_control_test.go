@@ -15,6 +15,7 @@ import (
 	core "my5G-RANTester/test/aio5gc/context"
 	coreConvert "my5G-RANTester/test/aio5gc/lib/convert"
 	coreTools "my5G-RANTester/test/aio5gc/lib/tools"
+	"my5G-RANTester/test/aio5gc/testkit"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -34,9 +35,8 @@ import (
 func TestScenarioControlsWaitForPDUAndTargetedXnCompletion(t *testing.T) {
 	conf := coreTools.GenerateDefaultConf(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.31"), uint16(30000+os.Getpid()%10000)), netip.MustParseAddrPort("127.0.0.31:2161"), []*config.AMF{{IPv4Port: config.IPv4Port{AddrPort: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(40000+os.Getpid()%10000))}}})
 	pathSwitch := make(chan *ngap.PathSwitchRequest, 1)
-	allowAck := make(chan struct{})
-	var unblock sync.Once
-	release := func() { unblock.Do(func() { close(allowAck) }) }
+	ackGate := testkit.NewGate()
+	release := ackGate.Open
 	t.Cleanup(release)
 	handoverRequired := make(chan *ngap.HandoverRequired, 2)
 	handoverNotify := make(chan *ngap.HandoverNotify, 1)
@@ -55,12 +55,14 @@ func TestScenarioControlsWaitForPDUAndTargetedXnCompletion(t *testing.T) {
 			coreMu.Unlock()
 		case *ngap.PathSwitchRequest:
 			pathSwitch <- request
-			<-allowAck
+			if err := ackGate.Wait(fgc.Context()); err != nil {
+				return true, err
+			}
 			ue, err := fgc.GetAMFContext().FindUEById(request.SourceAMFUENGAPID.Value)
 			if err != nil {
 				return true, err
 			}
-			ue.SetRanNgapId(request.RANUENGAPID.Value)
+			ue.BindGNB(gnb, request.RANUENGAPID.Value)
 			transfer, err := ngapConvert.Marshal(&ie.PathSwitchRequestAcknowledgeTransfer{ULNGUUPTNLInformation: ngapConvert.UPTransport(netip.MustParseAddr("127.0.0.1"), 71)})
 			if err != nil {
 				return true, err
@@ -72,7 +74,7 @@ func TestScenarioControlsWaitForPDUAndTargetedXnCompletion(t *testing.T) {
 			}
 			wire, err := ack.MarshalBinary()
 			if err == nil {
-				gnb.SendMsg(wire)
+				err = gnb.SendMsg(wire)
 			}
 			return true, err
 		case *ngap.HandoverRequired:
@@ -90,7 +92,7 @@ func TestScenarioControlsWaitForPDUAndTargetedXnCompletion(t *testing.T) {
 			}
 			wire, err := scenarioHandoverRequest(request, fgc)
 			if err == nil {
-				target.SendMsg(wire)
+				err = target.SendMsg(wire)
 			}
 			return true, err
 		case *ngap.HandoverRequestAcknowledge:
@@ -103,13 +105,13 @@ func TestScenarioControlsWaitForPDUAndTargetedXnCompletion(t *testing.T) {
 			wire, err := (&ngap.HandoverCommand{AMFUENGAPID: request.AMFUENGAPID, RANUENGAPID: ran,
 				HandoverType: &ie.HandoverType{Value: ie.HandoverTypePresentIntra5gs}, TargetToSourceTransparentContainer: request.TargetToSourceTransparentContainer}).MarshalBinary()
 			if err == nil {
-				source.SendMsg(wire)
+				err = source.SendMsg(wire)
 			}
 			return true, err
 		case *ngap.HandoverNotify:
 			ue, err := fgc.GetAMFContext().FindUEById(request.AMFUENGAPID.Value)
 			if err == nil {
-				ue.SetRanNgapId(request.RANUENGAPID.Value)
+				ue.BindGNB(gnb, request.RANUENGAPID.Value)
 			}
 			handoverNotify <- request
 			return true, err
@@ -278,14 +280,15 @@ func TestScenarioAutomaticDeregistrationWaitsForEveryPDUAccept(t *testing.T) {
 	analytics.SetCurrent(results)
 	t.Cleanup(func() { analytics.SetCurrent(nil) })
 	conf := coreTools.GenerateDefaultConf(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.51"), uint16(27000+os.Getpid()%2000)), netip.MustParseAddrPort("127.0.0.51:2163"), []*config.AMF{{IPv4Port: config.IPv4Port{AddrPort: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(60000+os.Getpid()%4000))}}})
-	pendingAccept, allowAccept := make(chan struct{}), make(chan struct{})
-	var block, unblock sync.Once
-	release := func() { unblock.Do(func() { close(allowAccept) }) }
+	acceptGate := testkit.NewGate()
+	pendingAccept := acceptGate.Reached()
+	release := acceptGate.Open
 	builder := aio5gc.FiveGCBuilder{}
-	fgc, err := builder.WithConfig(conf).WithPDUCallback(core.Active, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+	var fgc *core.Aio5gc
+	var err error
+	fgc, err = builder.WithConfig(conf).WithPDUCallback(core.Active, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 		if event == fsm.EntryEvent && args["sm"].(*core.SmContext).GetPduSessionId() == 2 {
-			block.Do(func() { close(pendingAccept) })
-			<-allowAccept
+			_ = acceptGate.Wait(fgc.Context())
 		}
 	}).Build()
 	require.NoError(t, err)

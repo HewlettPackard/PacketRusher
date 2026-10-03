@@ -255,6 +255,9 @@ func ReleasePDUSession(ue *UEContext, pduSessionID int32) (SmContext, error) {
 func ConfirmPDUSessionRelease(ue *UEContext, pduSessionID int32) error {
 	sm, err := ue.GetSmContext(pduSessionID)
 	if err != nil {
+		if ue.sessionWasReleased(pduSessionID) {
+			return nil
+		}
 		return err
 	}
 	err = ue.GetPduFsm().SendEvent(sm.state, ReleaseComplete, fsm.ArgsType{"ue": ue, "sm": sm}, log.NewEntry(log.StandardLogger()))

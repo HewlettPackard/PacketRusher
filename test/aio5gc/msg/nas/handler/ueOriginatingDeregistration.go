@@ -50,7 +50,7 @@ func DefaultUEOriginatingDeregistration(nasReq *nas.DeregReqUEOrig, amf *context
 	// TS 23.502 4.2.6, 4.12.3
 	switch deregistrationRequest.DeregType.AccessType {
 	case ie.AccessType_3gpp:
-		msg.SendUEContextReleaseCommand(gnb, ue, 3, ngapType.CauseNasPresentDeregister)
+		return msg.SendUEContextReleaseCommand(gnb, ue, 3, ngapType.CauseNasPresentDeregister)
 	default:
 		return errors.New("[5GC][NAS] Deregistration procedure: unsupported access type")
 	}

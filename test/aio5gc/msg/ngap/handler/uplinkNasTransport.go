@@ -10,7 +10,7 @@ import (
 	"my5G-RANTester/test/aio5gc/msg/nas"
 )
 
-func resolveUE(amf *context.AMFContext, ran *ie.RANUENGAPID, core *ie.AMFUENGAPID) (*context.UEContext, error) {
+func resolveUE(amf *context.AMFContext, ran *ie.RANUENGAPID, core *ie.AMFUENGAPID, gnbs ...*context.GNBContext) (*context.UEContext, error) {
 	if ran == nil || core == nil {
 		return nil, fmt.Errorf("missing UE NGAP identifiers")
 	}
@@ -23,10 +23,13 @@ func resolveUE(amf *context.AMFContext, ran *ie.RANUENGAPID, core *ie.AMFUENGAPI
 	if ue.GetRanNgapId() != ran.Value {
 		return nil, fmt.Errorf("RAN and AMF UE identifiers do not match")
 	}
+	if len(gnbs) > 0 && !ue.MatchesGNB(gnbs[0], ran.Value) {
+		return nil, fmt.Errorf("UE identifiers belong to another gNB association")
+	}
 	return ue, nil
 }
 func UplinkNASTransport(req *message.UplinkNASTransport, gnb *context.GNBContext, fgc *context.Aio5gc) error {
-	ue, err := resolveUE(fgc.GetAMFContext(), req.RANUENGAPID, req.AMFUENGAPID)
+	ue, err := resolveUE(fgc.GetAMFContext(), req.RANUENGAPID, req.AMFUENGAPID, gnb)
 	if err != nil {
 		return err
 	}
@@ -37,6 +40,5 @@ func UplinkNASTransport(req *message.UplinkNASTransport, gnb *context.GNBContext
 	model := convert.NRLocationToModels(location)
 	model.GlobalGnbId = gnb.GetGlobalRanNodeID()
 	ue.SetUserLocationInfo(model)
-	nas.Dispatch(req.NASPDU, ue, fgc, gnb)
-	return nil
+	return nas.Dispatch(req.NASPDU, ue, fgc, gnb)
 }

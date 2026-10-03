@@ -46,11 +46,13 @@ func DefaultAuthenticationResponse(nasMsg *nas.AuthRsp, gnb *context.GNBContext,
 
 		oldUe, err := amf.FindRegisteredUEByMsin(ue.GetSecurityContext().GetMsin())
 		if err == nil && oldUe.GetAmfNgapId() != ue.GetAmfNgapId() {
-			err := ue.GetUeFsm().SendEvent(oldUe.GetState(), context.ForceDeregistrationInit, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+			err := ue.GetUeFsm().SendEvent(oldUe.GetState(), context.ForceDeregistrationInit, fsm.ArgsType{"ue": oldUe}, log.NewEntry(log.StandardLogger()))
 			if err != nil {
 				log.Error(err)
 			}
-			msg.SendUEContextReleaseCommand(gnb, oldUe, 3, ngapType.CauseNasPresentUnspecified)
+			if err := msg.SendUEContextReleaseCommand(gnb, oldUe, 3, ngapType.CauseNasPresentUnspecified); err != nil {
+				return err
+			}
 		}
 	} else {
 		return errors.New(("5G AKA confirmation failed, expected res* " + xresStar + " but got " + resStar))
@@ -64,6 +66,5 @@ func DefaultAuthenticationResponse(nasMsg *nas.AuthRsp, gnb *context.GNBContext,
 		return err
 	}
 	ue.SetDefaultSNssai(prov.GetDefaultSNssai())
-	msg.SendSecurityModeCommand(gnb, ue)
-	return nil
+	return msg.SendSecurityModeCommand(gnb, ue)
 }

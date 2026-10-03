@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"github.com/free5gc/ngap/ie"
 	"github.com/free5gc/openapi/models"
+	"github.com/mohae/deepcopy"
 	"my5G-RANTester/test/aio5gc/lib/convert"
 )
 
@@ -30,6 +31,20 @@ func TaiListToModels(list ie.SupportedTAList) []Tai {
 			tai.plmnSnssaiList = append(tai.plmnSnssaiList, record)
 		}
 		out = append(out, tai)
+	}
+	return out
+}
+
+// CloneTaiList preserves private PLMN/slice records while copying nested model
+// pointers. Reflection over Tai alone would omit its unexported list.
+func CloneTaiList(list []Tai) []Tai {
+	if list == nil {
+		return nil
+	}
+	out := make([]Tai, len(list))
+	for i, tai := range list {
+		out[i] = tai
+		out[i].plmnSnssaiList = deepcopy.Copy(tai.plmnSnssaiList).([]models.Nrf_NFMgmt_PlmnSnssai)
 	}
 	return out
 }
