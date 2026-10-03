@@ -25,48 +25,50 @@ type PDUAddr struct {
 
 // UnmarshalBinary handles the value part, not including IEI and length.
 func (i *PDUAddr) UnmarshalBinary(b []byte) error {
-	if len(b) < 5 {
+	if len(b) == 0 {
 		return errors.Errorf("Bad PDUAddr IE length(%d)", len(b))
 	}
 	si6lla := GetBit4(b[0])
-	PDUSessTypeValue := Get3Bits31(b[0])
-	ofs := 1 // Offset
-	switch IpAddrType(PDUSessTypeValue) {
+	sessionType := IpAddrType(Get3Bits31(b[0]))
+	expected := 1
+	switch sessionType {
 	case IPv4:
-		i.IPv4 = append(i.IPv4, b[ofs:ofs+4]...)
-		ofs += 4
-
+		expected += 4
 	case IPv6:
-		if len(b) < ofs+8 {
-			return errors.Errorf("Bad PDUAddr IE length(%d)", len(b))
-		}
-		i.IPv6IfId = append(i.IPv6IfId, b[ofs:ofs+8]...)
-		ofs += 8
-
+		expected += 8
 	case IPv4v6:
-		if len(b) < ofs+12 {
-			return errors.Errorf("Bad PDUAddr IE length(%d)", len(b))
-		}
-		i.IPv6IfId = append(i.IPv6IfId, b[ofs:ofs+8]...)
-		ofs += 8
-
-		i.IPv4 = append(i.IPv4, b[ofs:ofs+4]...)
-		ofs += 4
-
+		expected += 12
 	default:
 		return errors.Errorf("Bad PDUSessTypeValue")
 	}
-	if SI6LLA_Present == si6lla {
-		if len(b) < ofs+16 {
-			return errors.Errorf("Bad PDUAddr IE length(%d)", len(b))
-		}
-		i.SMFIPv6LLA = append(i.SMFIPv6LLA, b[ofs:ofs+16]...)
+	if si6lla == SI6LLA_Present {
+		expected += 16
 	}
+	if len(b) != expected {
+		return errors.Errorf("Bad PDUAddr IE length(%d), expected %d", len(b), expected)
+	}
+	decoded := PDUAddr{}
+	offset := 1
+	if sessionType == IPv6 || sessionType == IPv4v6 {
+		decoded.IPv6IfId = append([]byte(nil), b[offset:offset+8]...)
+		offset += 8
+	}
+	if sessionType == IPv4 || sessionType == IPv4v6 {
+		decoded.IPv4 = append([]byte(nil), b[offset:offset+4]...)
+		offset += 4
+	}
+	if si6lla == SI6LLA_Present {
+		decoded.SMFIPv6LLA = append([]byte(nil), b[offset:offset+16]...)
+	}
+	*i = decoded
 	return nil
 }
 
 // MarshalBinary returns the value part, not including IEI and length.
 func (i *PDUAddr) MarshalBinary() ([]byte, error) {
+	if (i.IPv4 != nil && len(i.IPv4) != 4) || (i.IPv6IfId != nil && len(i.IPv6IfId) != 8) || (i.SMFIPv6LLA != nil && len(i.SMFIPv6LLA) != 16) {
+		return nil, errors.Errorf("PDUAddr: invalid IPv4, IPv6 interface identifier, or SMF link-local address length")
+	}
 	PDUSessTypeValue := uint8(0)
 	ieLen := 1
 	if nil != i.SMFIPv6LLA {

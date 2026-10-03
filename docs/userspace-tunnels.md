@@ -48,8 +48,9 @@ GTP/QFI overhead as the kernel backend; set `ue.tunnelmtu` lower for a constrain
 path. The gtp5g-specific 500 ms dedicated-tunnel creation floor does not apply to
 userspace tunnels.
 
-This change provides IPv4 user traffic over an IPv4 N3 underlay. IPv6 PDU address
-negotiation and prefix discovery are prepared separately. Performance against a
+The userspace backend carries IPv4, IPv6 and dual-stack PDU traffic over an
+IPv4 N3 underlay. See [IPv6 PDU sessions](ipv6.md) for address-family selection
+and UPF prefix discovery. Performance against a
 real UPF has not been benchmarked; retain gtp5g when evaluating kernel datapath
 performance. Existing metrics describe control-plane procedures, not user-plane
 throughput.

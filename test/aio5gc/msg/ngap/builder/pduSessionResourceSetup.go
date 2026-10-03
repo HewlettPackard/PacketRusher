@@ -4,6 +4,7 @@ package builder
 import (
 	"encoding/binary"
 	"fmt"
+	nasIE "github.com/free5gc/nas/ie"
 	"github.com/free5gc/ngap/aper"
 	"github.com/free5gc/ngap/ie"
 	"github.com/free5gc/ngap/message"
@@ -56,10 +57,17 @@ func buildPDUSessionResourceSetuprequestTransfert(sm context.SmContext, ip net.I
 	}
 	teid := make([]byte, 4)
 	binary.BigEndian.PutUint32(teid, 1)
+	sessionType := ie.PDUSessionTypePresentIpv4
+	switch sm.GetPduSessionType() {
+	case nasIE.PDUSessType_IPv6:
+		sessionType = ie.PDUSessionTypePresentIpv6
+	case nasIE.PDUSessType_IPv4v6:
+		sessionType = ie.PDUSessionTypePresentIpv4v6
+	}
 	transfer := &ie.PDUSessionResourceSetupRequestTransfer{ProtocolIEs: &ie.ProtocolIEContainerPDUSessionResourceSetupRequestTransferIEs{List: []ie.PDUSessionResourceSetupRequestTransferIEs{
 		{PDUSessionAggregateMaximumBitRate: &ie.PDUSessionAggregateMaximumBitRate{PDUSessionAggregateMaximumBitRateUL: &ie.BitRate{Value: ul}, PDUSessionAggregateMaximumBitRateDL: &ie.BitRate{Value: dl}}},
 		{ULNGUUPTNLInformation: &ie.UPTransportLayerInformation{Choice: &ie.GTPTunnel{TransportLayerAddress: &ie.TransportLayerAddress{Value: aper.BitString{Bytes: ip.To4(), BitLength: 32}}, GTPTEID: &ie.GTPTEID{Value: teid}}}},
-		{PDUSessionType: &ie.PDUSessionType{Value: ie.PDUSessionTypePresentIpv4}},
+		{PDUSessionType: &ie.PDUSessionType{Value: sessionType}},
 		{QosFlowSetupRequestList: &ie.QosFlowSetupRequestList{List: []ie.QosFlowSetupRequestItem{{
 			QosFlowIdentifier: &ie.QosFlowIdentifier{Value: int64(sm.GetDefQosQFI())},
 			QosFlowLevelQosParameters: &ie.QosFlowLevelQosParameters{

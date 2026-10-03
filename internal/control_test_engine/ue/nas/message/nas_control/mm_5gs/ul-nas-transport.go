@@ -16,7 +16,7 @@ import (
 
 func Request_UlNasTransport(pduSession *context.UEPDUSession, ue *context.UEContext) ([]byte, error) {
 
-	pdu := getUlNasTransport_PduSessionEstablishmentRequest(pduSession.Id, ue.Dnn, &ue.Snssai)
+	pdu := getUlNasTransport_PduSessionEstablishmentRequest(pduSession.Id, ue.Dnn, &ue.Snssai, pduSession.RequestedSessionType())
 	if pdu == nil {
 		return nil, fmt.Errorf("Error encoding %s IMSI UE PduSession Establishment Request Msg", ue.UeSecurity.Supi)
 	}
@@ -70,8 +70,8 @@ func transport(id uint8, payload []byte, request *ie.ReqType, dnn string, snssai
 	}
 	return encodePlain(msg)
 }
-func getUlNasTransport_PduSessionEstablishmentRequest(id uint8, dnn string, snssai *models.Snssai) []byte {
-	return transport(id, sm_5gs.GetPduSessionEstablishmentRequest(id), &ie.ReqType{Value: ie.ReqType_InitialReq}, dnn, snssai)
+func getUlNasTransport_PduSessionEstablishmentRequest(id uint8, dnn string, snssai *models.Snssai, sessionTypes ...uint8) []byte {
+	return transport(id, sm_5gs.GetPduSessionEstablishmentRequest(id, sessionTypes...), &ie.ReqType{Value: ie.ReqType_InitialReq}, dnn, snssai)
 }
 func getUlNasTransport_PduSessionEstablishmentRelease(id uint8) []byte {
 	return transport(id, sm_5gs.GetPduSessionReleaseRequest(id), nil, "", nil)

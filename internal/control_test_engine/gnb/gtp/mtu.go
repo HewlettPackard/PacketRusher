@@ -46,6 +46,17 @@ func SetTunnelMTU(tunnel netlink.Link, source netip.Addr, configured int) error 
 }
 
 func setTunnelMTU(tunnel netlink.Link, source netip.Addr, configured int, ops mtuOperations) error {
+	return setTunnelMTUMinimum(tunnel, source, configured, 68, ops)
+}
+
+// SetIPv6TunnelMTU checks the 1280-byte inner IPv6 minimum before modifying a
+// live TUN. Lowering its MTU first would disable Linux IPv6 and remove addresses,
+// even if a subsequent handover rollback restored the previous MTU.
+func SetIPv6TunnelMTU(tunnel netlink.Link, source netip.Addr, configured int) error {
+	return setTunnelMTUMinimum(tunnel, source, configured, 1280, mtuOperations{links: netlink.LinkList, addresses: netlink.AddrList, set: netlink.LinkSetMTU})
+}
+
+func setTunnelMTUMinimum(tunnel netlink.Link, source netip.Addr, configured, minimum int, ops mtuOperations) error {
 	if tunnel == nil || tunnel.Attrs() == nil {
 		return fmt.Errorf("tunnel interface is missing")
 	}
@@ -82,6 +93,9 @@ func setTunnelMTU(tunnel netlink.Link, source netip.Addr, configured int, ops mt
 	mtu, err := payloadMTU(underlay, configured)
 	if err != nil {
 		return err
+	}
+	if mtu < minimum {
+		return fmt.Errorf("N3 MTU %d permits an inner MTU of %d; IPv6 requires at least %d", underlay, mtu, minimum)
 	}
 	if err := ops.set(tunnel, mtu); err != nil {
 		return fmt.Errorf("set MTU %d on %s: %w", mtu, tunnel.Attrs().Name, err)
