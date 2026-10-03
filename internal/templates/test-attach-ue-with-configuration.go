@@ -10,6 +10,9 @@ func TestAttachUeWithConfiguration(tunnelEnabled bool) {
 	tunnelMode := config.TunnelDisabled
 	if tunnelEnabled {
 		tunnelMode = config.TunnelVrf
+		if config.GetConfig().Ue.TunnelBackend == config.TunnelBackendEBPF {
+			tunnelMode = config.TunnelTun
+		}
 	}
 	TestMultiUesInQueue(1, tunnelMode, true, false, 0, 200, 500, 0, 0, 0, 0, 0, 1)
 }

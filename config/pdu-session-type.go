@@ -22,7 +22,18 @@ func (t PDUSessionType) NASValue() uint8 {
 // ValidateTunnel checks requested families before starting telecom sockets.
 // IPv6 control-plane scenarios remain available when tunnels are disabled.
 func (c Config) ValidateTunnel(enabled bool) error {
-	if !enabled || c.Ue.PDUSessionType.NASValue() == ie.PDUSessType_IPv4 {
+	if !enabled {
+		return nil
+	}
+	if c.Ue.PDUSessionType.NASValue() == ie.PDUSessType_IPv4 {
+		if c.Ue.TunnelBackend == TunnelBackendEBPF {
+			if c.GNodeB.DataIF.Port() != 2152 {
+				return fmt.Errorf("eBPF requires gnodeb.dataif.port: 2152")
+			}
+			if c.Ue.TunnelMTU > 1456 {
+				return fmt.Errorf("eBPF ue.tunnelmtu cannot exceed 1456")
+			}
+		}
 		return nil
 	}
 	if c.Ue.TunnelBackend != TunnelBackendUserspace {

@@ -1,0 +1,52 @@
+name: eBPF native datapath
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ebpf-native.yml'
+      - 'scripts/*ebpf.sh'
+      - 'internal/control_test_engine/ue/gtp/**'
+      - 'internal/control_test_engine/ue/context/**'
+      - 'internal/control_test_engine/gnb/context/**'
+      - 'internal/control_test_engine/gnb/gnb.go'
+      - 'internal/templates/**'
+      - 'config/**'
+      - 'cmd/**'
+      - 'go.mod'
+      - 'go.sum'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ebpf-native.yml'
+      - 'scripts/*ebpf.sh'
+      - 'internal/control_test_engine/ue/gtp/**'
+      - 'internal/control_test_engine/ue/context/**'
+      - 'internal/control_test_engine/gnb/context/**'
+      - 'internal/control_test_engine/gnb/gnb.go'
+      - 'internal/templates/**'
+      - 'config/**'
+      - 'cmd/**'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install native test tools
+        run: sudo apt-get update && sudo apt-get install -y ethtool iproute2 libgsl-dev
+      - name: Run real verifier and packet proofs in owned namespaces
+        run: ./scripts/check-ebpf.sh 2>&1 | tee ebpf-native.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: ebpf-native-evidence
+          path: ebpf-native.log
+          if-no-files-found: error
