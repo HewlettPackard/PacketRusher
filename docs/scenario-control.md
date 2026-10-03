@@ -75,6 +75,11 @@ Its readiness wait is bounded to 30 seconds and cancelled when the iteration
 ends. If the core never accepts every PDU, the same UE generation and connection
 are terminated at that deadline so registration loops can progress; unfinished
 attempts are recorded as cancelled and the deadline is logged. Manual `deregister` continues to park immediately.
+The optional in-process `DeregistrationTrigger` replaces the timer and uses the
+same readiness/lifecycle checks; closing it disables further triggers and keeps
+the timer disabled. A UE that never registers does not arm automatic
+deregistration; stop the simulation explicitly (SIGINT or the global scenario
+shutdown command). Readiness requests remain bounded by their control deadline.
 Avoid mixing timer-driven procedures with a manually sequenced
 scenario on the same UE if precise ordering matters.
 

@@ -21,17 +21,20 @@ const Ready = 0x02
 const Down = 0x03
 
 type GNBUe struct {
-	ranUeNgapId      int64 // Identifier for UE in GNB Context.
-	amfUeNgapId      atomic.Int64
-	amfUeIDSet       atomic.Bool    // Identifier for UE in AMF Context.
-	amfId            int64          // Identifier for AMF in UE/GNB Context.
-	state            atomic.Int32   // State of UE in NAS/GNB Context.
-	sctpConnection   *sctp.SCTPConn // Sctp association in using by the UE.
-	gnbRx            chan UEMessage
-	gnbTx            chan UEMessage
-	pRueId           int64 // PacketRusher unique UE ID
-	tmsi             *nasType.MobileId5GS
-	context          Context
+	ranUeNgapId    int64 // Identifier for UE in GNB Context.
+	amfUeNgapId    atomic.Int64
+	amfUeIDSet     atomic.Bool    // Identifier for UE in AMF Context.
+	amfId          int64          // Identifier for AMF in UE/GNB Context.
+	state          atomic.Int64   // State of UE in NAS/GNB Context.
+	sctpConnection *sctp.SCTPConn // Sctp association in using by the UE.
+	gnbRx          chan UEMessage
+	gnbTx          chan UEMessage
+	pRueId         int64 // PacketRusher unique UE ID
+	tmsi           *nasType.MobileId5GS
+	context        Context
+	// contextMu protects session membership and the payload copied during Xn
+	// handover. It is independent of the processing and release-request locks.
+	contextMu        sync.RWMutex
 	lock             sync.Mutex
 	processingLock   sync.Mutex
 	txLock           sync.Mutex
@@ -53,6 +56,9 @@ type Context struct {
 }
 
 type GnbPDUSession struct {
+	// Xn handover copies session pointers. Only tunnel endpoint fields mutate
+	// after publication, and their access must be safe across both gNB lanes.
+	tunnelMu     sync.RWMutex
 	pduSessionId int64
 	upfIp        string
 	sst          string
@@ -71,6 +77,9 @@ type mobility struct {
 }
 
 func (ue *GNBUe) CreateUeContext(plmn string, imeisv string, sst []string, sd []string, ueSecurityCapabilities *ngapType.UESecurityCapabilities) {
+	ue.contextMu.Lock()
+	defer ue.contextMu.Unlock()
+
 	if plmn != "not informed" {
 		ue.context.mobilityInfo.mcc, ue.context.mobilityInfo.mnc = convertMccMnc(plmn)
 	} else {
@@ -85,18 +94,31 @@ func (ue *GNBUe) CreateUeContext(plmn string, imeisv string, sst []string, sd []
 }
 
 func (ue *GNBUe) CopyFromPreviousContext(oldUeContext *GNBUe) {
+	if ue == oldUeContext {
+		return
+	}
 	oldUeContext.LockProcessing()
 	defer oldUeContext.UnlockProcessing()
 	ue.SetAmfUeId(oldUeContext.GetAmfUeId())
-	ue.context = oldUeContext.context
+	oldUeContext.contextMu.RLock()
+	previous := oldUeContext.context
+	oldUeContext.contextMu.RUnlock()
 	// Path Switch changes target TEIDs. Sharing these pointers would mutate the
 	// source while its ordered NGAP worker can still handle a release.
-	for id, pdu := range ue.context.pduSession {
+	for id, pdu := range previous.pduSession {
 		if pdu != nil {
-			cloned := *pdu
-			ue.context.pduSession[id] = &cloned
+			pdu.tunnelMu.RLock()
+			previous.pduSession[id] = &GnbPDUSession{
+				pduSessionId: pdu.pduSessionId, upfIp: pdu.upfIp, sst: pdu.sst, sd: pdu.sd,
+				uplinkTeid: pdu.uplinkTeid, downlinkTeid: pdu.downlinkTeid, pduType: pdu.pduType,
+				qosId: pdu.qosId, fiveQi: pdu.fiveQi, priArp: pdu.priArp,
+			}
+			pdu.tunnelMu.RUnlock()
 		}
 	}
+	ue.contextMu.Lock()
+	ue.context = previous
+	ue.contextMu.Unlock()
 }
 
 func (ue *GNBUe) CreatePduSession(pduSessionId int64, upfIp string, sst string, sd string, pduType uint64,
@@ -105,6 +127,8 @@ func (ue *GNBUe) CreatePduSession(pduSessionId int64, upfIp string, sst string, 
 	if pduSessionId < 1 || pduSessionId > 15 {
 		return nil, fmt.Errorf("PDU session ID must be between 1 and 15, id: %d", pduSessionId)
 	}
+	ue.contextMu.Lock()
+	defer ue.contextMu.Unlock()
 
 	if ue.context.pduSession[pduSessionId-1] != nil {
 		return nil, fmt.Errorf("unable to create PDU Session %d as such PDU Session already exists", pduSessionId)
@@ -134,15 +158,21 @@ func (ue *GNBUe) GetPduSession(pduSessionId int64) (*GnbPDUSession, error) {
 	if pduSessionId < 1 || pduSessionId > 15 {
 		return nil, fmt.Errorf("PDU session ID must be between 1 and 15, id: %d", pduSessionId)
 	}
+	ue.contextMu.RLock()
+	defer ue.contextMu.RUnlock()
 
 	return ue.context.pduSession[pduSessionId-1], nil
 }
 
 func (ue *GNBUe) GetPduSessions() [16]*GnbPDUSession {
+	ue.contextMu.RLock()
+	defer ue.contextMu.RUnlock()
 	return ue.context.pduSession
 }
 
 func (ue *GNBUe) SetPduSessions(pduSessions [16]*GnbPDUSession) {
+	ue.contextMu.Lock()
+	defer ue.contextMu.Unlock()
 	ue.context.pduSession = pduSessions
 }
 
@@ -150,6 +180,8 @@ func (ue *GNBUe) DeletePduSession(pduSessionId int64) error {
 	if pduSessionId < 1 || pduSessionId > 15 {
 		return fmt.Errorf("PDU session ID must be between 1 and 15, id: %d", pduSessionId)
 	}
+	ue.contextMu.Lock()
+	defer ue.contextMu.Unlock()
 
 	ue.context.pduSession[pduSessionId-1] = nil
 
@@ -157,10 +189,14 @@ func (ue *GNBUe) DeletePduSession(pduSessionId int64) error {
 }
 
 func (ue *GNBUe) GetUeMobility() (string, string) {
+	ue.contextMu.RLock()
+	defer ue.contextMu.RUnlock()
 	return ue.context.mobilityInfo.mcc, ue.context.mobilityInfo.mnc
 }
 
 func (ue *GNBUe) GetUeMaskedImeiSv() string {
+	ue.contextMu.RLock()
+	defer ue.contextMu.RUnlock()
 	return ue.context.maskedIMEISV
 }
 
@@ -168,6 +204,8 @@ func (ue *GNBUe) GetSelectedNssai(pduSessionId int64) (string, string) {
 	if pduSessionId < 1 || pduSessionId > 15 {
 		return "NSSAI was not selected", "NSSAI was not selected"
 	}
+	ue.contextMu.RLock()
+	defer ue.contextMu.RUnlock()
 	pduSession := ue.context.pduSession[pduSessionId-1]
 	if pduSession != nil {
 		return pduSession.sst, pduSession.sd
@@ -177,9 +215,12 @@ func (ue *GNBUe) GetSelectedNssai(pduSessionId int64) (string, string) {
 }
 
 func (ue *GNBUe) GetUESecurityCapabilities() *ngapType.UESecurityCapabilities {
+	ue.contextMu.RLock()
+	defer ue.contextMu.RUnlock()
 	return ue.context.ueSecurityCapabilities
 }
 
+// isWantedNssai requires contextMu; it is only called while creating a session.
 func (ue *GNBUe) isWantedNssai(sst string, sd string) bool {
 	if len(ue.context.allowedSst) == len(ue.context.allowedSd) {
 		for i := range ue.context.allowedSst {
@@ -304,26 +345,38 @@ func (pduSession *GnbPDUSession) GetPduSessionId() int64 {
 }
 
 func (pduSession *GnbPDUSession) GetUpfIp() string {
+	pduSession.tunnelMu.RLock()
+	defer pduSession.tunnelMu.RUnlock()
 	return pduSession.upfIp
 }
 
 func (pduSession *GnbPDUSession) SetUpfIp(upfIp string) {
+	pduSession.tunnelMu.Lock()
+	defer pduSession.tunnelMu.Unlock()
 	pduSession.upfIp = upfIp
 }
 
 func (pduSession *GnbPDUSession) GetTeidUplink() uint32 {
+	pduSession.tunnelMu.RLock()
+	defer pduSession.tunnelMu.RUnlock()
 	return pduSession.uplinkTeid
 }
 
 func (pduSession *GnbPDUSession) SetTeidUplink(teidUplink uint32) {
+	pduSession.tunnelMu.Lock()
+	defer pduSession.tunnelMu.Unlock()
 	pduSession.uplinkTeid = teidUplink
 }
 
 func (pduSession *GnbPDUSession) GetTeidDownlink() uint32 {
+	pduSession.tunnelMu.RLock()
+	defer pduSession.tunnelMu.RUnlock()
 	return pduSession.downlinkTeid
 }
 
 func (pduSession *GnbPDUSession) SetTeidDownlink(teidDownlink uint32) {
+	pduSession.tunnelMu.Lock()
+	defer pduSession.tunnelMu.Unlock()
 	pduSession.downlinkTeid = teidDownlink
 }
 
