@@ -241,10 +241,25 @@ func TestScenarioDeregistrationParksAndRegistrationRearms(t *testing.T) {
 	t.Cleanup(func() { sim.Send(procedures.UeTesterMessage{Type: procedures.Kill}); <-sim.Done() })
 	registered, err := sim.Execute(ctx, "wait", "")
 	require.NoError(t, err)
+	coreUE, err := fgc.GetAMFContext().FindRegisteredUEByMsin(conf.Ue.Msin)
+	require.NoError(t, err)
 	parked, err := sim.Execute(ctx, "deregister", "")
 	require.NoError(t, err)
 	require.Equal(t, "parked", parked.State)
-	require.Eventually(t, func() bool { _, err := fgc.GetAMFContext().FindRegisteredUEByMsin(conf.Ue.Msin); return err != nil }, time.Second, 10*time.Millisecond)
+	// Switch-off has no NAS acknowledgement. Observe the original core UE's
+	// deregistered/inactive state before rearming, within a finite procedure bound.
+	require.Eventually(t, func() bool {
+		if coreUE.GetState().Current() != core.Deregistered {
+			return false
+		}
+		for _, session := range coreUE.GetSmContexts() {
+			if session.GetState().Current() != core.Inactive {
+				return false
+			}
+		}
+		_, err := fgc.GetAMFContext().FindRegisteredUEByMsin(conf.Ue.Msin)
+		return err != nil
+	}, 10*time.Second, 10*time.Millisecond)
 	again, err := sim.Execute(ctx, "register", "")
 	require.NoError(t, err)
 	require.Equal(t, registered.Generation+1, again.Generation)

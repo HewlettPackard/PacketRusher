@@ -87,7 +87,12 @@ func gnbListen(gnb *context.GNBContext) {
 				// Usual first UE connection to a gNodeB
 				log.Info("[GNB] Received incoming connection from new UE")
 				mcc, mnc := gnb.GetMccAndMnc()
-				message.GNBTx <- context.UEMessage{Mcc: mcc, Mnc: mnc}
+				if !ue.DeliverToUE(context.UEMessage{Mcc: mcc, Mnc: mnc}) {
+					// Publication precedes greeting. Failed delivery owns cleanup;
+					// no processingConn worker has started for this context yet.
+					gnb.DeleteGnBUe(ue)
+					continue
+				}
 				ue.SetPduSessions(message.GNBPduSessions)
 			}
 		}
