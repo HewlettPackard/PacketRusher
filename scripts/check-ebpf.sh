@@ -9,11 +9,12 @@ trap 'rm -rf -- "$scratch"' EXIT HUP INT TERM
 "${GO:-go}" test -race -c -o "$scratch/service.test" ./internal/control_test_engine/ue/gtp/service
 run_namespace() {
   if [ "$(id -u)" -eq 0 ]; then
-    ./scripts/run-ebpf-netns.sh "$1" "$2"
+    ./scripts/run-ebpf-netns.sh "$1" "$2" "${3:-normal}"
   else
-    sudo -n ./scripts/run-ebpf-netns.sh "$1" "$2"
+    sudo -n ./scripts/run-ebpf-netns.sh "$1" "$2" "${3:-normal}"
   fi
 }
+run_namespace "$scratch/backend.test" '^TestActualVerifierLoadDeclaredCapabilities$|^TestActualKernelPacketBoundsChecksumsAndTupleIsolation$|^TestActualKernelFree5UPFCapturedSequenceHeader$|^TestActualKernelUDPChecksumChunkBoundaries$' restricted
 run_namespace "$scratch/backend.test" '^TestActualVerifierLoad$|^TestActualKernelPacketBoundsChecksumsAndTupleIsolation$|^TestActualKernelFree5UPFCapturedSequenceHeader$|^TestNativeManagementEchoAndJoinedClose$|^TestNativeBidirectionalHandoverAndCleanup$'
 run_namespace "$scratch/backend.test" '^TestNativeRemotePeerHandoverAndCleanup$'
 run_namespace "$scratch/backend.test" '^TestNativeTCPBulkTrafficAndCleanup$'
