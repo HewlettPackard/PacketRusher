@@ -14,6 +14,8 @@ run_namespace() {
     sudo -n ./scripts/run-ebpf-netns.sh "$1" "$2"
   fi
 }
-run_namespace "$scratch/backend.test" '^TestActualVerifierLoad$|^TestActualKernelPacketBoundsChecksumsAndTupleIsolation$|^TestNativeManagementEchoAndJoinedClose$|^TestNativeBidirectionalHandoverAndCleanup$'
+run_namespace "$scratch/backend.test" '^TestActualVerifierLoad$|^TestActualKernelPacketBoundsChecksumsAndTupleIsolation$|^TestActualKernelFree5UPFCapturedSequenceHeader$|^TestNativeManagementEchoAndJoinedClose$|^TestNativeBidirectionalHandoverAndCleanup$'
 run_namespace "$scratch/backend.test" '^TestNativeRemotePeerHandoverAndCleanup$'
+run_namespace "$scratch/backend.test" '^TestNativeTCPBulkTrafficAndCleanup$'
 run_namespace "$scratch/service.test" '^TestNativeEBPFServiceRoutingHandoverRollbackAndRelease$'
+run_namespace "$scratch/service.test" '^TestNativeEBPFServiceTCPBulkTrafficAndRelease$'

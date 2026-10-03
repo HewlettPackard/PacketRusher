@@ -125,6 +125,9 @@ func setupEBPFTunnel(ue *context.UEContext, pdu *context.UEPDUSession, gnbPDU *g
 	if err = setTunnelMTU(t.link, local, ue.TunnelMTU); err != nil {
 		return err
 	}
+	if err = ebpfgtp.ConfigureEndpoint(t.link); err != nil {
+		return err
+	}
 	cfg, err := ebpfSessionConfig(pdu, gnbPDU, local, t.link.Attrs().Index, t.link.Attrs().MTU)
 	if err != nil {
 		return err
