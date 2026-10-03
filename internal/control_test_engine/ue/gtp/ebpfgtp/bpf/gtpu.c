@@ -21,6 +21,7 @@
 static void *(*lookup)(void *, const void *) = (void *)BPF_FUNC_map_lookup_elem;
 static long (*push_encap)(struct __sk_buff *, __u32, void *, __u32) = (void *)BPF_FUNC_lwt_push_encap;
 static long (*pull_data)(struct __sk_buff *, __u32) = (void *)BPF_FUNC_skb_pull_data;
+static long (*load_bytes)(struct __sk_buff *, __u32, void *, __u32) = (void *)BPF_FUNC_skb_load_bytes;
 static long (*adjust_room)(struct __sk_buff *, __s32, __u32, __u64) = (void *)BPF_FUNC_skb_adjust_room;
 static long (*redirect)(__u32, __u64) = (void *)BPF_FUNC_redirect;
 
@@ -111,36 +112,45 @@ int decap(struct __sk_buff *skb) {
     __u32 local = outer->daddr;
     __u32 *owner = lookup(&locals, &local);
     if (!owner) return NEXT; // Unowned host addresses/ports are untouched.
-    __u32 ihl = outer->ihl * 4;
-    if (ihl < 20 || ihl > 60) return NEXT;
-    struct udphdr *udp = (void *)outer + ihl;
+    // The supported profile has no IPv4 options. Leave unsupported headers
+    // to the host rather than performing variable packet-pointer arithmetic
+    // or touching another UDP port before ownership is known.
+    if (outer->ihl != 5) return NEXT;
+    struct udphdr *udp = (void *)(outer + 1);
     // Non-first fragments cannot identify a port; leave them to the host.
     if (outer->frag_off & htons(0x1fff)) return NEXT;
     if ((void *)(udp + 1) > end || udp->dest != htons(2152)) return NEXT;
     // From here only our exclusively reserved local UDP/2152 is affected.
-    if (*owner != skb->ingress_ifindex || ihl != 20 || skb->len > MAX_N3_MTU + ETH_HLEN ||
+    if (*owner != skb->ingress_ifindex || skb->len > MAX_N3_MTU + ETH_HLEN ||
         (outer->frag_off & htons(0x2000)) || pull_data(skb, skb->len)) goto drop;
     data = (void *)(long)skb->data; end = (void *)(long)skb->data_end;
     outer = data + ETH_HLEN; udp = (void *)(outer + 1);
     if ((void *)(udp + 1) > end || !ipv4_checksum((void *)outer, end)) goto drop;
     __u32 total = ntohs(outer->tot_len), length = ntohs(udp->len);
-    if (total < 40 || total > MAX_N3_MTU || (void *)outer + total > end ||
+    if (total < 40 || total > MAX_N3_MTU || total + ETH_HLEN > skb->len ||
         length < 20 || total != length + 20 || udp->source != htons(2152)) goto drop;
     // TC runs before the UDP stack: validate a nonzero checksum ourselves.
     if (udp->check) {
         __u32 src = ntohl(outer->saddr), dst = ntohl(outer->daddr);
         __u32 sum = (src >> 16) + (src & 0xffff) + (dst >> 16) + (dst & 0xffff) + 17 + length;
-        unsigned char *bytes = (void *)udp;
-#pragma clang loop unroll(disable)
-        for (__u32 i = 0; i < 750; i++) {
-            __u32 offset = i * 2;
+        // CAP_BPF/CAP_NET_ADMIN alone do not allow variable packet-pointer
+        // arithmetic under Linux's speculative-access checks. Load bounded
+        // chunks through the skb helper; keep the checksum equally strict.
+        // 47 chunks cover the maximum 1480-byte UDP datagram, including odd
+        // tails. Unrolling preserves helper-size bounds in restricted loading.
+#pragma unroll
+        for (__u32 i = 0; i < 47; i++) {
+            __u32 offset = i * 32;
             if (offset >= length) break;
-            if ((void *)(bytes + offset + 1) > end) goto drop;
-            sum += (__u32)bytes[offset] << 8;
-            if (offset + 1 < length) {
-                if ((void *)(bytes + offset + 2) > end) goto drop;
-                sum += bytes[offset + 1];
-            }
+            __u32 size = length - offset;
+            // Keep both size guards visible after LLVM's loop simplification.
+            asm volatile("" : "+r"(size));
+            if (size > 32) size = 32;
+            if (!size) goto drop;
+            unsigned char chunk[32] = {};
+            if (load_bytes(skb, ETH_HLEN + 20 + offset, chunk, size)) goto drop;
+#pragma unroll
+            for (int j = 0; j < 16; j++) sum += ((__u32)chunk[j * 2] << 8) | chunk[j * 2 + 1];
         }
         if (fold(sum) != 0xffff) goto drop;
     }
@@ -166,6 +176,7 @@ int decap(struct __sk_buff *skb) {
     // downlink keys cannot deliver before/after that atomic map replacement.
     if (cfg.local != key.local || cfg.peer != key.peer || cfg.downlink_teid != key.teid) goto drop;
     __u32 gtplen = 8;
+    struct iphdr *inner;
     // TS 29.281 §5.1: S and E independently require the four optional
     // header octets. free5UPF sends E+S, including sequence zero. Sequence
     // numbers do not change tuple/TEID ownership or permit N-PDU forwarding.
@@ -173,13 +184,18 @@ int decap(struct __sk_buff *skb) {
         if ((void *)(gtp + 1) > end || (gtp->flags == 0x34 && gtp->sequence) || gtp->npdu || gtp->next != 0x85 ||
             gtp->extension_length != 1 || gtp->pdu_type != 0 || gtp->qfi != cfg.qfi || gtp->end) goto drop;
         gtplen = 16;
+        inner = (void *)gtp + 16;
+        asm volatile("" : "+r"(inner));
     } else if (gtp->flags == 0x32) {
         if ((void *)gtp + 12 > end || gtp->npdu || gtp->next) goto drop;
         gtplen = 12;
-    } else if (gtp->flags != 0x30) goto drop;
+        inner = (void *)gtp + 12;
+        asm volatile("" : "+r"(inner));
+    } else if (gtp->flags == 0x30) {
+        inner = (void *)gtp + 8;
+        asm volatile("" : "+r"(inner));
+    } else goto drop;
     __u32 inner_length = length - 8 - gtplen;
-    struct iphdr *inner = (void *)gtp + gtplen;
-    asm volatile("" : "+r"(inner));
     if ((void *)(inner + 1) > end || *(unsigned char *)inner != 0x45 ||
         inner->daddr != cfg.ue || ntohs(inner->tot_len) != inner_length ||
         inner_length > cfg.mtu || !ipv4_checksum((void *)inner, end)) goto drop;
