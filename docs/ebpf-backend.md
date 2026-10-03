@@ -20,6 +20,12 @@ Linux little-endian amd64 and arm64 builds include the BPF object; selecting thi
 backend needs no compiler. Runtime verifier/attachment failures are reported
 without changing to another backend.
 
+The program also loads without CAP_SYS_ADMIN or CAP_PERFMON. Packet accesses
+use constant header offsets; nonzero UDP checksums use bounded skb-helper loads
+into initialized stack chunks, including odd tails. This avoids variable packet
+pointer arithmetic rejected by Linux's restricted-capability
+[verifier sanitation](https://github.com/torvalds/linux/blob/v6.8/kernel/bpf/verifier.c).
+
 IPv6/IPv4v6, VRF, loopback N3, multiple routes, VLAN/bond/bridge attachment,
 jumbo N3, outer fragmentation, IPv4 header options, GTP N-PDU options,
 and extension chains beyond the single PDU Session Container are unsupported.
@@ -28,6 +34,9 @@ other backends retain its existing VRF behavior. Applications bind the assigned
 UE source IPv4 address; socket `SO_BINDTODEVICE` to the UE TUN is unsupported
 because LWT outer rerouting retains the socket's bound-interface constraint. This is an experimental supported
 profile, not a claim of complete replacement for every gtp5g deployment.
+Unsupported outer IPv4 options remain with the host stack; they are never
+decapsulated into a UE endpoint. The exclusively owned management socket does
+not forward their T-PDUs.
 
 Uplink uses a source policy and per-session LWT route on the stable UE TUN. The
 BPF program adds IPv4/UDP/GTP-U and the uplink QFI container; Linux reroutes the
@@ -97,6 +106,10 @@ payloads, keepalive responses, TEID/N3/peer-address handover, wrong-TEID/destina
 unrelated UDP passthrough, release and reinstall. Separate encoded fixtures
 exercise checksum, type, QFI, length, sequence-header and tuple rejection through the kernel
 program. Socket-free tests inject commit/cleanup failures. The
+first native stage drops CAP_SYS_ADMIN and CAP_PERFMON after namespace setup,
+checks its actual effective capabilities, and repeats verifier/wire checks.
+Checksum cases straddle chunk boundaries and test both odd and maximum-sized
+datagrams; corrupting their last byte must drop. The
 TCP cases establish a UE-bound connection to a second kernel TCP stack behind
 the fake UPF's DN TUN, echo 270336 bytes, then require joined workers and complete
 service cleanup. They retain the UPF until the application confirms receipt;

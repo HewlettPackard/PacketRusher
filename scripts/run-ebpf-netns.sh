@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Always create our own namespaces, including when invoked directly as root.
 set -eu
-if [ "$#" -ne 2 ]; then
-  echo 'usage: run-ebpf-netns.sh TEST_BINARY TEST_PATTERN' >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+  echo 'usage: run-ebpf-netns.sh TEST_BINARY TEST_PATTERN [restricted]' >&2
   exit 2
 fi
+profile=${3:-normal}
+case "$profile" in normal|restricted) ;; *) echo 'unknown capability profile' >&2; exit 2;; esac
 exec unshare --net --mount sh -eu -c '
   mount --make-rprivate /
   if [ ! -c /dev/net/tun ]; then
@@ -18,5 +20,11 @@ exec unshare --net --mount sh -eu -c '
     mknod -m 666 /dev/zero c 1 5
   fi
   ip link set lo up
+  if [ "$3" = restricted ]; then
+    # Namespace/device preparation needs SYS_ADMIN, the loaded datapath does not.
+    exec setpriv --bounding-set=-sys_admin,-perfmon env \
+      PACKETRUSHER_EBPF_TEST=1 PACKETRUSHER_EBPF_RESTRICTED_CAPS=1 \
+      "$1" -test.run "$2" -test.v -test.timeout=40s
+  fi
   PACKETRUSHER_EBPF_TEST=1 "$1" -test.run "$2" -test.v -test.timeout=40s
-' sh "$1" "$2"
+' sh "$1" "$2" "$profile"

@@ -6,6 +6,7 @@ package ebpfgtp
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"net/netip"
 	"os"
 	"testing"
@@ -82,6 +83,14 @@ func TestActualKernelPacketBoundsChecksumsAndTupleIsolation(t *testing.T) {
 		{"sequenceWrongQFI", func(p []byte) []byte { p[42] = 0x36; p[56]++; return p }, 2},
 		{"sequenceWrongTEID", func(p []byte) []byte { p[42] = 0x36; p[49]++; return p }, 2},
 		{"unrelatedUDP", func(p []byte) []byte { binary.BigEndian.PutUint16(p[36:38], 9999); return p }, ^uint32(0)},
+		{"outerIPv4Options", func(p []byte) []byte {
+			p = append(append(append([]byte(nil), p[:34]...), 1, 1, 1, 0), p[34:]...)
+			p[14] = 0x46
+			binary.BigEndian.PutUint16(p[16:18], uint16(len(p)-14))
+			p[24], p[25] = 0, 0
+			binary.BigEndian.PutUint16(p[24:26], testpeer.Checksum(p[14:38]))
+			return p
+		}, ^uint32(0)},
 		{"unownedN3", func(p []byte) []byte { p[33]++; return p }, ^uint32(0)},
 		{"wrongTEID", func(p []byte) []byte { p[49]++; return p }, 2},
 		{"wrongPeer", func(p []byte) []byte {
@@ -150,6 +159,59 @@ func TestActualKernelPacketBoundsChecksumsAndTupleIsolation(t *testing.T) {
 	result, err := r.collection.Programs["decap"].Run(&ebpf.RunOptions{Data: p, Context: ctx})
 	require.NoError(t, err)
 	require.Equal(t, uint32(7), result)
+}
+
+// Nonzero UDP checksums include every byte of the GTP/inner payload, including
+// odd tails and the final chunk at the supported maximum N3 MTU. Mutating that
+// tail must fail even when IP headers and the owned session tuple are valid.
+func TestActualKernelUDPChecksumChunkBoundaries(t *testing.T) {
+	if os.Getenv("PACKETRUSHER_EBPF_TEST") != "1" {
+		t.Skip("requires privileged disposable namespace")
+	}
+	r := NewRegistry()
+	require.NoError(t, r.load())
+	defer r.collection.Close()
+	_, _, c := isolatedRegistry()
+	require.NoError(t, r.state.put("locals", ipv4(c.Local), uint32(1), ebpf.UpdateNoExist))
+	require.NoError(t, r.state.put("downlinks", c.downKey(), ipv4(c.IPv4), ebpf.UpdateNoExist))
+	require.NoError(t, r.state.put("sessions", ipv4(c.IPv4), c.binding(), ebpf.UpdateNoExist))
+	for _, udpLength := range []int{63, 64, 65, 95, 96, 97, 1479, 1480} {
+		t.Run(fmt.Sprintf("UDP%d", udpLength), func(t *testing.T) {
+			p := wirePacket(c)
+			innerLength := udpLength - 24
+			p = append(p, make([]byte, innerLength-32)...)
+			for i := 86; i < len(p); i++ {
+				p[i] = byte(i*13 + 7)
+			}
+			binary.BigEndian.PutUint16(p[16:18], uint16(len(p)-14))
+			binary.BigEndian.PutUint16(p[38:40], uint16(udpLength))
+			binary.BigEndian.PutUint16(p[44:46], uint16(innerLength+8))
+			binary.BigEndian.PutUint16(p[60:62], uint16(innerLength))
+			binary.BigEndian.PutUint16(p[82:84], uint16(innerLength-20))
+			p[24], p[25], p[68], p[69] = 0, 0, 0, 0
+			binary.BigEndian.PutUint16(p[24:26], testpeer.Checksum(p[14:34]))
+			binary.BigEndian.PutUint16(p[68:70], testpeer.Checksum(p[58:78]))
+			pseudo := append([]byte(nil), p[26:34]...)
+			pseudo = append(pseudo, 0, 17, p[38], p[39])
+			pseudo = append(pseudo, p[34:]...)
+			checksum := testpeer.Checksum(pseudo)
+			if checksum == 0 {
+				checksum = 0xffff
+			}
+			binary.BigEndian.PutUint16(p[40:42], checksum)
+			context := [48]uint32{}
+			context[9] = 1
+			opts := &ebpf.RunOptions{Data: p, DataOut: make([]byte, len(p)+256), Context: context}
+			result, err := r.collection.Programs["decap"].Run(opts)
+			require.NoError(t, err)
+			require.Equal(t, uint32(7), result, "valid nonzero checksum must redirect")
+			require.Equal(t, p[58:], opts.DataOut[14:])
+			p[len(p)-1] ^= 1
+			result, err = r.collection.Programs["decap"].Run(&ebpf.RunOptions{Data: p, Context: context})
+			require.NoError(t, err)
+			require.Equal(t, uint32(2), result, "last-byte corruption must drop")
+		})
+	}
 }
 
 // Exact GTP-U payload captured from genuine free5GC 4.3 free5UPF after a
