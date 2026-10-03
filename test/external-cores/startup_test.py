@@ -30,7 +30,7 @@ class StartupEvidence(unittest.TestCase):
     def test_associated_log_without_packet_and_deassociated_state_cannot_pass(self):
         with tempfile.TemporaryDirectory() as directory:
             state=Path(directory); (state/'core').mkdir()
-            for name in ['udr','udm','ausf','pcf','nssf','smf','amf']:
+            for name in ['udr','udm','ausf','bsf','pcf','nssf','smf','amf']:
                 (state/'core'/f'{name}.log').write_text('NF registered [Heartbeat:10s]\n')
             for name in ['smf','upf']:
                 with (state/'core'/f'{name}.log').open('a') as file: file.write('PFCP associated [peer]:8805\n')

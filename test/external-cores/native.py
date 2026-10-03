@@ -81,7 +81,7 @@ def run(core, prefix, binary, state):
         # Keep both sides' live TCP exchange, not just a post-shutdown timeout.
         diagnostic_log = (state/'diagnostic-capture.log').open('wb')
         files.append(diagnostic_log)
-        diagnostic_capture = launch_owned(['tcpdump','-n','-U','-i','any','-w',str(state/'oam-diagnostic.pcap'),'tcp','port','9090' if core == 'open5gs' else '8000'],stdout=diagnostic_log,stderr=subprocess.STDOUT)
+        diagnostic_capture = launch_owned(['tcpdump','-n','-U','--immediate-mode','-i','any','-w',str(state/'oam-diagnostic.pcap'),'tcp','port','9090' if core == 'open5gs' else '8000'],stdout=diagnostic_log,stderr=subprocess.STDOUT)
         processes.append(diagnostic_capture)
         for namespace, label in [([], 'core-startup'), (net, 'ran-startup')]:
             subprocess.run(namespace+['python3',str(HERE/'diagnostics.py'),'--state',str(state),'--label',label],check=False,timeout=15)

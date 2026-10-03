@@ -41,12 +41,12 @@ def start(prefix, state):
             subprocess.run(["ip", "tuntap", "add", "name", "ogstun", "mode", "tun"], check=True)
             subprocess.run(["ip", "addr", "add", DN_IP + "/16", "dev", "ogstun"], check=True)
             subprocess.run(["ip", "link", "set", "ogstun", "up"], check=True)
-            names = ["nrf", "udr", "udm", "ausf", "pcf", "nssf", "upf", "smf", "amf"]
+            names = ["nrf", "udr", "udm", "ausf", "bsf", "pcf", "nssf", "upf", "smf", "amf"]
             echo = threading.Thread(target=serve_echo, args=(stop,errors))
             echo.start()
             capture_log = (state / "pfcp-capture.log").open("wb")
             files.append(capture_log)
-            capture = subprocess.Popen(["tcpdump","-n","-U","-i","lo","-w",str(state/"pfcp-startup.pcap"),"udp","port","8805"],stdout=capture_log,stderr=subprocess.STDOUT)
+            capture = subprocess.Popen(["tcpdump","-n","-U","--immediate-mode","-i","lo","-w",str(state/"pfcp-startup.pcap"),"udp","port","8805"],stdout=capture_log,stderr=subprocess.STDOUT)
             capture_deadline = time.monotonic()+5
             while not ((state/"pfcp-startup.pcap").exists() and (state/"pfcp-startup.pcap").stat().st_size >= 24):
                 if capture.poll() is not None or time.monotonic() >= capture_deadline:

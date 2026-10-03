@@ -81,7 +81,7 @@ def accepted_pfcp(path):
 
 def open_registered_and_associated(state):
     state = Path(state)
-    for name in ["udr","udm","ausf","pcf","nssf","smf","amf"]:
+    for name in ["udr","udm","ausf","bsf","pcf","nssf","smf","amf"]:
         path = state/"core"/(name+".log")
         if not path.exists() or "NF registered [Heartbeat:" not in path.read_text(errors="replace"):
             return None
