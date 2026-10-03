@@ -14,7 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func RegistrationComplete(nasMsg *nas.RegComplete, gnb *context.GNBContext, ue *context.UEContext, amf context.AMFContext) error {
+func RegistrationComplete(nasMsg *nas.RegComplete, gnb *context.GNBContext, ue *context.UEContext, amf *context.AMFContext) error {
 	var err error
 	switch ue.GetState().Current() {
 	case context.Authenticated:
@@ -25,7 +25,7 @@ func RegistrationComplete(nasMsg *nas.RegComplete, gnb *context.GNBContext, ue *
 	return err
 }
 
-func DefaultRegistrationComplete(nasMsg *nas.RegComplete, gnb *context.GNBContext, ue *context.UEContext, amf context.AMFContext) error {
+func DefaultRegistrationComplete(nasMsg *nas.RegComplete, gnb *context.GNBContext, ue *context.UEContext, amf *context.AMFContext) error {
 
 	nwName := amf.GetNetworkName()
 	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.RegistrationAccept, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))

@@ -23,6 +23,14 @@ tests. Native-codec tests run explicitly in CI because it is a nested module.
 Obsolete local ASN.1 transfer definitions have been removed. Authentication
 subscriptions use the current OpenAPI UDR models.
 
+NGAP PLMN identities use their own validated codec following
+[TS 38.413, section 9.3.3.5](https://www.etsi.org/deliver/etsi_ts/138400_138499/138413/15.04.00_60/ts_138413v150400p.pdf):
+MCC digits followed by MNC digits, low nibble first, with a filler before a
+two-digit MNC. NAS places the third MNC digit differently; its PLMN encoding is
+unchanged. For MCC 999/MNC 070, NGAP carries `99 09 07` and NAS carries
+`99 09 70`. Independent literal-wire and authentication tests cover both layouts
+and preserve leading zeros and two-/three-digit MNC identities.
+
 Security Mode Commands require outer security header type 3 (integrity protected
 with a new 5G NAS security context), as specified by
 [3GPP TS 24.501, section 5.4.2.2](https://www.etsi.org/deliver/etsi_ts/124500_124599/124501/16.12.00_60/ts_124501v161200p.pdf).

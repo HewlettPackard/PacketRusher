@@ -122,6 +122,8 @@ By contributing here, [you agree](DCO.md) to license your contribution under the
 
 PacketRusher borrows libraries and data structures from the [free5gc project](https://github.com/free5gc/free5gc), and is originally based upon [my5G-RANTester](https://github.com/my5G/my5G-RANTester).
 
+For JSON/CSV procedure reports and live Prometheus metrics, see [Load-test results](docs/load-test-results.md).
+
 ### Boolean flags and UE distribution
 
 Boolean flags take no separate value. Enable a flag with `--tunnel` or

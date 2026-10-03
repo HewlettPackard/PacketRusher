@@ -14,6 +14,8 @@ import (
 )
 
 func HandlerAuthenticationReject(ue *context.UEContext, msg *nas.AuthRej) {
+	ue.RegistrationFailed()
+	log.Info("[UE][NAS] Authentication of UE ", ue.GetUeId(), " failed")
 	ue.SetStateMM_DEREGISTERED()
 }
 
@@ -91,6 +93,19 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, msg *nas.DLNASTranspo
 		return
 	}
 	switch m := payload.(type) {
+	case *nas.PDUSessEstReq:
+		// An AMF can refuse to forward the uplink N1 SM request and return it
+		// with a 5GMM cause, rather than returning a 5GSM establishment reject.
+		// Count only a matching current pending establishment; do not infer a
+		// refusal from an echoed request alone or schedule a new retry policy.
+		if msg.Cause5GMM == nil || msg.PDUSessID.Value != m.PDUSessId {
+			return
+		}
+		session, err := ue.GetPduSession(m.PDUSessId)
+		if err != nil {
+			return
+		}
+		session.EstablishmentTransportFailed(m.PTI)
 	case *nas.PDUSessEstAccept:
 		if m.SelectedPDUSessType == nil || m.SelectedPDUSessType.Value != ie.PDUSessType_IPv4 || m.PDUAddr == nil || len(m.PDUAddr.IPv4) != 4 {
 			log.Error("[UE][NAS] PDU session requires an IPv4 address")

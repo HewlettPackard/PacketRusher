@@ -80,6 +80,11 @@ type UESimulationConfig struct {
 	Cfg                      config.Config
 	ScenarioChan             chan procedures.UeTesterMessage
 	TimeBeforeDeregistration int
+	// DeregistrationTrigger optionally replaces the wall-clock timer. Each value
+	// gracefully ends the current iteration, without stopping registration loops.
+	// Closing it disables explicit triggers; scenario shutdown remains receivable.
+	// A nil channel preserves the normal TimeBeforeDeregistration behavior.
+	DeregistrationTrigger    <-chan struct{}
 	TimeBeforeNgapHandover   int
 	TimeBeforeXnHandover     int
 	TimeBeforeIdle           int
@@ -138,6 +143,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 		defer wg.Done()
 		defer close(simulation.done)
 		scenarioChan := simConfig.ScenarioChan
+		deregistrationTrigger := simConfig.DeregistrationTrigger
 		stopping := false
 		for iteration := 1; ; iteration++ {
 			wg.Add(1)
@@ -151,7 +157,11 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 				}
 				return time.After(time.Duration(milliseconds) * time.Millisecond)
 			}
-			deregistrationChannel := after(simConfig.TimeBeforeDeregistration)
+			var deregistrationChannel <-chan time.Time
+			iterationTrigger := deregistrationTrigger
+			if simConfig.DeregistrationTrigger == nil {
+				deregistrationChannel = after(simConfig.TimeBeforeDeregistration)
+			}
 			ngapHandoverChannel := after(simConfig.TimeBeforeNgapHandover)
 			xnHandoverChannel := after(simConfig.TimeBeforeXnHandover)
 			idleChannel := after(simConfig.TimeBeforeIdle)
@@ -166,6 +176,11 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 				}
 				if ueRx != nil {
 					pending = append(pending, message)
+				}
+			}
+			endIteration := func() {
+				if ueRx != nil && !stopping {
+					pending = append(pending, procedures.UeTesterMessage{Type: procedures.Terminate})
 				}
 			}
 			for alive {
@@ -191,8 +206,14 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 					}
 				case <-deregistrationChannel:
 					deregistrationChannel = nil
-					if ueRx != nil && !stopping {
-						pending = append(pending, procedures.UeTesterMessage{Type: procedures.Terminate})
+					endIteration()
+				case _, open := <-iterationTrigger:
+					iterationTrigger = nil // At most one graceful stop per iteration.
+					if open {
+						endIteration()
+					} else {
+						// Do not re-arm a closed channel for subsequent iterations.
+						deregistrationTrigger = nil
 					}
 				case <-ngapHandoverChannel:
 					ngapHandoverChannel = nil

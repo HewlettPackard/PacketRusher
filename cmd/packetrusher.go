@@ -22,9 +22,14 @@ func init() {
 }
 
 func newApp() *cli.App {
+	beforeResults, afterResults := resultsHooks()
 	app := &cli.App{
+		After: afterResults,
 		Flags: []cli.Flag{
 			&cli.PathFlag{Name: "config", Usage: "Configuration file path. (Default: ./config/config.yml)"},
+			&cli.PathFlag{Name: "report-json", Usage: "Write procedure results to a new JSON file on shutdown"},
+			&cli.PathFlag{Name: "report-csv", Usage: "Write procedure results to a new CSV file on shutdown"},
+			&cli.StringFlag{Name: "metrics-addr", Usage: "Serve Prometheus metrics at /metrics on this address, e.g. 127.0.0.1:9090"},
 		},
 		Commands: []*cli.Command{
 			{
@@ -235,7 +240,7 @@ func newApp() *cli.App {
 		},
 	}
 	for _, command := range app.Commands {
-		command.Before = validateArguments
+		command.Before = resultsBefore(validateArguments, beforeResults)
 	}
 	return app
 }

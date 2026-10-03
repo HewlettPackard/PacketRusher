@@ -134,6 +134,7 @@ func DispatchNas(ue *context.UEContext, packet []byte) {
 	case *nas.SvcRej:
 		log.Errorf("[UE][NAS] Service Reject: %s", m.Cause5GMM)
 	case *nas.RegRej:
+		ue.RegistrationFailed()
 		log.Errorf("[UE][NAS] Registration Reject: %s", m.Cause5GMM)
 	case *nas.Status5GMM:
 		log.Errorf("[UE][NAS] 5GMM status: %s", m.Cause5GMM)
