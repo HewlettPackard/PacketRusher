@@ -5,7 +5,7 @@ import struct
 import tempfile
 import unittest
 from pathlib import Path
-from probe import validate_report, gtpu_proof
+from probe import validate_report, gtpu_proof, open_registered_count
 from prepare import CORE_IP, RAN_IP, UE_IP, DN_IP
 
 def report(sessions):
@@ -28,6 +28,17 @@ def n3_capture(nonce, wrong_ue=False, duplicate=False):
     return data
 
 class CompletionGuards(unittest.TestCase):
+    def test_lazy_registered_gauge_is_empty_only_before_first_ue(self):
+        header=b'# TYPE fivegs_amffunction_rm_registeredsubnbr gauge\n'
+        self.assertEqual(open_registered_count(header,initial=True),0)
+        with self.assertRaises(AssertionError): open_registered_count(header)
+        for initial in [False,True]:
+            with self.assertRaises(AssertionError): open_registered_count(b'other_metric 0\n',initial)
+        for value in [b'NaN',b'+Inf',b'-1',b'0.5']:
+            with self.assertRaises(AssertionError): open_registered_count(header+b'fivegs_amffunction_rm_registeredsubnbr{plmn="20893"} '+value+b'\n',initial=True)
+        for value in [0,1]:
+            self.assertEqual(open_registered_count(header+b'fivegs_amffunction_rm_registeredsubnbr{plmn="20893"} '+str(value).encode()+b'\n'),value)
+
     def test_registration_without_upf_requires_zero_pdu_attempts(self):
         validate_report(report(0),0)
         for field in ['started','success','failure','cancelled','pending']:

@@ -3,6 +3,7 @@
 """Fail closed on real-core NAS, core state, reporting and UPF packet proofs."""
 import argparse
 import json
+import math
 import os
 import re
 import signal
@@ -37,7 +38,18 @@ def until(predicate, seconds, label):
         time.sleep(.1)
     raise TimeoutError(f"{label} did not complete within {seconds}s: {last}")
 
-def core_count(profile):
+def open_registered_count(raw, initial=False):
+    metric = rb"fivegs_amffunction_rm_registeredsubnbr"
+    require(re.search(rb"^# TYPE "+metric+rb" gauge\s*$",raw,re.M) is not None, "Open5GS registration gauge missing")
+    values = re.findall(rb"^"+metric+rb"(?:\{[^\n]*\})?\s+(\S+)\s*$", raw, re.M)
+    # v2.8.0 creates per-slice samples on the first Registered transition.
+    require(bool(values) or initial, "Open5GS registered gauge has no numeric sample after registration")
+    numbers = [float(value) for value in values]
+    require(all(math.isfinite(value) and value >= 0 and value.is_integer() for value in numbers), "invalid Open5GS registration gauge value")
+    return sum(numbers)
+
+
+def core_count(profile, initial=False):
     with HTTP.open(profile["oam"], timeout=2) as response:
         raw = response.read(1024*1024)
     if profile["core"] == "free5gc":
@@ -45,9 +57,7 @@ def core_count(profile):
         require(value is None or isinstance(value, list), "unexpected free5GC registered-UE response")
         require(all(ue.get("Supi") == "imsi-"+IMSI for ue in value or []), "AMF registered an unexpected subscriber")
         return len(value or [])
-    values = re.findall(rb"^fivegs_amffunction_rm_registeredsubnbr(?:\{[^\n]*\})?\s+([0-9.eE+-]+)\s*$", raw, re.M)
-    require(bool(values), "Open5GS registration gauge missing")
-    return sum(float(value) for value in values)
+    return open_registered_count(raw,initial)
 
 def validate_report(report, sessions):
     require(report.get("schema_version") == 1 and report.get("ended_at"), "report is not completed schema1")
@@ -134,7 +144,7 @@ def probe(binary, state):
             until(lambda: (state/"core-ready").exists(), 65, "real NF registration and accepted SMF/UPF PFCP association")
         else:
             until(lambda: free_registered(profile), 65, "real free5GC NRF registrations")
-        until(lambda: core_count(profile) == 0, 60, "real core initial empty registered state")
+        until(lambda: core_count(profile,initial=True) == 0, 60, "real core initial empty registered state")
         command = [str(binary), "--config", str(state/"config/packetrusher.yaml"), "--report-json", str(state/"report.json"), "multi-ue", "-n", "1", "--numPduSessions", str(sessions), "--control-socket", str(state/"control.sock")]
         if sessions:
             command.append("--tunnel")
