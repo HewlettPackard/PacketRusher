@@ -52,16 +52,6 @@ type ipv6Binding struct {
 func (b *ipv6Binding) install(advertisement ipv6.Advertisement) (bool, error) {
 	address := &netlink.Addr{IPNet: addressNet(advertisement.Address), Flags: unix.IFA_F_NODAD, PreferedLft: lifetime(advertisement.PreferredLifetime), ValidLft: lifetime(advertisement.ValidLifetime)}
 	sameAddress := b.address != nil && b.address.IP.Equal(address.IP)
-	if sameAddress {
-		if err := b.ops.addressReplace(b.link, address); err != nil {
-			return false, fmt.Errorf("renew UE IPv6 prefix: %w", err)
-		}
-	} else {
-		if err := b.ops.addressAdd(b.link, address); err != nil {
-			return false, fmt.Errorf("install UE IPv6 address: %w", err)
-		}
-		b.addresses = append(b.addresses, address)
-	}
 	rule := b.rule
 	if !sameAddress && !b.vrf {
 		rule = netlink.NewRule()
@@ -70,9 +60,19 @@ func (b *ipv6Binding) install(advertisement ipv6.Advertisement) (bool, error) {
 		rule.Table = int(b.table)
 		rule.Src = address.IPNet
 		if err := b.ops.ruleAdd(rule); err != nil {
-			return false, errors.Join(fmt.Errorf("install IPv6 source routing policy: %w", err), b.removeAddress(address))
+			return false, fmt.Errorf("install IPv6 source routing policy: %w", err)
 		}
 		b.rules = append(b.rules, rule)
+	}
+	if sameAddress {
+		if err := b.ops.addressReplace(b.link, address); err != nil {
+			return false, fmt.Errorf("renew UE IPv6 prefix: %w", err)
+		}
+	} else {
+		if err := b.ops.addressAdd(b.link, address); err != nil {
+			return false, errors.Join(fmt.Errorf("install UE IPv6 address: %w", err), b.removeRule(rule))
+		}
+		b.addresses = append(b.addresses, address)
 	}
 	if err := b.updateRouter(advertisement.Address, advertisement.RouterLifetime); err != nil {
 		if sameAddress {
