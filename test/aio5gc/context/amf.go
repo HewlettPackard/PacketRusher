@@ -108,7 +108,7 @@ func (c *AMFContext) FindUEByRanId(id int64) (*UEContext, error) {
 	ueMutex.Lock()
 	defer ueMutex.Unlock()
 	for ue := range c.ues {
-		if c.ues[ue].ranNgapId == id {
+		if c.ues[ue].GetRanNgapId() == id {
 			return c.ues[ue], nil
 		}
 	}

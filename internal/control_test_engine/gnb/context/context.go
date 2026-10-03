@@ -134,6 +134,22 @@ func (gnb *GNBContext) GetInboundChannel() chan UEMessage {
 	return gnb.controlInfo.inboundChannel
 }
 
+// QueueHandover serializes enqueue with channel closure. A full or unavailable
+// target is reported immediately, so its source's ordered dispatcher can continue.
+func (gnb *GNBContext) QueueHandover(message UEMessage) error {
+	gnb.controlInfo.lifecycle.Lock()
+	defer gnb.controlInfo.lifecycle.Unlock()
+	if !gnb.NGSetupReady() {
+		return errors.New("target gNB has not completed NG Setup")
+	}
+	select {
+	case gnb.controlInfo.inboundChannel <- message:
+		return nil
+	default:
+		return errors.New("target gNB connection queue is full")
+	}
+}
+
 func (gnb *GNBContext) GetN3GnbIp() netip.Addr {
 	return gnb.dataInfo.gnbIpPort.Addr()
 }
@@ -350,6 +366,11 @@ func (gnb *GNBContext) selectAmFByActive() *GNBAmf {
 	return amfSelect
 }
 
+// NGSetupReady is set by a successful NG Setup Response, not SCTP dialing.
+func (gnb *GNBContext) NGSetupReady() bool {
+	return !gnb.IsTerminated() && gnb.selectAmFByActive() != nil
+}
+
 func (gnb *GNBContext) getRanUeId() int64 {
 	return gnb.idUeGenerator.Add(1)
 }
@@ -535,7 +556,12 @@ func (gnb *GNBContext) GetMccAndMncInOctets() []byte {
 
 func (gnb *GNBContext) Terminate() {
 	gnb.controlInfo.lifecycle.Lock()
+	if gnb.controlInfo.terminated.Load() {
+		gnb.controlInfo.lifecycle.Unlock()
+		return
+	}
 	gnb.controlInfo.terminated.Store(true)
+	close(gnb.GetInboundChannel())
 	// N2 is also the conn of the AMF that published it; collect each conn once.
 	conns := []*sctp.SCTPConn{gnb.GetN2()}
 	for amf := range gnb.IterGnbAmf() {
@@ -546,7 +572,6 @@ func (gnb *GNBContext) Terminate() {
 	gnb.controlInfo.lifecycle.Unlock()
 
 	// close all connections
-	close(gnb.GetInboundChannel())
 	log.Info("[GNB][UE] NAS channel Terminated")
 
 	for _, conn := range conns {

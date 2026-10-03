@@ -947,6 +947,7 @@ func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapm
 		return
 	}
 
+	completed := 0
 	for _, pduSessionResourceSwitchedItem := range pduSessionResourceSwitchedList.List {
 		pduSessionId := pduSessionResourceSwitchedItem.PDUSessionID.Value
 		pduSession, err := ue.GetPduSession(pduSessionId)
@@ -983,9 +984,12 @@ func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapm
 		msg := context.UEMessage{GNBPduSessions: pduSessions, GnbIp: gnb.GetN3GnbIp(), GtpDevice: gnb.GetGtpDevice()}
 
 		sender.SendMessageToUe(ue, msg)
+		completed++
 	}
-
-	log.Info("[GNB] Handover completed successfully for UE ", ue.GetRanUeId())
+	if completed == len(pduSessionResourceSwitchedList.List) {
+		ue.SetStateReady()
+		log.Info("[GNB] Handover completed successfully for UE ", ue.GetRanUeId())
+	}
 }
 
 func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapmsg.HandoverRequest) {
@@ -1078,11 +1082,11 @@ func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, messag
 		log.Error("[GNB] Unable to unmarshall SourceToTargetTransparentContainer: ", err)
 		return
 	}
-	if sourceToTargetContainerNgap.IndexToRFSP == nil {
-		log.Error("[GNB] SourceToTargetTransparentContainer from source gNodeB is missing IndexToRFSP")
+	prUeId, err := ngapConvert.VirtualUEID(sourceToTargetContainerNgap)
+	if err != nil {
+		log.Error("[GNB] Invalid virtual UE identity in handover: ", err)
 		return
 	}
-	prUeId := sourceToTargetContainerNgap.IndexToRFSP.Value
 
 	ue, err := gnb.NewGnBUe(nil, nil, prUeId, nil)
 	if ue == nil || err != nil {
@@ -1174,7 +1178,11 @@ func HandlerHandoverCommand(amf *context.GNBAmf, gnb *context.GNBContext, messag
 	newGnbRx := make(chan context.UEMessage, 1)
 	newGnbTx := make(chan context.UEMessage, 1)
 	connectionLost := make(chan struct{})
-	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, ConnectionLost: connectionLost, PrUeId: ue.GetPrUeId(), IsHandover: true}
+	if err := newGnb.QueueHandover(context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, ConnectionLost: connectionLost, PrUeId: ue.GetPrUeId(), IsHandover: true}); err != nil {
+		ue.SetHandoverGnodeB(nil)
+		log.Error("[GNB] Unable to connect handover target: ", err)
+		return
+	}
 
 	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, ConnectionLost: connectionLost, GNBInboundChannel: newGnb.GetInboundChannel()}
 

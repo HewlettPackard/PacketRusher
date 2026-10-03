@@ -15,7 +15,7 @@ import (
 )
 
 func SendNGSetupResponse(gnb *context.GNBContext, amf *context.AMFContext) {
-	msg, err := ngapBuilder.NGSetupResponse(*amf)
+	msg, err := ngapBuilder.NGSetupResponse(amf)
 	if err != nil {
 		log.Error(err.Error())
 		return

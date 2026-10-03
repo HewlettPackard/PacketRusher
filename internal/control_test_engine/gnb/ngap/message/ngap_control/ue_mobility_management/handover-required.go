@@ -109,8 +109,10 @@ func GetSourceToTargetTransparentTransfer(sourceGnb *context.GNBContext, targetG
 }
 
 func buildSourceToTargetTransparentTransfer(sourceGnb *context.GNBContext, targetGnb *context.GNBContext, pduSessions [16]*context.GnbPDUSession, prUeId int64) (data ngapType.SourceNGRANNodeToTargetNGRANNodeTransparentContainer) {
-	data.RRCContainer = &ngapType.RRCContainer{Value: aper.OctetString("\x00\x00\x11")}
-	data.IndexToRFSP = &ngapType.IndexToRFSP{Value: prUeId}
+	data.RRCContainer = &ngapType.RRCContainer{Value: ngapConvert.VirtualUERrc(prUeId)}
+	if prUeId >= 1 && prUeId <= 256 {
+		data.IndexToRFSP = &ngapType.IndexToRFSP{Value: prUeId}
+	}
 	list := &ngapType.PDUSessionResourceInformationList{}
 	for _, session := range pduSessions {
 		if session == nil {

@@ -10,7 +10,7 @@ import (
 	"my5G-RANTester/test/aio5gc/lib/convert"
 )
 
-func NGSetupResponse(amf context.AMFContext) ([]byte, error) {
+func NGSetupResponse(amf *context.AMFContext) ([]byte, error) {
 	return BuilNGSetupResponse(amf.GetName(), amf.GetId(), amf.GetServedGuami(), amf.GetSupportedPlmnSnssai(), amf.GetRelativeCapacity()).MarshalBinary()
 }
 func BuilNGSetupResponse(name, id string, guamis []models.Guami, plmns []models.Nrf_NFMgmt_PlmnSnssai, capacity int64) *message.NGSetupResponse {

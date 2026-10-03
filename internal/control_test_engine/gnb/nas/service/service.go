@@ -75,8 +75,12 @@ func gnbListen(gnb *context.GNBContext) {
 			if message.UEContext != nil && message.IsHandover {
 				// Xn Handover
 				log.Info("[GNB] Received incoming handover for UE from another gNodeB")
-				ue.SetStateReady()
 				ue.CopyFromPreviousContext(message.UEContext)
+				for _, pdu := range ue.GetPduSessions() {
+					if pdu != nil {
+						pdu.SetTeidDownlink(gnb.GetUeTeid(ue))
+					}
+				}
 				trigger.SendPathSwitchRequest(gnb, ue)
 
 			} else {
@@ -111,10 +115,14 @@ func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
 			if !done {
 				// Channel is closed, UE is terminating
 				log.Debug("[GNB][NAS] Channel closed for UE ", ue.GetRanUeId())
-				gnbUeContext, err := gnb.GetGnbUe(ue.GetRanUeId())
-				if err == nil {
-					gnbUeContext.SetStateDown()
+				ue.LockProcessing()
+				if current, err := gnb.GetGnbUe(ue.GetRanUeId()); err == nil && current == ue {
+					ue.SetStateDown()
+					if ue.GetHandoverGnodeB() == nil {
+						gnb.DeleteGnBUe(ue)
+					}
 				}
+				ue.UnlockProcessing()
 				return
 			}
 

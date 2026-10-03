@@ -5,6 +5,8 @@
 package trigger
 
 import (
+	stdContext "context"
+	"fmt"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	ueSender "my5G-RANTester/internal/control_test_engine/gnb/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/interface_management"
@@ -227,25 +229,61 @@ func TriggerXnHandover(oldGnb *context.GNBContext, newGnb *context.GNBContext, p
 }
 
 func TriggerNgapHandover(oldGnb *context.GNBContext, newGnb *context.GNBContext, prUeId int64) {
+	if err := StartNgapHandover(oldGnb, newGnb, prUeId); err != nil {
+		log.Error("[GNB][NGAP] Error initiating handover: ", err)
+	}
+}
+
+// StartNgapHandover reports a build/send failure to runtime scenario callers.
+func StartNgapHandover(oldGnb *context.GNBContext, newGnb *context.GNBContext, prUeId int64) error {
 	log.Info("[GNB] Initiating NGAP UE Handover")
 
 	gnbUeContext, err := oldGnb.GetGnbUeByPrUeId(prUeId)
 	if err != nil {
 		log.Error("[GNB][NGAP] Error getting UE from PR UE ID: ", err)
-		return
+		return err
 	}
 
+	gnbUeContext.LockProcessing()
 	gnbUeContext.SetHandoverGnodeB(newGnb)
 
 	// send NG setup response.
 	ngapMsg, err := ue_mobility_management.HandoverRequired(oldGnb, newGnb, gnbUeContext)
+	gnbUeContext.UnlockProcessing()
 	if err != nil {
-		log.Info("[GNB][NGAP] Error sending Handover Required ", err)
+		gnbUeContext.SetHandoverGnodeB(nil)
+		return err
 	}
 
 	conn := gnbUeContext.GetSCTP()
 	err = sender.SendToAmF(ngapMsg, conn)
 	if err != nil {
-		log.Error("[GNB][NGAP] Error sending Handover Required: ", err)
+		gnbUeContext.SetHandoverGnodeB(nil)
 	}
+	return err
+}
+
+// PrepareXnHandover returns the connection change to the UE event loop. Sending
+// it to that loop's own downlink queue would deadlock when the queue is full.
+func PrepareXnHandover(ctx stdContext.Context, oldGnb, newGnb *context.GNBContext, prUeId int64) (context.UEMessage, error) {
+	if oldGnb == nil || newGnb == nil || oldGnb == newGnb {
+		return context.UEMessage{}, fmt.Errorf("invalid handover source or target")
+	}
+	gu, err := oldGnb.GetGnbUeByPrUeId(prUeId)
+	if err != nil {
+		return context.UEMessage{}, err
+	}
+	if !newGnb.NGSetupReady() {
+		return context.UEMessage{}, fmt.Errorf("target gNB has not completed NG Setup")
+	}
+	rx, tx := make(chan context.UEMessage, 10), make(chan context.UEMessage, 10)
+	lost := make(chan struct{})
+	message := context.UEMessage{GNBRx: rx, GNBTx: tx, ConnectionLost: lost, PrUeId: prUeId, UEContext: gu, IsHandover: true}
+	if err := ctx.Err(); err != nil {
+		return context.UEMessage{}, err
+	}
+	if err := newGnb.QueueHandover(message); err != nil {
+		return context.UEMessage{}, err
+	}
+	return context.UEMessage{GNBRx: rx, GNBTx: tx, ConnectionLost: lost, GNBInboundChannel: newGnb.GetInboundChannel()}, nil
 }
