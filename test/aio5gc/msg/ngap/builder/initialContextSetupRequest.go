@@ -10,14 +10,14 @@ import (
 	"my5G-RANTester/test/aio5gc/lib/convert"
 )
 
-func InitialContextSetupRequest(nas []byte, ue *context.UEContext, amf context.AMFContext) ([]byte, error) {
+func InitialContextSetupRequest(nas []byte, ue *context.UEContext, amf *context.AMFContext) ([]byte, error) {
 	msg, err := buildInitialContextSetupRequest(nas, ue, amf)
 	if err != nil {
 		return nil, err
 	}
 	return msg.MarshalBinary()
 }
-func buildInitialContextSetupRequest(nas []byte, ue *context.UEContext, amf context.AMFContext) (*message.InitialContextSetupRequest, error) {
+func buildInitialContextSetupRequest(nas []byte, ue *context.UEContext, amf *context.AMFContext) (*message.InitialContextSetupRequest, error) {
 	caps := ue.GetSecurityCapability()
 	enc, integrity := byte(0), byte(0)
 	if caps.EA1_128_5G {
