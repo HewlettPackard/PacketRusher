@@ -3,6 +3,8 @@ package service
 
 import (
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
@@ -30,6 +32,43 @@ func TestUserspaceConfigRejectsInvalidTEIDsAndQFI(t *testing.T) {
 	require.NoError(t, err)
 	_, err = userspaceConfig(pdu, msg.GnbIp, "10.0.0.1")
 	require.Error(t, err)
+}
+
+func TestUserspaceUpdateFailureReleasesOnlyWhenRollbackFails(t *testing.T) {
+	for _, rollbackFails := range []bool{false, true} {
+		t.Run(fmt.Sprintf("rollbackFails=%t", rollbackFails), func(t *testing.T) {
+			ue, pdu := sharedSetupUE(t, 1)
+			ue.TunnelBackend = config.TunnelBackendUserspace
+			source := userspaceTestMessage(t, "127.88.4.1", 60)
+			target := userspaceTestMessage(t, "127.88.4.2", 70)
+			link := &netlink.Tuntap{LinkAttrs: netlink.LinkAttrs{Name: "existing", MTU: 1456}}
+			pdu.SetTunInterface(link)
+			pdu.SetGnbIp(source.GnbIp)
+			pdu.GnbPduSession = source.GNBPduSessions[0]
+			released := 0
+			pdu.SetTunnelCleanup(func(bool) { released++; pdu.SetTunInterface(nil) })
+			pdu.SetTunnelUpdate(func(next *gnbContext.GnbPDUSession, ip netip.Addr) error {
+				require.Same(t, target.GNBPduSessions[0], next)
+				require.Equal(t, target.GnbIp, ip)
+				if rollbackFails {
+					return fmt.Errorf("%w: restore source MTU failed", errTunnelRollback)
+				}
+				return errors.New("target bind failed; source restored")
+			})
+			SetupGtpInterface(ue, target)
+			require.Equal(t, source.GnbIp, pdu.GetGnbIp())
+			require.Same(t, source.GNBPduSessions[0], pdu.GnbPduSession)
+			if rollbackFails {
+				require.Equal(t, 1, released)
+				require.Nil(t, pdu.GetTunInterface())
+			} else {
+				require.Zero(t, released)
+				require.Same(t, link, pdu.GetTunInterface())
+			}
+			pdu.ReleaseTunnel()
+			require.Equal(t, 1, released, "cleanup must run once")
+		})
+	}
 }
 func userspaceTestMessage(t *testing.T, local string, teid uint32) gnbContext.UEMessage {
 	t.Helper()
@@ -138,6 +177,31 @@ func TestUserspaceRealPolicyVRFHandoverAndRollback(t *testing.T) {
 			require.Equal(t, target.GNBPduSessions[0], pdu.GnbPduSession)
 			userspaceRoundTrip(t, app, peer, target.GnbIp, 70, 71)
 			blocked.Close()
+			// A target bind failure normally preserves the source. If restoring the
+			// already-changed TUN MTU also fails, retire that inconsistent tunnel.
+			blocked, err = net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 88, 4, 3), Port: 2152})
+			require.NoError(t, err)
+			defer blocked.Close()
+			previousRestore := restoreTunnelMTU
+			t.Cleanup(func() { restoreTunnelMTU = previousRestore })
+			restores := 0
+			restoreTunnelMTU = func(actual netlink.Link, previous int) error {
+				restores++
+				require.Equal(t, link.Attrs().Index, actual.Attrs().Index)
+				require.Equal(t, 1456, previous)
+				require.Equal(t, 1400, actual.Attrs().MTU, "target MTU must be applied before its bind fails")
+				kernelLink, err := netlink.LinkByName(actual.Attrs().Name)
+				require.NoError(t, err)
+				require.Equal(t, 1400, kernelLink.Attrs().MTU)
+				return errors.New("injected source MTU restoration failure")
+			}
+			ue.TunnelMTU = 1400
+			SetupGtpInterface(ue, userspaceTestMessage(t, "127.88.4.3", 80))
+			restoreTunnelMTU = previousRestore
+			require.Equal(t, 1, restores)
+			require.Equal(t, target.GnbIp, pdu.GetGnbIp())
+			require.Same(t, target.GNBPduSessions[0], pdu.GnbPduSession)
+			require.Nil(t, pdu.GetTunInterface())
 			app.Close()
 			pdu.ReleaseTunnel()
 			require.Nil(t, pdu.GetTunInterface())
