@@ -124,7 +124,7 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 
 	// The gNB, not its UEs, owns the GTP-U device they share: it is created on the N3
 	// address the gNB settled on above, before any UE can ask for a tunnel.
-	if conf.Ue.TunnelMode == config.TunnelShared && conf.Ue.TunnelBackend == config.TunnelBackendKernel {
+	if conf.Ue.TunnelMode == config.TunnelShared && conf.Ue.TunnelBackend != config.TunnelBackendUserspace && conf.Ue.TunnelBackend != config.TunnelBackendEBPF {
 		dev, err := gtp.NewDevice(gnb.GetN3GnbIp(), conf.Ue.TunnelMTU)
 		if err != nil {
 			log.Fatal("[GNB][GTP] Unable to create the shared GTP-U device: ", err)
