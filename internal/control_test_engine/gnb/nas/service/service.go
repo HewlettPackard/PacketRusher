@@ -22,7 +22,10 @@ func gnbListen(gnb *context.GNBContext) {
 	ln := gnb.GetInboundChannel()
 
 	for {
-		message := <-ln
+		message, open := <-ln
+		if !open {
+			return
+		}
 
 		if message.FetchPagedUEs {
 			if message.GNBTx != nil {
@@ -45,6 +48,7 @@ func gnbListen(gnb *context.GNBContext) {
 		if ue != nil && message.IsHandover {
 			// We already have a context for this UE since it was sent to us by the AMF from a NGAP Handover
 			// Notify the AMF that the UE has succesfully been handed over to US
+			ue.SetConnectionLost(message.ConnectionLost)
 			ue.SetGnbRx(message.GNBRx)
 			ue.SetGnbTx(message.GNBTx)
 
@@ -57,10 +61,15 @@ func gnbListen(gnb *context.GNBContext) {
 			trigger.SendHandoverNotify(gnb, ue)
 		} else {
 			var err error
-			ue, err = gnb.NewGnBUe(message.GNBTx, message.GNBRx, message.PrUeId, message.Tmsi)
+			ue, err = gnb.NewGnBUe(message.GNBTx, message.GNBRx, message.PrUeId, message.Tmsi, message.ConnectionLost)
 			if ue == nil && err != nil {
 				log.Errorf("[GNB] UE was not created succesfully: %s. Closing connection with UE.", err)
-				close(message.GNBTx)
+				if message.ConnectionLost != nil {
+					close(message.ConnectionLost)
+				}
+				if message.GNBTx != nil {
+					close(message.GNBTx)
+				}
 				continue
 			}
 			if message.UEContext != nil && message.IsHandover {
@@ -116,23 +125,34 @@ func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
 				continue
 			}
 
-			// Process the message
-			if message.ConnectionClosed {
-				log.Info("[GNB] Cleaning up context on current gNb for UE ", ue.GetRanUeId())
-				gnbUeContext.SetStateDown()
-				if gnbUeContext.GetHandoverGnodeB() == nil {
-					// We do not clean the context if it's a NGAP Handover, as AMF will request the context clean-up
-					// Otherwise, we do clean the context
-					gnb.DeleteGnBUe(ue)
-				}
+			if !processUplink(gnbUeContext, gnb, message) {
 				return
-			} else if message.IsNas {
-				nas.Dispatch(ue, message.Nas, gnb)
-			} else if message.Idle {
-				trigger.SendUeContextReleaseRequest(ue)
-			} else {
-				log.Debug("[GNB] Received message from UE ", ue.GetRanUeId())
 			}
 		}
 	}
+}
+
+func processUplink(ue *context.GNBUe, gnb *context.GNBContext, message context.UEMessage) bool {
+	ue.LockProcessing()
+	defer ue.UnlockProcessing()
+	// The context may have been released while we waited for downlink mutation.
+	if current, err := gnb.GetGnbUe(ue.GetRanUeId()); err != nil || current != ue {
+		return false
+	}
+	if message.ConnectionClosed {
+		log.Info("[GNB] Cleaning up context on current gNb for UE ", ue.GetRanUeId())
+		ue.SetStateDown()
+		if ue.GetHandoverGnodeB() == nil {
+			// NGAP handover leaves source cleanup to the AMF.
+			gnb.DeleteGnBUe(ue)
+		}
+		return false
+	} else if message.IsNas {
+		nas.Dispatch(ue, message.Nas, gnb)
+	} else if message.Idle {
+		trigger.SendUeContextReleaseRequest(ue)
+	} else {
+		log.Debug("[GNB] Received message from UE ", ue.GetRanUeId())
+	}
+	return true
 }

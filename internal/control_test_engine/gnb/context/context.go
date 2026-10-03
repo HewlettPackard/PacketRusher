@@ -86,7 +86,7 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd string, n2
 	gnb.dataInfo.gnbIpPort = n3
 }
 
-func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUeId int64, tmsi *nasType.GUTI5G) (*GNBUe, error) {
+func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUeId int64, tmsi *nasType.GUTI5G, connectionLost ...chan struct{}) (*GNBUe, error) {
 
 	// TODO if necessary add more information for UE.
 
@@ -97,11 +97,12 @@ func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUe
 	ranId := gnb.getRanUeId()
 	ue.SetRanUeId(ranId)
 
-	ue.SetAmfUeId(0)
-
 	// Connect gNB and UE's channels
 	ue.SetGnbRx(gnbRx)
 	ue.SetGnbTx(gnbTx)
+	if len(connectionLost) != 0 {
+		ue.SetConnectionLost(connectionLost[0])
+	}
 	ue.SetPrUeId(prUeId)
 	ue.SetTMSI(tmsi)
 
@@ -185,12 +186,7 @@ func (gnb *GNBContext) DeleteGnBUe(ue *GNBUe) {
 			gnb.teidPool.Delete(pduSession.GetTeidDownlink())
 		}
 	}
-	ue.Lock()
-	if ue.gnbTx != nil {
-		close(ue.gnbTx)
-		ue.gnbTx = nil
-	}
-	ue.Unlock()
+	ue.CloseUEChannel()
 }
 
 func (gnb *GNBContext) GetGnbUe(ranUeId int64) (*GNBUe, error) {
@@ -209,7 +205,7 @@ func (gnb *GNBContext) GetGnbUeByAmfUeId(amfUeId int64) (*GNBUe, error) {
 	var found *GNBUe
 	gnb.uePool.Range(func(key, value any) bool {
 		ue := value.(*GNBUe)
-		if ue.GetAmfUeId() == amfUeId {
+		if ue.HasAmfUeId() && ue.GetAmfUeId() == amfUeId {
 			found = ue
 			return false
 		}
@@ -390,6 +386,7 @@ func (gnb *GNBContext) ReleaseUesOfAmf(amfId int64) int {
 	released := 0
 	gnb.uePool.Range(func(_, value any) bool {
 		if ue, ok := value.(*GNBUe); ok && ue.GetAmfId() == amfId {
+			ue.FailUEChannel()
 			gnb.DeleteGnBUe(ue)
 			released++
 		}

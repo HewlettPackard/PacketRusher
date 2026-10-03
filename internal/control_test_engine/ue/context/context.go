@@ -56,6 +56,7 @@ type UEContext struct {
 	gnbInboundChannel chan context.UEMessage
 	gnbRx             chan context.UEMessage
 	gnbTx             chan context.UEMessage
+	gnbConnectionLost <-chan struct{}
 	drx               *time.Ticker
 	PduSession        [16]*UEPDUSession
 	amfInfo           Amf
@@ -839,3 +840,6 @@ func (pduSession *UEPDUSession) UpdateTunnel(pdu *context.GnbPDUSession, ip neti
 	}
 	return pduSession.updateTunnel(pdu, ip)
 }
+
+func (ue *UEContext) SetGnbConnectionLost(lost <-chan struct{}) { ue.gnbConnectionLost = lost }
+func (ue *UEContext) GetGnbConnectionLost() <-chan struct{}     { return ue.gnbConnectionLost }
