@@ -17,7 +17,7 @@ func BuildNGSetupRequest(gnb *context.GNBContext) *message.NGSetupRequest {
 	return &message.NGSetupRequest{
 		GlobalRANNodeID: &ie.GlobalRANNodeID{Choice: &ie.GlobalGNBID{
 			PLMNIdentity: gnb.GetPLMNIdentity(),
-			GNBID:        &ie.GNBID{Choice: &ie.GNBIDForGNBID{Value: aper.BitString{Bytes: gnb.GetGnbIdInBytes(), BitLength: 24}}},
+			GNBID:        &ie.GNBID{Choice: &ie.GNBIDForGNBID{Value: gnb.GetGNBIDBitString()}},
 		}},
 		RANNodeName: &ie.RANNodeName{Value: "my5gRANTester"},
 		SupportedTAList: &ie.SupportedTAList{List: []ie.SupportedTAItem{{
