@@ -33,17 +33,34 @@ var ipv6Network = ipv6NetworkOperations{
 }
 
 type ipv6Binding struct {
-	link      netlink.Link
-	table     uint32
-	vrf       bool
-	session   *context.UEPDUSession
-	ops       ipv6NetworkOperations
-	addresses []*netlink.Addr
-	rules     []*netlink.Rule
-	route     *netlink.Route
-	claim     *netlink.Route
-	address   *netlink.Addr
-	rule      *netlink.Rule
+	link                netlink.Link
+	table               uint32
+	vrf                 bool
+	session             *context.UEPDUSession
+	ops                 ipv6NetworkOperations
+	addresses           []*netlink.Addr
+	rules               []*netlink.Rule
+	route               *netlink.Route
+	claim               *netlink.Route
+	address             *netlink.Addr
+	rule                *netlink.Rule
+	allocationCallbacks []func(netip.Addr) error
+}
+
+// A forwarding owner must either commit the allocation or disable its path on
+// error. Notifications run synchronously in the discovery worker, without any
+// transport locks. Invalid addresses revoke an allocation, even when network
+// object retirement fails and its source policy must remain installed.
+func (b *ipv6Binding) notifyAllocation(address netip.Addr) error {
+	var failures []error
+	for _, callback := range b.allocationCallbacks {
+		if callback != nil {
+			if err := callback(address); err != nil {
+				failures = append(failures, fmt.Errorf("update IPv6 forwarding allocation: %w", err))
+			}
+		}
+	}
+	return errors.Join(failures...)
 }
 
 // install stages a new prefix before replacing its route; failed staging leaves
@@ -80,9 +97,21 @@ func (b *ipv6Binding) install(advertisement ipv6.Advertisement) (bool, error) {
 		}
 		return false, errors.Join(err, b.retire(address, rule))
 	}
+	if err := b.notifyAllocation(advertisement.Address); err != nil {
+		// Staging is not publication. Revoke any partially notified forwarding
+		// owner and remove the candidate, retaining failed deletions for cleanup.
+		withdrawErr := b.withdraw()
+		if !sameAddress {
+			withdrawErr = errors.Join(withdrawErr, b.retire(address, rule))
+		}
+		return false, errors.Join(err, withdrawErr)
+	}
 	oldRule, oldAddress := b.rule, b.address
 	b.rule, b.address = rule, address
 	if err := b.session.SetIPv6(advertisement.Address); err != nil {
+		if len(b.allocationCallbacks) > 0 {
+			return false, errors.Join(err, b.withdraw(), b.retire(oldAddress, oldRule))
+		}
 		return true, err
 	}
 	if sameAddress {
@@ -153,6 +182,9 @@ func (b *ipv6Binding) removeAddress(address *netlink.Addr) error {
 }
 func (b *ipv6Binding) withdraw() error {
 	var failures []error
+	if err := b.notifyAllocation(netip.Addr{}); err != nil {
+		failures = append(failures, err)
+	}
 	if err := b.withdrawRouter(); err != nil {
 		failures = append(failures, err)
 	}
@@ -204,12 +236,13 @@ func (b *ipv6Binding) cleanup() error {
 }
 
 // SetupIPv6Session discovers the UPF's prefix, then refreshes advertisements and
-// withdraws expired routing. Cleanup must precede userspace transport/device/
-// table cleanup. Even on failure a non-nil cleanup must be retained and called.
-func SetupIPv6Session(ue *context.UEContext, session *context.UEPDUSession, link netlink.Link, table uint32, send func([]byte) error, advertisements <-chan []byte) (func() error, error) {
-	return setupIPv6Session(ue, session, link, table, send, advertisements, ipv6Network, 4*time.Second)
+// withdraws expired routing. Optional forwarding callbacks must be bounded and
+// disable forwarding when their update fails. Cleanup must precede transport,
+// device and table cleanup. Retain and call non-nil cleanup even on failure.
+func SetupIPv6Session(ue *context.UEContext, session *context.UEPDUSession, link netlink.Link, table uint32, send func([]byte) error, advertisements <-chan []byte, callbacks ...func(netip.Addr) error) (func() error, error) {
+	return setupIPv6Session(ue, session, link, table, send, advertisements, ipv6Network, 4*time.Second, callbacks...)
 }
-func setupIPv6Session(ue *context.UEContext, session *context.UEPDUSession, link netlink.Link, table uint32, send func([]byte) error, advertisements <-chan []byte, ops ipv6NetworkOperations, retryDelay time.Duration) (cleanup func() error, resultError error) {
+func setupIPv6Session(ue *context.UEContext, session *context.UEPDUSession, link netlink.Link, table uint32, send func([]byte) error, advertisements <-chan []byte, ops ipv6NetworkOperations, retryDelay time.Duration, callbacks ...func(netip.Addr) error) (cleanup func() error, resultError error) {
 	iid, enabled := session.GetIPv6InterfaceID()
 	if !enabled {
 		return func() error { return nil }, nil
@@ -218,6 +251,11 @@ func setupIPv6Session(ue *context.UEContext, session *context.UEPDUSession, link
 		return nil, fmt.Errorf("IPv6 requires a session transport, routing table, and TUN MTU of at least 1280")
 	}
 	binding := &ipv6Binding{link: link, table: table, vrf: ue.TunnelMode == config.TunnelVrf, session: session, ops: ops}
+	for _, callback := range callbacks {
+		if callback != nil {
+			binding.allocationCallbacks = append(binding.allocationCallbacks, callback)
+		}
+	}
 	stop, done := make(chan struct{}), make(chan struct{})
 	var started bool
 	var once sync.Once
@@ -285,6 +323,13 @@ func setupIPv6Session(ue *context.UEContext, session *context.UEPDUSession, link
 	started = true
 	go func() {
 		defer close(done)
+		defer func() {
+			if len(binding.allocationCallbacks) > 0 {
+				if err := binding.withdraw(); err != nil {
+					log.Warn("[UE][GTP] IPv6 forwarding shutdown failed: ", err)
+				}
+			}
+		}()
 		validity := time.NewTimer(time.Duration(advertisement.ValidLifetime) * time.Second)
 		defer validity.Stop()
 		router := time.NewTimer(time.Duration(advertisement.RouterLifetime) * time.Second)
