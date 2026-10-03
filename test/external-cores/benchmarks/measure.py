@@ -35,8 +35,8 @@ def preflight_qfis(path, nonce):
 def command(direction, transport, seconds, rate=None):
     args = ['iperf3', '-c', '10.45.0.1', '-B', '10.45.0.2', '-p', '5201',
             '-J', '--get-server-output', '-t', str(seconds), '-i', '0',
-            '--connect-timeout', '3000', '--rcv-timeout', '5000', '--snd-timeout', '5000']
-    if direction == 'downlink': args.append('-R')
+            '--connect-timeout', '3000', '--snd-timeout', '5000']
+    if direction == 'downlink': args += ['-R','--rcv-timeout','5000']
     if transport == 'udp': args += ['-u', '-l', '1200', '-b', str(rate)]
     else: args += ['-M', '1200']
     return args

@@ -11,6 +11,7 @@ class MeasurementGuards(unittest.TestCase):
                 args=command(direction,transport,5,50_000_000)
                 self.assertEqual(args[args.index('-B')+1],'10.45.0.2')
                 self.assertEqual('-R' in args,direction=='downlink')
+                self.assertEqual('--rcv-timeout' in args,direction=='downlink')
                 self.assertEqual(args[args.index('-l' if transport=='udp' else '-M')+1],'1200')
 
     def test_sender_only_udp_stats_cannot_masquerade_as_receiver(self):
