@@ -29,3 +29,22 @@ jobs:
 
       - name: Run patched native NAS codec tests
         run: go test -v -race github.com/free5gc/nas/ie/... github.com/free5gc/nas/message/... github.com/free5gc/nas/internal/... -timeout=180s
+
+  docker-smoke:
+    name: Docker build and CLI smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v7.0.1
+      - name: Build Docker image
+        run: docker build -f docker/Dockerfile --target packetrusher -t packetrusher-ci .
+      - name: Check container CLI
+        run: |
+          docker run --rm packetrusher-ci --help
+          docker run --rm packetrusher-ci multi-ue --help
+      - name: Validate Compose configurations
+        run: |
+          docker compose -f docker/docker-compose.yml config --quiet
+          docker compose -f docker/docker-compose.yml -f docker/docker-compose.tunnel.yml config --quiet
+          docker compose -f docker/docker-compose.bridge.yml config --quiet
+          docker compose -f docker/docker-compose.bridge.yml -f docker/docker-compose.tunnel.yml config --quiet

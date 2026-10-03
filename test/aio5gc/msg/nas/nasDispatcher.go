@@ -63,7 +63,7 @@ func Dispatch(pdu *ie.NASPDU, ue *context.UEContext, fgc *context.Aio5gc, gnb *c
 	case *nas.SecModeComplete:
 		err = handler.SecurityModeComplete(m, amf, ue, gnb)
 	case *nas.RegComplete:
-		err = handler.RegistrationComplete(m, gnb, ue, *amf)
+		err = handler.RegistrationComplete(m, gnb, ue, amf)
 	case *nas.ULNASTransport:
 		err = handler.UlNasTransport(m, gnb, ue, session)
 	case *nas.CfgUpdateComplete:

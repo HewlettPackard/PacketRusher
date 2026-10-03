@@ -2,8 +2,11 @@ package message_test
 
 import (
 	"encoding/binary"
+	"encoding/hex"
+	"fmt"
 	"net/netip"
 	"reflect"
+	"sync"
 	"testing"
 
 	nasIE "github.com/free5gc/nas/ie"
@@ -18,6 +21,117 @@ import (
 	mobility "my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_mobility_management"
 	codec "my5G-RANTester/lib/ngap"
 )
+
+// Xn target setup runs on a different gNB lane from session release. A copied
+// array is a membership snapshot, but taking that snapshot must synchronize with
+// both source teardown and subsequent target teardown.
+func TestPathSwitchConcurrentHandoverSessionRelease(t *testing.T) {
+	_, source, sourceSession := fixture(t, "000001")
+	gnb, target, _ := fixture(t, "000002")
+	anchor, err := source.CreatePduSession(15, "10.0.0.1", "01", "000001", 0, 9, 1, 9, 101, 201)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target.CopyFromPreviousContext(source)
+	var sessions [16]*context.GnbPDUSession
+	sessions[0], sessions[14] = sourceSession, anchor
+	start := make(chan struct{})
+	errors := make(chan error, 4)
+	var workers sync.WaitGroup
+	workers.Add(4)
+	go func() {
+		defer workers.Done()
+		<-start
+		for i := 0; i < 200; i++ {
+			if err := source.DeletePduSession(1); err != nil {
+				errors <- err
+				return
+			}
+			source.SetPduSessions(sessions)
+		}
+	}()
+	go func() {
+		defer workers.Done()
+		<-start
+		for i := 0; i < 200; i++ {
+			target.CopyFromPreviousContext(source)
+			if err := target.DeletePduSession(1); err != nil {
+				errors <- err
+				return
+			}
+		}
+	}()
+	go func() {
+		defer workers.Done()
+		<-start
+		for i := 0; i < 200; i++ {
+			encoded, err := mobility.PathSwitchRequest(gnb, target)
+			if err != nil {
+				errors <- err
+				return
+			}
+			decoded, err := message.Parse(encoded)
+			if err != nil {
+				errors <- err
+				return
+			}
+			found := false
+			for _, item := range decoded.(*message.PathSwitchRequest).PDUSessionResourceToBeSwitchedDLList.List {
+				if item.PDUSessionID.Value == 15 {
+					found = true
+				}
+			}
+			if !found {
+				errors <- fmt.Errorf("stable handover session disappeared from path switch snapshot")
+				return
+			}
+		}
+	}()
+	go func() {
+		defer workers.Done()
+		<-start
+		for i := 0; i < 200; i++ {
+			// Session pointers remain shared by source/target snapshots, including
+			// tunnel updates from path-switch acknowledgement on another lane.
+			anchor.SetTeidDownlink(201 + uint32(i%2))
+		}
+	}()
+	close(start)
+	workers.Wait()
+	close(errors)
+	for err := range errors {
+		t.Error(err)
+	}
+}
+
+func TestNGSetupPLMNWireVectors(t *testing.T) {
+	for _, tc := range []struct{ mcc, mnc, wire string }{
+		{"208", "93", "02f839"}, {"208", "010", "020801"},
+		{"001", "001", "000110"}, {"001", "01", "00f110"},
+		{"999", "070", "990907"}, {"999", "07", "99f970"},
+	} {
+		t.Run(tc.mcc+"/"+tc.mnc, func(t *testing.T) {
+			gnb := &context.GNBContext{}
+			gnb.NewRanGnbContext("000001", tc.mcc, tc.mnc, "000001", "01", "000001", netip.MustParseAddrPort("127.0.0.1:9487"), netip.MustParseAddrPort("127.0.0.1:2152"))
+			encoded, err := interfaces.NGSetupRequest(gnb, "test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := message.Parse(encoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			setup := decoded.(*message.NGSetupRequest)
+			global := setup.GlobalRANNodeID.Choice.(*ie.GlobalGNBID)
+			broadcast := setup.SupportedTAList.List[0].BroadcastPLMNList.List[0].PLMNIdentity
+			for name, identity := range map[string]*ie.PLMNIdentity{"global gNB": global.PLMNIdentity, "broadcast TAI": broadcast} {
+				if got := hex.EncodeToString(identity.Value); got != tc.wire {
+					t.Fatalf("%s PLMN: got %s, want %s", name, got, tc.wire)
+				}
+			}
+		})
+	}
+}
 
 func fixture(t *testing.T, id string) (*context.GNBContext, *context.GNBUe, *context.GnbPDUSession) {
 	t.Helper()
