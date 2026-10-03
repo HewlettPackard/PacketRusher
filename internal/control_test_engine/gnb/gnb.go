@@ -58,6 +58,9 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 				currentN2IP.AddrPort,
 				currentN3IP.AddrPort,
 			)
+			if err := gnb.ConfigureIdentity(conf.GNodeB.PlmnList.GnbIDLength, conf.GNodeB.PlmnList.CellID); err != nil {
+				log.Fatalf("[GNB] Invalid identity: %v", err)
+			}
 
 			// new AMF context.
 			amf := gnb.NewGnBAmf(amfConfig.AddrPort)
@@ -161,6 +164,9 @@ func InitGnbForLoadSeconds(conf config.Config, wg *sync.WaitGroup,
 		conf.GNodeB.SliceSupportList.Sd,
 		conf.GNodeB.ControlIF.AddrPort,
 		conf.GNodeB.DataIF.AddrPort)
+	if err := gnb.ConfigureIdentity(conf.GNodeB.PlmnList.GnbIDLength, conf.GNodeB.PlmnList.CellID); err != nil {
+		log.Fatalf("[GNB] Invalid identity: %v", err)
+	}
 
 	// start communication with AMF (server SCTP).
 	for _, amf := range conf.AMFs {
@@ -203,6 +209,9 @@ func InitGnbForAvaibility(conf config.Config,
 		conf.GNodeB.SliceSupportList.Sd,
 		conf.GNodeB.ControlIF.AddrPort,
 		conf.GNodeB.DataIF.AddrPort)
+	if err := gnb.ConfigureIdentity(conf.GNodeB.PlmnList.GnbIDLength, conf.GNodeB.PlmnList.CellID); err != nil {
+		log.Fatalf("[GNB] Invalid identity: %v", err)
+	}
 
 	// start communication with AMF (server SCTP).
 	for _, amf := range conf.AMFs {

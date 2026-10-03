@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb/gtp"
 
 	nasType "github.com/free5gc/nas/ie"
@@ -57,6 +58,8 @@ type ControlInfo struct {
 	mnc            string
 	tac            string
 	gnbId          string
+	gnbIDLength    uint8
+	cellID         uint16
 	gnbIpPort      netip.AddrPort
 	inboundChannel chan UEMessage
 	n2             atomic.Pointer[sctp.SCTPConn]
@@ -78,6 +81,8 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd string, n2
 	gnb.controlInfo.mnc = mnc
 	gnb.controlInfo.tac = tac
 	gnb.controlInfo.gnbId = gnbId
+	gnb.controlInfo.gnbIDLength = 24
+	gnb.controlInfo.cellID = 0
 	gnb.controlInfo.inboundChannel = make(chan UEMessage, 100)
 	gnb.sliceInfo.sd = sd
 	gnb.sliceInfo.sst = sst
@@ -449,12 +454,35 @@ func (gnb *GNBContext) GetPagedUEs() []PagedUE {
 }
 
 func (gnb *GNBContext) GetGnbIdInBytes() []byte {
-	// changed for bytes.
-	resu, err := hex.DecodeString(gnb.controlInfo.gnbId)
+	id, err := gnb.identity()
 	if err != nil {
-		fmt.Println(err)
+		log.Errorf("[GNB] Invalid identity: %v", err)
+		return nil
 	}
-	return resu
+	return id.Bytes()
+}
+
+// ConfigureIdentity runs before an association can encode NG Setup or location.
+func (gnb *GNBContext) ConfigureIdentity(bits uint8, cell uint16) error {
+	id, err := config.ParseGNBIdentity(gnb.controlInfo.gnbId, bits, cell)
+	if err != nil {
+		return err
+	}
+	gnb.controlInfo.gnbIDLength = id.BitLength
+	gnb.controlInfo.cellID = id.Cell
+	return nil
+}
+
+func (gnb *GNBContext) identity() (config.GNBIdentity, error) {
+	return config.ParseGNBIdentity(gnb.controlInfo.gnbId, gnb.controlInfo.gnbIDLength, gnb.controlInfo.cellID)
+}
+
+func (gnb *GNBContext) GetGNBIDBitString() aper.BitString {
+	bits := gnb.controlInfo.gnbIDLength
+	if bits == 0 {
+		bits = 24
+	}
+	return aper.BitString{Bytes: gnb.GetGnbIdInBytes(), BitLength: uint64(bits)}
 }
 
 func (gnb *GNBContext) getTac() string {
@@ -495,12 +523,14 @@ func (gnb *GNBContext) GetPLMNIdentity() *ngapType.PLMNIdentity {
 }
 
 func (gnb *GNBContext) GetNRCellIdentity() *ngapType.NRCellIdentity {
-	nci := gnb.GetGnbIdInBytes()
-	var slice = make([]byte, 2)
-
+	id, err := gnb.identity()
+	if err != nil {
+		log.Errorf("[GNB] Invalid cell identity: %v", err)
+		return nil
+	}
 	return &ngapType.NRCellIdentity{
 		Value: aper.BitString{
-			Bytes:     append(nci, slice...),
+			Bytes:     id.CellBytes(),
 			BitLength: 36,
 		},
 	}

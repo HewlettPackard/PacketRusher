@@ -15,6 +15,10 @@ gnodeb:
     mcc: "208"
     mnc: "93"
     tac: "000001"
+    # gnbidlength is 22..32 bits; omitted/0 preserves 24 bits.
+    # cellid occupies the remaining bits of the 36-bit NR cell identity.
+    gnbidlength: 24
+    cellid: 0
     gnbid: "000008"
 
   # gNodeB's Supported Slices
