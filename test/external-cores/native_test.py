@@ -14,11 +14,11 @@ class OwnedCleanup(unittest.TestCase):
         code='import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); print("ready",flush=True); time.sleep(60)'
         processes=[launch_owned([sys.executable,'-c',code],stdout=subprocess.PIPE,text=True) for _ in range(2)]
         previous=signal.getsignal(signal.SIGINT)
+        first_wait=processes[0].wait
         try:
             for process in processes:
                 self.assertEqual(process.stdout.readline().strip(),'ready')
             signal.signal(signal.SIGINT,interrupt)
-            first_wait=processes[0].wait
             def second_cancellation(*args,**kwargs):
                 os.kill(os.getpid(),signal.SIGINT)
                 return first_wait(*args,**kwargs)
@@ -33,10 +33,12 @@ class OwnedCleanup(unittest.TestCase):
             self.assertEqual([process.returncode for process in processes],[-signal.SIGKILL,-signal.SIGKILL])
             self.assertIs(signal.getsignal(signal.SIGINT),interrupt)
         finally:
+            processes[0].wait=first_wait
             signal.signal(signal.SIGINT,previous)
-            for process in processes:
-                stop_owned(process,timeout=.1)
-                process.stdout.close()
+            with defer_cancellation():
+                for process in processes:
+                    stop_owned(process,timeout=.1)
+                    process.stdout.close()
 
     def test_timeout_retires_descendant_even_when_leader_already_exited(self):
         # The child remains in our owned session after its leader exits.
