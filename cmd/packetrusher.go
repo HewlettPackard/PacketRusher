@@ -29,7 +29,7 @@ func newApp() *cli.App {
 		Version: version,
 		After:   afterResults,
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "tunnel-backend", Usage: "Tunnel datapath: gtp5g (default) or userspace; overrides ue.tunnelbackend"},
+			&cli.StringFlag{Name: "tunnel-backend", Usage: "Tunnel datapath: gtp5g (default), userspace, or ebpf; overrides ue.tunnelbackend"},
 			&cli.PathFlag{Name: "config", Usage: "Configuration file path. (Default: ./config/config.yml)"},
 			&cli.PathFlag{Name: "report-json", Usage: "Write procedure results to a new JSON file on shutdown"},
 			&cli.PathFlag{Name: "report-csv", Usage: "Write procedure results to a new CSV file on shutdown"},
@@ -124,6 +124,14 @@ func newApp() *cli.App {
 					cfg := setConfig(*c)
 					if err := cfg.ValidateTunnel(c.Bool("tunnel")); err != nil {
 						return err
+					}
+					if c.Bool("tunnel") && cfg.Ue.TunnelBackend == config.TunnelBackendEBPF {
+						if c.Int("numPduSessions") != 1 {
+							return fmt.Errorf("eBPF tunnels require exactly one PDU session")
+						}
+						if c.Bool("dedicatedGnb") && c.Bool("tunnel-vrf") {
+							return fmt.Errorf("eBPF requires policy routing; set --tunnel-vrf=false")
+						}
 					}
 					if c.IsSet("number-of-ues") {
 						numUes = c.Int("number-of-ues")

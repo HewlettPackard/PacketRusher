@@ -3,8 +3,9 @@ module my5G-RANTester
 go 1.26.2
 
 require (
+	github.com/cilium/ebpf v0.22.0
 	github.com/aead/cmac v0.0.0-20160719120800-7af84192f0b1
-	github.com/davecgh/go-spew v1.1.1
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/free5gc/go-gtp5gnl v1.6.2
 	github.com/free5gc/nas v1.3.0
 	github.com/free5gc/ngap v1.2.0
@@ -15,8 +16,8 @@ require (
 	github.com/ishidawataru/sctp v0.0.0-20250303034628-ecf9ed6df987
 	github.com/khirono/go-nl v1.0.5
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
-	github.com/sirupsen/logrus v1.9.3
-	github.com/stretchr/testify v1.10.0
+	github.com/sirupsen/logrus v1.9.4
+	github.com/stretchr/testify v1.11.1
 	github.com/tetratelabs/wazero v1.9.0
 	github.com/urfave/cli/v2 v2.27.6
 	github.com/vishvananda/netlink v1.3.0
@@ -28,7 +29,7 @@ require (
 	github.com/khirono/go-genl v1.0.1 // indirect
 	github.com/khirono/go-rtnllink v1.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect

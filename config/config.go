@@ -42,6 +42,7 @@ type TunnelBackend string
 const (
 	TunnelBackendKernel    TunnelBackend = "gtp5g"
 	TunnelBackendUserspace TunnelBackend = "userspace"
+	TunnelBackendEBPF      TunnelBackend = "ebpf"
 )
 
 func ParseTunnelBackend(value string) (TunnelBackend, error) {
@@ -50,8 +51,10 @@ func ParseTunnelBackend(value string) (TunnelBackend, error) {
 		return TunnelBackendKernel, nil
 	case string(TunnelBackendUserspace):
 		return TunnelBackendUserspace, nil
+	case string(TunnelBackendEBPF):
+		return TunnelBackendEBPF, nil
 	default:
-		return "", fmt.Errorf("tunnel backend %q must be gtp5g or userspace", value)
+		return "", fmt.Errorf("tunnel backend %q must be gtp5g, userspace, or ebpf", value)
 	}
 }
 
