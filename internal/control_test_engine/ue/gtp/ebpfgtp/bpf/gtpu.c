@@ -80,7 +80,8 @@ int encap(struct __sk_buff *skb) {
     if (!value) return BPF_DROP;
     struct binding cfg = *value;
     // The assigned source and endpoint determine ownership; other routes/UEs
-    // cannot borrow this program's mapping. GSO is segmented by the endpoint.
+    // cannot borrow this program's mapping. Endpoint limits prevent multi-
+    // segment TCP skbs before this hook; never emit one oversized GTP length.
     if (cfg.ue != source || skb->len > cfg.mtu || skb->len < 20 ||
         ntohs(ip->tot_len) != skb->len || skb->gso_segs > 1) return BPF_DROP;
     struct encap_header h = {};

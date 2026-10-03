@@ -21,7 +21,7 @@ backend needs no compiler. Runtime verifier/attachment failures are reported
 without changing to another backend.
 
 IPv6/IPv4v6, VRF, loopback N3, multiple routes, VLAN/bond/bridge attachment,
-jumbo N3, outer fragmentation, IPv4 header options, GTP sequence/N-PDU options,
+jumbo N3, outer fragmentation, IPv4 header options, GTP N-PDU options,
 and extension chains beyond the single PDU Session Container are unsupported.
 Choose `userspace` for IPv6/VRF. The `ue` command uses policy routing with eBPF;
 other backends retain its existing VRF behavior. Applications bind the assigned
@@ -44,6 +44,20 @@ aliases must also match that entry before delivery. The UE TUN, source rule,
 routing table and application sockets stay the same. Failed staging retains
 the source. A committed handover tracks unsuccessful retirement for later
 cleanup instead of rolling back the newly committed mapping.
+
+Downlink T-PDUs may carry a sequence field with or without the single PDU
+Session Container, including the E+S format emitted by free5UPF. Header lengths,
+optional-field bounds and container QFI remain validated; sequence values do
+not change session ownership. The backend delivers arrival order and does not
+perform GTP sequence reordering. See [TS 29.281 §5.1](https://atisorg.s3.amazonaws.com/archive/3gpp-documents/Rel99-14/ATIS.3GPP.29.281.V1030-2012.pdf).
+
+The newly owned UE TUN limits TCP GSO to one segment before its LWT route is
+installed. Linux can send software GSO packets through LWT before final device
+segmentation, so each encapsulated packet must already fit the negotiated MTU
+and contain one complete inner IPv4 packet. This changes only that session's
+endpoint; N3 and other interfaces retain their settings. The kernel ordering
+is visible in [Linux 6.8 IPv4 output](https://github.com/torvalds/linux/blob/v6.8/net/ipv4/ip_output.c)
+and [socket capability setup](https://github.com/torvalds/linux/blob/v6.8/net/core/sock.c).
 
 A small joined UDP management worker answers strictly validated Echo Requests
 from committed peers, preserving their sequence and returning Recovery IE 0.
@@ -79,10 +93,16 @@ The runner creates a TUN device node in a private `/dev` mount when needed;
 it never creates a device or mount on the host. The checks create private
 network/mount namespaces and a second private fake
 UPF namespace. They require real verifier loading and actual bidirectional UDP
-payloads, keepalive responses, TEID/N3 handover, wrong-TEID/destination drops,
+payloads, keepalive responses, TEID/N3/peer-address handover, wrong-TEID/destination drops,
 unrelated UDP passthrough, release and reinstall. Separate encoded fixtures
-exercise checksum, type, QFI, length and tuple rejection through the kernel
+exercise checksum, type, QFI, length, sequence-header and tuple rejection through the kernel
 program. Socket-free tests inject commit/cleanup failures. The
+TCP cases establish a UE-bound connection to a second kernel TCP stack behind
+the fake UPF's DN TUN, echo 270336 bytes, then require joined workers and complete
+service cleanup. They retain the UPF until the application confirms receipt;
+unrelated IPv6 router discovery on that private DN TUN cannot terminate the
+IPv4 fixture. An exact captured free5UPF downlink also exercises the kernel
+parser. The
 `eBPF native datapath` workflow runs this same command on relevant pull requests, pushes to main, and manual
 dispatch. It fails if kernel support or packet proofs fail; ordinary unprivileged tests skip only the
 explicitly gated native fixtures. No external-core interoperability claim is

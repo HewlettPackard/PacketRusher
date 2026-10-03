@@ -23,6 +23,17 @@ import (
 //go:embed gtpu_bpfel.o
 var object []byte
 
+// ConfigureEndpoint limits TCP software GSO before its packets enter the LWT
+// program. Linux routes GSO skbs through LWT before final device segmentation;
+// each GTP-U length must instead describe one complete inner IPv4 packet.
+// Call only for the backend's newly owned TUN, before installing its route.
+func ConfigureEndpoint(endpoint netlink.Link) error {
+	if err := netlink.LinkSetGSOMaxSegs(endpoint, 1); err != nil {
+		return fmt.Errorf("limit eBPF endpoint TCP segmentation: %w", err)
+	}
+	return nil
+}
+
 // Config binds one IPv4 PDU session to an owned, stable L3 endpoint.
 // This backend supports Ethernet N3, policy routing and an MTU <= 1500.
 type Config struct {
