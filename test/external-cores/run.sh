@@ -34,7 +34,7 @@ mkdir -p "$fixture_dir/.runtime"
 "${compose[@]}" pull --ignore-buildable
 "${compose[@]}" build
 "${compose[@]}" up --detach --wait --wait-timeout 90 db
-"${compose[@]}" exec --no-TTY db mongosh --quiet "$core" /artifacts/subscriber.js > "$state/provision.log"
+"${compose[@]}" exec --interactive=false --no-TTY db mongosh --quiet "$core" /artifacts/subscriber.js > "$state/provision.log"
 if [[ "$core" == free5gc ]]; then
   "${compose[@]}" up --detach nrf udr udm ausf nssf pcf amf
 else
