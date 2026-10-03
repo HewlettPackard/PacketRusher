@@ -19,10 +19,20 @@ import (
 
 func TestEBPFPeerProcess(t *testing.T) { testpeer.Run(t) }
 func TestNativeBidirectionalHandoverAndCleanup(t *testing.T) {
+	testNativeBidirectionalHandover(t, false)
+}
+func TestNativeRemotePeerHandoverAndCleanup(t *testing.T) {
+	testNativeBidirectionalHandover(t, true)
+}
+func testNativeBidirectionalHandover(t *testing.T, changeRemote bool) {
 	if os.Getenv("PACKETRUSHER_EBPF_TEST") != "1" {
 		t.Skip("requires private privileged namespace")
 	}
-	join := testpeer.Start(t, "TestEBPFPeerProcess")
+	steps := []string{"1", "2", "1"}
+	if changeRemote {
+		steps[1] = "2-remote"
+	}
+	join := testpeer.Start(t, "TestEBPFPeerProcess", steps...)
 	endpoint, device, err := userspace.NewTUN("pr-ue")
 	require.NoError(t, err)
 	defer endpoint.Close()
@@ -33,7 +43,8 @@ func TestNativeBidirectionalHandoverAndCleanup(t *testing.T) {
 	cfg := Config{Local: netip.MustParseAddr("10.88.0.1"), Remote: netip.MustParseAddr("10.88.0.2"), IPv4: netip.MustParseAddr("10.60.0.1"), UplinkTEID: 1001, DownlinkTEID: 2001, QFI: 9, EndpointIfIndex: device.Attrs().Index, MTU: 1456}
 	session, err := r.Open(cfg)
 	require.NoError(t, err)
-	defer session.Close()
+	// Reinstallation replaces session; cleanup must own the current instance.
+	defer func() { _ = session.Close() }()
 	rule := netlink.NewRule()
 	rule.Priority = 100
 	rule.Table = 1600
@@ -66,10 +77,18 @@ func TestNativeBidirectionalHandoverAndCleanup(t *testing.T) {
 	exchange("initial-real-bpf")
 	next := cfg
 	next.Local = netip.MustParseAddr("10.88.0.3")
+	if changeRemote {
+		next.Remote = netip.MustParseAddr("10.88.0.4")
+	}
 	next.UplinkTEID = 1002
 	next.DownlinkTEID = 2002
 	require.NoError(t, session.Update(next))
 	exchange("same-socket-after-n3-teid-handover")
+	if changeRemote {
+		_, _, dropped, err := r.Stats()
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, dropped, uint64(5), "wrong TEID/UE twice and the previous UPF must be dropped")
+	}
 	oldSocket, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("10.88.0.1"), Port: 2152})
 	require.NoError(t, err)
 	require.NoError(t, oldSocket.Close())
