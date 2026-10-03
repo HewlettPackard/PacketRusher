@@ -5,6 +5,8 @@ package ebpfgtp
 
 import (
 	"encoding/binary"
+	"encoding/hex"
+	"net/netip"
 	"os"
 	"testing"
 
@@ -63,6 +65,22 @@ func TestActualKernelPacketBoundsChecksumsAndTupleIsolation(t *testing.T) {
 		result uint32
 	}{
 		{"valid", func(p []byte) []byte { return p }, 7},
+		{"sequenceWithContainer", func(p []byte) []byte { p[42] = 0x36; p[50] = 0x12; p[51] = 0x34; return p }, 7},
+		{"sequenceZeroWithContainer", func(p []byte) []byte { p[42] = 0x36; return p }, 7},
+		{"sequenceWithoutContainer", func(p []byte) []byte {
+			p[42], p[50], p[51], p[53] = 0x32, 0x12, 0x34, 0
+			p = append(p[:54], p[58:]...)
+			binary.BigEndian.PutUint16(p[16:18], uint16(len(p)-14))
+			binary.BigEndian.PutUint16(p[38:40], uint16(len(p)-34))
+			binary.BigEndian.PutUint16(p[44:46], uint16(len(p)-50))
+			p[24], p[25] = 0, 0
+			binary.BigEndian.PutUint16(p[24:26], testpeer.Checksum(p[14:34]))
+			return p
+		}, 7},
+		{"unsupportedNPDUFlag", func(p []byte) []byte { p[42] = 0x37; return p }, 2},
+		{"invalidSequenceContainerLength", func(p []byte) []byte { p[42], p[54] = 0x36, 2; return p }, 2},
+		{"sequenceWrongQFI", func(p []byte) []byte { p[42] = 0x36; p[56]++; return p }, 2},
+		{"sequenceWrongTEID", func(p []byte) []byte { p[42] = 0x36; p[49]++; return p }, 2},
 		{"unrelatedUDP", func(p []byte) []byte { binary.BigEndian.PutUint16(p[36:38], 9999); return p }, ^uint32(0)},
 		{"unownedN3", func(p []byte) []byte { p[33]++; return p }, ^uint32(0)},
 		{"wrongTEID", func(p []byte) []byte { p[49]++; return p }, 2},
@@ -132,4 +150,35 @@ func TestActualKernelPacketBoundsChecksumsAndTupleIsolation(t *testing.T) {
 	result, err := r.collection.Programs["decap"].Run(&ebpf.RunOptions{Data: p, Context: ctx})
 	require.NoError(t, err)
 	require.Equal(t, uint32(7), result)
+}
+
+// Exact GTP-U payload captured from genuine free5GC 4.3 free5UPF after a
+// UE-bound nonce echo. Keep its E+S header, zero sequence and inner checksum;
+// this must exercise the actual kernel parser rather than a Go decoder.
+func TestActualKernelFree5UPFCapturedSequenceHeader(t *testing.T) {
+	if os.Getenv("PACKETRUSHER_EBPF_TEST") != "1" {
+		t.Skip("requires privileged disposable namespace")
+	}
+	r := NewRegistry()
+	require.NoError(t, r.load())
+	defer r.collection.Close()
+	_, _, c := isolatedRegistry()
+	c.IPv4, c.DownlinkTEID, c.QFI = netip.MustParseAddr("10.45.0.2"), 1, 1
+	require.NoError(t, r.state.put("locals", ipv4(c.Local), uint32(1), ebpf.UpdateNoExist))
+	require.NoError(t, r.state.put("downlinks", c.downKey(), ipv4(c.IPv4), ebpf.UpdateNoExist))
+	require.NoError(t, r.state.put("sessions", ipv4(c.IPv4), c.binding(), ebpf.UpdateNoExist))
+	gtp, err := hex.DecodeString("36ff007e00000001000000850100010045000076231e4000401102fd0a2d00010a2d00022328df4000629f5f5041434b45545255534845522d45585445524e414c2d6331623864333065326637623033343632316338323234373137313430653162646634383437336239623837653362343437623538353132336265643366326600000000")
+	require.NoError(t, err)
+	p := append(wirePacket(c)[:42], gtp...)
+	binary.BigEndian.PutUint16(p[16:18], uint16(len(p)-14))
+	binary.BigEndian.PutUint16(p[38:40], uint16(len(p)-34))
+	p[24], p[25] = 0, 0
+	binary.BigEndian.PutUint16(p[24:26], testpeer.Checksum(p[14:34]))
+	ctx := [48]uint32{}
+	ctx[9] = 1
+	opts := &ebpf.RunOptions{Data: p, DataOut: make([]byte, len(p)+256), Context: ctx}
+	result, err := r.collection.Programs["decap"].Run(opts)
+	require.NoError(t, err)
+	require.Equal(t, uint32(7), result, "real free5UPF E+S downlink must redirect to its UE")
+	require.Equal(t, gtp[16:], opts.DataOut[14:])
 }

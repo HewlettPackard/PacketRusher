@@ -165,10 +165,16 @@ int decap(struct __sk_buff *skb) {
     // downlink keys cannot deliver before/after that atomic map replacement.
     if (cfg.local != key.local || cfg.peer != key.peer || cfg.downlink_teid != key.teid) goto drop;
     __u32 gtplen = 8;
-    if (gtp->flags == 0x34) {
-        if ((void *)(gtp + 1) > end || gtp->sequence || gtp->npdu || gtp->next != 0x85 ||
+    // TS 29.281 §5.1: S and E independently require the four optional
+    // header octets. free5UPF sends E+S, including sequence zero. Sequence
+    // numbers do not change tuple/TEID ownership or permit N-PDU forwarding.
+    if (gtp->flags == 0x34 || gtp->flags == 0x36) {
+        if ((void *)(gtp + 1) > end || (gtp->flags == 0x34 && gtp->sequence) || gtp->npdu || gtp->next != 0x85 ||
             gtp->extension_length != 1 || gtp->pdu_type != 0 || gtp->qfi != cfg.qfi || gtp->end) goto drop;
         gtplen = 16;
+    } else if (gtp->flags == 0x32) {
+        if ((void *)gtp + 12 > end || gtp->npdu || gtp->next) goto drop;
+        gtplen = 12;
     } else if (gtp->flags != 0x30) goto drop;
     __u32 inner_length = length - 8 - gtplen;
     struct iphdr *inner = (void *)gtp + gtplen;
