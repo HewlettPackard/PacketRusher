@@ -44,6 +44,9 @@ func newApp() *cli.App {
 					name := "Testing an ue attached with configuration"
 					cfg := setConfig(*c)
 					tunnelEnabled := !c.Bool("disableTunnel")
+					if err := cfg.ValidateTunnel(tunnelEnabled); err != nil {
+						return err
+					}
 
 					log.Info("PacketRusher version " + version)
 					log.Info("---------------------------------------")
@@ -115,6 +118,9 @@ func newApp() *cli.App {
 					var numUes int
 					name := "Testing registration of multiple UEs"
 					cfg := setConfig(*c)
+					if err := cfg.ValidateTunnel(c.Bool("tunnel")); err != nil {
+						return err
+					}
 					if c.IsSet("number-of-ues") {
 						numUes = c.Int("number-of-ues")
 					} else {

@@ -203,6 +203,11 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		return
 	}
 
+	if _, ipv6 := pduSession.GetIPv6InterfaceID(); ipv6 {
+		log.Error("[UE][GTP] IPv6 user traffic requires the userspace backend; set ue.tunnelbackend: userspace")
+		return
+	}
+
 	// Bounded concurrency through the plumbing below; see setupSlots. A dedicated
 	// device per UE keeps its own pacing, the 500 ms registration floor.
 	if ue.TunnelMode == config.TunnelShared {

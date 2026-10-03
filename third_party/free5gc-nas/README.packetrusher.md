@@ -41,6 +41,10 @@ receive paths commit a cloned counter/context only after successful parsing and
 integrity verification. Type-1 codecs require exactly one octet, decode the value
 bits, ignore spare bits, and emit zero spare bits.
 
+- Require exact native PDU address lengths for IPv4, IPv6 interface identifier,
+  IPv4v6, and optional SMF IPv6 link-local address. Reusing a decoder replaces
+  owned fields only after full validation; encoders reject partial fields.
+
 ## Compatibility audit
 
 The audit covered Registration Accept/Reject, Configuration Update Command,

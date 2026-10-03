@@ -107,18 +107,19 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, msg *nas.DLNASTranspo
 		}
 		session.EstablishmentTransportFailed(m.PTI)
 	case *nas.PDUSessEstAccept:
-		if m.SelectedPDUSessType == nil || m.SelectedPDUSessType.Value != ie.PDUSessType_IPv4 || m.PDUAddr == nil || len(m.PDUAddr.IPv4) != 4 {
-			log.Error("[UE][NAS] PDU session requires an IPv4 address")
-			return
-		}
 		session, err := ue.GetPduSession(m.PDUSessId)
-		if err != nil {
-			log.Errorf("[UE][NAS] Unknown PDU session %d: %v", m.PDUSessId, err)
+		if err != nil || m.PDUSessId != msg.PDUSessID.Value {
+			log.Errorf("[UE][NAS] Unknown or mismatched PDU session %d", m.PDUSessId)
 			return
 		}
-		var ip [12]uint8
-		copy(ip[:], m.PDUAddr.IPv4)
-		session.SetIp(ip)
+		if m.SelectedPDUSessType == nil || m.PDUAddr == nil {
+			log.Error("[UE][NAS] PDU session address or selected type is missing")
+			return
+		}
+		if err := session.SetPDUAddress(m.SelectedPDUSessType.Value, m.PDUAddr); err != nil {
+			log.Errorf("[UE][NAS] Invalid PDU session address: %v", err)
+			return
+		}
 		session.SetStateSM_PDU_SESSION_ACTIVE()
 		log.Infof("[UE][NAS] PDU session %d address: %s", m.PDUSessId, session.GetIp())
 		if m.DNN != nil {
