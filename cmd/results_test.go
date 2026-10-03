@@ -4,7 +4,6 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"my5G-RANTester/internal/analytics"
 	"os"
@@ -59,57 +58,56 @@ func TestExistingReportIsPreserved(t *testing.T) {
 }
 
 func TestRejectedCommandLeavesReportPathsAvailable(t *testing.T) {
-	for _, rejected := range [][]string{
+	dir := t.TempDir()
+	jsonPath, csvPath := filepath.Join(dir, "result.json"), filepath.Join(dir, "result.csv")
+	called := false
+	app := newApp()
+	app.Writer, app.ErrWriter = io.Discard, io.Discard
+	app.Command("multi-ue").Action = func(*cli.Context) error { called = true; return nil }
+	for _, args := range [][]string{
 		{"-n=invalid"},
-		{"--tunnel", "true", "-n", "2"},
 		{"-n", "0"},
-		{"-n", "2", "--numPduSessions=0"},
-		{"-n", "2", "--timeBetweenRegistration=-1"},
+		{"-n", "1", "--numPduSessions", "16"},
+		{"-n", "1", "--timeBeforeIdle", "-1"},
+		{"-n", "1", "--tunnel", "true"},
+		{"-n", "1", "--tunnel-vrf", "false"},
 	} {
-		t.Run(fmt.Sprint(rejected), func(t *testing.T) {
-			dir := t.TempDir()
-			jsonPath, csvPath := filepath.Join(dir, "result.json"), filepath.Join(dir, "result.csv")
-			called := false
-			app := newApp()
-			app.Writer, app.ErrWriter = io.Discard, io.Discard
-			app.Command("multi-ue").Action = func(*cli.Context) error { called = true; return nil }
-			args := append([]string{"packetrusher", "--report-json", jsonPath, "--report-csv", csvPath, "multi-ue"}, rejected...)
-			require.Error(t, app.Run(args))
-			require.False(t, called, "rejected commands must not start a scenario")
-			require.Nil(t, analytics.Current())
-			for _, path := range []string{jsonPath, csvPath} {
-				_, err := os.Stat(path)
-				require.ErrorIs(t, err, os.ErrNotExist)
-			}
-
-			// Correct the syntax and reuse the same output paths with the real parser.
-			next := newApp()
-			next.Writer, next.ErrWriter = io.Discard, io.Discard
-			next.Command("multi-ue").Action = func(*cli.Context) error {
-				called = true
-				recorder := analytics.Current()
-				require.NotNil(t, recorder)
-				recorder.Begin(1, 0, analytics.Registration)
-				recorder.Finish(1, 0, analytics.Registration, analytics.Success)
-				return nil
-			}
-			require.NoError(t, next.Run([]string{"packetrusher", "--report-json", jsonPath, "--report-csv", csvPath, "multi-ue", "-n", "2", "--tunnel"}))
-			require.True(t, called)
-			require.Nil(t, analytics.Current())
-			data, err := os.ReadFile(jsonPath)
-			require.NoError(t, err)
-			var report analytics.Report
-			require.NoError(t, json.Unmarshal(data, &report))
-			require.NotNil(t, report.EndedAt)
-			for _, procedure := range report.Procedures {
-				if procedure.Procedure == analytics.Registration {
-					require.Equal(t, uint64(1), procedure.Started)
-					require.Equal(t, uint64(1), procedure.Success)
-				}
-			}
-			csvData, err := os.ReadFile(csvPath)
-			require.NoError(t, err)
-			require.Contains(t, string(csvData), "registration,1,1,0,0,0,1,")
-		})
+		invocation := append([]string{"packetrusher", "--report-json", jsonPath, "--report-csv", csvPath, "multi-ue"}, args...)
+		require.Error(t, app.Run(invocation), "invalid arguments: %v", args)
+		require.False(t, called, "rejected commands must not start a scenario")
+		require.Nil(t, analytics.Current())
+		for _, path := range []string{jsonPath, csvPath} {
+			_, err := os.Stat(path)
+			require.ErrorIs(t, err, os.ErrNotExist)
+		}
 	}
+
+	// Correct the syntax and reuse the same output paths with the real parser.
+	next := newApp()
+	next.Writer, next.ErrWriter = io.Discard, io.Discard
+	next.Command("multi-ue").Action = func(*cli.Context) error {
+		called = true
+		recorder := analytics.Current()
+		require.NotNil(t, recorder)
+		recorder.Begin(1, 0, analytics.Registration)
+		recorder.Finish(1, 0, analytics.Registration, analytics.Success)
+		return nil
+	}
+	require.NoError(t, next.Run([]string{"packetrusher", "--report-json", jsonPath, "--report-csv", csvPath, "multi-ue", "-n", "2"}))
+	require.True(t, called)
+	require.Nil(t, analytics.Current())
+	data, err := os.ReadFile(jsonPath)
+	require.NoError(t, err)
+	var report analytics.Report
+	require.NoError(t, json.Unmarshal(data, &report))
+	require.NotNil(t, report.EndedAt)
+	for _, procedure := range report.Procedures {
+		if procedure.Procedure == analytics.Registration {
+			require.Equal(t, uint64(1), procedure.Started)
+			require.Equal(t, uint64(1), procedure.Success)
+		}
+	}
+	csvData, err := os.ReadFile(csvPath)
+	require.NoError(t, err)
+	require.Contains(t, string(csvData), "registration,1,1,0,0,0,1,")
 }
