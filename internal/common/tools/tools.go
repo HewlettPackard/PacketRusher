@@ -162,11 +162,18 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 			var deregistrationChannel, ngapHandoverChannel, xnHandoverChannel, idleChannel <-chan time.Time
 			var reconnectChannel <-chan time.Time
 			iterationCtx, cancelIteration := context.WithCancel(context.Background())
+			generation := uint64(iteration)
 			launchControl := func(action, target string) {
 				go func() {
-					ctx, cancel := context.WithTimeout(iterationCtx, 30*time.Second)
-					defer cancel()
-					if _, err := simulation.Execute(ctx, action, target); err != nil && !errors.Is(err, context.Canceled) {
+					var err error
+					if action == "terminate" {
+						err = simulation.terminateWhenReady(iterationCtx, generation, 30*time.Second)
+					} else {
+						ctx, cancel := context.WithTimeout(iterationCtx, 30*time.Second)
+						defer cancel()
+						_, err = simulation.Execute(ctx, action, target)
+					}
+					if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, procedures.ErrStopped) {
 						log.Warn("[TESTER] UE ", simConfig.UeId, " ", action, ": ", err)
 					}
 				}()
@@ -227,7 +234,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 				case <-deregistrationChannel:
 					deregistrationChannel = nil
 					if ueRx != nil && !stopping {
-						pending = append(pending, procedures.UeTesterMessage{Type: procedures.Terminate})
+						launchControl("terminate", "")
 					}
 				case <-ngapHandoverChannel:
 					ngapHandoverChannel = nil

@@ -26,7 +26,7 @@ func TestControlRunsOnUELoopAndRejectsCancelledOrStaleActions(t *testing.T) {
 		cancelled bool
 		want      error
 	}{
-		{"inspect", false, false, nil}, {"idle", true, false, procedures.ErrGeneration}, {"idle", false, true, context.Canceled}, {"idle", false, false, procedures.ErrNotReady},
+		{"inspect", false, false, nil}, {"idle", true, false, procedures.ErrGeneration}, {"idle", false, true, context.Canceled}, {"idle", false, false, procedures.ErrNotReady}, {"terminate", true, false, procedures.ErrGeneration}, {"terminate", false, true, context.Canceled}, {"terminate", false, false, procedures.ErrNotReady}, {"terminate-after-timeout", true, false, procedures.ErrGeneration}, {"terminate-after-timeout", false, true, context.Canceled},
 	} {
 		ctx, cancel := context.WithCancel(context.Background())
 		if tc.cancelled {
@@ -49,6 +49,17 @@ func TestControlRunsOnUELoopAndRejectsCancelledOrStaleActions(t *testing.T) {
 			t.Fatal("control request did not return")
 		}
 		cancel()
+	}
+	// Timeout cleanup must not touch a connection created after its snapshot.
+	r := &procedures.ControlRequest{Context: context.Background(), Action: "terminate-after-timeout", Generation: 2, ExpectedGeneration: 2, ExpectedConnection: 1, Reply: make(chan procedures.ControlResult, 1)}
+	manager <- procedures.UeTesterMessage{Type: procedures.Control, Control: r}
+	select {
+	case result := <-r.Reply:
+		if !errors.Is(result.Err, procedures.ErrGeneration) || result.Attachment.State != "registered" {
+			t.Fatalf("stale connection cleanup mutated the UE: %+v", result)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("stale connection cleanup did not return")
 	}
 }
 
@@ -143,5 +154,43 @@ func TestIdleAndReconnectControlsUseProductionConnectionHandshake(t *testing.T) 
 				t.Fatalf("old connection generation retained: %+v", inspected.Attachment)
 			}
 		})
+	}
+}
+
+func TestControlReadinessRequiresEachConfiguredPDUId(t *testing.T) {
+	node := &gnb.GNBContext{}
+	node.NewRanGnbContext("000008", "001", "01", "000001", "01", "", netip.MustParseAddrPort("127.0.0.1:1"), netip.MustParseAddrPort("127.0.0.1:2"))
+	node.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:3")).SetStateActive()
+	ue := &ueContext.UEContext{}
+	ue.NewRanUeContext("0000000001", &ie.UESecCapability{Length: 2}, "", "", "", "", "", "001", "01", sidf.HomeNetworkPublicKey{}, "0000", "internet", 1, "", config.TunnelDisabled, make(chan ueScenario.ScenarioMessage, 16), node.GetInboundChannel(), 1)
+	ue.StateMM = ueContext.MM5G_REGISTERED
+	rx, tx := make(chan gnb.UEMessage, 10), make(chan gnb.UEMessage, 10)
+	ue.SetGnbRx(rx)
+	ue.SetGnbTx(tx)
+	ue.SetGnbConnectionLost(make(chan struct{}))
+	gu, err := node.NewGnBUe(tx, rx, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gu.SetStateReady()
+	for id := 1; id <= 3; id++ {
+		pdu, err := ue.CreatePDUSession()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if id != 2 {
+			pdu.SetStateSM_PDU_SESSION_ACTIVE()
+		}
+	}
+	manager, _ := startUELoop(t, ue)
+	r := &procedures.ControlRequest{Context: context.Background(), Action: "inspect", Gnbs: map[string]*gnb.GNBContext{"000008": node}, ExpectedPDUSessions: 2, Generation: 1, Reply: make(chan procedures.ControlResult, 1)}
+	manager <- procedures.UeTesterMessage{Type: procedures.Control, Control: r}
+	select {
+	case result := <-r.Reply:
+		if result.Err != nil || result.Attachment.Ready || len(result.Attachment.ActivePDUSessions) != 2 {
+			t.Fatalf("active IDs 1 and 3 cannot replace required ID 2: %+v", result)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("UE loop did not respond")
 	}
 }
