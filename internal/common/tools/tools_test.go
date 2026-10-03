@@ -7,6 +7,34 @@ import (
 	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
 )
 
+// The factory and selector canonicalize the same configured hexadecimal range,
+// including a return to the first gNB after a handover.
+func TestUEGnbSelectionCanonicalizesConfiguredID(t *testing.T) {
+	for _, configuredID := range []string{"00000a", "00000A"} {
+		t.Run(configuredID, func(t *testing.T) {
+			plmn := config.PlmnList{GnbId: configuredID}
+			gnbs := make(map[string]*gnbContext.GNBContext)
+			for offset := 0; offset < 2; offset++ {
+				id, err := plmn.GNBIDAt(offset)
+				if err != nil {
+					t.Fatal(err)
+				}
+				gnbs[id] = nil
+			}
+			for ueID := 1; ueID <= 3; ueID++ {
+				sim := UESimulationConfig{UeId: ueID, Gnbs: gnbs,
+					Cfg: config.Config{GNodeB: config.GNodeB{PlmnList: plmn}}}
+				for offset := 0; offset < 4; offset++ {
+					want := []string{"00000A", "00000B"}[(ueID-1+offset)%2]
+					if got := sim.gnbID(offset); got != want {
+						t.Errorf("UE %d offset %d: gNB %q, want %q", ueID, offset, got, want)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestUEGnbSelectionAndHandoverSequence(t *testing.T) {
 	cases := []struct {
 		name   string
