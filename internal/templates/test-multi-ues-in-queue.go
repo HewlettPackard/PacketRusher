@@ -33,13 +33,21 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	if options.NumberOfGnbs < 0 || options.NumberOfGnbs > 0 && dedicatedGnb {
 		return fmt.Errorf("--number-of-gnbs requires a non-dedicated gNB configuration")
 	}
+	if tunnelMode != config.TunnelDisabled && config.GetConfig().Ue.TunnelBackend == config.TunnelBackendEBPF {
+		if tunnelMode == config.TunnelVrf {
+			return fmt.Errorf("eBPF requires policy routing; VRF is unsupported")
+		}
+		if numPduSessions != 1 {
+			return fmt.Errorf("eBPF tunnels require exactly one PDU session")
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if tunnelMode != config.TunnelDisabled {
 		if !dedicatedGnb && tunnelMode != config.TunnelShared {
 			log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
 		}
-		if timeBetweenRegistration < 500 && tunnelMode != config.TunnelShared && config.GetConfig().Ue.TunnelBackend != config.TunnelBackendUserspace {
+		if timeBetweenRegistration < 500 && tunnelMode != config.TunnelShared && config.GetConfig().Ue.TunnelBackend != config.TunnelBackendUserspace && config.GetConfig().Ue.TunnelBackend != config.TunnelBackendEBPF {
 			log.Fatal("When using the --tunnel option, --timeBetweenRegistration must be equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
 		}
 	}

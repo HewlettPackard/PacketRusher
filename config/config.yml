@@ -63,7 +63,8 @@ ue:
   # Set a smaller value, e.g. 1400, to match the UPF or a lower path MTU.
   tunnelmtu: 0
 
-  # gtp5g (default) or userspace (Linux TUN + UDP, no gtp5g module).
+  # gtp5g (default), userspace (TUN + UDP), or ebpf (IPv4/Ethernet/policy).
+  # See docs/ebpf-backend.md for eBPF requirements and supported profile.
   tunnelbackend: gtp5g
 
   # UE's SIM credentials

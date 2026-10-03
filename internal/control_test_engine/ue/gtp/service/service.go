@@ -185,6 +185,23 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		return
 	}
 
+	if ue.TunnelBackend == config.TunnelBackendEBPF {
+		if pduSession.Id != 1 {
+			log.Error("[UE][eBPF] Only PDU session 1 is supported")
+			return
+		}
+		if err := setupEBPFTunnel(ue, pduSession, gnbPduSession, msg.GnbIp); err != nil {
+			log.Error("[UE][eBPF] Unable to configure tunnel: ", err)
+			if errors.Is(err, errTunnelRollback) {
+				pduSession.ReleaseTunnel()
+			}
+			return
+		}
+		pduSession.SetGnbIp(msg.GnbIp)
+		committed = true
+		return
+	}
+
 	if ue.TunnelBackend == config.TunnelBackendUserspace {
 		if pduSession.Id != 1 {
 			log.Warn("[UE][GTP] Only PDU session 1 has a tunnel")

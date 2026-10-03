@@ -3,11 +3,12 @@ package config
 
 import (
 	"github.com/stretchr/testify/require"
+	"net/netip"
 	"testing"
 )
 
 func TestTunnelBackendDefaultsAndValidation(t *testing.T) {
-	for _, name := range []string{"", "gtp5g", "userspace"} {
+	for _, name := range []string{"", "gtp5g", "userspace", "ebpf"} {
 		_, err := ParseTunnelBackend(name)
 		require.NoError(t, err)
 	}
@@ -16,4 +17,15 @@ func TestTunnelBackendDefaultsAndValidation(t *testing.T) {
 	require.Equal(t, TunnelBackendKernel, backend)
 	_, err = ParseTunnelBackend("kernel")
 	require.Error(t, err)
+}
+
+func TestEBPFProfileRejectsIgnoredPortAndExcessiveMTUBeforeNetworking(t *testing.T) {
+	cfg := Config{}
+	cfg.Ue.TunnelBackend = TunnelBackendEBPF
+	require.ErrorContains(t, cfg.ValidateTunnel(true), "dataif.port: 2152")
+	cfg.GNodeB.DataIF.AddrPort = netip.MustParseAddrPort("192.0.2.1:2152")
+	require.NoError(t, cfg.ValidateTunnel(true))
+	cfg.Ue.TunnelMTU = 1457
+	require.ErrorContains(t, cfg.ValidateTunnel(true), "1456")
+	require.NoError(t, cfg.ValidateTunnel(false))
 }

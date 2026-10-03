@@ -131,7 +131,7 @@ func InitGnbContext(ctx stdcontext.Context, conf config.Config, wg *sync.WaitGro
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if conf.Ue.TunnelMode == config.TunnelShared && conf.Ue.TunnelBackend != config.TunnelBackendUserspace {
+	if conf.Ue.TunnelMode == config.TunnelShared && conf.Ue.TunnelBackend != config.TunnelBackendUserspace && conf.Ue.TunnelBackend != config.TunnelBackendEBPF {
 		dev, err := gtp.NewDevice(gnb.GetN3GnbIp(), conf.Ue.TunnelMTU)
 		if err != nil {
 			return nil, fmt.Errorf("create shared GTP-U device: %w", err)
