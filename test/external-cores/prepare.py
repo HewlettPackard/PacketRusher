@@ -10,6 +10,23 @@ HERE = Path(__file__).resolve().parent
 CORE_IP, RAN_IP, UE_IP, DN_IP = "172.30.5.20", "172.30.5.30", "10.45.0.2", "10.45.0.1"
 IMSI, KEY, OPC = "208930000000120", "00112233445566778899AABBCCDDEEFF", "00112233445566778899AABBCCDDEEFF"
 FREE_IPS = {"nrf": "172.30.5.11", "ausf": "172.30.5.12", "udm": "172.30.5.13", "udr": "172.30.5.14", "nssf": "172.30.5.15", "pcf": "172.30.5.16", "amf": CORE_IP}
+SMF_IP = "172.30.5.17"
+
+
+def profile_options(core, sessions=None, backend="userspace", upf=None):
+    sessions = (0 if core == "free5gc" else 1) if sessions is None else sessions
+    if core not in {"free5gc", "open5gs"} or sessions not in {0, 1}:
+        raise ValueError("profiles require a supported real core and zero or one PDU")
+    if backend not in {"userspace", "ebpf"}:
+        raise ValueError("external user-plane profiles require userspace or ebpf")
+    if core == "open5gs" and sessions != 1:
+        raise ValueError("Open5GS acceptance requires a real PDU and traffic")
+    if sessions == 0 and (backend != "userspace" or upf is not None):
+        raise ValueError("registration-only does not exercise a tunnel backend or UPF")
+    upf = ("free5gc" if core == "free5gc" else "open5gs") if sessions and upf is None else upf
+    if sessions and (upf not in {"free5gc", "open5gs"} or (core == "open5gs" and upf != "open5gs")):
+        raise ValueError("unsupported real UPF implementation")
+    return sessions, backend, upf
 
 def write(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,7 +44,8 @@ def replace(value, mapping):
             value = value.replace(source, target)
     return value
 
-def generate(core, output, native=False, prefix="/opt/open5gs"):
+def generate(core, output, native=False, prefix="/opt/open5gs", sessions=None, backend="userspace", upf=None):
+    sessions, backend, upf = profile_options(core, sessions, backend, upf)
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     config = output / "config"
@@ -40,13 +58,32 @@ def generate(core, output, native=False, prefix="/opt/open5gs"):
     session = {"subnet": "10.45.0.0/16", "gateway": DN_IP, "dnn": "internet"}
     if core == "free5gc":
         values = json.loads((HERE / "free5gc-configs.json").read_text())
-        addresses = FREE_IPS if not native else {nf: f"127.0.0.{i+11}" for i, nf in enumerate(FREE_IPS)} | {"amf": CORE_IP}
+        addresses = dict(FREE_IPS) if not native else {nf: f"127.0.0.{i+11}" for i, nf in enumerate(FREE_IPS)} | {"amf": CORE_IP}
+        if sessions:
+            values.update(json.loads((HERE / "free5gc-userplane-configs.json").read_text()))
+            addresses["smf"] = "127.0.0.18" if native else SMF_IP
+        # UPF is not an SBI NF and must not be treated as an NRF/listener entry.
         mapping = {f"{nf}.free5gc.org": ip for nf, ip in addresses.items()}
+        mapping["upf.free5gc.org"] = CORE_IP
         mapping["mongodb://db:27017"] = f"mongodb://{mongo}:27017"
         values = replace(values, mapping)
         values["nrf"]["configuration"]["sbi"]["oauth"] = False
+        if sessions:
+            smf = values["smf"]["configuration"]
+            smf['plmnList'] = [plmn]
+            smf["snssaiInfos"] = [{"sNssai": slice_, "dnnInfos": [{"dnn": "internet", "dns": {"ipv4": DN_IP}}]}]
+            node = smf["userplaneInformation"]["upNodes"]["UPF"]
+            node["sNssaiUpfInfos"] = [{"sNssai": slice_, "dnnUpfInfoList": [{"dnn": "internet", "pools": [{"cidr": "10.45.1.0/24"}], "staticPools": [{"cidr": "10.45.0.0/24"}]}]}]
+            # Open5GS follows the FQDN-encoded Network Instance IE; native
+            # free5UPF uses the release's ordinary Network Instance encoding.
+            smf["nwInstFqdnEncoding"] = upf == "open5gs"
+            values["upf"]["dnnList"] = [{"dnn": "internet", "cidr": "10.45.0.0/16"}]
         for nf, value in values.items():
+            if nf == "upf" and upf == "open5gs":
+                continue
             write(config / f"{nf}cfg.yaml", value)
+        if sessions and upf == "open5gs":
+            write(config / "upf.yaml", {"logger": {"file": {"path": f"{logs}/upf.log"}}, "global": {"max": {"ue": 16}}, "upf": {"pfcp": {"server": [{"address": CORE_IP}]}, "gtpu": {"server": [{"address": CORE_IP}]}, "session": [session | {"dev": "ogstun"}]}})
         supi = "imsi-" + IMSI
         auth = {"ueId": supi, "authenticationMethod": "5G_AKA", "encPermanentKey": KEY, "encOpcKey": OPC, "authenticationManagementField": "8000", "sequenceNumber": {"sqnScheme": "GENERAL", "sqn": "000000000020"}}
         am = {"ueId": supi, "servingPlmnId": "20893", "gpsis": ["msisdn-0900000000"], "nssai": {"defaultSingleNssais": [slice_], "singleNssais": [slice_]}, "subscribedUeAmbr": {"uplink": "1 Gbps", "downlink": "1 Gbps"}}
@@ -57,6 +94,10 @@ def generate(core, output, native=False, prefix="/opt/open5gs"):
             "subscriptionData.provisionedData.smfSelectionSubscriptionData": selection,
             "policyData.ues.amData": {"ueId": supi, "subscCats": ["free5gc"]},
         }
+        if sessions:
+            # Pinned WebUI api_sample.go and api_webui.go's SM/SM-policy schema.
+            documents["subscriptionData.provisionedData.smData"] = {"ueId": supi, "servingPlmnId": "20893", "singleNssai": slice_, "dnnConfigurations": {"internet": {"pduSessionTypes": {"defaultSessionType": "IPV4", "allowedSessionTypes": ["IPV4"]}, "sscModes": {"defaultSscMode": "SSC_MODE_1", "allowedSscModes": ["SSC_MODE_1"]}, "sessionAmbr": {"uplink": "1 Gbps", "downlink": "1 Gbps"}, "5gQosProfile": {"5qi": 9, "arp": {"priorityLevel": 8}, "priorityLevel": 8}, "staticIpAddress": [{"ipv4Addr": UE_IP}]}}}
+            documents["policyData.ues.smData"] = {"ueId": supi, "smPolicySnssaiData": {"01010203": {"snssai": slice_, "smPolicyDnnData": {"internet": {"dnn": "internet"}}}}}
         statements = [f'db.getCollection({json.dumps(name)}).insertOne({json.dumps(value)});' for name, value in documents.items()]
         oam = f'http://{CORE_IP}:8000/namf-oam/v1/registered-ue-context'
         nf_addresses = addresses
@@ -88,9 +129,9 @@ def generate(core, output, native=False, prefix="/opt/open5gs"):
         oam = f"http://{CORE_IP}:9090/metrics"
     with (output / "subscriber.js").open("x") as file:
         file.write(f'if (db.getName() !== {json.dumps(core)}) throw new Error("unexpected provisioning database");\n' + "\n".join(statements) + "\n")
-    ue = {"hplmn": plmn, "msin": "0000000120", "routingindicator": "0000", "protectionScheme": 0, "homeNetworkPublicKeyID": 0, "key": KEY, "opc": OPC, "amf": "8000", "sqn": "000000000000", "dnn": "internet", "snssai": {"sst": "01", "sd": "010203"}, "pdusessiontype": "IPv4", "tunnelbackend": "userspace", "tunnelmtu": 1400, "integrity": {"nia2": True}, "ciphering": {"nea0": True}}
+    ue = {"hplmn": plmn, "msin": "0000000120", "routingindicator": "0000", "protectionScheme": 0, "homeNetworkPublicKeyID": 0, "key": KEY, "opc": OPC, "amf": "8000", "sqn": "000000000000", "dnn": "internet", "snssai": {"sst": "01", "sd": "010203"}, "pdusessiontype": "IPv4", "tunnelbackend": backend, "tunnelmtu": 1400, "integrity": {"nia2": True}, "ciphering": {"nea0": True}}
     write(config / "packetrusher.yaml", {"gnodeb": {"controlif": {"ip": RAN_IP, "port": 9487}, "dataif": {"ip": RAN_IP, "port": 2152}, "plmnlist": plmn | {"tac": "000001", "gnbid": "000008", "gnbidlength": 24}, "slicesupportlist": {"sst": "01", "sd": "010203"}}, "ue": ue, "amfif": [{"ip": CORE_IP, "port": 38412}], "logs": {"level": 4}})
-    write(output / "profile.json", {"core": core, "oam": oam, "nf_addresses": nf_addresses, "native": native})
+    write(output / "profile.json", {"core": core, "oam": oam, "nf_addresses": nf_addresses, "native": native, "sessions": sessions, "tunnel_backend": backend, "upf_implementation": upf, "pfcp_smf_ip": nf_addresses.get("smf"), "pfcp_upf_ip": CORE_IP if sessions else None})
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -98,5 +139,8 @@ if __name__ == "__main__":
     parser.add_argument("--output", required=True)
     parser.add_argument("--native", action="store_true")
     parser.add_argument("--prefix", default="/opt/open5gs")
+    parser.add_argument("--sessions", type=int, choices=[0, 1])
+    parser.add_argument("--backend", choices=["userspace", "ebpf"], default="userspace")
+    parser.add_argument("--upf", choices=["free5gc", "open5gs"])
     args = parser.parse_args()
-    generate(args.core, args.output, args.native, args.prefix)
+    generate(args.core, args.output, args.native, args.prefix, args.sessions, args.backend, args.upf)

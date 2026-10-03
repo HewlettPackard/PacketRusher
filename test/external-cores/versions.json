@@ -2,7 +2,11 @@
   "free5gc": {
     "version": "v4.3.0",
     "compose_revision": "887b9a139643715190cc481df0654e84256ecbe7",
-    "webconsole_revision": "c40b94b6896109e90e46e59d57ebc5f7fa4c32a2"
+    "webconsole_revision": "c40b94b6896109e90e46e59d57ebc5f7fa4c32a2",
+    "smf_revision": "1c9d7662fb51de39df0591bad9c609ac85fec64d",
+    "upf_revision": "616a4ff6cbd2e7de2bccd39399f37425f373bcc8",
+    "gtp5g_version": "v0.10.2",
+    "gtp5g_revision": "952fb419130f5fc44cac1874e8183312006b746c"
   },
   "open5gs": {
     "version": "v2.8.0",
@@ -19,6 +23,8 @@
     "free5gc/udm:v4.3.0": "free5gc/udm:v4.3.0@sha256:7bff71f639e1666f315a6059fe99812ff7bfdfceea4cd3b021aa7145cbbe3197",
     "free5gc/udr:v4.3.0": "free5gc/udr:v4.3.0@sha256:47d9f8be58b32d6284eff42efe68e868e31c21e0f5372744ddbcab87d46c49b8",
     "free5gc/nssf:v4.3.0": "free5gc/nssf:v4.3.0@sha256:b073ed0b2f918a0d54338a8cedf03b53304d51ad3778f6b5aa739397df37515f",
-    "free5gc/pcf:v4.3.0": "free5gc/pcf:v4.3.0@sha256:035d238081e393294a8c880b1582aab497d75e9a2169a4b65673403c9a27a19c"
+    "free5gc/pcf:v4.3.0": "free5gc/pcf:v4.3.0@sha256:035d238081e393294a8c880b1582aab497d75e9a2169a4b65673403c9a27a19c",
+    "free5gc/smf:v4.3.0": "free5gc/smf:v4.3.0@sha256:8b005eeb6af02fa9f3c5a65b5017ecfc057a53392db1be9fbd3b3fa2ac8ef473",
+    "free5gc/upf:v4.3.0": "free5gc/upf:v4.3.0@sha256:95d890d582c37e1d3e205bb7c21d17bef2d3d4ed673fa9f95956a0c83e8fb568"
   }
 }

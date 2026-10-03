@@ -79,7 +79,7 @@ def validate_report(report, sessions):
         require(row["started"] == count and row["success"] == count, f"{name} expected {count} actual successes: {row}")
         require(all(row[field] == 0 for field in ["failure", "cancelled", "pending"]), f"{name} has unfinished/failed attempts: {row}")
 
-def gtpu_proof(path, nonce):
+def gtpu_proof(path, nonce, expected_sequences=(0,1,2), bidirectional=True):
     packets = {"uplink": [], "downlink": []}
     sequences = {"uplink": set(), "downlink": set()}
     with Path(path).open("rb") as file:
@@ -125,6 +125,10 @@ def gtpu_proof(path, nonce):
                         extension, offset = gtp[offset+size-1], offset+size
                     require(not extension, "GTP-U extension chain too long")
                 inner = gtp[offset:]
+                if len(inner) >= 20 and inner[0]>>4 == 4 and inner[9] != 17:
+                    # A closed DN UDP port may return ICMP quoting the nonce;
+                    # it is not a UDP echo or evidence of a working DN peer.
+                    continue
                 require(len(inner) >= 28 and inner[0]>>4 == 4, "DN payload is not IPv4 UDP")
                 length, ihl = struct.unpack("!H",inner[2:4])[0], (inner[0]&15)*4
                 require(length == len(inner) and ihl >= 20 and inner[9] == 17, "invalid inner IPv4/UDP packet")
@@ -137,15 +141,21 @@ def gtpu_proof(path, nonce):
                 port = struct.unpack("!H",inner[ihl+(2 if direction == "uplink" else 0):ihl+(4 if direction == "uplink" else 2)])[0]
                 require(port == 9000, "DN payload has wrong UDP peer port")
                 packets[direction].append(teid)
-    require(all(len(value) >= 3 for value in packets.values()), "three unique DN echoes absent from bidirectional GTP-U capture")
-    require(all(value == {0,1,2} for value in sequences.values()), "N3 capture lacks distinct DN echo sequence payloads")
+    expected = set(expected_sequences)
+    require(bool(expected), 'at least one unique sequence is required')
+    require(len(packets['uplink']) >= len(expected) and sequences['uplink'] == expected, 'N3 capture lacks distinct uplink payloads')
+    if bidirectional:
+        require(len(packets['downlink']) >= len(expected) and sequences['downlink'] == expected, 'N3 capture lacks distinct DN echo responses')
+    else:
+        require(not packets['downlink'], 'missing-DN negative control received a UDP echo')
     return {direction: {"packets": len(teids), "teids": sorted(set(teids))} for direction, teids in packets.items()}
 
 def probe(binary, state):
     state = Path(state).resolve()
     profile = json.loads((state / "profile.json").read_text())
-    sessions = 0 if profile["core"] == "free5gc" else 1
-    result, process, capture = {"core": profile["core"], "success": False}, None, None
+    sessions = profile.get('sessions',0 if profile["core"] == "free5gc" else 1)
+    backend = profile.get('tunnel_backend','userspace')
+    result, process, capture = {"core": profile["core"], "sessions":sessions, "tunnel_backend":backend, "upf_implementation":profile.get('upf_implementation'), "success": False}, None, None
     nonce = b"PACKETRUSHER-EXTERNAL-" + os.urandom(32).hex().encode()
     log = (state / "packetrusher.log").open("wb")
     capture_log = (state / "capture.log").open("wb")
@@ -155,19 +165,19 @@ def probe(binary, state):
         else:
             until(lambda: free_registered(profile), 65, "real free5GC NRF registrations")
         await_core_count(profile,state,"initial",0,60,initial=True)
-        command = [str(binary), "--config", str(state/"config/packetrusher.yaml"), "--report-json", str(state/"report.json"), "multi-ue", "-n", "1", "--numPduSessions", str(sessions), "--control-socket", str(state/"control.sock")]
+        command = [str(binary), "--config", str(state/"config/packetrusher.yaml"), "--tunnel-backend", backend, "--report-json", str(state/"report.json"), "multi-ue", "-n", "1", "--numPduSessions", str(sessions), "--control-socket", str(state/"control.sock")]
         if sessions:
-            command.append("--tunnel")
+            command.extend(["--tunnel","--tunnel-vrf=false"])
             capture = subprocess.Popen(["tcpdump", "-n", "-U", "--immediate-mode", "-i", "eth0", "-w", str(state/"n3.pcap"), "udp", "port", "2152"], stdout=capture_log, stderr=subprocess.STDOUT)
             until(lambda: capture.poll() is None and (state/"n3.pcap").exists() and (state/"n3.pcap").stat().st_size >= 24, 5, "N3 capture startup")
         else:
             command.extend(["--timeBeforeDeregistration", "5000"])
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
         until(lambda: (state/"control.sock").is_socket() and process.poll() is None, 20, "control socket")
-        def control(action):
+        def control(action, label=None):
             response = subprocess.run([str(binary), "control", "--socket", str(state/"control.sock"), "--ue", "1", "--action", action, "--timeout", "45s"], check=True, capture_output=True, text=True, timeout=50)
             value = json.loads(response.stdout)
-            (state/f"{action}.json").write_text(json.dumps(value,indent=2)+"\n")
+            (state/f"{label or action}.json").write_text(json.dumps(value,indent=2)+"\n")
             return value["ues"][0]
         ready = control("wait")
         require(ready["ready"] and ready["connected"] and ready["state"] == "registered" and ready["active_pdu_sessions"] == ([1] if sessions else []), f"incomplete real NAS readiness: {ready}")
@@ -185,10 +195,32 @@ def probe(binary, state):
                     data, peer = sock.recvfrom(4096)
                     require(data == payload and peer == (DN_IP,9000), "DN response payload/peer mismatch")
             until(lambda: gtpu_proof(state/"n3.pcap",nonce),3,"three observed uplink/downlink capture sequences")
+            result['user_plane'] = gtpu_proof(state/'n3.pcap',nonce)
+            # Keep the real core and PDU active while removing only our DN
+            # application. This proves that echo acceptance depends on that
+            # downstream peer, not control-plane readiness or a local shortcut.
+            (state/'dn-disable').write_text('negative control: close only owned DN UDP peer\n')
+            until(lambda: (state/'dn-disabled').exists(),3,'owned DN peer closure')
+            negative_nonce = b'PACKETRUSHER-MISSING-DN-'+os.urandom(32).hex().encode()
+            with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
+                sock.bind((UE_IP,0))
+                sock.settimeout(3)
+                sock.sendto(negative_nonce+struct.pack('!I',3),(DN_IP,9000))
+                try:
+                    sock.recvfrom(4096)
+                except (TimeoutError,ConnectionRefusedError):
+                    pass
+                else:
+                    raise AssertionError('missing-DN negative control unexpectedly received a UDP response')
+            still_ready = control('wait','wait-dn-disabled')
+            require(still_ready['ready'] and still_ready['active_pdu_sessions'] == [1], 'DN closure changed PDU readiness')
+            await_core_count(profile,state,'dn-disabled',1,5)
+            until(lambda: gtpu_proof(state/'n3.pcap',negative_nonce,(3,),False),3,'missing-DN uplink with no UDP echo')
             capture.send_signal(signal.SIGINT)
             require(capture.wait(timeout=5) == 0, "N3 capture failed")
             capture = None
             result["user_plane"] = gtpu_proof(state/"n3.pcap", nonce)
+            result['missing_dn'] = gtpu_proof(state/'n3.pcap',negative_nonce,(3,),False)
             require(control("deregister")["state"] == "parked", "manual deregistration did not park")
         # Free5GC automatic termination must take the positive readiness path,
         # well before the legacy30s unresolved-readiness cleanup fallback.
