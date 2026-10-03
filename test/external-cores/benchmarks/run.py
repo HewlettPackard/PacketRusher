@@ -74,7 +74,7 @@ def cohort(args):
         record(state/'ue-route.json',route)
         expected='valgnb'+socket.inet_aton(prepare.RAN_IP).hex() if args.backend=='gtp5g' else 'val0000000120'
         probe.require(route[0]['dev']==expected,f'unexpected owned backend route: {route}')
-        link=json.loads(subprocess.check_output(['ip','-json','link','show','dev',route[0]['dev']],text=True))
+        link=json.loads(subprocess.check_output(['ip','-details','-json','link','show','dev',route[0]['dev']],text=True))
         record(state/'ue-link.json',link)
         probe.require(link[0]['mtu']==1400,'backend MTU differs from1400')
         if args.backend=='gtp5g':probe.require(link[0].get('linkinfo',{}).get('info_kind')=='gtp5g','route does not select kernel gtp5g')
@@ -176,7 +176,7 @@ def run(args):
         'rates_bps':args.rates,'seconds':args.seconds,'repetitions':args.repetitions,'seed':args.seed,
         'module_version':Path('/sys/module/gtp5g/version').read_text().strip(),
         'logging_level':4,'routing':'source policy, no VRF','captures_during_timing':False,
-        'pilot':args.pilot,'setup_complete':True,'ue_and_session_ambr':'10 Gbps',
+        'pilot':args.pilot,'setup_complete':False,'ue_and_session_ambr':'10 Gbps',
         'urr_period_seconds':3600,'urr_threshold_bytes':1_000_000_000_000,
         'iperf_binary_sha256':hashlib.sha256(Path('/usr/bin/iperf3').read_bytes()).hexdigest(),
         'module_sha256':hashlib.sha256(Path(args.module).read_bytes()).hexdigest(),
@@ -210,6 +210,9 @@ def run(args):
         log=(state/'core-supervisor.log').open('wb');files.append(log)
         supervisor=native.launch_owned(['python3',str(Path(args.fixture)/'core.py'),'--prefix',args.prefix,'--state',str(state),'--stop-capture-when-ready'],stdout=log,stderr=subprocess.STDOUT);processes.append(supervisor)
         probe.until(lambda:supervisor.poll() is None and (state/'core-ready').exists(),65,'genuine core/PFCP')
+        environment=json.loads((state/'environment.json').read_text())
+        environment['setup_complete']=True
+        record(state/'environment.json',environment)
         nf={}
         for pid in Path(f'/proc/{supervisor.pid}/task/{supervisor.pid}/children').read_text().split():
             try:
