@@ -146,7 +146,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	for _, simulation := range simulations {
 		require.True(t, simulation.Send(procedures.UeTesterMessage{Type: procedures.Terminate}))
 	}
-	waitTestSimulations(t, simulations)
+	waitTestSimulations(t, simulations, 30*time.Second)
 	require.Eventually(t, func() bool {
 		allDeregistered := true
 		fiveGC.GetAMFContext().ExecuteForAllUe(func(ue *context.UEContext) {
@@ -238,10 +238,13 @@ func TestUERegistrationLoop(t *testing.T) {
 	// Setup UE
 	scenarioChans := make([]chan procedures.UeTesterMessage, 2)
 	ueSimCfg := tools.UESimulationConfig{
-		UeId:                     1,
-		Gnbs:                     gnbs,
-		Cfg:                      conf,
-		TimeBeforeDeregistration: 2000,
+		UeId: 1,
+		Gnbs: gnbs,
+		Cfg:  conf,
+		// This test requires completed registrations, not deliberate early
+		// aborts. Leave room for the kernel's multi-second SCTP retransmission
+		// interval before ending each iteration; production timers are unchanged.
+		TimeBeforeDeregistration: 5000,
 		TimeBeforeNgapHandover:   0,
 		TimeBeforeXnHandover:     0,
 		NumPduSessions:           1,
@@ -264,7 +267,7 @@ func TestUERegistrationLoop(t *testing.T) {
 
 	// Join the whole loop before inspecting it or closing its gNB inbound
 	// channel. A fixed sleep can expire while the next UE is still attaching.
-	waitTestSimulations(t, []*tools.UESimulation{simulation})
+	waitTestSimulations(t, []*tools.UESimulation{simulation}, 45*time.Second)
 	require.Eventually(t, func() bool {
 		allDeregistered := true
 		fiveGC.GetAMFContext().ExecuteForAllUe(func(ue *context.UEContext) {
@@ -283,9 +286,9 @@ func TestUERegistrationLoop(t *testing.T) {
 		})
 }
 
-func waitTestSimulations(t *testing.T, simulations []*tools.UESimulation) {
+func waitTestSimulations(t *testing.T, simulations []*tools.UESimulation, timeout time.Duration) {
 	t.Helper()
-	deadline := time.NewTimer(30 * time.Second)
+	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	for _, simulation := range simulations {
 		select {
@@ -301,5 +304,5 @@ func stopTestSimulations(t *testing.T, simulations []*tools.UESimulation) {
 	for _, simulation := range simulations {
 		simulation.Send(procedures.UeTesterMessage{Type: procedures.Kill})
 	}
-	waitTestSimulations(t, simulations)
+	waitTestSimulations(t, simulations, 30*time.Second)
 }
