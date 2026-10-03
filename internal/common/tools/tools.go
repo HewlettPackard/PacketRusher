@@ -30,14 +30,23 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 	// gnb[0].n2_ip = 192.168.2.10, gnb[0].n3_ip = 192.168.3.10
 	// gnb[1].n2_ip = 192.168.2.11, gnb[1].n3_ip = 192.168.3.11
 	// ...
-	baseGnbId := cfg.GNodeB.PlmnList.GnbId
+	if count < 1 {
+		log.Fatal("[GNB] At least one gNB is required")
+	}
+	if _, err := cfg.GNodeB.PlmnList.GNBIDAt(count - 1); err != nil {
+		log.Fatalf("[GNB] Invalid identifier range: %v", err)
+	}
+	cfg.GNodeB.PlmnList.GnbId, _ = cfg.GNodeB.PlmnList.GNBIDAt(0)
+	basePLMN := cfg.GNodeB.PlmnList
 	for i := 1; i <= count; i++ {
 		gnbs[cfg.GNodeB.PlmnList.GnbId] = gnb.InitGnb(cfg, wg)
 		wg.Add(1)
 
 		// TODO: We could find the interfaces where N2/N3 are
 		// and check that the incremented IPs, still belong to the interfaces' subnet
-		cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(i, baseGnbId)
+		if i < count {
+			cfg.GNodeB.PlmnList.GnbId, _ = basePLMN.GNBIDAt(i)
+		}
 		cfg.GNodeB.ControlIF = cfg.GNodeB.ControlIF.WithNextAddr()
 		cfg.GNodeB.DataIF = cfg.GNodeB.DataIF.WithNextAddr()
 	}
@@ -62,16 +71,12 @@ func IncrementIP(origIP, cidr string) (string, error) {
 	return ip.String(), nil
 }
 
-func gnbIdGenerator(i int, gnbId string) string {
-
-	gnbId_int, err := strconv.ParseInt(gnbId, 16, 0)
+func gnbIdGenerator(offset int, id string) string {
+	value, err := (config.PlmnList{GnbId: id}).GNBIDAt(offset)
 	if err != nil {
-		log.Fatal("[UE][CONFIG] Given gnbId is invalid")
+		log.Fatalf("[GNB] Invalid identifier: %v", err)
 	}
-	base := int(gnbId_int) + i
-
-	gnbId = fmt.Sprintf("%06X", base)
-	return gnbId
+	return value
 }
 
 type UESimulationConfig struct {
@@ -94,7 +99,11 @@ type UESimulationConfig struct {
 // round-robin sequence. UE IDs start at 1; gNB offsets start at 0.
 func (simConfig UESimulationConfig) gnbID(handoverOffset int) string {
 	index := (simConfig.UeId - 1 + handoverOffset) % len(simConfig.Gnbs)
-	return gnbIdGenerator(index, simConfig.Cfg.GNodeB.PlmnList.GnbId)
+	id, err := simConfig.Cfg.GNodeB.PlmnList.GNBIDAt(index)
+	if err != nil {
+		log.Fatalf("[GNB] Invalid identifier: %v", err)
+	}
+	return id
 }
 
 // UESimulation tracks the entire scenario, including registration-loop delays.
