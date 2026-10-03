@@ -575,8 +575,8 @@ func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, messag
 	}
 
 	if err {
-		log.Fatal("[GNB][AMF] AMF is inactive")
-		amf.SetStateInactive()
+		log.Error("[GNB][AMF] Invalid NG Setup Response; AMF is inactive")
+		amf.RejectSetup(fmt.Errorf("invalid NG Setup Response"))
 	} else {
 		amf.SetStateActive()
 		log.Info("[GNB][AMF] AMF Name: ", amf.GetAmfName())
@@ -633,7 +633,7 @@ func HandlerNgSetupFailure(amf *context.GNBAmf, gnb *context.GNBContext, message
 	}
 
 	// redundant but useful for information about code.
-	amf.SetStateInactive()
+	amf.RejectSetup(fmt.Errorf("NG Setup Failure: %s", causeToString(valueMessage.Cause)))
 
 	log.Info("[GNB][NGAP] AMF is inactive")
 }
@@ -749,7 +749,9 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 
 			// start communication with AMF(SCTP).
 			if err := InitConn(newAmf, gnb); err != nil {
-				log.Fatal("Error in", err)
+				gnb.RemoveGnbAmf(newAmf)
+				log.Error("[GNB][AMF] Configuration Update connection failed: ", err)
+				continue
 			} else {
 				log.Info("[GNB] SCTP/NGAP service is running")
 				// wg.Add(1)

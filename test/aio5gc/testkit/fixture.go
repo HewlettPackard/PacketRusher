@@ -52,8 +52,11 @@ func Start(ctx context.Context, builder *aio5gc.FiveGCBuilder, gnbCount int) (*F
 		return nil, err
 	}
 	f := &Fixture{Core: core, Config: core.Config(), closed: make(chan struct{})}
-	f.Gnbs = tools.CreateGnbs(gnbCount, f.Config, &f.wg)
-	if err := tools.WaitGnbs(ctx, f.Gnbs); err != nil {
+	f.Gnbs, err = tools.CreateGnbsContext(ctx, gnbCount, f.Config, &f.wg)
+	if err == nil {
+		err = tools.WaitGnbs(ctx, f.Gnbs)
+	}
+	if err != nil {
 		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = f.CloseContext(cleanup)

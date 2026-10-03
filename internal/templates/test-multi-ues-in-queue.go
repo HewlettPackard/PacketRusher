@@ -80,7 +80,13 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 		log.Warn("[TESTER] We are increasing the number of gNodeB to two for handover test cases. Make you sure you fill the requirements for having two gNodeBs.")
 		numGnb++
 	}
-	gnbs := tools.CreateGnbs(numGnb, cfg, &wg)
+	gnbs, err := tools.CreateGnbsContext(ctx, numGnb, cfg, &wg)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+		return err
+	}
 	defer func() {
 		for _, node := range gnbs {
 			node.Terminate()
@@ -99,7 +105,7 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 
 	// A connected SCTP socket does not mean the AMF accepted NG Setup.
 	readyCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	err := tools.WaitGnbs(readyCtx, gnbs)
+	err = tools.WaitGnbs(readyCtx, gnbs)
 	cancel()
 	if err != nil {
 		if errors.Is(err, context.Canceled) {

@@ -24,37 +24,53 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// CreateGnbs retains the original API. Error-aware callers should use
+// CreateGnbsContext; this wrapper logs failure and returns an empty registry.
 func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gnbCxt.GNBContext {
+	gnbs, err := CreateGnbsContext(context.Background(), count, cfg, wg)
+	if err != nil {
+		log.Error("[GNB] Startup failed: ", err)
+	}
+	return gnbs
+}
+
+// CreateGnbsContext owns partial construction: any startup failure stops and
+// joins already-created nodes, leaving no partial registry for UE admission.
+func CreateGnbsContext(ctx context.Context, count int, cfg config.Config, wg *sync.WaitGroup) (map[string]*gnbCxt.GNBContext, error) {
 	gnbs := make(map[string]*gnbCxt.GNBContext)
-	// Each gNB have their own IP address on both N2 and N3
-	// TODO: Limitation for now, these IPs must be sequential, eg:
-	// gnb[0].n2_ip = 192.168.2.10, gnb[0].n3_ip = 192.168.3.10
-	// gnb[1].n2_ip = 192.168.2.11, gnb[1].n3_ip = 192.168.3.11
-	// ...
+	if err := ctx.Err(); err != nil {
+		return gnbs, err
+	}
 	if count < 1 {
-		log.Fatal("[GNB] At least one gNB is required")
+		return gnbs, fmt.Errorf("at least one gNB is required")
 	}
 	if _, err := cfg.GNodeB.PlmnList.GNBIDAt(count - 1); err != nil {
-		log.Fatalf("[GNB] Invalid identifier range: %v", err)
+		return gnbs, fmt.Errorf("invalid gNB identifier range: %w", err)
 	}
 	cfg.GNodeB.PlmnList.GnbId, _ = cfg.GNodeB.PlmnList.GNBIDAt(0)
 	basePLMN := cfg.GNodeB.PlmnList
 	for i := 1; i <= count; i++ {
-		wg.Add(1)
-		created := gnb.InitGnb(cfg, wg)
+		if wg != nil {
+			wg.Add(1)
+		}
+		created, err := gnb.InitGnbContext(ctx, cfg, wg)
+		if err != nil {
+			for _, node := range gnbs {
+				node.Terminate()
+			}
+			for _, node := range gnbs {
+				node.WaitAssociations()
+			}
+			return make(map[string]*gnbCxt.GNBContext), fmt.Errorf("initialize gNB %s: %w", cfg.GNodeB.PlmnList.GnbId, err)
+		}
 		gnbs[cfg.GNodeB.PlmnList.GnbId] = created
-
-		// TODO: We could find the interfaces where N2/N3 are
-		// and check that the incremented IPs, still belong to the interfaces' subnet
 		if i < count {
 			cfg.GNodeB.PlmnList.GnbId, _ = basePLMN.GNBIDAt(i)
 		}
-		// Setup retries may have consumed addresses beyond the configured start.
-		// Allocate after the settled endpoints, preserving the configured ports.
 		cfg.GNodeB.ControlIF.AddrPort = netip.AddrPortFrom(created.GetGnbIpPort().Addr().Next(), cfg.GNodeB.ControlIF.Port())
 		cfg.GNodeB.DataIF.AddrPort = netip.AddrPortFrom(created.GetN3GnbIp().Next(), cfg.GNodeB.DataIF.Port())
 	}
-	return gnbs
+	return gnbs, nil
 }
 
 func IncrementIP(origIP, cidr string) (string, error) {
