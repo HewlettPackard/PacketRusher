@@ -172,6 +172,7 @@ func TestUserspaceRealPolicyVRFHandoverAndRollback(t *testing.T) {
 			userspaceRoundTrip(t, app, peer, target.GnbIp, 70, 71)
 			blocked, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 88, 4, 3), Port: 2152})
 			require.NoError(t, err)
+			defer blocked.Close()
 			SetupGtpInterface(ue, userspaceTestMessage(t, "127.88.4.3", 80))
 			require.Equal(t, target.GnbIp, pdu.GetGnbIp())
 			require.Equal(t, target.GNBPduSessions[0], pdu.GnbPduSession)
