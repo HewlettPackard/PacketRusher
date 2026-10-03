@@ -85,12 +85,12 @@ func (c *SmContext) NASPDUAddress() (*ie.PDUAddr, error) {
 	case ie.PDUSessType_IPv4:
 		address.IPv4 = append([]byte(nil), c.pduAddress.To4()...)
 	case ie.PDUSessType_IPv6:
-		if len(c.pduIPv6Address) != 16 {
+		if len(c.pduIPv6Address) != 16 || c.pduIPv6Address.To4() != nil {
 			return nil, fmt.Errorf("missing IPv6 mock address")
 		}
 		address.IPv6IfId = append([]byte(nil), c.pduIPv6Address[8:]...)
 	case ie.PDUSessType_IPv4v6:
-		if len(c.pduIPv6Address) != 16 {
+		if len(c.pduIPv6Address) != 16 || c.pduIPv6Address.To4() != nil {
 			return nil, fmt.Errorf("missing IPv6 mock address")
 		}
 		address.IPv6IfId = append([]byte(nil), c.pduIPv6Address[8:]...)
@@ -213,7 +213,11 @@ func CreatePDUSession(sessionRequest *nas.PDUSessEstReq,
 		newSmContext.SetPDUAddress(session.GetUnallocatedIP())
 	}
 	if sessionType != ie.PDUSessType_IPv4 {
-		newSmContext.SetPDUIPv6Address(session.GetUnallocatedIPv6())
+		ipv6Address, err := session.GetUnallocatedIPv6()
+		if err != nil {
+			return nil, err
+		}
+		newSmContext.SetPDUIPv6Address(ipv6Address)
 	}
 
 	if options := sessionRequest.ExtendedProtCfgOpts; options != nil && options.FromMs != nil {

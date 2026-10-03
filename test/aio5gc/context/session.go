@@ -108,11 +108,14 @@ func (s *SessionContext) GetUnallocatedIP() net.IP {
 
 // GetUnallocatedIPv6 allocates one deterministic /64 per mock PDU session.
 // The prefix is advertised by a fake UPF in dataplane tests, not encoded in NAS.
-func (s *SessionContext) GetUnallocatedIPv6() net.IP {
+func (s *SessionContext) GetUnallocatedIPv6() (net.IP, error) {
 	s.ipMtx.Lock()
 	defer s.ipMtx.Unlock()
+	if s.lastAllocatedIPv6 >= 1<<32-1 {
+		return nil, errors.New("mock IPv6 /64 pool exhausted")
+	}
 	s.lastAllocatedIPv6++
 	bytes := netip.MustParseAddr("2001:db8::1").As16()
 	bytes[4], bytes[5], bytes[6], bytes[7] = byte(s.lastAllocatedIPv6>>24), byte(s.lastAllocatedIPv6>>16), byte(s.lastAllocatedIPv6>>8), byte(s.lastAllocatedIPv6)
-	return net.IP(bytes[:])
+	return net.IP(bytes[:]), nil
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Package ipv6 implements the user-plane IPv6 prefix discovery required after
-// NAS allocates an interface identifier (TS 23.501 5.8.2.2.1).
+// NAS allocates an interface identifier (TS 23.501 5.8.2.2.3).
 package ipv6
 
 import (
@@ -49,8 +49,8 @@ func ParseAdvertisement(packet []byte, iid [8]byte) (Advertisement, error) {
 	}
 	source := netip.AddrFrom16([16]byte(packet[8:24]))
 	destination := netip.AddrFrom16([16]byte(packet[24:40]))
-	if !source.IsLinkLocalUnicast() || (destination != netip.MustParseAddr("ff02::1") && destination != LinkLocal(iid)) || checksum(packet) != 0 || binary.BigEndian.Uint16(packet[46:48]) == 0 {
-		return result, fmt.Errorf("invalid IPv6 Router Advertisement source, destination, checksum, or router lifetime")
+	if !source.IsLinkLocalUnicast() || (destination != netip.MustParseAddr("ff02::1") && destination != LinkLocal(iid)) || checksum(packet) != 0 {
+		return result, fmt.Errorf("invalid IPv6 Router Advertisement source, destination, or checksum")
 	}
 	for offset := 56; offset < len(packet); {
 		if len(packet)-offset < 2 || packet[offset+1] == 0 {
@@ -67,7 +67,7 @@ func ParseAdvertisement(packet []byte, iid [8]byte) (Advertisement, error) {
 			}
 			valid, preferred := binary.BigEndian.Uint32(option[4:8]), binary.BigEndian.Uint32(option[8:12])
 			prefix := netip.PrefixFrom(netip.AddrFrom16([16]byte(option[16:32])), int(option[2])).Masked()
-			if option[2] == 64 && option[3]&0x40 != 0 && valid != 0 && preferred != 0 && preferred <= valid && !prefix.Addr().IsLinkLocalUnicast() && !prefix.Addr().IsMulticast() && !prefix.Addr().IsUnspecified() && !result.Address.IsValid() {
+			if option[2] == 64 && option[3]&0x40 != 0 && preferred <= valid && !prefix.Addr().IsLinkLocalUnicast() && !prefix.Addr().IsMulticast() && !prefix.Addr().IsUnspecified() && !result.Address.IsValid() {
 				address := prefix.Addr().As16()
 				copy(address[8:], iid[:])
 				result = Advertisement{Address: netip.AddrFrom16(address), Prefix: prefix, Router: source, ValidLifetime: valid, PreferredLifetime: preferred, RouterLifetime: binary.BigEndian.Uint16(packet[46:48])}

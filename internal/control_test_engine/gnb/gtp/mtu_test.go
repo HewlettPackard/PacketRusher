@@ -74,3 +74,17 @@ func TestSetTunnelMTUFindsN3Alias(t *testing.T) {
 func testAddress(ip string) netlink.Addr {
 	return netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(ip), Mask: net.CIDRMask(24, 32)}}
 }
+
+func TestIPv6MinimumCheckedBeforeTouchingLiveTUN(t *testing.T) {
+	tunnel := &netlink.Tuntap{LinkAttrs: netlink.LinkAttrs{Index: 3, MTU: 1456}}
+	n3 := &netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Index: 2, MTU: 1300}}
+	called := false
+	ops := mtuOperations{links: func() ([]netlink.Link, error) { return []netlink.Link{n3}, nil }, addresses: func(netlink.Link, int) ([]netlink.Addr, error) { return []netlink.Addr{testAddress("192.0.2.2")}, nil }, set: func(netlink.Link, int) error { called = true; return nil }}
+	require.ErrorContains(t, setTunnelMTUMinimum(tunnel, netip.MustParseAddr("192.0.2.2"), 0, 1280, ops), "IPv6 requires at least 1280")
+	require.False(t, called, "setting a sub-1280 MTU removes kernel IPv6 addresses before rollback")
+	require.Equal(t, 1456, tunnel.Attrs().MTU)
+	n3.Attrs().MTU = 1500
+	require.NoError(t, setTunnelMTUMinimum(tunnel, netip.MustParseAddr("192.0.2.2"), 0, 1280, ops))
+	require.True(t, called)
+	require.Equal(t, 1456, tunnel.Attrs().MTU)
+}

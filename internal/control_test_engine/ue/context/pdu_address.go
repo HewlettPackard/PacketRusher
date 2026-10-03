@@ -46,7 +46,7 @@ func (s *UEPDUSession) SetPDUAddress(selected uint8, address *ie.PDUAddr) error 
 	}
 	if len(address.SMFIPv6LLA) != 0 {
 		addr, ok := netip.AddrFromSlice(address.SMFIPv6LLA)
-		if !want6 || !ok || !addr.Is6() || !addr.IsLinkLocalUnicast() {
+		if !ok || !addr.Is6() || !addr.IsLinkLocalUnicast() {
 			return fmt.Errorf("invalid SMF IPv6 link-local address")
 		}
 	}
@@ -57,8 +57,10 @@ func (s *UEPDUSession) SetPDUAddress(selected uint8, address *ie.PDUAddr) error 
 	if ipv4.IsValid() {
 		s.ueIP = ipv4.String()
 	}
+	if s.ipv6InterfaceID != iid || !want6 {
+		s.ipv6Address = netip.Addr{}
+	}
 	s.ipv6InterfaceID = iid
-	s.ipv6Address = netip.Addr{}
 	return nil
 }
 

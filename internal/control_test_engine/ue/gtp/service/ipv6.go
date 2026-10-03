@@ -208,7 +208,7 @@ func setupIPv6Session(ue *context.UEContext, session *context.UEPDUSession, link
 					timer.Stop()
 					return cleanup, fmt.Errorf("IPv6 transport ended before prefix discovery")
 				}
-				if candidate, err := ipv6.ParseAdvertisement(packet, iid); err == nil {
+				if candidate, err := ipv6.ParseAdvertisement(packet, iid); err == nil && candidate.ValidLifetime > 0 && candidate.RouterLifetime > 0 {
 					advertisement = candidate
 					waiting = false
 				}
@@ -246,6 +246,17 @@ func setupIPv6Session(ue *context.UEContext, session *context.UEPDUSession, link
 				}
 				candidate, err := ipv6.ParseAdvertisement(packet, iid)
 				if err != nil {
+					continue
+				}
+				if candidate.RouterLifetime == 0 || candidate.ValidLifetime == 0 {
+					allocation := session.GetIPv6()
+					if candidate.RouterLifetime == 0 || (allocation.IsValid() && candidate.Prefix.Contains(allocation)) {
+						if err := binding.withdraw(); err != nil {
+							log.Warn("[UE][GTP] Withdrawn IPv6 prefix cleanup failed: ", err)
+						}
+						expiry.Stop()
+						refresh.Reset(retryDelay)
+					}
 					continue
 				}
 				if err = binding.install(candidate); err != nil {

@@ -38,15 +38,13 @@ func TestRouterAdvertisementSemanticsWithValidChecksum(t *testing.T) {
 	for _, modify := range []func([]byte){
 		func(b []byte) { b[58] = 48 }, // /48 is unsuitable for a 64-bit NAS IID.
 		func(b []byte) { b[59] &= ^byte(0x40) },
-		func(b []byte) { copy(b[60:64], []byte{0, 0, 0, 0}) },
-		func(b []byte) { copy(b[64:68], []byte{0, 0, 0, 0}) },
+
 		func(b []byte) { copy(b[64:68], []byte{0, 0, 0xff, 0xff}) },
 		func(b []byte) { b[57] = 0 },
 		func(b []byte) { b[57] = 5 },
 		func(b []byte) { b[72] = 0xfe; b[73] = 0x80 },
 		func(b []byte) { b[72] = 0xff },
 		func(b []byte) { b[8] = 0x20; b[9] = 1 },
-		func(b []byte) { b[46] = 0; b[47] = 0 },
 	} {
 		malformed := append([]byte(nil), packet...)
 		modify(malformed)

@@ -27,3 +27,19 @@ func TestPDUSessionTypeConfig(t *testing.T) {
 		require.Error(t, yaml.UnmarshalWithOptions([]byte("ue:\n  pdusessiontype: "+invalid), &cfg, yaml.Strict()))
 	}
 }
+
+func TestIPv6TunnelPreflight(t *testing.T) {
+	cfg := Config{Ue: Ue{PDUSessionType: PDUSessionType(2), TunnelBackend: TunnelBackendKernel}}
+	require.NoError(t, cfg.ValidateTunnel(false))
+	require.ErrorContains(t, cfg.ValidateTunnel(true), "userspace")
+	cfg.Ue.TunnelBackend = TunnelBackendUserspace
+	require.NoError(t, cfg.ValidateTunnel(true))
+	cfg.Ue.TunnelMTU = 1279
+	require.ErrorContains(t, cfg.ValidateTunnel(true), "1280")
+	cfg.Ue.TunnelMTU = 1280
+	require.NoError(t, cfg.ValidateTunnel(true))
+	cfg.Ue.PDUSessionType = PDUSessionType(1)
+	cfg.Ue.TunnelBackend = TunnelBackendKernel
+	cfg.Ue.TunnelMTU = 1400
+	require.NoError(t, cfg.ValidateTunnel(true))
+}

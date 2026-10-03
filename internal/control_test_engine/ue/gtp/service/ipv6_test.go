@@ -2,6 +2,7 @@
 package service
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"github.com/free5gc/nas/ie"
@@ -10,6 +11,7 @@ import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"net/netip"
+	"sync"
 	"testing"
 	"time"
 )
@@ -23,6 +25,74 @@ func ipv6TestSession(t *testing.T) (*context.UEContext, *context.UEPDUSession) {
 	require.NoError(t, err)
 	require.NoError(t, session.SetPDUAddress(2, &ie.PDUAddr{IPv6IfId: []byte{0, 0, 0, 0, 0, 0, 0, 7}}))
 	return ue, session
+}
+
+func TestIPv6PrefixRenewalRenumberingExpiryAndRediscovery(t *testing.T) {
+	ue, session := ipv6TestSession(t)
+	link := &netlink.Tuntap{LinkAttrs: netlink.LinkAttrs{Index: 77, MTU: 1456}}
+	advertisements := make(chan []byte, 8)
+	var mu sync.Mutex
+	addresses := make(map[string]bool)
+	var renewals int
+	ops := ipv6NetworkOperations{
+		addressAdd: func(_ netlink.Link, address *netlink.Addr) error {
+			mu.Lock()
+			defer mu.Unlock()
+			addresses[address.IP.String()] = true
+			return nil
+		},
+		addressReplace: func(_ netlink.Link, address *netlink.Addr) error {
+			mu.Lock()
+			defer mu.Unlock()
+			renewals++
+			addresses[address.IP.String()] = true
+			return nil
+		},
+		addressDel: func(_ netlink.Link, address *netlink.Addr) error {
+			mu.Lock()
+			defer mu.Unlock()
+			delete(addresses, address.IP.String())
+			return nil
+		},
+		ruleAdd: func(*netlink.Rule) error { return nil }, ruleDel: func(*netlink.Rule) error { return nil },
+		routeAdd: func(*netlink.Route) error { return nil }, routeDel: func(*netlink.Route) error { return nil },
+	}
+	first, _ := hex.DecodeString(raWire)
+	advertisements <- first
+	cleanup, err := setupIPv6Session(ue, session, link, 1000, func([]byte) error { return nil }, advertisements, ops, 10*time.Millisecond)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, cleanup()) })
+	advertisements <- first
+	require.Eventually(t, func() bool { mu.Lock(); defer mu.Unlock(); return renewals == 1 }, time.Second, time.Millisecond)
+	second := append([]byte(nil), first...)
+	second[76], second[77] = 0x56, 0x78
+	binary.BigEndian.PutUint32(second[60:64], 1)
+	binary.BigEndian.PutUint32(second[64:68], 1)
+	second[42], second[43] = 0, 0
+	checksum := udp6Checksum(second)
+	binary.BigEndian.PutUint16(second[42:44], checksum)
+	advertisements <- second
+	require.Eventually(t, func() bool { return session.GetIPv6() == netip.MustParseAddr("2001:db8:5678::7") }, time.Second, time.Millisecond)
+	mu.Lock()
+	require.False(t, addresses["2001:db8:1234::7"], "old prefix must be retired after the new route commits")
+	mu.Unlock()
+	require.Eventually(t, func() bool { return !session.GetIPv6().IsValid() }, 1500*time.Millisecond, time.Millisecond)
+	mu.Lock()
+	require.True(t, addresses["fe80::7"])
+	require.False(t, addresses["2001:db8:5678::7"])
+	mu.Unlock()
+	advertisements <- first
+	require.Eventually(t, func() bool { return session.GetIPv6() == netip.MustParseAddr("2001:db8:1234::7") }, time.Second, time.Millisecond)
+	withdrawal := append([]byte(nil), first...)
+	withdrawal[46], withdrawal[47] = 0, 0
+	withdrawal[42], withdrawal[43] = 0, 0
+	binary.BigEndian.PutUint16(withdrawal[42:44], udp6Checksum(withdrawal))
+	advertisements <- withdrawal
+	require.Eventually(t, func() bool { return !session.GetIPv6().IsValid() }, time.Second, time.Millisecond)
+	require.NoError(t, cleanup())
+	mu.Lock()
+	require.Empty(t, addresses)
+	mu.Unlock()
 }
 
 func TestIPv6SessionDiscoverySourcePolicyAndCleanup(t *testing.T) {
