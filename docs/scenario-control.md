@@ -68,8 +68,14 @@ procedure already sent to the core may complete after a timeout; inspect its
 state before retrying. Association loss stops that UE and is reported to callers. An unavailable or
 full target connection queue is rejected without blocking the source dispatcher.
 
-The legacy idle/handover timers start after registration and use these same
-readiness checks. Avoid mixing timer-driven procedures with a manually sequenced
+The legacy deregistration/idle/handover timers start after registration and use
+these same readiness checks. Automatic deregistration waits for every configured
+PDU session to be active before releasing sessions and ending that iteration.
+Its readiness wait is bounded to 30 seconds and cancelled when the iteration
+ends. If the core never accepts every PDU, the same UE generation and connection
+are terminated at that deadline so registration loops can progress; unfinished
+attempts are recorded as cancelled and the deadline is logged. Manual `deregister` continues to park immediately.
+Avoid mixing timer-driven procedures with a manually sequenced
 scenario on the same UE if precise ordering matters.
 
 NG handover carries PacketRusher's virtual UE identity in simulator metadata

@@ -130,7 +130,31 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		time.Sleep(time.Duration(5) * time.Millisecond)
 	}
 
-	time.Sleep(time.Duration(5000) * time.Millisecond)
+	// Telecom replies can arrive after the old five-second window. Observe the
+	// same end state asserted below, including recorder completion, with a bound.
+	assert.Eventually(t, func() bool {
+		seen, complete := 0, true
+		fiveGC.GetAMFContext().ExecuteForAllUe(func(ue *context.UEContext) {
+			seen++
+			if ue.GetState().Current() != context.Deregistered {
+				complete = false
+			}
+			ue.ExecuteForAllSmContexts(func(sm *context.SmContext) {
+				if sm.GetState().Current() != context.Inactive {
+					complete = false
+				}
+			})
+		})
+		if !complete || seen != ueCount {
+			return false
+		}
+		for _, procedure := range results.Snapshot().Procedures {
+			if procedure.Started != uint64(ueCount) || procedure.Success != uint64(ueCount) || procedure.Failure != 0 || procedure.Pending != 0 {
+				return false
+			}
+		}
+		return true
+	}, 30*time.Second, 20*time.Millisecond, "all ten UEs must deregister with inactive PDU sessions and successful completed procedures")
 	i := 0
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
@@ -236,9 +260,23 @@ func TestUERegistrationLoop(t *testing.T) {
 	amfContext := fiveGC.GetAMFContext()
 	amfContext.Provision(models.Snssai{Sst: int32(ueSimCfg.Cfg.Ue.Snssai.Sst), Sd: ueSimCfg.Cfg.Ue.Snssai.Sd}, securityContext)
 
-	tools.SimulateSingleUE(ueSimCfg, &wg)
+	sim := tools.SimulateSingleUE(ueSimCfg, &wg)
 
-	time.Sleep(time.Duration(15000) * time.Millisecond)
+	assert.Eventually(t, func() bool {
+		select {
+		case <-sim.Done():
+		default:
+			return false
+		}
+		seen, complete := 0, true
+		fiveGC.GetAMFContext().ExecuteForAllUe(func(ue *context.UEContext) {
+			seen++
+			if ue.GetState().Current() != context.Deregistered {
+				complete = false
+			}
+		})
+		return seen == ueSimCfg.LoopCount && complete
+	}, 30*time.Second, 20*time.Millisecond, "all five iterations must complete and the core must observe final deregistration")
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
 			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")

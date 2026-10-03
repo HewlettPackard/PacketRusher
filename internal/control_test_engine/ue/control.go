@@ -27,12 +27,16 @@ func attachment(r *procedures.ControlRequest, ue *context.UEContext) procedures.
 			break
 		}
 	}
+	expectedActive := 0
 	for id := uint8(1); id <= 15; id++ {
 		if pdu, err := ue.GetPduSession(id); err == nil && pdu.GetStateSM() == context.SM5G_PDU_SESSION_ACTIVE {
 			a.ActivePDUSessions = append(a.ActivePDUSessions, id)
+			if int(id) <= r.ExpectedPDUSessions {
+				expectedActive++
+			}
 		}
 	}
-	a.Ready = a.Ready && a.Connected && a.State == "registered" && !ue.ControlHandoverTarget().IsValid() && len(a.ActivePDUSessions) >= r.ExpectedPDUSessions
+	a.Ready = a.Ready && a.Connected && a.State == "registered" && !ue.ControlHandoverTarget().IsValid() && expectedActive == r.ExpectedPDUSessions
 	return a
 }
 
@@ -61,13 +65,15 @@ func handleControl(r *procedures.ControlRequest, ue *context.UEContext) bool {
 	if r.Action == "reconnect" {
 		ready = a.State == "idle" && !a.Connected
 	}
-	if !ready {
+	if !ready && r.Action != "terminate-after-timeout" {
 		r.Respond(a, procedures.ErrNotReady)
 		return true
 	}
 	var err error
 	keep := true
 	switch r.Action {
+	case "terminate", "terminate-after-timeout":
+		keep = ueMgrHandler(procedures.UeTesterMessage{Type: procedures.Terminate}, ue)
 	case "deregister":
 		// Switch-off deregistration has no NAS acknowledgement. Ending this UE
 		// releases its local session resources; the scenario parks until register.

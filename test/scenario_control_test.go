@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/analytics"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/scenario"
@@ -26,6 +27,7 @@ import (
 	"github.com/free5gc/ngap/ie"
 	ngap "github.com/free5gc/ngap/message"
 	"github.com/free5gc/openapi/models"
+	"github.com/free5gc/util/fsm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -248,6 +250,100 @@ func TestScenarioDeregistrationParksAndRegistrationRearms(t *testing.T) {
 	require.Equal(t, registered.Generation+1, again.Generation)
 	require.True(t, again.Ready)
 	require.Equal(t, []uint8{1}, again.ActivePDUSessions)
+}
+
+// Hold the core before it emits the encoded second PDU accept. The first
+// session is already active; automatic td must wait for both configured IDs.
+func TestScenarioAutomaticDeregistrationWaitsForEveryPDUAccept(t *testing.T) {
+	results := analytics.NewRecorder()
+	analytics.SetCurrent(results)
+	t.Cleanup(func() { analytics.SetCurrent(nil) })
+	conf := coreTools.GenerateDefaultConf(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.51"), uint16(27000+os.Getpid()%2000)), netip.MustParseAddrPort("127.0.0.51:2163"), []*config.AMF{{IPv4Port: config.IPv4Port{AddrPort: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(60000+os.Getpid()%4000))}}})
+	pendingAccept, allowAccept := make(chan struct{}), make(chan struct{})
+	var block, unblock sync.Once
+	release := func() { unblock.Do(func() { close(allowAccept) }) }
+	builder := aio5gc.FiveGCBuilder{}
+	fgc, err := builder.WithConfig(conf).WithPDUCallback(core.Active, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+		if event == fsm.EntryEvent && args["sm"].(*core.SmContext).GetPduSessionId() == 2 {
+			block.Do(func() { close(pendingAccept) })
+			<-allowAccept
+		}
+	}).Build()
+	require.NoError(t, err)
+	t.Cleanup(func() { release(); require.NoError(t, fgc.Close()) })
+	security := core.SecurityContext{}
+	security.SetMsin(conf.Ue.Msin)
+	security.SetAuthSubscription(conf.Ue.Key, conf.Ue.Opc, "c9e8763286b5b9ffbdf56e1297d0887b", conf.Ue.Amf, conf.Ue.Sqn)
+	security.SetAbba([]byte{0, 0})
+	require.NoError(t, fgc.GetAMFContext().Provision(models.Snssai{Sst: 1, Sd: conf.Ue.Snssai.Sd}, security))
+	var wg sync.WaitGroup
+	gnbs := tools.CreateGnbs(1, conf, &wg)
+	t.Cleanup(func() {
+		for _, node := range gnbs {
+			node.Terminate()
+		}
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	require.NoError(t, tools.WaitGnbs(ctx, gnbs))
+	sim := tools.SimulateSingleUE(tools.UESimulationConfig{UeId: 1, Cfg: conf, Gnbs: gnbs, NumPduSessions: 2, TimeBeforeDeregistration: 400}, &wg)
+	t.Cleanup(func() {
+		release()
+		sim.Send(procedures.UeTesterMessage{Type: procedures.Kill})
+		select {
+		case <-sim.Done():
+		case <-time.After(5 * time.Second):
+			t.Error("simulation did not shut down")
+		}
+	})
+	select {
+	case <-pendingAccept:
+	case <-ctx.Done():
+		t.Fatal("second PDU request did not reach the core")
+	}
+	require.Eventually(t, func() bool {
+		a, err := sim.Inspect(ctx)
+		return err == nil && a.State == "registered" && len(a.ActivePDUSessions) == 1 && a.ActivePDUSessions[0] == 1 && !a.Ready
+	}, 5*time.Second, 10*time.Millisecond)
+	// This deliberate response delay is longer than td400ms, rather than a
+	// readiness sleep: termination must remain absent throughout the interval.
+	select {
+	case <-sim.Done():
+		t.Fatal("automatic deregistration cancelled a pending PDU establishment")
+	case <-time.After(700 * time.Millisecond):
+	}
+	a, err := sim.Inspect(ctx)
+	require.NoError(t, err, "inspection must remain available during automatic readiness wait")
+	require.Equal(t, []uint8{1}, a.ActivePDUSessions)
+	require.False(t, a.Ready)
+	release()
+	select {
+	case <-sim.Done():
+	case <-ctx.Done():
+		t.Fatal("ready UE did not complete automatic deregistration")
+	}
+	require.Eventually(t, func() bool {
+		seen, complete := 0, true
+		fgc.GetAMFContext().ExecuteForAllUe(func(ue *core.UEContext) {
+			seen++
+			complete = complete && ue.GetState().Current() == core.Deregistered
+			ue.ExecuteForAllSmContexts(func(sm *core.SmContext) {
+				complete = complete && sm.GetState().Current() == core.Inactive
+			})
+		})
+		return seen == 1 && complete
+	}, 5*time.Second, 20*time.Millisecond)
+	for _, procedure := range results.Snapshot().Procedures {
+		want := uint64(1)
+		if procedure.Procedure == analytics.SessionEstablishment {
+			want = 2
+		}
+		require.Equal(t, want, procedure.Started)
+		require.Equal(t, want, procedure.Success)
+		require.Zero(t, procedure.Failure)
+		require.Zero(t, procedure.Cancelled)
+		require.Zero(t, procedure.Pending)
+	}
 }
 
 // Complete the core side over encoded NGAP; production gNB handlers create the
