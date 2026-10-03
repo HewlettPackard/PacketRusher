@@ -31,7 +31,7 @@ trap 'exit 130' INT
 "${compose[@]}" config --quiet
 mkdir -p "$fixture_dir/.runtime"
 (cd "$repo_dir"; CGO_ENABLED=0 scripts/build.sh "$fixture_dir/.runtime/client")
-"${compose[@]}" pull --ignore-buildable
+"${compose[@]}" pull --ignore-buildable --policy missing
 "${compose[@]}" build
 "${compose[@]}" up --detach --wait --wait-timeout 90 db
 "${compose[@]}" exec --interactive=false --no-TTY db mongosh --quiet "$core" /artifacts/subscriber.js > "$state/provision.log"
