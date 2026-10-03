@@ -36,6 +36,31 @@ const (
 	TunnelShared
 )
 
+// TunnelBackend selects the datapath independently of UE routing mode.
+type TunnelBackend string
+
+const (
+	TunnelBackendKernel    TunnelBackend = "gtp5g"
+	TunnelBackendUserspace TunnelBackend = "userspace"
+)
+
+func ParseTunnelBackend(value string) (TunnelBackend, error) {
+	switch value {
+	case "", string(TunnelBackendKernel):
+		return TunnelBackendKernel, nil
+	case string(TunnelBackendUserspace):
+		return TunnelBackendUserspace, nil
+	default:
+		return "", fmt.Errorf("tunnel backend %q must be gtp5g or userspace", value)
+	}
+}
+
+// OverrideTunnelBackend applies a CLI override to the loaded configuration.
+func OverrideTunnelBackend(backend TunnelBackend) Config {
+	config.Ue.TunnelBackend = backend
+	return *config
+}
+
 var config *Config
 
 type Config struct {
@@ -64,22 +89,23 @@ type SliceSupportList struct {
 }
 
 type Ue struct {
-	Msin                   string     `yaml:"msin"`
-	Key                    string     `yaml:"key"`
-	Opc                    string     `yaml:"opc"`
-	Amf                    string     `yaml:"amf"`
-	Sqn                    string     `yaml:"sqn"`
-	Dnn                    string     `yaml:"dnn"`
-	ProtectionScheme       int        `yaml:"protectionScheme"`
-	HomeNetworkPublicKey   string     `yaml:"homeNetworkPublicKey"`
-	HomeNetworkPublicKeyID uint8      `yaml:"homeNetworkPublicKeyID"`
-	RoutingIndicator       string     `yaml:"routingindicator"`
-	Hplmn                  Hplmn      `yaml:"hplmn"`
-	Snssai                 Snssai     `yaml:"snssai"`
-	Integrity              Integrity  `yaml:"integrity"`
-	Ciphering              Ciphering  `yaml:"ciphering"`
-	TunnelMode             TunnelMode `yaml:"-"`
-	TunnelMTU              int        `yaml:"tunnelmtu"`
+	Msin                   string        `yaml:"msin"`
+	Key                    string        `yaml:"key"`
+	Opc                    string        `yaml:"opc"`
+	Amf                    string        `yaml:"amf"`
+	Sqn                    string        `yaml:"sqn"`
+	Dnn                    string        `yaml:"dnn"`
+	ProtectionScheme       int           `yaml:"protectionScheme"`
+	HomeNetworkPublicKey   string        `yaml:"homeNetworkPublicKey"`
+	HomeNetworkPublicKeyID uint8         `yaml:"homeNetworkPublicKeyID"`
+	RoutingIndicator       string        `yaml:"routingindicator"`
+	Hplmn                  Hplmn         `yaml:"hplmn"`
+	Snssai                 Snssai        `yaml:"snssai"`
+	Integrity              Integrity     `yaml:"integrity"`
+	Ciphering              Ciphering     `yaml:"ciphering"`
+	TunnelMode             TunnelMode    `yaml:"-"`
+	TunnelMTU              int           `yaml:"tunnelmtu"`
+	TunnelBackend          TunnelBackend `yaml:"tunnelbackend"`
 }
 
 type Hplmn struct {
@@ -144,6 +170,12 @@ func readConfig(configPath string) Config {
 	if err != nil {
 		log.Fatal("Could not unmarshal yaml config at \"", configPath, "\". ", err.Error())
 	}
+
+	backend, err := ParseTunnelBackend(string(cfg.Ue.TunnelBackend))
+	if err != nil {
+		log.Fatal(err)
+	}
+	cfg.Ue.TunnelBackend = backend
 
 	if cfg.Ue.TunnelMTU < 0 {
 		log.Fatal("ue.tunnelmtu must be zero (automatic) or a positive IPv4 MTU")

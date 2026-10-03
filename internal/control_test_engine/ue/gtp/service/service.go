@@ -184,6 +184,20 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		return
 	}
 
+	if ue.TunnelBackend == config.TunnelBackendUserspace {
+		if pduSession.Id != 1 {
+			log.Warn("[UE][GTP] Only PDU session 1 has a tunnel")
+			return
+		}
+		if err := setupUserspaceTunnel(ue, pduSession, gnbPduSession, msg.GnbIp); err != nil {
+			log.Error("[UE][GTP] Unable to configure userspace tunnel: ", err)
+			return
+		}
+		pduSession.SetGnbIp(msg.GnbIp)
+		committed = true
+		return
+	}
+
 	// Bounded concurrency through the plumbing below; see setupSlots. A dedicated
 	// device per UE keeps its own pacing, the 500 ms registration floor.
 	if ue.TunnelMode == config.TunnelShared {
