@@ -61,7 +61,7 @@ def generate(core, output, native=False, prefix="/opt/open5gs"):
         oam = f'http://{CORE_IP}:8000/namf-oam/v1/registered-ue-context'
         nf_addresses = addresses
     else:
-        nf_addresses = {"nrf": "127.0.0.10", "ausf": "127.0.0.11", "udm": "127.0.0.12", "udr": "127.0.0.20", "pcf": "127.0.0.13", "nssf": "127.0.0.14", "smf": "127.0.0.4", "amf": "127.0.0.5"}
+        nf_addresses = {"nrf": "127.0.0.10", "ausf": "127.0.0.11", "udm": "127.0.0.12", "udr": "127.0.0.20", "pcf": "127.0.0.13", "nssf": "127.0.0.14", "bsf": "127.0.0.15", "smf": "127.0.0.4", "amf": "127.0.0.5"}
         for nf, addr in nf_addresses.items():
             sbi = {"server": [{"address": addr, "port": 7777}]}
             if nf != "nrf":

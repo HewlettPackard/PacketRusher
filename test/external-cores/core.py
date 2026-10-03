@@ -41,7 +41,7 @@ def start(prefix, state):
             subprocess.run(["ip", "tuntap", "add", "name", "ogstun", "mode", "tun"], check=True)
             subprocess.run(["ip", "addr", "add", DN_IP + "/16", "dev", "ogstun"], check=True)
             subprocess.run(["ip", "link", "set", "ogstun", "up"], check=True)
-            names = ["nrf", "udr", "udm", "ausf", "pcf", "nssf", "upf", "smf", "amf"]
+            names = ["nrf", "udr", "udm", "ausf", "bsf", "pcf", "nssf", "upf", "smf", "amf"]
             echo = threading.Thread(target=serve_echo, args=(stop,errors))
             echo.start()
             capture_log = (state / "pfcp-capture.log").open("wb")
