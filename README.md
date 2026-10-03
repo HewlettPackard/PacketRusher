@@ -122,4 +122,23 @@ By contributing here, [you agree](DCO.md) to license your contribution under the
 
 PacketRusher borrows libraries and data structures from the [free5gc project](https://github.com/free5gc/free5gc), and is originally based upon [my5G-RANTester](https://github.com/my5G/my5G-RANTester).
 
+### Boolean flags and UE distribution
+
+Boolean flags take no separate value. Enable a flag with `--tunnel` or
+`--tunnel=true`, and disable a flag with `--tunnel-vrf=false`. For example:
+
+```bash
+./packetrusher --config config/config.yml multi-ue -n 2 --tunnel -d --tunnel-vrf=false
+```
+
+Flags may appear in either order. Do not write `--tunnel true` or
+`--tunnel-vrf false`; those values are positional arguments and are rejected
+before configuration loading or network setup.
+
+UE IDs start at 1. The first UE uses the configured gNB ID and N2/N3 addresses;
+the next UE uses the next gNB when multiple gNBs are present. Selection wraps
+back to the first gNB after the last one, and handovers advance through that
+same sequence. With `--dedicatedGnb`, ascending MSINs therefore use ascending
+gNB IDs and N2/N3 addresses.
+
 For the current codec APIs and validation commands, see [Dependency migration](docs/dependency-migration.md).
