@@ -152,10 +152,13 @@ func setupEBPFTunnel(ue *context.UEContext, pdu *context.UEPDUSession, gnbPDU *g
 		return err
 	}
 	ebpfRegistry.SetWarningHandler(func(err error) { log.Warn("[UE][eBPF] ", err) })
-	t.session, err = ebpfRegistry.Open(cfg)
+	// Open returns a concrete pointer. Publish it to the cleanup interface only
+	// after success; assigning its nil error result would create a typed nil.
+	session, err := ebpfRegistry.Open(cfg)
 	if err != nil {
 		return err
 	}
+	t.session = session
 	encap := &netlink.BpfEncap{}
 	if err = encap.SetProg(nl.LWT_BPF_XMIT, t.session.ProgramFD(), "packetrusher_gtpu"); err != nil {
 		return err
