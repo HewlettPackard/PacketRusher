@@ -49,6 +49,7 @@ jobs:
         run: |
           go mod download
           python3 -m unittest discover -s test/external-cores -p '*_test.py' -v
+          python3 -m unittest discover -s test/external-cores/benchmarks -p '*_test.py' -v
           bash -n test/external-cores/run.sh test/external-cores/native.sh
       - name: Run real core
         env:
