@@ -7,6 +7,7 @@ package context
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"github.com/mohae/deepcopy"
 	"my5G-RANTester/internal/common/auth"
 
 	nasType "github.com/free5gc/nas/ie"
@@ -36,7 +37,7 @@ type SecurityContext struct {
 }
 
 func (s *SecurityContext) GetAuthSubscription() models.Udr_DR_AuthenticationSubscription {
-	return s.authenticationSubs
+	return deepcopy.Copy(s.authenticationSubs).(models.Udr_DR_AuthenticationSubscription)
 }
 
 func (s *SecurityContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
@@ -116,7 +117,7 @@ func (s *SecurityContext) GetKseaf() string {
 }
 
 func (s *SecurityContext) SetAbba(abba []uint8) {
-	s.abba = abba
+	s.abba = append([]uint8(nil), abba...)
 }
 
 func (s *SecurityContext) GetKnasInt() [16]uint8 {
@@ -202,4 +203,15 @@ func (s *SecurityContext) NASSecurityContext() *security.SecCtx {
 		CipheringAlg: nasType.AlgCiphering(s.cipheringAlg), IntegrityAlg: nasType.AlgIntegrity(s.integrityAlg),
 		KnasEnc: s.knasEnc, KnasInt: s.knasInt,
 	}
+}
+
+// clone isolates provisioned secrets and pointer/slice fields from callers and
+// from each new registration's live NAS counter context.
+func (s SecurityContext) clone() SecurityContext {
+	out := s
+	out.authenticationSubs = deepcopy.Copy(s.authenticationSubs).(models.Udr_DR_AuthenticationSubscription)
+	out.abba = append([]uint8(nil), s.abba...)
+	out.kgnb = append([]uint8(nil), s.kgnb...)
+	out.NH = append([]byte(nil), s.NH...)
+	return out
 }

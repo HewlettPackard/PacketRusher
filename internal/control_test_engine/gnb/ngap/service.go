@@ -57,7 +57,7 @@ func dialAmf(amf *context.GNBAmf, gnb *context.GNBContext) error {
 	gnbAddrPort := gnb.GetGnbIpPort()
 	port := amf.GetLocalPort()
 	if port == 0 {
-		port = gnbAddrPort.Port() + uint16(ConnCount.Add(1)-1)
+		port = localAssociationPort(gnbAddrPort.Port(), ConnCount.Add(1)-1)
 		amf.SetLocalPort(port)
 	}
 	DialCount.Add(1)
@@ -124,6 +124,11 @@ func dialAmf(amf *context.GNBAmf, gnb *context.GNBContext) error {
 		return err
 	}
 
+	if gnbAddrPort.Port() == 0 {
+		if addr, ok := conn.LocalAddr().(*sctp.SCTPAddr); ok {
+			amf.SetLocalPort(uint16(addr.Port))
+		}
+	}
 	log.Info("[GNB][SCTP] SCTP connection established successfully")
 
 	// set streams and other information about TNLA
@@ -286,4 +291,13 @@ func awaitReassociation(amf *context.GNBAmf, conn *sctp.SCTPConn, lostAt time.Ti
 			return
 		}
 	}
+}
+
+// Configured port zero requests a kernel-assigned endpoint for every association;
+// counting associations must not turn it into a privileged fixed port.
+func localAssociationPort(configured uint16, offset int32) uint16 {
+	if configured == 0 {
+		return 0
+	}
+	return configured + uint16(offset)
 }

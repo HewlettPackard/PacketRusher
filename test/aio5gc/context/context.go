@@ -19,16 +19,15 @@ import (
 
 // All in one 5GC for test purpose
 type Aio5gc struct {
-	amfContext  AMFContext
-	session     SessionContext
-	nasHooks    map[nas.MsgType]func(nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error)
-	ngapHook    []func(ngapType.Message, *GNBContext, *Aio5gc) (bool, error)
-	conf        config.Config
-	lifecycleMu sync.Mutex
-	closing     bool
-	closed      chan struct{}
-	closers     []func() error
-	workers     sync.WaitGroup
+	amfContext   AMFContext
+	session      SessionContext
+	nasHooks     map[nas.MsgType]func(nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error)
+	ngapHook     []func(ngapType.Message, *GNBContext, *Aio5gc) (bool, error)
+	conf         config.Config
+	configMu     sync.RWMutex
+	runtime      runtime
+	hooksMu      sync.RWMutex
+	observations observations
 }
 
 func (a *Aio5gc) GetAMFContext() *AMFContext {
@@ -68,16 +67,16 @@ func (a *Aio5gc) Init(conf config.Config, id string, name string, ueCallbacks ma
 		},
 	}
 
-	pdufsm, err := initPduFSM(pduCallbacks)
+	pdufsm, err := initPduFSM(a.observedCallbacks(pduCallbacks, true))
 	if err != nil {
 		return err
 	}
-	uefsm, err := initUeFSM(ueCallbacks)
+	uefsm, err := initUeFSM(a.observedCallbacks(ueCallbacks, false))
 	if err != nil {
 		return err
 	}
 
-	a.conf = conf
+	a.conf = CloneConfig(conf)
 	a.amfContext = AMFContext{}
 	a.amfContext.NewAmfContext(
 		name,
@@ -89,24 +88,37 @@ func (a *Aio5gc) Init(conf config.Config, id string, name string, ueCallbacks ma
 		pdufsm,
 	)
 
+	a.amfContext.onCreate = a.observeCreatedUE
+	a.amfContext.onAssociationChange = a.observeAssociationChange
 	a.session.NewSessionContext()
 	return nil
 }
 
 func (a *Aio5gc) GetNasHook(msgType nas.MsgType) func(nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error) {
+	a.hooksMu.RLock()
+	defer a.hooksMu.RUnlock()
 	return a.nasHooks[msgType]
 }
 
 func (a *Aio5gc) SetNasHooks(hooks map[nas.MsgType]func(nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error)) {
-	a.nasHooks = hooks
+	a.hooksMu.Lock()
+	defer a.hooksMu.Unlock()
+	a.nasHooks = make(map[nas.MsgType]func(nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error), len(hooks))
+	for key, hook := range hooks {
+		a.nasHooks[key] = hook
+	}
 }
 
 func (a *Aio5gc) GetNgapHooks() []func(ngapType.Message, *GNBContext, *Aio5gc) (bool, error) {
-	return a.ngapHook
+	a.hooksMu.RLock()
+	defer a.hooksMu.RUnlock()
+	return append([]func(ngapType.Message, *GNBContext, *Aio5gc) (bool, error)(nil), a.ngapHook...)
 }
 
 func (a *Aio5gc) SetNgapHooks(hook []func(ngapType.Message, *GNBContext, *Aio5gc) (bool, error)) {
-	a.ngapHook = hook
+	a.hooksMu.Lock()
+	defer a.hooksMu.Unlock()
+	a.ngapHook = append([]func(ngapType.Message, *GNBContext, *Aio5gc) (bool, error)(nil), hook...)
 }
 
 func initUeFSM(callbacks fsm.Callbacks) (*fsm.FSM, error) {
@@ -171,6 +183,7 @@ func initPduFSM(callbacks fsm.Callbacks) (*fsm.FSM, error) {
 			{Event: ModificationCommand, From: Active, To: ModificationPending},
 			{Event: ModificationComplete, From: ModificationPending, To: Inactive},
 			{Event: ForceRelease, From: Active, To: Inactive},
+			{Event: ForceRelease, From: InactivePending, To: Inactive},
 		},
 		fsm.Callbacks{
 			Inactive:            callbacks[Inactive],
@@ -184,47 +197,4 @@ func initPduFSM(callbacks fsm.Callbacks) (*fsm.FSM, error) {
 		return nil, fmt.Errorf("[5GC] Failed to create PDU FSM: %v", err.Error())
 	}
 	return PduFsm, nil
-}
-
-// RegisterCloser and BeginWork serialize startup with Close, so test cleanup also
-// catches associations accepted while a shutdown is already starting.
-func (a *Aio5gc) RegisterCloser(close func() error) {
-	a.lifecycleMu.Lock()
-	if a.closing {
-		a.lifecycleMu.Unlock()
-		_ = close()
-		return
-	}
-	a.closers = append(a.closers, close)
-	a.lifecycleMu.Unlock()
-}
-func (a *Aio5gc) BeginWork() bool {
-	a.lifecycleMu.Lock()
-	defer a.lifecycleMu.Unlock()
-	if a.closing {
-		return false
-	}
-	a.workers.Add(1)
-	return true
-}
-func (a *Aio5gc) EndWork() { a.workers.Done() }
-func (a *Aio5gc) Close() error {
-	a.lifecycleMu.Lock()
-	if a.closing {
-		closed := a.closed
-		a.lifecycleMu.Unlock()
-		<-closed
-		return nil
-	}
-	a.closing = true
-	a.closed = make(chan struct{})
-	closers := a.closers
-	a.closers = nil
-	a.lifecycleMu.Unlock()
-	for _, close := range closers {
-		_ = close()
-	}
-	a.workers.Wait()
-	close(a.closed)
-	return nil
 }

@@ -6,7 +6,9 @@ package context
 
 import (
 	"errors"
+	"github.com/mohae/deepcopy"
 	"math"
+	"reflect"
 	"strconv"
 	"sync"
 
@@ -16,15 +18,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
-	tmsiGenerator *idgenerator.IDGenerator = nil
-	ueMutex       sync.Mutex
-	scMutex       sync.Mutex
-	gnbMutex      sync.Mutex
-	ueIdMutex     sync.Mutex
-)
-
 type AMFContext struct {
+	ueMu                sync.RWMutex
+	subscriberMu        sync.RWMutex
+	gnbMu               sync.RWMutex
+	idMu                sync.Mutex
+	tmsiGenerator       *idgenerator.IDGenerator
+	ueByID              map[int64]*UEContext
+	onCreate            func(*UEContext)
+	onAssociationChange func()
 	amfName             string
 	id                  string
 	supportedPlmnSnssai []models.Nrf_NFMgmt_PlmnSnssai
@@ -44,18 +46,16 @@ type NetworkName struct {
 	Short string
 }
 
-func init() {
-	tmsiGenerator = idgenerator.NewGenerator(1, math.MaxInt32)
-}
-
 func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssai []models.Nrf_NFMgmt_PlmnSnssai, servedGuami []models.Guami, relativeCapacity int64, ueFsm *fsm.FSM, pduFsm *fsm.FSM) {
 	c.amfName = amfName
 	c.id = id
-	c.supportedPlmnSnssai = supportedPlmnSnssai
-	c.servedGuami = servedGuami
+	c.supportedPlmnSnssai = deepcopy.Copy(supportedPlmnSnssai).([]models.Nrf_NFMgmt_PlmnSnssai)
+	c.servedGuami = deepcopy.Copy(servedGuami).([]models.Guami)
 	c.relativeCapacity = relativeCapacity
 	c.gnbs = make(map[string]*GNBContext)
 	c.ues = []*UEContext{}
+	c.ueByID = make(map[int64]*UEContext)
+	c.tmsiGenerator = idgenerator.NewGenerator(1, math.MaxInt32)
 	c.provisionedData = map[string]provisionedData{}
 	c.idUeGenerator = 0
 	c.networkName = NetworkName{
@@ -67,7 +67,12 @@ func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssa
 }
 
 func (c *AMFContext) TmsiAllocate() int32 {
-	tmsi, err := tmsiGenerator.Allocate()
+	c.idMu.Lock()
+	defer c.idMu.Unlock()
+	if c.tmsiGenerator == nil {
+		c.tmsiGenerator = idgenerator.NewGenerator(1, math.MaxInt32)
+	}
+	tmsi, err := c.tmsiGenerator.Allocate()
 	if err != nil {
 		log.Errorf("[5GC] Allocate TMSI error: %+v", err)
 		return -1
@@ -84,8 +89,8 @@ func (c *AMFContext) GetId() string {
 }
 
 func (c *AMFContext) FindProvisionedData(msin string) (provisionedData, error) {
-	scMutex.Lock()
-	defer scMutex.Unlock()
+	c.subscriberMu.Lock()
+	defer c.subscriberMu.Unlock()
 	data, ok := c.provisionedData[msin]
 	if !ok {
 		return provisionedData{}, errors.New("[5GC] UE with msin " + msin + "not found")
@@ -94,19 +99,17 @@ func (c *AMFContext) FindProvisionedData(msin string) (provisionedData, error) {
 }
 
 func (c *AMFContext) FindUEById(id int64) (*UEContext, error) {
-	ueMutex.Lock()
-	defer ueMutex.Unlock()
-	for ue := range c.ues {
-		if c.ues[ue].amfNgapId == id {
-			return c.ues[ue], nil
-		}
+	c.ueMu.Lock()
+	defer c.ueMu.Unlock()
+	if ue, ok := c.ueByID[id]; ok {
+		return ue, nil
 	}
 	return nil, errors.New("[5GC] UE with amfNgapId " + strconv.Itoa(int(id)) + "not found")
 }
 
 func (c *AMFContext) FindUEByRanId(id int64) (*UEContext, error) {
-	ueMutex.Lock()
-	defer ueMutex.Unlock()
+	c.ueMu.Lock()
+	defer c.ueMu.Unlock()
 	for ue := range c.ues {
 		if c.ues[ue].GetRanNgapId() == id {
 			return c.ues[ue], nil
@@ -117,8 +120,8 @@ func (c *AMFContext) FindUEByRanId(id int64) (*UEContext, error) {
 }
 
 func (c *AMFContext) FindRegisteredUEByMsin(msin string) (*UEContext, error) {
-	ueMutex.Lock()
-	defer ueMutex.Unlock()
+	c.ueMu.Lock()
+	defer c.ueMu.Unlock()
 	for ue := range c.ues {
 		if c.ues[ue].GetState().Is(Registered) && c.ues[ue].GetSecurityContext() != nil && c.ues[ue].GetSecurityContext().msin == msin {
 			return c.ues[ue], nil
@@ -128,42 +131,54 @@ func (c *AMFContext) FindRegisteredUEByMsin(msin string) (*UEContext, error) {
 }
 
 func (c *AMFContext) ExecuteForAllUe(function func(ue *UEContext)) {
-	ueMutex.Lock()
+	c.ueMu.Lock()
 	ues := append([]*UEContext(nil), c.ues...)
-	ueMutex.Unlock()
+	c.ueMu.Unlock()
 	for _, ue := range ues {
 		function(ue)
 	}
 }
 
 func (c *AMFContext) Provision(nssai models.Snssai, securityContext SecurityContext) error {
-	scMutex.Lock()
-	defer scMutex.Unlock()
+	c.subscriberMu.Lock()
+	defer c.subscriberMu.Unlock()
 	_, ok := c.provisionedData[securityContext.msin]
 	if ok {
 		return errors.New("[5GC] Cannot create new subscriber: subscriber with msin " + securityContext.msin + " already exist")
 	}
-	c.provisionedData[securityContext.msin] = provisionedData{defaultSNssai: nssai, securityContext: securityContext}
+	if c.provisionedData == nil {
+		c.provisionedData = make(map[string]provisionedData)
+	}
+	c.provisionedData[securityContext.msin] = provisionedData{defaultSNssai: nssai, securityContext: securityContext.clone()}
 	return nil
 }
 
-func (c *AMFContext) NewUE(ueRanNgapId int64) *UEContext {
+func (c *AMFContext) NewUE(ueRanNgapId int64) *UEContext { return c.NewUEForGNB(ueRanNgapId, nil) }
+
+// NewUEForGNB binds identity before publishing the context to other readers.
+func (c *AMFContext) NewUEForGNB(ueRanNgapId int64, gnb *GNBContext) *UEContext {
 	newUE := UEContext{}
-	newUE.SetRanNgapId(ueRanNgapId)
+	newUE.BindGNB(gnb, ueRanNgapId)
 	newUE.SetAmfNgapId(c.getAmfUeId())
 	newUE.smContexts = make(map[int32]*SmContext)
 	newUE.state = fsm.NewState(Deregistered)
 	newUE.ueFsm = c.ueFsm
 	newUE.pduFsm = c.pduFsm
-	ueMutex.Lock()
+	c.ueMu.Lock()
+	if c.ueByID == nil {
+		c.ueByID = make(map[int64]*UEContext)
+	}
+	c.ueByID[newUE.amfNgapId] = &newUE
 	c.ues = append(c.ues, &newUE)
-	ueMutex.Unlock()
-	ue, _ := c.FindUEById(newUE.amfNgapId)
-	return ue
+	c.ueMu.Unlock()
+	if c.onCreate != nil {
+		c.onCreate(&newUE)
+	}
+	return &newUE
 }
 
 func (c *AMFContext) GetServedGuami() []models.Guami {
-	return c.servedGuami
+	return deepcopy.Copy(c.servedGuami).([]models.Guami)
 }
 
 func (c *AMFContext) GetServedGuamiPlmns(plmnIds []models.PlmnId) []models.Guami {
@@ -175,11 +190,11 @@ func (c *AMFContext) GetServedGuamiPlmns(plmnIds []models.PlmnId) []models.Guami
 			}
 		}
 	}
-	return guamis
+	return deepcopy.Copy(guamis).([]models.Guami)
 }
 
 func (c *AMFContext) GetSupportedPlmnSnssai() []models.Nrf_NFMgmt_PlmnSnssai {
-	return c.supportedPlmnSnssai
+	return deepcopy.Copy(c.supportedPlmnSnssai).([]models.Nrf_NFMgmt_PlmnSnssai)
 }
 
 func (c *AMFContext) GetRelativeCapacity() int64 {
@@ -187,39 +202,43 @@ func (c *AMFContext) GetRelativeCapacity() int64 {
 }
 
 func (c *AMFContext) GetGnb(Addr string) (*GNBContext, error) {
-	gnbMutex.Lock()
+	c.gnbMu.Lock()
 	gnb, exist := c.gnbs[Addr]
-	gnbMutex.Unlock()
+	c.gnbMu.Unlock()
 	if !exist {
 		return gnb, errors.New("GNB with address " + Addr + " not found in AMF")
 	}
 	return gnb, nil
 }
 
-func (c *AMFContext) FindGnbById(globalRanNodeID models.GlobalRanNodeId) (GNBContext, error) {
-	gnbMutex.Lock()
-	defer gnbMutex.Unlock()
+func (c *AMFContext) FindGnbById(globalRanNodeID models.GlobalRanNodeId) (*GNBContext, error) {
+	c.gnbMu.Lock()
+	defer c.gnbMu.Unlock()
 	for _, gnb := range c.gnbs {
-		if gnb.globalRanNodeID == globalRanNodeID {
-			connMu.RLock()
-			defer connMu.RUnlock()
-			return *gnb, nil
+		if reflect.DeepEqual(*gnb.GetGlobalRanNodeID(), globalRanNodeID) {
+			return gnb, nil
 		}
 	}
-	return GNBContext{}, errors.New("GNB with matching global RanNode ID not found in AMF")
+	return nil, errors.New("GNB with matching global RanNode ID not found in AMF")
 
 }
 
 func (c *AMFContext) AddGnb(gnbAddr string, gnb *GNBContext) error {
-	gnbMutex.Lock()
+	c.gnbMu.Lock()
+	if c.gnbs == nil {
+		c.gnbs = make(map[string]*GNBContext)
+	}
 	c.gnbs[gnbAddr] = gnb
-	gnbMutex.Unlock()
+	c.gnbMu.Unlock()
+	if c.onAssociationChange != nil {
+		c.onAssociationChange()
+	}
 	return nil
 }
 
 func (c *AMFContext) getAmfUeId() int64 {
-	ueIdMutex.Lock()
-	defer ueIdMutex.Unlock()
+	c.idMu.Lock()
+	defer c.idMu.Unlock()
 	id := c.idUeGenerator
 
 	// increment UeId
@@ -230,4 +249,28 @@ func (c *AMFContext) getAmfUeId() int64 {
 
 func (c *AMFContext) GetNetworkName() NetworkName {
 	return c.networkName
+}
+
+// RemoveGnb cannot retire a newer association that reused the same peer address.
+func (c *AMFContext) RemoveGnb(addr string, expected *GNBContext) {
+	c.gnbMu.Lock()
+	if c.gnbs[addr] == expected {
+		delete(c.gnbs, addr)
+	}
+	c.gnbMu.Unlock()
+	if c.onAssociationChange != nil {
+		c.onAssociationChange()
+	}
+}
+func (c *AMFContext) GNBCount() int { c.gnbMu.RLock(); defer c.gnbMu.RUnlock(); return len(c.gnbs) }
+
+func (c *AMFContext) Associations() []AssociationRecord {
+	c.gnbMu.RLock()
+	defer c.gnbMu.RUnlock()
+	out := make([]AssociationRecord, 0, len(c.gnbs))
+	for _, gnb := range c.gnbs {
+		local, remote := gnb.Endpoints()
+		out = append(out, AssociationRecord{Local: local, Remote: remote})
+	}
+	return out
 }

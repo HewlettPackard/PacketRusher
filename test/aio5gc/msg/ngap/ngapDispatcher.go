@@ -4,27 +4,25 @@ package ngap
 import (
 	"fmt"
 	"github.com/free5gc/ngap/message"
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg/ngap/handler"
 )
 
-func Dispatch(buf []byte, gnb *context.GNBContext, fgc *context.Aio5gc) {
+func Dispatch(buf []byte, gnb *context.GNBContext, fgc *context.Aio5gc) error {
 	msg, err := message.Parse(buf)
 	if err != nil {
-		log.Errorf("[5GC][NGAP] Decode failed: %v", err)
-		return
+		return fmt.Errorf("NGAP decode: %w", err)
 	}
 	handled := false
 	for _, hook := range fgc.GetNgapHooks() {
 		done, err := hook(msg, gnb, fgc)
 		if err != nil {
-			log.Error(err)
+			return fmt.Errorf("NGAP scenario hook: %w", err)
 		}
 		handled = handled || done
 	}
 	if handled {
-		return
+		return nil
 	}
 	switch m := msg.(type) {
 	case *message.NGSetupRequest:
@@ -34,17 +32,15 @@ func Dispatch(buf []byte, gnb *context.GNBContext, fgc *context.Aio5gc) {
 	case *message.UplinkNASTransport:
 		err = handler.UplinkNASTransport(m, gnb, fgc)
 	case *message.InitialContextSetupResponse:
-		err = handler.InitialContextSetupResponse(m, fgc)
+		err = handler.InitialContextSetupResponse(m, fgc, gnb)
 	case *message.PDUSessionResourceSetupResponse:
-		err = handler.PDUSessionResourceSetup(m, fgc)
+		err = handler.PDUSessionResourceSetup(m, fgc, gnb)
 	case *message.PDUSessionResourceReleaseResponse:
-		err = handler.PDUSessionResourceRelease(m, fgc)
+		err = handler.PDUSessionResourceRelease(m, fgc, gnb)
 	case *message.UEContextReleaseComplete:
-		err = handler.UEContextReleaseComplete(m, fgc)
+		err = handler.UEContextReleaseComplete(m, fgc, gnb)
 	default:
 		err = fmt.Errorf("unsupported NGAP message %T", msg)
 	}
-	if err != nil {
-		log.Errorf("[5GC][NGAP] Handle failed: %v", err)
-	}
+	return err
 }

@@ -111,12 +111,11 @@ func handleUnspecifiedRequest(n1smContent []uint8,
 		if err != nil {
 			return err
 		}
-		msg.SendPDUSessionReleaseCommand(gnb, ue, smContext, ie.Cause5GSM_RegularDeactivation)
+		return msg.SendPDUSessionReleaseCommand(gnb, ue, smContext, ie.Cause5GSM_RegularDeactivation)
 
 	default:
 		return errors.New("[5GC][NAS] Unimplemented ulNasTransport Request type")
 	}
-	return nil
 }
 
 func handleInitialRequest(n1smContent []uint8,
@@ -140,6 +139,5 @@ func handleInitialRequest(n1smContent []uint8,
 	if err != nil {
 		return err
 	}
-	msg.SendPDUSessionEstablishmentAccept(gnb, ue, smContext, session)
-	return nil
+	return msg.SendPDUSessionEstablishmentAccept(gnb, ue, smContext, session)
 }

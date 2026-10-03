@@ -15,10 +15,9 @@ func InitialUEMessage(req *message.InitialUEMessage, gnb *context.GNBContext, fg
 	if !ok {
 		return fmt.Errorf("mock core requires NR location")
 	}
-	ue := fgc.GetAMFContext().NewUE(req.RANUENGAPID.Value)
+	ue := fgc.GetAMFContext().NewUEForGNB(req.RANUENGAPID.Value, gnb)
 	model := convert.NRLocationToModels(location)
 	model.GlobalGnbId = gnb.GetGlobalRanNodeID()
 	ue.SetUserLocationInfo(model)
-	nas.Dispatch(req.NASPDU, ue, fgc, gnb)
-	return nil
+	return nas.Dispatch(req.NASPDU, ue, fgc, gnb)
 }

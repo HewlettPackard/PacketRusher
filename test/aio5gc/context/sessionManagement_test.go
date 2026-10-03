@@ -45,3 +45,25 @@ func TestConfirmReleasePreservesOtherPDUSessions(t *testing.T) {
 	require.NoError(t, err)
 	require.Same(t, second, remaining)
 }
+
+// Switch-off deregistration may overtake a release ACK on the same UE. Retire
+// pending sessions coherently and accept a later ACK only for a known retirement.
+func TestForceReleasePendingSessionAndLateConfirmation(t *testing.T) {
+	machine, err := initPduFSM(nil)
+	require.NoError(t, err)
+	ue := &UEContext{smContexts: make(map[int32]*SmContext), pduFsm: machine, securityContext: &SecurityContext{}}
+	session := NewSmContext(1)
+	session.state.Set(InactivePending)
+	require.NoError(t, ue.AddSmContext(session))
+	ForceReleaseAllPDUSession(ue)
+	require.Equal(t, Inactive, session.state.Current())
+	require.NoError(t, ConfirmPDUSessionRelease(ue, 1))
+	require.Error(t, ConfirmPDUSessionRelease(ue, 2), "unknown session must remain rejected")
+	replacement := NewSmContext(1)
+	replacement.state.Set(Active)
+	require.NoError(t, ue.AddSmContext(replacement))
+	require.Error(t, ConfirmPDUSessionRelease(ue, 1), "stale confirmation must not release a new active session")
+	remaining, err := ue.GetSmContext(1)
+	require.NoError(t, err)
+	require.Same(t, replacement, remaining)
+}

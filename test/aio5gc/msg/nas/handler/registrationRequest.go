@@ -53,8 +53,7 @@ func DefaultRegistrationRequest(nasReq *nas.RegReq, amf *context.AMFContext, ue 
 	ue.SetNgKsi(ngKsi)
 	mobileIdentity5GS := nasReq.MobileId5GS
 	if mobileIdentity5GS == nil || mobileIdentity5GS.TypeOfId != ie.IdType_5GS_SUCI {
-		msg.SendIdentityRequest(gnb, ue)
-		return nil
+		return msg.SendIdentityRequest(gnb, ue)
 	}
 
 	return SetMobileIdentity(amf, ue, mobileIdentity5GS, gnb)
@@ -87,7 +86,5 @@ func SetMobileIdentity(amf *context.AMFContext, ue *context.UEContext, mobileIde
 	sCtx.SetSupi("imsi-" + suci[2] + suci[3] + suci[len(suci)-1])
 	ue.SetSecurityContext(&sCtx)
 
-	msg.SendAuthenticationRequest(gnb, ue)
-
-	return nil
+	return msg.SendAuthenticationRequest(gnb, ue)
 }

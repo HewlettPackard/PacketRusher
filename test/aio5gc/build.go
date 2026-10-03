@@ -15,10 +15,10 @@ import (
 	nas "github.com/free5gc/nas/message"
 	ngapType "github.com/free5gc/ngap/message"
 	"github.com/free5gc/util/fsm"
-	log "github.com/sirupsen/logrus"
 )
 
 type FiveGCBuilder struct {
+	errors       []error
 	config       config.Config
 	nasHooks     map[nas.MsgType]func(nas.Message, *context.UEContext, *context.GNBContext, *context.Aio5gc) (bool, error)
 	ngapHook     []func(ngapType.Message, *context.GNBContext, *context.Aio5gc) (bool, error)
@@ -27,7 +27,7 @@ type FiveGCBuilder struct {
 }
 
 func (f *FiveGCBuilder) WithConfig(conf config.Config) *FiveGCBuilder {
-	f.config = conf
+	f.config = context.CloneConfig(conf)
 	return f
 }
 
@@ -37,7 +37,7 @@ func (f *FiveGCBuilder) WithNASDispatcherHook(ProcedureCode nas.MsgType, hook fu
 	}
 	_, ok := f.nasHooks[ProcedureCode]
 	if ok {
-		log.Errorf("[5GC] Coudln't add NAS Hook with procedure code %d: already exist", ProcedureCode)
+		f.errors = append(f.errors, fmt.Errorf("duplicate NAS hook for %s", ProcedureCode))
 		return f
 	}
 	f.nasHooks[ProcedureCode] = hook
@@ -55,7 +55,7 @@ func (f *FiveGCBuilder) WithUeCallback(state fsm.StateType, callback fsm.Callbac
 	}
 	_, ok := f.ueCallbacks[state]
 	if ok {
-		log.Errorf("[5GC] Coudln't add ue state change callback for state %v: already exist", state)
+		f.errors = append(f.errors, fmt.Errorf("duplicate UE callback for %s", state))
 		return f
 	}
 	f.ueCallbacks[state] = callback
@@ -68,7 +68,7 @@ func (f *FiveGCBuilder) WithPDUCallback(state fsm.StateType, callback fsm.Callba
 	}
 	_, ok := f.pduCallbacks[state]
 	if ok {
-		log.Errorf("[5GC] Coudln't add pdu session state change callback for state %v: already exist", state)
+		f.errors = append(f.errors, fmt.Errorf("duplicate PDU callback for %s", state))
 		return f
 	}
 	f.pduCallbacks[state] = callback
@@ -76,16 +76,19 @@ func (f *FiveGCBuilder) WithPDUCallback(state fsm.StateType, callback fsm.Callba
 }
 
 func (f *FiveGCBuilder) Build() (*context.Aio5gc, error) {
+	if err := errors.Join(f.errors...); err != nil {
+		return nil, err
+	}
 	amfId := "196673"                    // TODO generate ID
 	amfName := "amf.5gc.3gppnetwork.org" // TODO generate Name
 
 	fgc := context.Aio5gc{}
 	if reflect.DeepEqual(f.config, config.Config{}) {
-		return &context.Aio5gc{}, errors.New("No configuration provided")
+		return nil, errors.New("no configuration provided")
 	}
 	err := fgc.Init(f.config, amfId, amfName, f.ueCallbacks, f.pduCallbacks)
 	if err != nil {
-		return &context.Aio5gc{}, err
+		return nil, err
 	}
 
 	if f.nasHooks != nil {
@@ -95,14 +98,22 @@ func (f *FiveGCBuilder) Build() (*context.Aio5gc, error) {
 	if f.ngapHook != nil {
 		fgc.SetNgapHooks(f.ngapHook)
 	}
-	for _, amf := range f.config.AMFs {
+	if len(f.config.AMFs) == 0 {
+		return nil, errors.New("no AMF endpoints provided")
+	}
+	for index, amf := range f.config.AMFs {
+		if amf == nil {
+			_ = fgc.Close()
+			return nil, fmt.Errorf("AMF endpoint %d is nil", index)
+		}
 		listener, err := service.Listen(amf.AddrPort)
 		if err != nil {
 			_ = fgc.Close()
 			return nil, fmt.Errorf("start mock AMF: %w", err)
 		}
+		fgc.SetAMFEndpoint(index, config.AMF{IPv4Port: config.IPv4Port{AddrPort: listener.Addr()}})
 		fgc.RegisterCloser(listener.Close)
-		go service.Serve(listener, &fgc)
+		fgc.Go(func() { service.Serve(listener, &fgc) })
 	}
 	return &fgc, nil
 }

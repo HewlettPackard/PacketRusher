@@ -32,6 +32,5 @@ func DefaultRegistrationComplete(nasMsg *nas.RegComplete, gnb *context.GNBContex
 	if err != nil {
 		return err
 	}
-	msg.SendConfigurationUpdateCommand(gnb, ue, &nwName)
-	return nil
+	return msg.SendConfigurationUpdateCommand(gnb, ue, &nwName)
 }
