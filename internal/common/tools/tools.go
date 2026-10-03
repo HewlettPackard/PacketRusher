@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package tools
 
@@ -30,14 +31,20 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 	// gnb[0].n2_ip = 192.168.2.10, gnb[0].n3_ip = 192.168.3.10
 	// gnb[1].n2_ip = 192.168.2.11, gnb[1].n3_ip = 192.168.3.11
 	// ...
-	baseGnbId := cfg.GNodeB.PlmnList.GnbId
+	basePLMN := cfg.GNodeB.PlmnList
+	if _, err := basePLMN.GNBIDAt(count - 1); err != nil {
+		log.Fatalf("[GNB] Invalid identifier range: %v", err)
+	}
+	cfg.GNodeB.PlmnList.GnbId, _ = basePLMN.GNBIDAt(0)
 	for i := 1; i <= count; i++ {
 		gnbs[cfg.GNodeB.PlmnList.GnbId] = gnb.InitGnb(cfg, wg)
 		wg.Add(1)
 
 		// TODO: We could find the interfaces where N2/N3 are
 		// and check that the incremented IPs, still belong to the interfaces' subnet
-		cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(i, baseGnbId)
+		if i < count {
+			cfg.GNodeB.PlmnList.GnbId, _ = basePLMN.GNBIDAt(i)
+		}
 		cfg.GNodeB.ControlIF = cfg.GNodeB.ControlIF.WithNextAddr()
 		cfg.GNodeB.DataIF = cfg.GNodeB.DataIF.WithNextAddr()
 	}
@@ -62,18 +69,6 @@ func IncrementIP(origIP, cidr string) (string, error) {
 	return ip.String(), nil
 }
 
-func gnbIdGenerator(i int, gnbId string) string {
-
-	gnbId_int, err := strconv.ParseInt(gnbId, 16, 0)
-	if err != nil {
-		log.Fatal("[UE][CONFIG] Given gnbId is invalid")
-	}
-	base := int(gnbId_int) + i
-
-	gnbId = fmt.Sprintf("%06X", base)
-	return gnbId
-}
-
 type UESimulationConfig struct {
 	UeId                     int
 	Gnbs                     map[string]*gnbCxt.GNBContext
@@ -93,6 +88,17 @@ type UESimulationConfig struct {
 	RegistrationLoop         bool
 	LoopCount                int
 	TimeBeforeReregistration int
+}
+
+// gnbID selects the initial gNB and subsequent handover targets in the same
+// round-robin sequence. UE IDs start at 1; gNB offsets start at 0.
+func (simConfig UESimulationConfig) gnbID(handoverOffset int) string {
+	index := (simConfig.UeId - 1 + handoverOffset) % len(simConfig.Gnbs)
+	id, err := simConfig.Cfg.GNodeB.PlmnList.GNBIDAt(index)
+	if err != nil {
+		log.Fatalf("[GNB] Invalid identifier: %v", err)
+	}
+	return id
 }
 
 // UESimulation tracks the entire scenario, including registration-loop delays.
@@ -116,18 +122,6 @@ func (simulation *UESimulation) Send(message procedures.UeTesterMessage) bool {
 	case <-simulation.done:
 		return false
 	}
-}
-
-// gnbID selects the initial gNB and subsequent handover targets in the same
-// round-robin sequence. UE IDs start at 1; gNB offsets start at 0.
-func (simConfig UESimulationConfig) gnbID(handoverOffset int) string {
-	index := (simConfig.UeId - 1 + handoverOffset) % len(simConfig.Gnbs)
-	if index == 0 {
-		// CreateGnbs preserves the configured ID as the first map key. Hex
-		// letter case must therefore be retained when returning to that gNB.
-		return simConfig.Cfg.GNodeB.PlmnList.GnbId
-	}
-	return gnbIdGenerator(index, simConfig.Cfg.GNodeB.PlmnList.GnbId)
 }
 
 func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimulation {
