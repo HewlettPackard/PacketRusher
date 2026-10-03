@@ -146,3 +146,6 @@ gNB IDs and N2/N3 addresses.
 For automatic tunnel MTU calculation and the `ue.tunnelmtu` override, see [Tunnel MTU](docs/tunnel-mtu.md).
 
 For the current codec APIs and validation commands, see [Dependency migration](docs/dependency-migration.md).
+
+For local attachment inspection, targeted handovers and state-driven JSON scenarios,
+see [Runtime procedure controls](docs/scenario-control.md).

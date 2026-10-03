@@ -94,12 +94,28 @@ func (ue *GNBUe) CreateUeContext(plmn string, imeisv string, sst []string, sd []
 }
 
 func (ue *GNBUe) CopyFromPreviousContext(oldUeContext *GNBUe) {
+	if ue == oldUeContext {
+		return
+	}
+	oldUeContext.LockProcessing()
+	defer oldUeContext.UnlockProcessing()
 	ue.SetAmfUeId(oldUeContext.GetAmfUeId())
-	// Take an independent membership snapshot, retaining the existing shallow
-	// session/metadata copy. Never hold two UE locks, including for self-copy.
 	oldUeContext.contextMu.RLock()
 	previous := oldUeContext.context
 	oldUeContext.contextMu.RUnlock()
+	// Path Switch changes target TEIDs. Sharing these pointers would mutate the
+	// source while its ordered NGAP worker can still handle a release.
+	for id, pdu := range previous.pduSession {
+		if pdu != nil {
+			pdu.tunnelMu.RLock()
+			previous.pduSession[id] = &GnbPDUSession{
+				pduSessionId: pdu.pduSessionId, upfIp: pdu.upfIp, sst: pdu.sst, sd: pdu.sd,
+				uplinkTeid: pdu.uplinkTeid, downlinkTeid: pdu.downlinkTeid, pduType: pdu.pduType,
+				qosId: pdu.qosId, fiveQi: pdu.fiveQi, priArp: pdu.priArp,
+			}
+			pdu.tunnelMu.RUnlock()
+		}
+	}
 	ue.contextMu.Lock()
 	ue.context = previous
 	ue.contextMu.Unlock()

@@ -16,6 +16,7 @@ import (
 type simulationHarness struct {
 	simulation *UESimulation
 	inbound    chan gnbcontext.UEMessage
+	gnb        *gnbcontext.GNBContext
 }
 
 // Exercise the real scenario and UE goroutines without an SCTP listener. The
@@ -33,8 +34,12 @@ func newSimulationHarness(t *testing.T, trigger <-chan struct{}, interval, loops
 			Ciphering: config.Ciphering{Nea0: true}, Integrity: config.Integrity{Nia0: true},
 		},
 	}
+	// Unit fixture for successful NG Setup/attachment. Native wire readiness is
+	// covered separately by the real SCTP scenario fixtures.
+	gnb.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:38412")).SetStateActive()
+	t.Cleanup(gnb.Terminate)
 	wg := &sync.WaitGroup{}
-	h := &simulationHarness{inbound: gnb.GetInboundChannel()}
+	h := &simulationHarness{inbound: gnb.GetInboundChannel(), gnb: gnb}
 	h.simulation = SimulateSingleUE(UESimulationConfig{
 		UeId: 1, Gnbs: map[string]*gnbcontext.GNBContext{"000008": gnb}, Cfg: cfg,
 		TimeBeforeDeregistration: interval, DeregistrationTrigger: trigger,
@@ -62,6 +67,11 @@ func (h *simulationHarness) nextUE(t *testing.T) gnbcontext.UEMessage {
 	case connection := <-h.inbound:
 		connection.GNBTx <- gnbcontext.UEMessage{Mcc: "001", Mnc: "01"}
 		expectUplink(t, connection, nas.MsgTypeRegReq)
+		gu, err := h.gnb.NewGnBUe(connection.GNBTx, connection.GNBRx, connection.PrUeId, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		gu.SetStateReady()
 		return connection
 	case <-time.After(2 * time.Second):
 		t.Fatal("scenario did not create its next UE")
@@ -154,14 +164,30 @@ func waitSimulationDone(t *testing.T, simulation *UESimulation) {
 	}
 }
 
-func TestNilDeregistrationTriggerPreservesTimedEarlyAbortAndLoops(t *testing.T) {
+func TestNilDeregistrationTriggerWaitsForRegistrationBeforeTimedLoops(t *testing.T) {
 	h := newSimulationHarness(t, nil, 25, 3)
 	for iteration := 0; iteration < 3; iteration++ {
 		connection := h.nextUE(t)
-		// The default timer still aborts an unregistered UE; it is not gated on
-		// registration/PDU readiness by the explicit-trigger implementation.
+		// The scenario controls intentionally start td after registration. This
+		// is longer than td and must not abort an unregistered attachment.
+		select {
+		case <-connection.GNBRx:
+			t.Fatal("timer ended an unregistered iteration")
+		case <-time.After(50 * time.Millisecond):
+		}
+		registerHarnessUE(t, connection)
+		expectUplink(t, connection, nas.MsgTypeDeregReqUEOrig)
 		expectConnectionClosed(t, connection)
 	}
+	waitSimulationDone(t, h.simulation)
+}
+
+func TestUnregisteredTimedSimulationRemainsGloballyCancellable(t *testing.T) {
+	h := newSimulationHarness(t, nil, 1, 0)
+	connection := h.nextUE(t)
+	expectConnectionAlive(t, connection)
+	h.send(t, procedures.UeTesterMessage{Type: procedures.Kill})
+	expectConnectionClosed(t, connection)
 	waitSimulationDone(t, h.simulation)
 }
 
@@ -214,5 +240,16 @@ func TestPendingDeregistrationTriggerAllowsGlobalShutdown(t *testing.T) {
 			expectConnectionClosed(t, connection)
 			waitSimulationDone(t, h.simulation)
 		})
+	}
+}
+
+func TestRegistrationLoopStopsWhenGNBTerminates(t *testing.T) {
+	h := newSimulationHarness(t, nil, 1, 0)
+	connection := h.nextUE(t)
+	h.gnb.Terminate()
+	expectConnectionClosed(t, connection)
+	waitSimulationDone(t, h.simulation)
+	for range h.inbound {
+		t.Fatal("registration loop created another UE after gNB termination")
 	}
 }

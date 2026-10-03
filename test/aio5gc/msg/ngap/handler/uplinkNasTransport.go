@@ -18,11 +18,9 @@ func resolveUE(amf *context.AMFContext, ran *ie.RANUENGAPID, core *ie.AMFUENGAPI
 	if err != nil {
 		return nil, err
 	}
-	ranUE, err := amf.FindUEByRanId(ran.Value)
-	if err != nil {
-		return nil, err
-	}
-	if ue != ranUE {
+	// RAN IDs are scoped to a gNB. Two gNBs may both assign ID 1; the
+	// globally unique AMF ID selects the UE whose RAN ID must then match.
+	if ue.GetRanNgapId() != ran.Value {
 		return nil, fmt.Errorf("RAN and AMF UE identifiers do not match")
 	}
 	return ue, nil

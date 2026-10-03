@@ -23,4 +23,5 @@ type UeTesterMessage struct {
 	Type    UeTesterMessageType
 	Param   uint8
 	GnbChan chan context.UEMessage
+	Control *ControlRequest
 }

@@ -20,8 +20,19 @@ func InitConn(ue *context.UEContext, gnbInboundChannel chan gnbContext.UEMessage
 	lost := make(chan struct{})
 	ue.SetGnbConnectionLost(lost)
 
-	// Send channels to gNB
-	gnbInboundChannel <- gnbContext.UEMessage{GNBTx: ue.GetGnbTx(), GNBRx: ue.GetGnbRx(), PrUeId: ue.GetPrUeId(), Tmsi: ue.Get5gGuti(), ConnectionLost: lost}
+	// Only the owning gNB can order admission against closing its channel.
+	gnb := ue.GetGnbContext()
+	if gnb == nil || gnb.GetInboundChannel() != gnbInboundChannel {
+		close(lost)
+		log.Warn("[UE] Connection has no matching gNB lifecycle owner")
+		return
+	}
+	if err := gnb.QueueUE(gnbContext.UEMessage{GNBTx: ue.GetGnbTx(), GNBRx: ue.GetGnbRx(), PrUeId: ue.GetPrUeId(), Tmsi: ue.Get5gGuti(), ConnectionLost: lost}); err != nil {
+		// Rejected admission transfers no channels to the gNB; this UE owns loss.
+		close(lost)
+		log.Warn("[UE] gNB rejected connection: ", err)
+		return
+	}
 
 	// Use timeout to prevent blocking indefinitely
 	select {
@@ -29,6 +40,8 @@ func InitConn(ue *context.UEContext, gnbInboundChannel chan gnbContext.UEMessage
 		if open {
 			ue.SetAmfMccAndMnc(msg.Mcc, msg.Mnc)
 		}
+	case <-gnb.Done():
+		log.Warn("[UE] gNB stopped during attach")
 	case <-lost:
 		log.Warn("[UE] gNB connection failed during attach")
 	case <-time.After(5 * time.Second):

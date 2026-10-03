@@ -93,6 +93,8 @@ func newApp() *cli.App {
 					"This test case will launch N UEs. See packetrusher multi-ue --help\n",
 				Flags: []cli.Flag{
 					&cli.IntFlag{Name: "number-of-ues", Value: 1, Aliases: []string{"n"}},
+					&cli.IntFlag{Name: "number-of-gnbs", Usage: "Number of shared gNBs (each needs its own N2/N3 address)"},
+					&cli.PathFlag{Name: "control-socket", Usage: "Serve local inspection and procedure controls on this Unix socket"},
 					&cli.IntFlag{Name: "timeBetweenRegistration", Value: 500, Aliases: []string{"tr"}, Usage: "The time in ms, between UE registration."},
 					&cli.IntFlag{Name: "timeBeforeDeregistration", Value: 0, Aliases: []string{"td"}, Usage: "The time in ms, before a UE deregisters once it has been registered. 0 to disable auto-deregistration."},
 					&cli.IntFlag{Name: "timeBeforeNgapHandover", Value: 0, Aliases: []string{"ngh"}, Usage: "The time in ms, before triggering a UE handover using NGAP Handover. 0 to disable handover. This requires at least two gNodeB, eg: two N2/N3 IPs."},
@@ -148,9 +150,7 @@ func newApp() *cli.App {
 							tunnelMode = config.TunnelTun
 						}
 					}
-					templates.TestMultiUesInQueue(numUes, tunnelMode, c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("loopCount"), c.Int("timeBeforeReregistration"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("timeBeforeReconnecting"), c.Int("numPduSessions"))
-
-					return nil
+					return templates.TestMultiUesInQueue(numUes, tunnelMode, c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("loopCount"), c.Int("timeBeforeReregistration"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("timeBeforeReconnecting"), c.Int("numPduSessions"), templates.ControlOptions{Socket: c.Path("control-socket"), NumberOfGnbs: c.Int("number-of-gnbs")})
 				},
 			},
 			{
@@ -239,7 +239,12 @@ func newApp() *cli.App {
 			},
 		},
 	}
+	app.Commands = append(app.Commands, controlCommands()...)
 	for _, command := range app.Commands {
+		if command.Name == "control" || command.Name == "run-scenario" {
+			command.Before = validateControl
+			continue
+		}
 		command.Before = resultsBefore(validateArguments, beforeResults)
 	}
 	return app
@@ -257,6 +262,9 @@ func validateArguments(c *cli.Context) error {
 	}
 	if c.Int("number-of-ues") < 1 {
 		return fmt.Errorf("--number-of-ues must be at least 1")
+	}
+	if c.Int("number-of-gnbs") < 0 || c.Int("number-of-gnbs") > 0 && c.Bool("dedicatedGnb") {
+		return fmt.Errorf("--number-of-gnbs requires a non-dedicated gNB configuration")
 	}
 	if n := c.Int("numPduSessions"); n < 1 || n > 15 {
 		return fmt.Errorf("--numPduSessions must be between 1 and 15")
