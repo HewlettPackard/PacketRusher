@@ -27,18 +27,22 @@ import (
 // Exercise actual production gNB creation and SCTP binds, then decode the real
 // target Path Switch transfer. Loopback /8 requires no network alias changes.
 func TestMultiGNBUsesDistinctN2N3AndTargetPathSwitchAddress(t *testing.T) {
-	t.Run("normal", func(t *testing.T) { multiGNBAddressProof(t, 0, 0) })
-	t.Run("after-source-ng-setup-retry", func(t *testing.T) { multiGNBAddressProof(t, 8, 1) })
-	t.Run("after-target-ng-setup-retry", func(t *testing.T) { multiGNBAddressProof(t, 9, 2) })
+	t.Run("normal", func(t *testing.T) { multiGNBAddressProof(t, 0, 0, false) })
+	t.Run("after-source-ng-setup-retry", func(t *testing.T) { multiGNBAddressProof(t, 8, 1, false) })
+	t.Run("after-target-ng-setup-retry", func(t *testing.T) { multiGNBAddressProof(t, 9, 2, false) })
+	t.Run("source-retry-with-two-amfs", func(t *testing.T) { multiGNBAddressProof(t, 8, 3, true) })
 }
 
-func multiGNBAddressProof(t *testing.T, retryID byte, portOffset uint16) {
+func multiGNBAddressProof(t *testing.T, retryID byte, portOffset uint16, multiAMF bool) {
 	n2 := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.10"), 9498+20*portOffset)
 	n3 := netip.AddrPortFrom(n2.Addr(), 2159+portOffset)
-	amf := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 38538+portOffset)
+	amf := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 38538+2*portOffset)
 	conf := amfTools.GenerateDefaultConf(n2, n3, []*config.AMF{
 		{IPv4Port: config.IPv4Port{AddrPort: amf}},
 	})
+	if multiAMF {
+		conf.AMFs = append(conf.AMFs, &config.AMF{IPv4Port: config.IPv4Port{AddrPort: netip.AddrPortFrom(amf.Addr(), amf.Port()+1)}})
+	}
 	var dropped atomic.Bool
 	builder := (&aio5gc.FiveGCBuilder{}).WithConfig(conf)
 	if retryID != 0 {
@@ -78,12 +82,14 @@ func multiGNBAddressProof(t *testing.T, retryID byte, portOffset uint16) {
 		}
 		require.NotEqual(t, configured, retried.GetN3GnbIp(), "the retry must move the selected gNB address")
 	}
+	owners := make(map[string]string)
 	for _, g := range []*gnbcontext.GNBContext{first, target} {
 		want := g.GetGnbIpPort().Addr()
 		require.True(t, want.IsLoopback())
 		require.Equal(t, want, g.GetN3GnbIp())
 		require.Equal(t, n2.Port(), g.GetGnbIpPort().Port())
 		active := 0
+		currentBinding := false
 		for a := range g.IterGnbAmf() {
 			// A failed SCTP dial can leave an inactive entry in the AMF pool.
 			// Verify the current associations, including their actual bindings.
@@ -93,13 +99,22 @@ func multiGNBAddressProof(t *testing.T, retryID byte, portOffset uint16) {
 			active++
 			require.NotNil(t, a.GetSCTPConn())
 			local := a.GetSCTPConn().LocalAddr().(*sctp.SCTPAddr)
-			require.Equal(t, want.String(), local.IPAddrs[0].IP.String())
+			actual := local.IPAddrs[0].IP.String()
+			if owner, exists := owners[actual]; exists {
+				require.Equal(t, g.GetGnbId(), owner, "different gNBs must not share any live N2 binding, including earlier AMFs")
+			}
+			owners[actual] = g.GetGnbId()
+			currentBinding = currentBinding || actual == want.String()
+			if !multiAMF {
+				require.Equal(t, want.String(), actual)
+			}
 			peer, err := core.GetAMFContext().GetGnb(local.String())
 			require.NoError(t, err)
 			require.NotNil(t, peer.GetGlobalRanNodeID().GNbId)
 			require.Equal(t, g.GetGnbId(), peer.GetGlobalRanNodeID().GNbId.GNBValue)
 		}
-		require.Positive(t, active, "each gNB must have a working NG Setup association")
+		require.Equal(t, len(conf.AMFs), active, "each configured AMF must have a working NG Setup association")
+		require.True(t, currentBinding, "the settled context must match a live N2 association")
 	}
 	ue, err := target.NewGnBUe(make(chan gnbcontext.UEMessage, 2), make(chan gnbcontext.UEMessage, 2), 42, nil)
 	require.NoError(t, err)
