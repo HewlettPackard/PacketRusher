@@ -26,6 +26,7 @@ func newApp() *cli.App {
 	app := &cli.App{
 		After: afterResults,
 		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "tunnel-backend", Usage: "Tunnel datapath: gtp5g (default) or userspace; overrides ue.tunnelbackend"},
 			&cli.PathFlag{Name: "config", Usage: "Configuration file path. (Default: ./config/config.yml)"},
 			&cli.PathFlag{Name: "report-json", Usage: "Write procedure results to a new JSON file on shutdown"},
 			&cli.PathFlag{Name: "report-csv", Usage: "Write procedure results to a new CSV file on shutdown"},
@@ -257,6 +258,9 @@ func validateArguments(c *cli.Context) error {
 	if c.Args().Len() != 0 {
 		return fmt.Errorf("unexpected positional arguments %q: boolean flags take no separate value; use --tunnel, --tunnel=true, or --tunnel-vrf=false", c.Args().Slice())
 	}
+	if _, err := config.ParseTunnelBackend(c.String("tunnel-backend")); err != nil {
+		return err
+	}
 	if c.Command.Name != "multi-ue-pdu" {
 		return nil
 	}
@@ -294,6 +298,10 @@ func setConfig(c cli.Context) config.Config {
 		cfg = config.Load(c.Path("config"))
 	} else {
 		cfg = config.LoadDefaultConfig()
+	}
+	if c.IsSet("tunnel-backend") {
+		backend, _ := config.ParseTunnelBackend(c.String("tunnel-backend"))
+		cfg = config.OverrideTunnelBackend(backend)
 	}
 	return cfg
 }

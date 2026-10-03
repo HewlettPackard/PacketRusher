@@ -64,6 +64,7 @@ func TestEndpointMTUCommitsWithRouteOrRestoresSource(t *testing.T) {
 			}
 			if tc.badRestore {
 				require.ErrorIs(t, err, rollbackFailure)
+				require.ErrorIs(t, err, errTunnelRollback)
 				require.ErrorContains(t, err, "source endpoint MTU rollback failed")
 			}
 			require.Equal(t, tc.wantMTU, kernelMTU)

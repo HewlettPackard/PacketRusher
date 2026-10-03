@@ -149,3 +149,6 @@ For the current codec APIs and validation commands, see [Dependency migration](d
 
 For local attachment inspection, targeted handovers and state-driven JSON scenarios,
 see [Runtime procedure controls](docs/scenario-control.md).
+
+See [userspace GTP-U tunnels](docs/userspace-tunnels.md) to run user traffic without
+the gtp5g kernel module. The default backend remains `gtp5g`.

@@ -243,6 +243,25 @@ func testDedicatedHandover(t *testing.T, mode config.TunnelMode) {
 	require.Equal(t, 1156, fresh.GetUEInterface().Attrs().MTU)
 	require.Equal(t, fresh.GetUEInterface().Attrs().MTU, fresh.GetTunInterface().Attrs().MTU)
 	fresh.ReleaseTunnel()
+	// If restoring a retained endpoint fails, the completed source is no longer
+	// consistent. Exercise the production caller's retirement, not just the helper.
+	routeError = errors.New("target route failed")
+	restores := 0
+	setUEEndpointMTU = func(actual netlink.Link, mtu int) error {
+		require.Same(t, endpoint, actual)
+		if mtu == 1356 {
+			restores++
+			return errors.New("source endpoint MTU restoration failed")
+		}
+		return nil
+	}
+	SetupGtpInterface(ue, build("192.0.2.3", 32))
+	require.Equal(t, 1, restores)
+	require.Nil(t, session.GetTunInterface(), "failed source MTU rollback must release the tunnel")
+	require.Nil(t, session.GetUEInterface())
+	require.Nil(t, session.GetTunRule())
+	require.Nil(t, session.GetTunRoute())
+	require.Nil(t, session.GetVrfDevice())
 	session.ReleaseTunnel()
 	require.Empty(t, sessionRoutingTables.sessions)
 	require.Empty(t, kernel.routes)
@@ -251,6 +270,13 @@ func testDedicatedHandover(t *testing.T, mode config.TunnelMode) {
 	mu.Unlock()
 	require.Contains(t, finalEvents, "delete:val7005551000")
 	require.Contains(t, finalEvents, "stop:gtp17005551000")
+	endpointDeletes := 0
+	for _, event := range finalEvents {
+		if event == "delete:val7005551000" {
+			endpointDeletes++
+		}
+	}
+	require.Equal(t, 1, endpointDeletes, "source endpoint cleanup must be idempotent")
 	require.Nil(t, session.GetTunInterface())
 }
 
