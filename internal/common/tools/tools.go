@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package tools
 
@@ -14,6 +15,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue"
 	ueCtx "my5G-RANTester/internal/control_test_engine/ue/context"
 	"net"
+	"net/netip"
 	"strconv"
 	"sync"
 	"time"
@@ -32,14 +34,17 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 	// ...
 	baseGnbId := cfg.GNodeB.PlmnList.GnbId
 	for i := 1; i <= count; i++ {
-		gnbs[cfg.GNodeB.PlmnList.GnbId] = gnb.InitGnb(cfg, wg)
+		created := gnb.InitGnb(cfg, wg)
+		gnbs[cfg.GNodeB.PlmnList.GnbId] = created
 		wg.Add(1)
 
 		// TODO: We could find the interfaces where N2/N3 are
 		// and check that the incremented IPs, still belong to the interfaces' subnet
 		cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(i, baseGnbId)
-		cfg.GNodeB.ControlIF = cfg.GNodeB.ControlIF.WithNextAddr()
-		cfg.GNodeB.DataIF = cfg.GNodeB.DataIF.WithNextAddr()
+		// Setup retries may have consumed addresses beyond the configured start.
+		// Allocate after the settled endpoints, preserving the configured ports.
+		cfg.GNodeB.ControlIF.AddrPort = netip.AddrPortFrom(created.GetGnbIpPort().Addr().Next(), cfg.GNodeB.ControlIF.Port())
+		cfg.GNodeB.DataIF.AddrPort = netip.AddrPortFrom(created.GetN3GnbIp().Next(), cfg.GNodeB.DataIF.Port())
 	}
 	return gnbs
 }
