@@ -50,18 +50,22 @@ const SM5G_PDU_SESSION_ACTIVE_PENDING = 0x01
 const SM5G_PDU_SESSION_ACTIVE = 0x02
 
 type UEContext struct {
-	Results           *analytics.Recorder
-	id                uint8
-	prUeId            int64
-	UeSecurity        SECURITY
-	StateMM           int
-	gnbInboundChannel chan context.UEMessage
-	gnbRx             chan context.UEMessage
-	gnbTx             chan context.UEMessage
-	gnbConnectionLost <-chan struct{}
-	drx               *time.Ticker
-	PduSession        [16]*UEPDUSession
-	amfInfo           Amf
+	Results                  *analytics.Recorder
+	id                       uint8
+	prUeId                   int64
+	UeSecurity               SECURITY
+	StateMM                  int
+	gnbInboundChannel        chan context.UEMessage
+	gnbRx                    chan context.UEMessage
+	gnbTx                    chan context.UEMessage
+	gnbConnectionLost        <-chan struct{}
+	connectionGeneration     uint64 // owned by the UE event loop
+	controlHandoverTarget    netip.Addr
+	controlHandoverCancelled <-chan struct{}
+	controlHandoverSource    *context.GNBUe
+	drx                      *time.Ticker
+	PduSession               [16]*UEPDUSession
+	amfInfo                  Amf
 
 	// TODO: Modify config so you can configure these parameters per PDUSession
 	Dnn            string
@@ -291,7 +295,24 @@ func (ue *UEContext) SetGnbInboundChannel(gnbInboundChannel chan context.UEMessa
 }
 
 func (ue *UEContext) SetGnbRx(gnbRx chan context.UEMessage) {
+	if ue.gnbRx != gnbRx && gnbRx != nil {
+		ue.connectionGeneration++
+	}
 	ue.gnbRx = gnbRx
+}
+
+func (ue *UEContext) ConnectionGeneration() uint64 { return ue.connectionGeneration }
+
+func (ue *UEContext) ControlHandoverTarget() netip.Addr { return ue.controlHandoverTarget }
+func (ue *UEContext) BeginControlHandover(target netip.Addr, cancelled <-chan struct{}, source *context.GNBUe) {
+	ue.controlHandoverTarget, ue.controlHandoverCancelled, ue.controlHandoverSource = target, cancelled, source
+}
+func (ue *UEContext) ControlHandoverCancelled() <-chan struct{} { return ue.controlHandoverCancelled }
+func (ue *UEContext) EndControlHandover(cancelled bool) {
+	if cancelled && ue.controlHandoverSource != nil {
+		ue.controlHandoverSource.SetHandoverGnodeB(nil)
+	}
+	ue.controlHandoverTarget, ue.controlHandoverCancelled, ue.controlHandoverSource = netip.Addr{}, nil, nil
 }
 
 func (ue *UEContext) SetGnbTx(gnbTx chan context.UEMessage) {
@@ -785,6 +806,7 @@ func (ue *UEContext) Terminate() {
 	if ue.terminated {
 		return
 	}
+	ue.EndControlHandover(true)
 	ue.terminated = true
 	for _, session := range ue.PduSession {
 		if session != nil {

@@ -5,11 +5,11 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
 	gnbCxt "my5G-RANTester/internal/control_test_engine/gnb/context"
-	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue"
 	ueCtx "my5G-RANTester/internal/control_test_engine/ue/context"
@@ -109,8 +109,10 @@ func (simConfig UESimulationConfig) gnbID(handoverOffset int) string {
 // UESimulation tracks the entire scenario, including registration-loop delays.
 // Send waits for a live scenario to accept a command or for it to finish.
 type UESimulation struct {
-	commands chan procedures.UeTesterMessage
-	done     chan struct{}
+	commands    chan procedures.UeTesterMessage
+	done        chan struct{}
+	controlGate chan struct{}
+	config      UESimulationConfig
 }
 
 func (simulation *UESimulation) Done() <-chan struct{} { return simulation.done }
@@ -134,7 +136,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 	ueCfg.Ue.Msin = IncrementMsin(simConfig.UeId, simConfig.Cfg.Ue.Msin)
 	log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", ueCfg.Ue.Msin, " UE")
 
-	simulation := &UESimulation{commands: make(chan procedures.UeTesterMessage), done: make(chan struct{})}
+	simulation := &UESimulation{commands: make(chan procedures.UeTesterMessage), done: make(chan struct{}), config: simConfig, controlGate: make(chan struct{}, 1)}
 	// Count the scenario before starting it. It may create further UEs after a
 	// registration-loop delay, even when the previous UE has already finished.
 	wg.Add(1)
@@ -143,10 +145,12 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 		defer close(simulation.done)
 		scenarioChan := simConfig.ScenarioChan
 		stopping := false
+		initialGNB := simConfig.gnbID(0)
+	iterations:
 		for iteration := 1; ; iteration++ {
 			wg.Add(1)
 			ueRx := make(chan procedures.UeTesterMessage)
-			ueTx := ue.NewUE(ueCfg, simConfig.UeId, ueRx, simConfig.Gnbs[simConfig.gnbID(0)].GetInboundChannel(), wg)
+			ueTx := ue.NewUE(ueCfg, simConfig.UeId, ueRx, simConfig.Gnbs[initialGNB].GetInboundChannel(), wg)
 			pending := []procedures.UeTesterMessage{{Type: procedures.Registration}}
 
 			after := func(milliseconds int) <-chan time.Time {
@@ -155,16 +159,43 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 				}
 				return time.After(time.Duration(milliseconds) * time.Millisecond)
 			}
-			deregistrationChannel := after(simConfig.TimeBeforeDeregistration)
-			ngapHandoverChannel := after(simConfig.TimeBeforeNgapHandover)
-			xnHandoverChannel := after(simConfig.TimeBeforeXnHandover)
-			idleChannel := after(simConfig.TimeBeforeIdle)
+			var deregistrationChannel, ngapHandoverChannel, xnHandoverChannel, idleChannel <-chan time.Time
 			var reconnectChannel <-chan time.Time
+			iterationCtx, cancelIteration := context.WithCancel(context.Background())
+			launchControl := func(action, target string) {
+				go func() {
+					ctx, cancel := context.WithTimeout(iterationCtx, 30*time.Second)
+					defer cancel()
+					if _, err := simulation.Execute(ctx, action, target); err != nil && !errors.Is(err, context.Canceled) {
+						log.Warn("[TESTER] UE ", simConfig.UeId, " ", action, ": ", err)
+					}
+				}()
+			}
 			nextHandoverId := 0
 			registered := false
 			state := ueCtx.MM5G_NULL
 			alive := true
+			var parkRequest *procedures.ControlRequest
 			acceptCommand := func(message procedures.UeTesterMessage) {
+				if message.Control != nil {
+					r := message.Control
+					r.Generation = uint64(iteration)
+					if r.Context.Err() != nil {
+						r.Respond(procedures.Attachment{}, r.Context.Err())
+						return
+					}
+					if stopping || ueRx == nil {
+						r.Respond(procedures.Attachment{}, procedures.ErrStopped)
+						return
+					}
+					if r.ExpectedGeneration != 0 && r.ExpectedGeneration != uint64(iteration) {
+						r.Respond(procedures.Attachment{}, procedures.ErrGeneration)
+						return
+					}
+					if r.Action == "deregister" {
+						parkRequest = r
+					}
+				}
 				if message.Type == procedures.Terminate || message.Type == procedures.Kill {
 					stopping = true
 				}
@@ -201,25 +232,25 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 				case <-ngapHandoverChannel:
 					ngapHandoverChannel = nil
 					if !stopping {
-						trigger.TriggerNgapHandover(simConfig.Gnbs[simConfig.gnbID(nextHandoverId)], simConfig.Gnbs[simConfig.gnbID(nextHandoverId+1)], int64(simConfig.UeId))
+						launchControl("ng-handover", simConfig.gnbID(nextHandoverId+1))
 						nextHandoverId++
 					}
 				case <-xnHandoverChannel:
 					xnHandoverChannel = nil
 					if !stopping {
-						trigger.TriggerXnHandover(simConfig.Gnbs[simConfig.gnbID(nextHandoverId)], simConfig.Gnbs[simConfig.gnbID(nextHandoverId+1)], int64(simConfig.UeId))
+						launchControl("xn-handover", simConfig.gnbID(nextHandoverId+1))
 						nextHandoverId++
 					}
 				case <-idleChannel:
 					idleChannel = nil
 					if ueRx != nil && !stopping {
-						pending = append(pending, procedures.UeTesterMessage{Type: procedures.Idle})
+						launchControl("idle", "")
 						reconnectChannel = after(simConfig.TimeBeforeReconnecting)
 					}
 				case <-reconnectChannel:
 					reconnectChannel = nil
 					if ueRx != nil && !stopping {
-						pending = append(pending, procedures.UeTesterMessage{Type: procedures.ServiceRequest})
+						launchControl("reconnect", "")
 					}
 				case msg := <-commands:
 					acceptCommand(msg)
@@ -236,6 +267,10 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 					}
 					log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)
 					if msg.StateChange == ueCtx.MM5G_REGISTERED && !registered {
+						deregistrationChannel = after(simConfig.TimeBeforeDeregistration)
+						ngapHandoverChannel = after(simConfig.TimeBeforeNgapHandover)
+						xnHandoverChannel = after(simConfig.TimeBeforeXnHandover)
+						idleChannel = after(simConfig.TimeBeforeIdle)
 						if ueRx != nil && !stopping {
 							for session := 0; session < simConfig.NumPduSessions; session++ {
 								pending = append(pending, procedures.UeTesterMessage{Type: procedures.NewPDUSession})
@@ -244,6 +279,55 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 						registered = true
 					}
 					state = msg.StateChange
+				}
+			}
+			cancelIteration()
+			for _, msg := range pending {
+				if r := msg.Control; r != nil {
+					if r.Action == "inspect" && parkRequest != nil && parkRequest.DidDeregister {
+						r.Respond(procedures.Attachment{UE: simConfig.UeId, Generation: uint64(iteration), State: "parked", ActivePDUSessions: []uint8{}}, nil)
+					} else {
+						r.Respond(procedures.Attachment{}, procedures.ErrGeneration)
+					}
+				}
+			}
+			if parkRequest != nil && parkRequest.DidDeregister && !stopping {
+				if simConfig.Gnbs[parkRequest.LastGNB] != nil {
+					initialGNB = parkRequest.LastGNB
+				}
+				parked := procedures.Attachment{UE: simConfig.UeId, Generation: uint64(iteration), State: "parked", ActivePDUSessions: []uint8{}}
+				for {
+					select {
+					case msg := <-simulation.commands:
+						if msg.Type == procedures.Terminate || msg.Type == procedures.Kill {
+							return
+						}
+						if r := msg.Control; r != nil {
+							if r.Context.Err() != nil {
+								r.Respond(parked, r.Context.Err())
+								continue
+							}
+							if r.ExpectedGeneration != 0 && r.ExpectedGeneration != parked.Generation {
+								r.Respond(parked, procedures.ErrGeneration)
+								continue
+							}
+							if r.Action == "inspect" {
+								r.Respond(parked, nil)
+								continue
+							}
+							if r.Action == "register" {
+								parked.Generation++
+								parked.State = "starting"
+								r.Respond(parked, nil)
+								continue iterations
+							}
+							r.Respond(parked, procedures.ErrNotReady)
+						}
+					case msg, open := <-scenarioChan:
+						if !open || msg.Type == procedures.Terminate || msg.Type == procedures.Kill {
+							return
+						}
+					}
 				}
 			}
 			if stopping || !simConfig.RegistrationLoop || (simConfig.LoopCount != 0 && iteration >= simConfig.LoopCount) {
@@ -271,6 +355,27 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 		}
 	}()
 	return simulation
+}
+
+func (simulation *UESimulation) request(ctx context.Context, action, target string, generation, connection uint64) (procedures.Attachment, error) {
+	r := &procedures.ControlRequest{Context: ctx, Action: action, Target: target, Gnbs: simulation.config.Gnbs,
+		ExpectedPDUSessions: simulation.config.NumPduSessions, ExpectedGeneration: generation,
+		ExpectedConnection: connection, Reply: make(chan procedures.ControlResult, 1)}
+	select {
+	case <-ctx.Done():
+		return procedures.Attachment{}, ctx.Err()
+	case <-simulation.done:
+		return procedures.Attachment{}, procedures.ErrStopped
+	case simulation.commands <- procedures.UeTesterMessage{Type: procedures.Control, Control: r}:
+	}
+	select {
+	case result := <-r.Reply:
+		return result.Attachment, result.Err
+	case <-ctx.Done():
+		return procedures.Attachment{}, ctx.Err()
+	case <-simulation.done:
+		return procedures.Attachment{}, procedures.ErrStopped
+	}
 }
 
 func IncrementMsin(i int, msin string) string {

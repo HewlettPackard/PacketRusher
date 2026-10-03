@@ -152,3 +152,9 @@ the gtp5g kernel module. The default backend remains `gtp5g`.
 
 For IPv6 and dual-stack PDU negotiation, UPF prefix discovery and routing, see
 [IPv6 PDU sessions](docs/ipv6.md).
+
+For local attachment inspection, targeted handovers and state-driven JSON scenarios,
+see [Runtime procedure controls](docs/scenario-control.md).
+
+For configurable gNB and NR cell identities, see [gNB identities](docs/gnb-identities.md).
+For binary identity and release packaging, see [Build identity and releases](docs/versioning.md).

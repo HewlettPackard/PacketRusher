@@ -129,3 +129,22 @@ func TestInitialUEGUTIBitFieldsRoundTrip(t *testing.T) {
 		t.Fatal("TMSI changed during encoding")
 	}
 }
+
+func TestHandoverTransparentIdentityBeyondRFSPRange(t *testing.T) {
+	source, ue, _ := fixture(t, "000001")
+	target, _, _ := fixture(t, "000002")
+	for _, id := range []int64{257, 100000} {
+		wire := mobility.GetSourceToTargetTransparentTransfer(source, target, ue.GetPduSessions(), id)
+		container := &ie.SourceNGRANNodeToTargetNGRANNodeTransparentContainer{}
+		if err := codec.Unmarshal(wire, container); err != nil {
+			t.Fatal(err)
+		}
+		got, err := codec.VirtualUEID(container)
+		if err != nil || got != id {
+			t.Fatalf("handover identity %d: %d %v", id, got, err)
+		}
+		if container.IndexToRFSP != nil {
+			t.Fatal("unbounded UE identity used as constrained RFSP index")
+		}
+	}
+}

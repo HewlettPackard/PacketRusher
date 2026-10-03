@@ -179,6 +179,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	pduSession.GnbPduSession = gnbPduSession
 
 	if ue.TunnelMode == config.TunnelDisabled {
+		pduSession.SetGnbIp(msg.GnbIp)
 		committed = true
 		log.Info(fmt.Sprintf("[UE][GTP] Interface for UE %s has not been created. Tunnel has been disabled.", ue.GetMsin()))
 		return
