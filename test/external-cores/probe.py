@@ -158,7 +158,7 @@ def probe(binary, state):
         command = [str(binary), "--config", str(state/"config/packetrusher.yaml"), "--report-json", str(state/"report.json"), "multi-ue", "-n", "1", "--numPduSessions", str(sessions), "--control-socket", str(state/"control.sock")]
         if sessions:
             command.append("--tunnel")
-            capture = subprocess.Popen(["tcpdump", "-n", "-U", "-i", "eth0", "-w", str(state/"n3.pcap"), "udp", "port", "2152"], stdout=capture_log, stderr=subprocess.STDOUT)
+            capture = subprocess.Popen(["tcpdump", "-n", "-U", "--immediate-mode", "-i", "eth0", "-w", str(state/"n3.pcap"), "udp", "port", "2152"], stdout=capture_log, stderr=subprocess.STDOUT)
             until(lambda: capture.poll() is None and (state/"n3.pcap").exists() and (state/"n3.pcap").stat().st_size >= 24, 5, "N3 capture startup")
         else:
             command.extend(["--timeBeforeDeregistration", "5000"])
@@ -184,6 +184,7 @@ def probe(binary, state):
                     sock.sendto(payload, (DN_IP, 9000))
                     data, peer = sock.recvfrom(4096)
                     require(data == payload and peer == (DN_IP,9000), "DN response payload/peer mismatch")
+            until(lambda: gtpu_proof(state/"n3.pcap",nonce),3,"three observed uplink/downlink capture sequences")
             capture.send_signal(signal.SIGINT)
             require(capture.wait(timeout=5) == 0, "N3 capture failed")
             capture = None

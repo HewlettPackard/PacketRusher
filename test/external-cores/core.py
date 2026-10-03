@@ -46,7 +46,7 @@ def start(prefix, state):
             echo.start()
             capture_log = (state / "pfcp-capture.log").open("wb")
             files.append(capture_log)
-            capture = subprocess.Popen(["tcpdump","-n","-U","-i","lo","-w",str(state/"pfcp-startup.pcap"),"udp","port","8805"],stdout=capture_log,stderr=subprocess.STDOUT)
+            capture = subprocess.Popen(["tcpdump","-n","-U","--immediate-mode","-i","lo","-w",str(state/"pfcp-startup.pcap"),"udp","port","8805"],stdout=capture_log,stderr=subprocess.STDOUT)
             capture_deadline = time.monotonic()+5
             while not ((state/"pfcp-startup.pcap").exists() and (state/"pfcp-startup.pcap").stat().st_size >= 24):
                 if capture.poll() is not None or time.monotonic() >= capture_deadline:
