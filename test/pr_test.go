@@ -182,6 +182,10 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 }
 
 func TestUERegistrationLoop(t *testing.T) {
+	results := analytics.NewRecorder()
+	analytics.SetCurrent(results)
+	t.Cleanup(func() { analytics.SetCurrent(nil) })
+
 	controlIFConfig := netip.MustParseAddrPort("127.0.0.1:9490")
 	dataIFConfig := netip.MustParseAddrPort("127.0.0.1:2155")
 	amfListConfig := []*config.AMF{
@@ -237,14 +241,13 @@ func TestUERegistrationLoop(t *testing.T) {
 
 	// Setup UE
 	scenarioChans := make([]chan procedures.UeTesterMessage, 2)
+	deregistrationTrigger := make(chan struct{})
 	ueSimCfg := tools.UESimulationConfig{
-		UeId: 1,
-		Gnbs: gnbs,
-		Cfg:  conf,
-		// This test requires completed registrations, not deliberate early
-		// aborts. Leave room for the kernel's multi-second SCTP retransmission
-		// interval before ending each iteration; production timers are unchanged.
-		TimeBeforeDeregistration: 5000,
+		UeId:                     1,
+		Gnbs:                     gnbs,
+		Cfg:                      conf,
+		TimeBeforeDeregistration: 2000,
+		DeregistrationTrigger:    deregistrationTrigger,
 		TimeBeforeNgapHandover:   0,
 		TimeBeforeXnHandover:     0,
 		NumPduSessions:           1,
@@ -265,9 +268,37 @@ func TestUERegistrationLoop(t *testing.T) {
 	simulation := tools.SimulateSingleUE(ueSimCfg, &wg)
 	t.Cleanup(func() { stopTestSimulations(t, []*tools.UESimulation{simulation}) })
 
+	// Each iteration must really finish registration and accept its PDU session
+	// before we exercise graceful teardown. A timer started before attach can
+	// deliberately abort an authenticated UE during SCTP recovery instead.
+	deadline := time.Now().Add(45 * time.Second)
+	for iteration := 1; iteration <= ueSimCfg.LoopCount; iteration++ {
+		require.Eventually(t, func() bool {
+			completed := 0
+			for _, procedure := range results.Snapshot().Procedures {
+				if procedure.Procedure == analytics.Registration || procedure.Procedure == analytics.SessionEstablishment {
+					if procedure.Success == uint64(iteration) {
+						completed++
+					}
+				}
+			}
+			return completed == 2
+		}, time.Until(deadline), 10*time.Millisecond, "iteration %d must complete both client procedures", iteration)
+		timer := time.NewTimer(time.Until(deadline))
+		select {
+		case deregistrationTrigger <- struct{}{}:
+		case <-simulation.Done():
+			timer.Stop()
+			t.Fatalf("scenario ended before iteration %d teardown", iteration)
+		case <-timer.C:
+			t.Fatalf("scenario did not accept iteration %d teardown before the deadline", iteration)
+		}
+		timer.Stop()
+	}
+
 	// Join the whole loop before inspecting it or closing its gNB inbound
 	// channel. A fixed sleep can expire while the next UE is still attaching.
-	waitTestSimulations(t, []*tools.UESimulation{simulation}, 45*time.Second)
+	waitTestSimulations(t, []*tools.UESimulation{simulation}, time.Until(deadline))
 	require.Eventually(t, func() bool {
 		allDeregistered := true
 		fiveGC.GetAMFContext().ExecuteForAllUe(func(ue *context.UEContext) {
@@ -275,8 +306,10 @@ func TestUERegistrationLoop(t *testing.T) {
 		})
 		return allDeregistered
 	}, 5*time.Second, 10*time.Millisecond, "the mock core must process the last deregistration")
+	ueCount := 0
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
+			ueCount++
 			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
 			checksMu.Lock()
 			defer checksMu.Unlock()
@@ -284,6 +317,14 @@ func TestUERegistrationLoop(t *testing.T) {
 			require.NotNil(t, check)
 			assert.Equal(t, 5, check.authCounter, "each loop must authenticate once")
 		})
+	assert.Equal(t, ueSimCfg.LoopCount, ueCount, "each loop must create a core UE context")
+	for _, procedure := range results.Snapshot().Procedures {
+		assert.Equal(t, uint64(ueSimCfg.LoopCount), procedure.Started)
+		assert.Equal(t, uint64(ueSimCfg.LoopCount), procedure.Success)
+		assert.Zero(t, procedure.Failure)
+		assert.Zero(t, procedure.Cancelled)
+		assert.Zero(t, procedure.Pending)
+	}
 }
 
 func waitTestSimulations(t *testing.T, simulations []*tools.UESimulation, timeout time.Duration) {
