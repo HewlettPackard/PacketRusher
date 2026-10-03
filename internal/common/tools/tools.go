@@ -14,6 +14,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue"
 	ueCtx "my5G-RANTester/internal/control_test_engine/ue/context"
 	"net"
+	"net/netip"
 	"strconv"
 	"sync"
 	"time"
@@ -39,7 +40,8 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 	cfg.GNodeB.PlmnList.GnbId, _ = cfg.GNodeB.PlmnList.GNBIDAt(0)
 	basePLMN := cfg.GNodeB.PlmnList
 	for i := 1; i <= count; i++ {
-		gnbs[cfg.GNodeB.PlmnList.GnbId] = gnb.InitGnb(cfg, wg)
+		created := gnb.InitGnb(cfg, wg)
+		gnbs[cfg.GNodeB.PlmnList.GnbId] = created
 		wg.Add(1)
 
 		// TODO: We could find the interfaces where N2/N3 are
@@ -47,8 +49,10 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 		if i < count {
 			cfg.GNodeB.PlmnList.GnbId, _ = basePLMN.GNBIDAt(i)
 		}
-		cfg.GNodeB.ControlIF = cfg.GNodeB.ControlIF.WithNextAddr()
-		cfg.GNodeB.DataIF = cfg.GNodeB.DataIF.WithNextAddr()
+		// Setup retries may have consumed addresses beyond the configured start.
+		// Allocate after the settled endpoints, preserving the configured ports.
+		cfg.GNodeB.ControlIF.AddrPort = netip.AddrPortFrom(created.GetGnbIpPort().Addr().Next(), cfg.GNodeB.ControlIF.Port())
+		cfg.GNodeB.DataIF.AddrPort = netip.AddrPortFrom(created.GetN3GnbIp().Next(), cfg.GNodeB.DataIF.Port())
 	}
 	return gnbs
 }

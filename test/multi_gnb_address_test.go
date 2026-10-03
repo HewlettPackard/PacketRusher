@@ -27,22 +27,26 @@ import (
 // Exercise actual production gNB creation and SCTP binds, then decode the real
 // target Path Switch transfer. Loopback /8 requires no network alias changes.
 func TestMultiGNBUsesDistinctN2N3AndTargetPathSwitchAddress(t *testing.T) {
-	t.Run("normal", func(t *testing.T) { multiGNBAddressProof(t, false) })
-	t.Run("after-ng-setup-retry", func(t *testing.T) { multiGNBAddressProof(t, true) })
+	t.Run("normal", func(t *testing.T) { multiGNBAddressProof(t, 0, 0) })
+	t.Run("after-source-ng-setup-retry", func(t *testing.T) { multiGNBAddressProof(t, 8, 1) })
+	t.Run("after-target-ng-setup-retry", func(t *testing.T) { multiGNBAddressProof(t, 9, 2) })
 }
 
-func multiGNBAddressProof(t *testing.T, retry bool) {
-	conf := amfTools.GenerateDefaultConf(netip.MustParseAddrPort("127.0.0.10:9498"), netip.MustParseAddrPort("127.0.0.10:2159"), []*config.AMF{
-		{IPv4Port: config.IPv4Port{AddrPort: netip.MustParseAddrPort("127.0.0.1:38538")}},
+func multiGNBAddressProof(t *testing.T, retryID byte, portOffset uint16) {
+	n2 := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.10"), 9498+20*portOffset)
+	n3 := netip.AddrPortFrom(n2.Addr(), 2159+portOffset)
+	amf := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 38538+portOffset)
+	conf := amfTools.GenerateDefaultConf(n2, n3, []*config.AMF{
+		{IPv4Port: config.IPv4Port{AddrPort: amf}},
 	})
 	var dropped atomic.Bool
 	builder := (&aio5gc.FiveGCBuilder{}).WithConfig(conf)
-	if retry {
+	if retryID != 0 {
 		builder.WithNGAPDispatcherHook(func(m message.Message, _ *coreContext.GNBContext, _ *coreContext.Aio5gc) (bool, error) {
 			if setup, ok := m.(*message.NGSetupRequest); ok {
 				node := setup.GlobalRANNodeID.Choice.(*ie.GlobalGNBID)
 				id := node.GNBID.Choice.(*ie.GNBIDForGNBID).Value.Bytes
-				if bytes.Equal(id, []byte{0, 0, 9}) && dropped.CompareAndSwap(false, true) {
+				if bytes.Equal(id, []byte{0, 0, retryID}) && dropped.CompareAndSwap(false, true) {
 					return true, nil
 				}
 			}
@@ -66,15 +70,19 @@ func multiGNBAddressProof(t *testing.T, retry bool) {
 	require.NotNil(t, target)
 	require.NotEqual(t, first.GetGnbIpPort().Addr(), target.GetGnbIpPort().Addr(), "N2 associations must use distinct addresses")
 	require.NotEqual(t, first.GetN3GnbIp(), target.GetN3GnbIp(), "N3 endpoints must use distinct addresses")
-	if retry {
-		require.True(t, dropped.Load(), "the target's first NG Setup must have been withheld")
-		require.NotEqual(t, conf.GNodeB.DataIF.WithNextAddr().Addr(), target.GetN3GnbIp(), "the retry must move the target address")
+	if retryID != 0 {
+		require.True(t, dropped.Load(), "the selected gNB's first NG Setup must have been withheld")
+		retried, configured := target, conf.GNodeB.DataIF.WithNextAddr().Addr()
+		if retryID == 8 {
+			retried, configured = first, conf.GNodeB.DataIF.Addr()
+		}
+		require.NotEqual(t, configured, retried.GetN3GnbIp(), "the retry must move the selected gNB address")
 	}
 	for _, g := range []*gnbcontext.GNBContext{first, target} {
 		want := g.GetGnbIpPort().Addr()
 		require.True(t, want.IsLoopback())
 		require.Equal(t, want, g.GetN3GnbIp())
-		require.Equal(t, uint16(9498), g.GetGnbIpPort().Port())
+		require.Equal(t, n2.Port(), g.GetGnbIpPort().Port())
 		active := 0
 		for a := range g.IterGnbAmf() {
 			// A failed SCTP dial can leave an inactive entry in the AMF pool.
