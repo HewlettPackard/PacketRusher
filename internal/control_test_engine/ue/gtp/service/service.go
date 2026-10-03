@@ -403,6 +403,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	link, err := findTunnelLink(nameInf)
 	if err != nil {
 		failed("[UE][GTP] Tunnel link unavailable: ", err)
+
 		return
 	}
 	addressLink := link

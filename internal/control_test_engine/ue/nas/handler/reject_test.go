@@ -33,12 +33,14 @@ func reject(id uint8) *message.PDUSessEstRej {
 	return &message.PDUSessEstRej{PDUSessId: id, PTI: 1, Cause5GSM: &ie.Cause5GSM{Value: 26}}
 }
 
-func noHandOff(t *testing.T, ue *context.UEContext, why string) {
+func awaitRetry(t *testing.T, ue *context.UEContext) context.PduSessionRetry {
 	t.Helper()
 	select {
-	case <-ue.PduSessionRetries():
-		t.Fatal(why)
-	case <-time.After(200 * time.Millisecond):
+	case retry := <-ue.PduSessionRetries():
+		return retry
+	case <-time.After(3 * time.Second):
+		t.Fatal("reject did not queue a retry for the UE event loop")
+		return context.PduSessionRetry{}
 	}
 }
 
@@ -58,49 +60,43 @@ func rejectBytes(id, cause uint8, ies ...byte) []byte {
 	return append([]byte{0x2e, id, 0x01, byte(message.MsgTypePDUSessEstRej), cause}, ies...)
 }
 
-// A reject arriving in a DL NAS Transport reaches the cancellable retry queue.
+// A real 5GSM reject carried by DL NAS Transport reaches the typed retry queue.
 func TestDlNasTransportRejectSchedulesTheRetry(t *testing.T) {
 	ue := newTestUE(t)
 	session, err := ue.CreatePDUSession()
 	require.NoError(t, err)
 	session.SetStateSM_PDU_SESSION_PENDING()
-
 	HandlerDlNasTransportPduaccept(ue, dlReject(session.Id, rejectBytes(session.Id, 26)))
-
-	assert.Zero(t, session.T3580Retries, "a scheduled attempt is not counted until executed")
-	select {
-	case retry := <-ue.PduSessionRetries():
-		assert.Same(t, session, retry.Session())
-	case <-time.After(3 * time.Second):
-		t.Fatal("the DL NAS reject should schedule its session's retry")
-	}
+	retry := awaitRetry(t, ue)
+	require.Same(t, session, retry.Session())
+	assert.Zero(t, session.T3580Retries, "queueing must not count an unexecuted request")
 }
 
-// The timer hands a typed token to the UE's goroutine after its 1 s backoff.
-// NAS is encoded, sent and counted only when that goroutine executes the token.
+// Timer expiry hands over a token, not an encoder. Sending and counting happen
+// only when the UE event loop validates and executes that token.
 func TestHandleEstablishmentRejectRetriesOnTheUEGoroutine(t *testing.T) {
 	ue := newTestUE(t)
 	session, err := ue.CreatePDUSession()
 	require.NoError(t, err)
 	session.SetStateSM_PDU_SESSION_PENDING()
-	uplink := make(chan gnbcontext.UEMessage, 1)
-	ue.SetGnbRx(uplink)
-
+	ue.SetGnbRx(make(chan gnbcontext.UEMessage, 1))
 	handleEstablishmentReject(ue, reject(session.Id))
-	assert.Zero(t, session.T3580Retries, "not counted when scheduled")
-
+	retry := awaitRetry(t, ue)
+	assert.Zero(t, session.T3580Retries)
+	assert.Empty(t, ue.GetGnbRx(), "the timer must not send NAS")
+	encoded := false
+	require.NoError(t, ue.StartPduSessionRetry(retry, func() ([]byte, error) {
+		encoded = true
+		return []byte{0x42}, nil
+	}))
+	assert.True(t, encoded)
+	assert.Equal(t, 1, session.T3580Retries)
 	select {
-	case retry := <-ue.PduSessionRetries():
-		assert.Empty(t, uplink, "the timer must not send NAS")
-		assert.Zero(t, session.T3580Retries, "not counted by the timer")
-		require.NoError(t, ue.StartPduSessionRetry(retry, func() ([]byte, error) {
-			return []byte{0x7e}, nil
-		}))
-	case <-time.After(3 * time.Second):
-		t.Fatal("the retry should be handed to the UE's goroutine after its 1 s backoff")
+	case msg := <-ue.GetGnbRx():
+		assert.Equal(t, []byte{0x42}, msg.Nas)
+	default:
+		t.Fatal("the event loop did not send its retry")
 	}
-	assert.Equal(t, 1, session.T3580Retries, "counted when the UE executes the attempt")
-	assert.Equal(t, gnbcontext.UEMessage{IsNas: true, Nas: []byte{0x7e}}, <-uplink)
 }
 
 func TestHandleEstablishmentRejectStopsAfterFiveRetries(t *testing.T) {
@@ -108,10 +104,12 @@ func TestHandleEstablishmentRejectStopsAfterFiveRetries(t *testing.T) {
 	session, err := ue.CreatePDUSession()
 	require.NoError(t, err)
 	session.SetStateSM_PDU_SESSION_PENDING()
-	session.T3580Retries = maxRejectRetries
-
+	session.T3580Retries = 5
 	handleEstablishmentReject(ue, reject(session.Id))
-
-	assert.Equal(t, maxRejectRetries, session.T3580Retries)
-	noHandOff(t, ue, "no sixth retry")
+	assert.Equal(t, 5, session.T3580Retries)
+	select {
+	case <-ue.PduSessionRetries():
+		t.Fatal("no sixth retry may be queued")
+	case <-time.After(200 * time.Millisecond):
+	}
 }

@@ -79,10 +79,8 @@ type UEContext struct {
 	// Sync primitive
 	scenarioChan chan scenario.ScenarioMessage
 
-	// deferred hands work to the UE goroutine; done cancels waiting handoffs on termination.
-	deferred chan func()
-	done     chan struct{}
-
+	deferred          chan func()
+	done              chan struct{}
 	lock              sync.Mutex
 	terminated        bool
 	pduSessionRetries chan PduSessionRetry
@@ -941,9 +939,6 @@ func hexCharToByte(c byte) byte {
 	return 0
 }
 
-func (ue *UEContext) SetGnbConnectionLost(lost <-chan struct{}) { ue.gnbConnectionLost = lost }
-func (ue *UEContext) GetGnbConnectionLost() <-chan struct{}     { return ue.gnbConnectionLost }
-
 // BeginRegistrationResults records a new attempt, without counting retransmits twice.
 func (ue *UEContext) BeginRegistrationResults() {
 	ue.Results.Begin(ue.GetPrUeId(), 0, analytics.Registration)
@@ -964,9 +959,8 @@ func (pdu *UEPDUSession) EstablishmentFailed() {
 	pdu.results.Finish(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment, analytics.Failure)
 }
 
-// EstablishmentTransportFailed accounts for an explicitly refused uplink request,
-// not a session-state transition or a new retry policy. Establishment requests
-// currently use PTI 1; verify that transaction and the current pending lifetime.
+// EstablishmentTransportFailed accounts for an explicitly refused uplink request
+// only when its transaction still belongs to the current pending session.
 func (pdu *UEPDUSession) EstablishmentTransportFailed(pti uint8) {
 	if pdu.owner == nil {
 		return
@@ -977,6 +971,17 @@ func (pdu *UEPDUSession) EstablishmentTransportFailed(pti uint8) {
 		return
 	}
 	pdu.results.Finish(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment, analytics.Failure)
+}
+
+// NASSecurityContext exposes upstream security operations while sharing the UE counters.
+func (ue *UEContext) NASSecurityContext() *security.SecCtx {
+	return &security.SecCtx{
+		Side: security.UESide, Bearer: security.Bearer3GPP,
+		UplinkCount: &ue.UeSecurity.ULCount, DownlinkCount: &ue.UeSecurity.DLCount,
+		CipheringAlg: nasType.AlgCiphering(ue.UeSecurity.CipheringAlg),
+		IntegrityAlg: nasType.AlgIntegrity(ue.UeSecurity.IntegrityAlg),
+		KnasEnc:      ue.UeSecurity.KnasEnc, KnasInt: ue.UeSecurity.KnasInt,
+	}
 }
 
 // The backend keeps an immutable snapshot of its last completed rules so an
@@ -995,13 +1000,5 @@ func (pduSession *UEPDUSession) UpdateTunnel(pdu *context.GnbPDUSession, ip neti
 	return pduSession.updateTunnel(pdu, ip)
 }
 
-// NASSecurityContext exposes upstream security operations while sharing the UE counters.
-func (ue *UEContext) NASSecurityContext() *security.SecCtx {
-	return &security.SecCtx{
-		Side: security.UESide, Bearer: security.Bearer3GPP,
-		UplinkCount: &ue.UeSecurity.ULCount, DownlinkCount: &ue.UeSecurity.DLCount,
-		CipheringAlg: nasType.AlgCiphering(ue.UeSecurity.CipheringAlg),
-		IntegrityAlg: nasType.AlgIntegrity(ue.UeSecurity.IntegrityAlg),
-		KnasEnc:      ue.UeSecurity.KnasEnc, KnasInt: ue.UeSecurity.KnasInt,
-	}
-}
+func (ue *UEContext) SetGnbConnectionLost(lost <-chan struct{}) { ue.gnbConnectionLost = lost }
+func (ue *UEContext) GetGnbConnectionLost() <-chan struct{}     { return ue.gnbConnectionLost }

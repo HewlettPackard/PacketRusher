@@ -21,20 +21,18 @@ const Ready = 0x02
 const Down = 0x03
 
 type GNBUe struct {
-	ranUeNgapId    int64 // Identifier for UE in GNB Context.
-	amfUeNgapId    atomic.Int64
-	amfUeIDSet     atomic.Bool    // Identifier for UE in AMF Context.
-	amfId          int64          // Identifier for AMF in UE/GNB Context.
-	state          atomic.Int64   // State of UE in NAS/GNB Context.
-	sctpConnection *sctp.SCTPConn // Sctp association in using by the UE.
-	gnbRx          chan UEMessage
-	gnbTx          chan UEMessage
-	pRueId         int64 // PacketRusher unique UE ID
-	tmsi           *nasType.MobileId5GS
-	context        Context
-	// contextMu protects session membership and the payload copied during Xn
-	// handover. It is independent of the processing and release-request locks.
-	contextMu        sync.RWMutex
+	ranUeNgapId      int64 // Identifier for UE in GNB Context.
+	amfUeNgapId      atomic.Int64
+	amfUeIDSet       atomic.Bool    // Identifier for UE in AMF Context.
+	amfId            int64          // Identifier for AMF in UE/GNB Context.
+	state            atomic.Int64   // State of UE in NAS/GNB Context.
+	sctpConnection   *sctp.SCTPConn // Sctp association in using by the UE.
+	gnbRx            chan UEMessage
+	gnbTx            chan UEMessage
+	pRueId           int64 // PacketRusher unique UE ID
+	tmsi             *nasType.MobileId5GS
+	context          Context
+	contextMu        sync.RWMutex // Membership and metadata, independent of NGAP processing.
 	lock             sync.Mutex
 	processingLock   sync.Mutex
 	txLock           sync.Mutex
@@ -56,8 +54,8 @@ type Context struct {
 }
 
 type GnbPDUSession struct {
-	// Xn handover copies session pointers. Only tunnel endpoint fields mutate
-	// after publication, and their access must be safe across both gNB lanes.
+	// Tunnel endpoint fields can change after publication. Protect access from
+	// concurrent handlers and take coherent snapshots for independent handover copies.
 	tunnelMu     sync.RWMutex
 	pduSessionId int64
 	upfIp        string

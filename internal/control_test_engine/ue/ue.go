@@ -58,7 +58,7 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 		case <-ue.GetGnbConnectionLost():
 		case <-ue.GnbStopped():
 		default:
-			handleUE(ue, ueMgrChannel)
+			runUE(ue, ueMgrChannel)
 		}
 
 		ue.Terminate()
@@ -72,10 +72,9 @@ func runUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMessage
 	handleUE(ue, ueMgrChannel)
 }
 
-// handleUE runs messages and deferred work serially on the UE's goroutine until
-// the scenario stops it or its gNB association fails.
 func handleUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMessage) {
 	retries := ue.PduSessionRetries()
+	// Block until a signal is received.
 	loop := true
 	for loop {
 		select {
@@ -109,11 +108,10 @@ func handleUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMess
 				break
 			}
 			loop = ueMgrHandler(msg, ue)
+		case work := <-ue.Deferred():
+			work()
 		case <-ue.GetDRX():
 			verifyPaging(ue)
-		case f := <-ue.Deferred():
-			// Work such as a rejected session's retry shares the UE's NAS counters.
-			f()
 		}
 	}
 }

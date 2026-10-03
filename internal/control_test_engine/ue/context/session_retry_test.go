@@ -264,3 +264,89 @@ func awaitSessionRetry(t *testing.T, queue <-chan PduSessionRetry) PduSessionRet
 		return PduSessionRetry{}
 	}
 }
+
+func TestAssociationLossUnblocksPendingSessionSends(t *testing.T) {
+	for _, retrying := range []bool{false, true} {
+		name := "initial request"
+		if retrying {
+			name = "retry"
+		}
+		t.Run(name, func(t *testing.T) {
+			lost := make(chan struct{})
+			ue := &UEContext{Results: analytics.NewRecorder(), scenarioChan: make(chan scenario.ScenarioMessage), gnbRx: make(chan gnbcontext.UEMessage, 1), gnbConnectionLost: lost}
+			session, err := ue.CreatePDUSession()
+			if err != nil {
+				t.Fatal(err)
+			}
+			ue.gnbRx <- gnbcontext.UEMessage{Nas: []byte{99}}
+			var retry PduSessionRetry
+			if retrying {
+				session.SetStateSM_PDU_SESSION_PENDING()
+				session.EstablishmentFailed()
+				ue.Lock()
+				ue.schedulePduSessionRetryLocked(session, 0)
+				ue.Unlock()
+				retry = awaitSessionRetry(t, ue.PduSessionRetries())
+			}
+			encoding, completed := make(chan struct{}), make(chan error, 1)
+			encode := func() ([]byte, error) { close(encoding); return []byte{1}, nil }
+			go func() {
+				if retrying {
+					completed <- ue.StartPduSessionRetry(retry, encode)
+				} else {
+					completed <- ue.StartPduSessionRequest(session, encode)
+				}
+			}()
+			select {
+			case <-encoding:
+			case <-time.After(time.Second):
+				t.Fatal("request did not start")
+			}
+			close(lost)
+			select {
+			case err := <-completed:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("association loss left session send blocked")
+			}
+			started := uint64(1)
+			if retrying {
+				started++
+			}
+			assertSessionResults(t, ue.Results, started, 0, 1, 0)
+			if message := <-ue.gnbRx; len(message.Nas) != 1 || message.Nas[0] != 99 {
+				t.Fatal("request was delivered after association failure")
+			}
+			ue.Terminate() // The cancelled send must also have released the UE lock.
+		})
+	}
+}
+
+func TestAlreadyFailedAssociationDoesNotStartSessionAttempt(t *testing.T) {
+	lost := make(chan struct{})
+	close(lost)
+	ue := &UEContext{Results: analytics.NewRecorder(), gnbRx: make(chan gnbcontext.UEMessage, 1), gnbConnectionLost: lost}
+	session, err := ue.CreatePDUSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.SetStateSM_PDU_SESSION_PENDING()
+	session.EstablishmentFailed()
+	ue.Lock()
+	ue.schedulePduSessionRetryLocked(session, 0)
+	ue.Unlock()
+	retry := awaitSessionRetry(t, ue.PduSessionRetries())
+	encode := func() ([]byte, error) { t.Fatal("failed connection encoded a request"); return nil, nil }
+	if err := ue.StartPduSessionRetry(retry, encode); err != nil {
+		t.Fatal(err)
+	}
+	if err := ue.StartPduSessionRequest(session, encode); err != nil {
+		t.Fatal(err)
+	}
+	if session.T3580Retries != 0 {
+		t.Fatal("failed connection consumed a retry")
+	}
+	assertSessionResults(t, ue.Results, 1, 0, 0, 0)
+}
