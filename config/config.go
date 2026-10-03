@@ -64,22 +64,23 @@ type SliceSupportList struct {
 }
 
 type Ue struct {
-	Msin                   string     `yaml:"msin"`
-	Key                    string     `yaml:"key"`
-	Opc                    string     `yaml:"opc"`
-	Amf                    string     `yaml:"amf"`
-	Sqn                    string     `yaml:"sqn"`
-	Dnn                    string     `yaml:"dnn"`
-	ProtectionScheme       int        `yaml:"protectionScheme"`
-	HomeNetworkPublicKey   string     `yaml:"homeNetworkPublicKey"`
-	HomeNetworkPublicKeyID uint8      `yaml:"homeNetworkPublicKeyID"`
-	RoutingIndicator       string     `yaml:"routingindicator"`
-	Hplmn                  Hplmn      `yaml:"hplmn"`
-	Snssai                 Snssai     `yaml:"snssai"`
-	Integrity              Integrity  `yaml:"integrity"`
-	Ciphering              Ciphering  `yaml:"ciphering"`
-	TunnelMode             TunnelMode `yaml:"-"`
-	TunnelMTU              int        `yaml:"tunnelmtu"`
+	Msin                   string         `yaml:"msin"`
+	Key                    string         `yaml:"key"`
+	Opc                    string         `yaml:"opc"`
+	Amf                    string         `yaml:"amf"`
+	Sqn                    string         `yaml:"sqn"`
+	Dnn                    string         `yaml:"dnn"`
+	ProtectionScheme       int            `yaml:"protectionScheme"`
+	HomeNetworkPublicKey   string         `yaml:"homeNetworkPublicKey"`
+	HomeNetworkPublicKeyID uint8          `yaml:"homeNetworkPublicKeyID"`
+	RoutingIndicator       string         `yaml:"routingindicator"`
+	Hplmn                  Hplmn          `yaml:"hplmn"`
+	Snssai                 Snssai         `yaml:"snssai"`
+	Integrity              Integrity      `yaml:"integrity"`
+	Ciphering              Ciphering      `yaml:"ciphering"`
+	TunnelMode             TunnelMode     `yaml:"-"`
+	TunnelMTU              int            `yaml:"tunnelmtu"`
+	PDUSessionType         PDUSessionType `yaml:"pdusessiontype"`
 }
 
 type Hplmn struct {
@@ -146,7 +147,7 @@ func readConfig(configPath string) Config {
 	}
 
 	if cfg.Ue.TunnelMTU < 0 {
-		log.Fatal("ue.tunnelmtu must be zero (automatic) or a positive IPv4 MTU")
+		log.Fatal("ue.tunnelmtu must be zero (automatic) or a positive IP MTU")
 	}
 
 	sqn, err := strconv.ParseInt(cfg.Ue.Sqn, 16, 64)

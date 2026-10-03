@@ -15,11 +15,12 @@ import (
 )
 
 type SessionContext struct {
-	dataNetworks    []DataNetwork
-	sessionsRules   []*models.Pcf_SMPolCtrl_SessionRule
-	lastAllocatedIP net.IP
-	n3              net.IP
-	ipMtx           sync.Mutex
+	dataNetworks      []DataNetwork
+	sessionsRules     []*models.Pcf_SMPolCtrl_SessionRule
+	lastAllocatedIP   net.IP
+	lastAllocatedIPv6 uint64
+	n3                net.IP
+	ipMtx             sync.Mutex
 }
 
 type DataNetwork struct {
@@ -103,4 +104,15 @@ func (s *SessionContext) GetUnallocatedIP() net.IP {
 
 	s.lastAllocatedIP = net.ParseIP(ip).To4()
 	return s.lastAllocatedIP
+}
+
+// GetUnallocatedIPv6 allocates one deterministic /64 per mock PDU session.
+// The prefix is advertised by a fake UPF in dataplane tests, not encoded in NAS.
+func (s *SessionContext) GetUnallocatedIPv6() net.IP {
+	s.ipMtx.Lock()
+	defer s.ipMtx.Unlock()
+	s.lastAllocatedIPv6++
+	bytes := netip.MustParseAddr("2001:db8::1").As16()
+	bytes[4], bytes[5], bytes[6], bytes[7] = byte(s.lastAllocatedIPv6>>24), byte(s.lastAllocatedIPv6>>16), byte(s.lastAllocatedIPv6>>8), byte(s.lastAllocatedIPv6)
+	return net.IP(bytes[:])
 }

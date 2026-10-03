@@ -21,6 +21,7 @@ type SmContext struct {
 	pduSessionID                 int32
 	snssai                       models.Snssai
 	pduAddress                   net.IP
+	pduIPv6Address               net.IP
 	dataNetwork                  DataNetwork
 	userLocation                 models.NrLocation
 	plmnID                       models.PlmnId
@@ -73,6 +74,34 @@ func (c *SmContext) SetSnssai(snssai models.Snssai) {
 
 func (c *SmContext) SetPDUAddress(ip net.IP) {
 	c.pduAddress = ip
+}
+
+func (c *SmContext) SetPDUIPv6Address(ip net.IP) {
+	c.pduIPv6Address = append(net.IP(nil), ip.To16()...)
+}
+func (c *SmContext) NASPDUAddress() (*ie.PDUAddr, error) {
+	address := new(ie.PDUAddr)
+	switch c.sessionType {
+	case ie.PDUSessType_IPv4:
+		address.IPv4 = append([]byte(nil), c.pduAddress.To4()...)
+	case ie.PDUSessType_IPv6:
+		if len(c.pduIPv6Address) != 16 {
+			return nil, fmt.Errorf("missing IPv6 mock address")
+		}
+		address.IPv6IfId = append([]byte(nil), c.pduIPv6Address[8:]...)
+	case ie.PDUSessType_IPv4v6:
+		if len(c.pduIPv6Address) != 16 {
+			return nil, fmt.Errorf("missing IPv6 mock address")
+		}
+		address.IPv6IfId = append([]byte(nil), c.pduIPv6Address[8:]...)
+		address.IPv4 = append([]byte(nil), c.pduAddress.To4()...)
+	default:
+		return nil, fmt.Errorf("unsupported mock PDU session type %d", c.sessionType)
+	}
+	if c.sessionType != ie.PDUSessType_IPv6 && len(address.IPv4) != 4 {
+		return nil, fmt.Errorf("missing IPv4 mock address")
+	}
+	return address, nil
 }
 
 func (c *SmContext) GetSnnsai() models.Snssai {
@@ -131,8 +160,16 @@ func (smContext *SmContext) PDUAddressToNAS() ([12]byte, uint8) {
 		copy(addr[:4], smContext.pduAddress.To4())
 		addrLen = 4 + 1
 	case ie.PDUSessType_IPv6:
+		if len(smContext.pduIPv6Address) == 16 {
+			copy(addr[:8], smContext.pduIPv6Address[8:])
+		}
+		addrLen = 9
 	case ie.PDUSessType_IPv4v6:
-		addrLen = 12 + 1
+		if len(smContext.pduIPv6Address) == 16 {
+			copy(addr[:8], smContext.pduIPv6Address[8:])
+		}
+		copy(addr[8:12], smContext.pduAddress.To4())
+		addrLen = 13
 	}
 	return addr, addrLen
 }
@@ -161,11 +198,23 @@ func CreatePDUSession(sessionRequest *nas.PDUSessEstReq,
 	newSmContext.SetUserLocation(locationCopy)
 
 	newSmContext.SetPti(sessionRequest.PTI)
-	newSmContext.SetPduSessionType(sessionRequest.PDUSessType.Value)
+	sessionType := uint8(ie.PDUSessType_IPv4)
+	if sessionRequest.PDUSessType != nil {
+		sessionType = sessionRequest.PDUSessType.Value
+	}
+	if sessionType < ie.PDUSessType_IPv4 || sessionType > ie.PDUSessType_IPv4v6 {
+		return nil, fmt.Errorf("unsupported mock PDU session type %d", sessionType)
+	}
+	newSmContext.SetPduSessionType(sessionType)
 	newSmContext.SetSessionRule(session.GetSessionRules()[0])
 	newSmContext.SetDefQosQFI(uint8(1))
 
-	newSmContext.SetPDUAddress(session.GetUnallocatedIP())
+	if sessionType != ie.PDUSessType_IPv6 {
+		newSmContext.SetPDUAddress(session.GetUnallocatedIP())
+	}
+	if sessionType != ie.PDUSessType_IPv4 {
+		newSmContext.SetPDUIPv6Address(session.GetUnallocatedIPv6())
+	}
 
 	if options := sessionRequest.ExtendedProtCfgOpts; options != nil && options.FromMs != nil {
 		from := options.FromMs
