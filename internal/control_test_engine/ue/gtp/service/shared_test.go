@@ -99,3 +99,26 @@ func TestAddPDRVerifiedKeepsCreateErrorWhenItCannotCheck(t *testing.T) {
 	err := addPDRVerified(dev, 2, []string{"nosuchgtp0", "2", "--pcd", "2", "--ue-ipv4", "10.0.0.1", "--far-id", "2"}, "uplink")
 	assert.Error(t, err, "the failed create should be reported")
 }
+
+func TestSharedHandoverTransfersPolicyAndPreservesTargetAddress(t *testing.T) {
+	oldRule, oldRoute := ruleDel, routeDel
+	ruleDel = func(*netlink.Rule) error { t.Fatal("retirement deleted transferred policy"); return nil }
+	routeDel = func(*netlink.Route) error { t.Fatal("retirement deleted replaced route"); return nil }
+	t.Cleanup(func() { ruleDel, routeDel = oldRule, oldRoute })
+	for _, sameDevice := range []bool{true, false} {
+		dev := &fakeDevice{}
+		held := &sharedTunnel{dev: dev, ueIP: "10.1.0.1", rule: &netlink.Rule{}, route: &netlink.Route{}}
+		source := &netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Index: 10}}
+		targetIndex := 11
+		if sameDevice {
+			targetIndex = 10
+		}
+		held.retireOn(source, &netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Index: targetIndex}})
+		held.release(nil)
+		if sameDevice {
+			require.Equal(t, []string{"rules"}, dev.calls)
+		} else {
+			require.Equal(t, []string{"address", "rules"}, dev.calls)
+		}
+	}
+}
