@@ -39,7 +39,7 @@ type GNBUe struct {
 	pendingDelivery  *[]ueMessageDelivery // Scoped to the current downlink handler, guarded by txLock.
 	connectionLost   chan struct{}
 	connectionFailed bool
-	newGnb           *GNBContext
+	newGnb           atomic.Pointer[GNBContext]
 	releaseRequested bool // Set when UE Context Release Request is sent to AMF
 }
 
@@ -219,11 +219,11 @@ func (ue *GNBUe) SetStateDown() {
 }
 
 func (ue *GNBUe) SetHandoverGnodeB(gnb *GNBContext) {
-	ue.newGnb = gnb
+	ue.newGnb.Store(gnb)
 }
 
 func (ue *GNBUe) GetHandoverGnodeB() *GNBContext {
-	return ue.newGnb
+	return ue.newGnb.Load()
 }
 
 func (ue *GNBUe) GetGnbRx() chan UEMessage {
