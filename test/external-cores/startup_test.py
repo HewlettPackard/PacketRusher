@@ -4,8 +4,9 @@ import socket
 import struct
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
-from startup import accepted_pfcp, open_registered_and_associated
+from startup import accepted_pfcp, open_registered_and_associated, free_registered_and_associated
 from prepare import CORE_IP
 
 
@@ -39,5 +40,20 @@ class StartupEvidence(unittest.TestCase):
             self.assertIsNotNone(open_registered_and_associated(state))
             with (state/'core'/'smf.log').open('a') as file: file.write('PFCP de-associated [peer]:8805\n')
             self.assertIsNone(open_registered_and_associated(state))
+
+    def test_free5gc_current_association_requires_accepted_configured_peer_packet(self):
+        with tempfile.TemporaryDirectory() as directory, patch('startup.free_registered',return_value={'smf':['actual-id']}):
+            state=Path(directory); (state/'core').mkdir()
+            profile={'sessions':1,'pfcp_smf_ip':'127.0.0.18','pfcp_upf_ip':CORE_IP}
+            log=state/'core'/'smf-stdout.log'
+            log.write_text('Received PFCP Association Setup Accepted Response from UPF\n')
+            self.assertIsNone(free_registered_and_associated(state,profile))
+            (state/'pfcp-startup.pcap').write_bytes(capture(destination='127.0.0.4'))
+            self.assertIsNone(free_registered_and_associated(state,profile))
+            (state/'pfcp-startup.pcap').write_bytes(capture(destination='127.0.0.18'))
+            self.assertIsNotNone(free_registered_and_associated(state,profile))
+            for event in ['PFCP Heartbeat error: expired','Canceled association to UPF[peer]','Canceled SMF PFCP context']:
+                log.write_text('Received PFCP Association Setup Accepted Response from UPF\n'+event+'\n')
+                self.assertIsNone(free_registered_and_associated(state,profile))
 
 if __name__ == '__main__': unittest.main()

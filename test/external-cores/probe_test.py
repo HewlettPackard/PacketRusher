@@ -16,10 +16,10 @@ def packet(source, destination, payload, port_source, port_destination):
     return b'\x45\x00'+struct.pack('!H',20+len(udp))+b'\x00'*4+b'\x40\x11\x00\x00'+socket.inet_aton(source)+socket.inet_aton(destination)+udp
 
 
-def n3_capture(nonce, wrong_ue=False, duplicate=False):
+def n3_capture(nonce, wrong_ue=False, duplicate=False, directions=(True,False), sequences=range(3)):
     data=struct.pack('<IHHIIII',0xa1b2c3d4,2,4,0,0,65535,1)
-    for uplink in [True,False]:
-        for sequence in range(3):
+    for uplink in directions:
+        for sequence in sequences:
             inner=packet(('10.45.0.3' if wrong_ue else UE_IP) if uplink else DN_IP,DN_IP if uplink else UE_IP,nonce+struct.pack('!I',0 if duplicate else sequence),40000 if uplink else 9000,9000 if uplink else 40000)
             # The uplink includes a real-shaped PDU Session Container/QFI.
             gtp=(b'\x34\xff'+struct.pack('!HI',len(inner)+8,7)+b'\x00\x00\x00\x85\x01\x10\x01\x00'+inner) if uplink else (b'\x30\xff'+struct.pack('!HI',len(inner),9)+inner)
@@ -76,5 +76,14 @@ class CompletionGuards(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'n3.pcap'; path.write_bytes(b'')
             with self.assertRaises(AssertionError): gtpu_proof(path,b'unique')
+
+    def test_missing_dn_requires_observed_uplink_and_rejects_any_udp_echo(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'n3.pcap'; nonce=b'missing-peer-private-nonce'
+            path.write_bytes(n3_capture(nonce,directions=(True,),sequences=(3,)))
+            self.assertEqual(gtpu_proof(path,nonce,(3,),False)['downlink']['packets'],0)
+            for directions in [(),(False,),(True,False)]:
+                path.write_bytes(n3_capture(nonce,directions=directions,sequences=(3,)))
+                with self.assertRaises(AssertionError): gtpu_proof(path,nonce,(3,),False)
 
 if __name__=='__main__': unittest.main()

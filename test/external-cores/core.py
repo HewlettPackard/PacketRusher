@@ -10,14 +10,19 @@ import threading
 import time
 from pathlib import Path
 from prepare import CORE_IP, DN_IP
-from startup import free_registered, open_registered_and_associated
+from startup import free_registered_and_associated, open_registered_and_associated
 
-def serve_echo(stop, errors):
+def serve_echo(stop, errors, state):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.bind((DN_IP, 9000))
             sock.settimeout(.2)
             while not stop.is_set():
+                if (state/'dn-disable').exists():
+                    sock.close()
+                    (state/'dn-disabled').write_text('owned UDP DN peer closed\n')
+                    stop.wait()
+                    return
                 try:
                     data, address = sock.recvfrom(4096)
                     sock.sendto(data, address)
@@ -27,22 +32,34 @@ def serve_echo(stop, errors):
         errors.append(error)
         stop.set()
 
-def start(prefix, state):
+def start(prefix, state, upf_prefix=None):
     state = Path(state).resolve()
     profile = json.loads((state / "profile.json").read_text())
     prefix = Path(prefix).resolve()
+    upf_prefix = Path(upf_prefix).resolve() if upf_prefix else prefix
     stop = threading.Event()
     processes, files, errors = [], [], []
     capture, echo = None, None
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, lambda *_: stop.set())
     try:
+        sessions = profile.get('sessions', 1 if profile['core'] == 'open5gs' else 0)
         if profile["core"] == "open5gs":
+            names = ["nrf", "udr", "udm", "ausf", "bsf", "pcf", "nssf", "upf", "smf", "amf"]
+        else:
+            names = ["nrf", "udr", "udm", "ausf", "pcf", "nssf"] + (["upf", "smf"] if sessions else []) + ["amf"]
+        if sessions and profile.get('upf_implementation','open5gs') == 'open5gs':
             subprocess.run(["ip", "tuntap", "add", "name", "ogstun", "mode", "tun"], check=True)
             subprocess.run(["ip", "addr", "add", DN_IP + "/16", "dev", "ogstun"], check=True)
             subprocess.run(["ip", "link", "set", "ogstun", "up"], check=True)
-            names = ["nrf", "udr", "udm", "ausf", "bsf", "pcf", "nssf", "upf", "smf", "amf"]
-            echo = threading.Thread(target=serve_echo, args=(stop,errors))
+        elif sessions:
+            # The genuine UPF installs the UE subnet route on upfgtp. Give the
+            # DN peer only its /32 so replies must traverse those PFCP rules.
+            subprocess.run(['ip','link','add','dn0','type','dummy'],check=True)
+            subprocess.run(['ip','addr','add',DN_IP+'/32','dev','dn0'],check=True)
+            subprocess.run(['ip','link','set','dn0','up'],check=True)
+        if sessions:
+            echo = threading.Thread(target=serve_echo, args=(stop,errors,state))
             echo.start()
             capture_log = (state / "pfcp-capture.log").open("wb")
             files.append(capture_log)
@@ -52,14 +69,13 @@ def start(prefix, state):
                 if capture.poll() is not None or time.monotonic() >= capture_deadline:
                     raise RuntimeError("PFCP startup capture failed")
                 time.sleep(.05)
-        else:
-            names = ["nrf", "udr", "udm", "ausf", "pcf", "nssf", "amf"]
         for name in names:
-            if profile["core"] == "open5gs":
-                binary = prefix / "bin" / f"open5gs-{name}d"
+            open_nf = profile['core'] == 'open5gs' or (name == 'upf' and profile['upf_implementation'] == 'open5gs')
+            if open_nf:
+                binary = (upf_prefix if name == 'upf' else prefix) / "bin" / f"open5gs-{name}d"
                 configuration = state / "config" / f"{name}.yaml"
             else:
-                binary = prefix / "bin" / name
+                binary = (upf_prefix if name == 'upf' else prefix) / "bin" / name
                 configuration = state / "config" / f"{name}cfg.yaml"
             log = (state / "core" / f"{name}-stdout.log").open("wb")
             files.append(log)
@@ -81,7 +97,7 @@ def start(prefix, state):
                     pass
             if not remaining:
                 try:
-                    evidence = open_registered_and_associated(state) if profile["core"] == "open5gs" else free_registered(profile)
+                    evidence = open_registered_and_associated(state) if profile["core"] == "open5gs" else free_registered_and_associated(state,profile)
                 except OSError:
                     pass
             if time.monotonic() >= deadline or stop.is_set():
@@ -122,5 +138,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--prefix", required=True)
     parser.add_argument("--state", required=True)
+    parser.add_argument("--upf-prefix")
     args = parser.parse_args()
-    start(args.prefix, args.state)
+    start(args.prefix, args.state,args.upf_prefix)

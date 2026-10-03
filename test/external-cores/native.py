@@ -32,13 +32,16 @@ def interrupt(signum, _):
     raise InterruptedError(f"native runner interrupted by signal {signum}")
 
 
-def run(core, prefix, binary, state):
+def run(core, prefix, binary, state, sessions=None, backend="userspace", upf=None, upf_prefix=None):
     if os.geteuid() != 0 or os.stat('/proc/self/ns/net').st_ino == os.stat('/proc/1/ns/net').st_ino:
         raise RuntimeError("native runner requires root in a new network namespace; use native.sh")
-    if core == "open5gs" and not Path('/dev/net/tun').is_char_device():
+    if (core == "open5gs" or sessions) and not Path('/dev/net/tun').is_char_device():
         raise RuntimeError("isolated /dev/net/tun missing; use native.sh")
     state = Path(state).resolve()
-    generate(core, state, native=True, prefix=prefix)
+    generate(core, state, native=True, prefix=prefix, sessions=sessions, backend=backend, upf=upf)
+    profile = json.loads((state/'profile.json').read_text())
+    if profile['upf_implementation'] == 'free5gc' and not Path('/sys/module/gtp5g').is_dir():
+        raise RuntimeError('the genuine free5GC UPF requires gtp5g in the disposable guest; PacketRusher eBPF does not replace the UPF')
     processes, files = [], []
     probe_process = None
     for signum in (signal.SIGINT, signal.SIGTERM):
@@ -57,6 +60,13 @@ def run(core, prefix, binary, state):
         net = ['nsenter','--target',str(child.pid),'--net']
         for command in [['ip','link','set','lo','up'],['ip','link','set','ran0','name','eth0'],['ip','addr','add',RAN_IP+'/24','dev','eth0'],['ip','link','set','eth0','up']]:
             subprocess.run(net+command,check=True)
+        if backend == 'ebpf':
+            # Only these newly owned veth endpoints are changed. Partial veth
+            # checksum/GSO frames are outside the backend's Ethernet profile.
+            for namespace, device in [([], 'core0'), (net, 'eth0')]:
+                subprocess.run(namespace+['ethtool','-K',device,'tx','off','rx','off','tso','off','gso','off','gro','off'],check=True)
+                with (state/f'offloads-{device}.txt').open('w') as output:
+                    subprocess.run(namespace+['ethtool','-k',device],check=True,stdout=output)
         db = state/'mongo'
         db.mkdir()
         mongo_log = (state/'mongo-stdout.log').open('wb')
@@ -71,7 +81,10 @@ def run(core, prefix, binary, state):
         subprocess.run(['mongosh','--quiet','mongodb://127.0.0.1:27017/'+core,str(state/'subscriber.js')],check=True,timeout=10)
         core_log = (state/'core-supervisor.log').open('wb')
         files.append(core_log)
-        supervisor = launch_owned(['python3',str(HERE/'core.py'),'--prefix',str(Path(prefix).resolve()),'--state',str(state)],stdout=core_log,stderr=subprocess.STDOUT)
+        core_command = ['python3',str(HERE/'core.py'),'--prefix',str(Path(prefix).resolve()),'--state',str(state)]
+        if upf_prefix:
+            core_command += ['--upf-prefix',str(Path(upf_prefix).resolve())]
+        supervisor = launch_owned(core_command,stdout=core_log,stderr=subprocess.STDOUT)
         processes.append(supervisor)
         def ready():
             if supervisor.poll() is not None:
@@ -107,5 +120,9 @@ if __name__ == '__main__':
     parser.add_argument('--prefix',required=True)
     parser.add_argument('--packetrusher',required=True)
     parser.add_argument('--state',required=True)
+    parser.add_argument('--sessions',type=int,choices=[0,1])
+    parser.add_argument('--backend',choices=['userspace','ebpf'],default='userspace')
+    parser.add_argument('--upf',choices=['free5gc','open5gs'])
+    parser.add_argument('--upf-prefix')
     args=parser.parse_args()
-    run(args.core,args.prefix,args.packetrusher,args.state)
+    run(args.core,args.prefix,args.packetrusher,args.state,args.sessions,args.backend,args.upf,args.upf_prefix)

@@ -1,0 +1,209 @@
+{
+  "smf": {
+    "info": {
+      "version": "1.0.7",
+      "description": "SMF initial local configuration"
+    },
+    "configuration": {
+      "smfName": "SMF",
+      "sbi": {
+        "scheme": "http",
+        "registerIPv4": "smf.free5gc.org",
+        "bindingIPv4": "smf.free5gc.org",
+        "port": 8000,
+        "tls": {
+          "key": "cert/smf.key",
+          "pem": "cert/smf.pem"
+        }
+      },
+      "serviceNameList": [
+        "nsmf-pdusession",
+        "nsmf-event-exposure",
+        "nsmf-oam",
+        "nsmf-callback"
+      ],
+      "snssaiInfos": [
+        {
+          "sNssai": {
+            "sst": 1,
+            "sd": "010203"
+          },
+          "dnnInfos": [
+            {
+              "dnn": "internet",
+              "dns": {
+                "ipv4": "8.8.8.8",
+                "ipv6": "2001:4860:4860::8888"
+              }
+            }
+          ]
+        },
+        {
+          "sNssai": {
+            "sst": 1,
+            "sd": "112233"
+          },
+          "dnnInfos": [
+            {
+              "dnn": "internet",
+              "dns": {
+                "ipv4": "8.8.8.8",
+                "ipv6": "2001:4860:4860::8888"
+              }
+            }
+          ]
+        }
+      ],
+      "plmnList": [
+        {
+          "mcc": 208,
+          "mnc": "93"
+        }
+      ],
+      "locality": "area1",
+      "pfcp": {
+        "nodeID": "smf.free5gc.org",
+        "listenAddr": "smf.free5gc.org",
+        "externalAddr": "smf.free5gc.org"
+      },
+      "userplaneInformation": {
+        "upNodes": {
+          "gNB1": {
+            "type": "AN"
+          },
+          "UPF": {
+            "type": "UPF",
+            "nodeID": "upf.free5gc.org",
+            "addr": "upf.free5gc.org",
+            "sNssaiUpfInfos": [
+              {
+                "sNssai": {
+                  "sst": 1,
+                  "sd": "010203"
+                },
+                "dnnUpfInfoList": [
+                  {
+                    "dnn": "internet",
+                    "pools": [
+                      {
+                        "cidr": "10.60.0.0/16"
+                      }
+                    ],
+                    "staticPools": [
+                      {
+                        "cidr": "10.60.100.0/24"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "sNssai": {
+                  "sst": 1,
+                  "sd": "112233"
+                },
+                "dnnUpfInfoList": [
+                  {
+                    "dnn": "internet",
+                    "pools": [
+                      {
+                        "cidr": "10.61.0.0/16"
+                      }
+                    ],
+                    "staticPools": [
+                      {
+                        "cidr": "10.61.100.0/24"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "interfaces": [
+              {
+                "interfaceType": "N3",
+                "endpoints": [
+                  "upf.free5gc.org"
+                ],
+                "networkInstances": [
+                  "internet"
+                ]
+              }
+            ]
+          }
+        },
+        "links": [
+          {
+            "A": "gNB1",
+            "B": "UPF"
+          }
+        ]
+      },
+      "t3591": {
+        "enable": true,
+        "expireTime": "16s",
+        "maxRetryTimes": 3
+      },
+      "t3592": {
+        "enable": true,
+        "expireTime": "16s",
+        "maxRetryTimes": 3
+      },
+      "nrfUri": "http://nrf.free5gc.org:8000",
+      "nrfCertPem": "cert/nrf.pem",
+      "urrPeriod": 10,
+      "urrThreshold": 1000,
+      "requestedUnit": 1000,
+      "metrics": {
+        "enable": false,
+        "scheme": "http",
+        "bindingIPv4": "smf.free5gc.org",
+        "port": 9091,
+        "tls": {
+          "pem": "cert/smf.pem",
+          "key": "cert/smf.key"
+        },
+        "namespace": "free5gc"
+      }
+    },
+    "logger": {
+      "enable": true,
+      "level": "info",
+      "reportCaller": false
+    }
+  },
+  "upf": {
+    "version": "1.0.3",
+    "description": "UPF initial local configuration",
+    "pfcp": {
+      "addr": "upf.free5gc.org",
+      "nodeID": "upf.free5gc.org",
+      "retransTimeout": "1s",
+      "maxRetrans": 3
+    },
+    "gtpu": {
+      "forwarder": "gtp5g",
+      "ifList": [
+        {
+          "addr": "upf.free5gc.org",
+          "type": "N3"
+        }
+      ]
+    },
+    "dnnList": [
+      {
+        "dnn": "internet",
+        "cidr": "10.60.0.0/16"
+      },
+      {
+        "dnn": "internet",
+        "cidr": "10.61.0.0/16"
+      }
+    ],
+    "logger": {
+      "enable": true,
+      "level": "info",
+      "reportCaller": false
+    }
+  }
+}

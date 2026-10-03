@@ -28,7 +28,7 @@ def free_registered(profile):
     return evidence
 
 
-def accepted_pfcp(path):
+def accepted_pfcp(path, smf_ip="127.0.0.4", upf_ip=CORE_IP):
     """Read a live Ethernet/loopback PCAP; ignore its unfinished final record."""
     try:
         data = Path(path).read_bytes()
@@ -55,7 +55,7 @@ def accepted_pfcp(path):
         if ip[0]>>4 != 4 or ihl < 20 or ip[9] != 17 or length > len(ip) or length < ihl+16:
             continue
         peers = (socket.inet_ntoa(ip[12:16]), socket.inet_ntoa(ip[16:20]))
-        if peers not in [(CORE_IP, "127.0.0.4"), ("127.0.0.4", CORE_IP)]:
+        if peers not in [(upf_ip, smf_ip), (smf_ip, upf_ip)]:
             continue
         udp = ip[ihl:length]
         if struct.unpack("!HH", udp[:4]) != (8805,8805):
@@ -92,4 +92,23 @@ def open_registered_and_associated(state):
         events = [line for line in path.read_text(errors="replace").splitlines() if "PFCP associated " in line or "PFCP de-associated " in line]
         if not events or "PFCP associated " not in events[-1]:
             return None
-    return accepted_pfcp(state/"pfcp-startup.pcap")
+    profile_path = state/'profile.json'
+    profile = json.loads(profile_path.read_text()) if profile_path.exists() else {}
+    return accepted_pfcp(state/"pfcp-startup.pcap", profile.get('pfcp_smf_ip', '127.0.0.4'), profile.get('pfcp_upf_ip', CORE_IP))
+
+
+def free_registered_and_associated(state, profile):
+    evidence = free_registered(profile)
+    if not evidence or not profile.get('sessions'):
+        return evidence
+    # Exact v4.3.0 processor/association.go logs successful validation, then
+    # logs cancellation/heartbeat failure when that association is retired.
+    path = Path(state)/'core'/'smf-stdout.log'
+    if not path.exists():
+        return None
+    events = [line for line in path.read_text(errors='replace').splitlines()
+              if any(marker in line for marker in ['Received PFCP Association Setup Accepted Response', 'PFCP Heartbeat error:', 'Canceled association to UPF', 'Canceled SMF PFCP context'])]
+    if not events or 'Received PFCP Association Setup Accepted Response' not in events[-1]:
+        return None
+    packet = accepted_pfcp(Path(state)/'pfcp-startup.pcap',profile['pfcp_smf_ip'],profile['pfcp_upf_ip'])
+    return {'registered_nfs':evidence,'accepted_association':packet} if packet else None
