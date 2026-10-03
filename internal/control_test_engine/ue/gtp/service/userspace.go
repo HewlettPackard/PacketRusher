@@ -18,6 +18,7 @@ import (
 
 var makeUserspaceTUN = userspace.NewTUN
 var userspaceRegistry = userspace.DefaultRegistry
+var restoreTunnelMTU = netlink.LinkSetMTU
 
 // userspaceTunnel owns its stable UE endpoint and routing objects; the shared
 // registry owns each N3 socket while any session holds it. Handover changes the

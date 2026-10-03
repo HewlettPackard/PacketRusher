@@ -108,7 +108,6 @@ var (
 	setTunnelMTU       = gtp.SetTunnelMTU
 	setUEEndpointMTU   = netlink.LinkSetMTU
 	makeUEEndpoint     = createUEEndpoint
-	restoreTunnelMTU   = netlink.LinkSetMTU
 	sharedDeviceFor    = func(msg gnbContext.UEMessage) sharedGTPDevice {
 		if msg.GtpDevice == nil {
 			return nil
