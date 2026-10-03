@@ -64,7 +64,7 @@ def cohort(args):
         probe.until(lambda:capture.poll() is None and (state/'preflight-n3.pcap').exists() and (state/'preflight-n3.pcap').stat().st_size>=24,5,'preflight capture')
         process=native.launch_owned([str(binary),'--config',str(state/'config.json'),'--tunnel-backend',args.backend,
              '--report-json',str(state/'report.json'),'multi-ue','-n','1','--numPduSessions','1',
-             '--tunnel','--tunnel-shared=true','--tunnel-vrf=false','--control-socket',str(state/'control.sock')],stdout=log,stderr=subprocess.STDOUT)
+             '--tunnel','--dedicatedGnb=false','--tunnel-vrf=false','--control-socket',str(state/'control.sock')],stdout=log,stderr=subprocess.STDOUT)
         owned.append(process)
         probe.until(lambda:process.poll() is None and (state/'control.sock').is_socket(),20,'UE control socket')
         ready=control('wait')
