@@ -160,7 +160,7 @@ func TestIPv6SessionDiscoverySourcePolicyAndCleanup(t *testing.T) {
 		if mode == config.TunnelVrf {
 			require.Equal(t, []string{"address+fe80::7", "claim+", "address+2001:db8:1234::7", "route+", "route-", "address-2001:db8:1234::7", "address-fe80::7", "claim-"}, events)
 		} else {
-			require.Equal(t, []string{"address+fe80::7", "claim+", "address+2001:db8:1234::7", "rule+", "route+", "route-", "address-2001:db8:1234::7", "rule-", "address-fe80::7", "claim-"}, events)
+			require.Equal(t, []string{"address+fe80::7", "claim+", "rule+", "address+2001:db8:1234::7", "route+", "route-", "address-2001:db8:1234::7", "rule-", "address-fe80::7", "claim-"}, events)
 		}
 	}
 }
@@ -389,4 +389,48 @@ func TestIPv6WithdrawalFailureRetainsSourcePolicyAndClaim(t *testing.T) {
 	require.NoError(t, binding.cleanup())
 	require.False(t, policy)
 	require.False(t, claim)
+}
+
+func TestIPv6StagingPolicyFailureCannotAssignUnisolatedAddress(t *testing.T) {
+	_, session := ipv6TestSession(t)
+	var addressAdds, policyDeletes int
+	policyAddFails, policyDeleteFails := true, true
+	ops := ipv6NetworkOperations{
+		addressAdd: func(netlink.Link, *netlink.Addr) error { addressAdds++; return errors.New("address rejected") },
+		ruleAdd: func(*netlink.Rule) error {
+			if policyAddFails {
+				return errors.New("policy rejected")
+			}
+			return nil
+		},
+		ruleDel: func(*netlink.Rule) error {
+			policyDeletes++
+			if policyDeleteFails {
+				return errors.New("policy busy")
+			}
+			return nil
+		},
+	}
+	binding := &ipv6Binding{link: &netlink.Tuntap{LinkAttrs: netlink.LinkAttrs{Index: 77}}, table: 1000, session: session, ops: ops}
+	packet, _ := hex.DecodeString(raWire)
+	advertisement, err := ipv6.ParseAdvertisement(packet, [8]byte{0, 0, 0, 0, 0, 0, 0, 7})
+	require.NoError(t, err)
+	committed, err := binding.install(advertisement)
+	require.False(t, committed)
+	require.ErrorContains(t, err, "policy rejected")
+	require.Zero(t, addressAdds, "address must not become usable before its source policy exists")
+	require.Empty(t, binding.addresses)
+	require.Empty(t, binding.rules)
+	policyAddFails = false
+	committed, err = binding.install(advertisement)
+	require.False(t, committed)
+	require.ErrorContains(t, err, "address rejected")
+	require.ErrorContains(t, err, "policy busy")
+	require.Equal(t, 1, addressAdds)
+	require.Equal(t, 1, policyDeletes)
+	require.Empty(t, binding.addresses)
+	require.Len(t, binding.rules, 1, "failed policy rollback must remain tracked")
+	policyDeleteFails = false
+	require.NoError(t, binding.cleanup())
+	require.Empty(t, binding.rules)
 }
