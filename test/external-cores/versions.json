@@ -1,0 +1,24 @@
+{
+  "free5gc": {
+    "version": "v4.3.0",
+    "compose_revision": "887b9a139643715190cc481df0654e84256ecbe7",
+    "webconsole_revision": "c40b94b6896109e90e46e59d57ebc5f7fa4c32a2"
+  },
+  "open5gs": {
+    "version": "v2.8.0",
+    "revision": "157f611a530e292e40ec50f9d23f0ef5d4fcd6a6",
+    "freeDiameter_revision": "14725af3ba0edbf9ff61c4e3239ed42464423b2e",
+    "prometheus_revision": "a58ba25bf87a9b1b7c6be4e6f4c62047d620f402"
+  },
+  "images": {
+    "library/ubuntu:24.04": "library/ubuntu:24.04@sha256:a853f94d226358a79c740cfc7bce0c289748f3fe3488d921d038ccd752c61b60",
+    "library/mongo:8.0.16": "library/mongo:8.0.16@sha256:4b58ebcb1dc7a7b4e84cd8ce9098d48764ae4478876898ff9551acf2ac4a6a6d",
+    "free5gc/amf:v4.3.0": "free5gc/amf:v4.3.0@sha256:5035b443fb2d780ba75e576cde6cb7264ba143462945fd84c6b1bb10c0f4eeb2",
+    "free5gc/nrf:v4.3.0": "free5gc/nrf:v4.3.0@sha256:e0c7bf50ca27d2af01ad4bad3f4772f9d07a564b9b280786f9bec9ec0d023751",
+    "free5gc/ausf:v4.3.0": "free5gc/ausf:v4.3.0@sha256:0692a2583bc10700bd4f7e6d02c8a97acaa58acf5a1c707e16a741cfc014f6bd",
+    "free5gc/udm:v4.3.0": "free5gc/udm:v4.3.0@sha256:7bff71f639e1666f315a6059fe99812ff7bfdfceea4cd3b021aa7145cbbe3197",
+    "free5gc/udr:v4.3.0": "free5gc/udr:v4.3.0@sha256:47d9f8be58b32d6284eff42efe68e868e31c21e0f5372744ddbcab87d46c49b8",
+    "free5gc/nssf:v4.3.0": "free5gc/nssf:v4.3.0@sha256:b073ed0b2f918a0d54338a8cedf03b53304d51ad3778f6b5aa739397df37515f",
+    "free5gc/pcf:v4.3.0": "free5gc/pcf:v4.3.0@sha256:035d238081e393294a8c880b1582aab497d75e9a2169a4b65673403c9a27a19c"
+  }
+}
