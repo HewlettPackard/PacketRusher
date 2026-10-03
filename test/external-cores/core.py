@@ -43,6 +43,8 @@ def start(prefix, state, upf_prefix=None):
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, lambda *_: stop.set())
     try:
+        if profile.get('tunnel_backend') == 'ebpf' and not profile.get('native'):
+            subprocess.run(['ethtool','-K','eth0','tx','off','rx','off','tso','off','gso','off','gro','off'],check=True)
         sessions = profile.get('sessions', 1 if profile['core'] == 'open5gs' else 0)
         if profile["core"] == "open5gs":
             names = ["nrf", "udr", "udm", "ausf", "bsf", "pcf", "nssf", "upf", "smf", "amf"]
@@ -84,6 +86,8 @@ def start(prefix, state, upf_prefix=None):
         remaining = set(profile["nf_addresses"])
         evidence = None
         while remaining or not evidence:
+            if capture and capture.poll() is not None:
+                raise RuntimeError('PFCP capture exited during readiness; no packet proof can be accepted')
             if errors:
                 raise RuntimeError(f"DN peer failed: {errors[0]}")
             for name, process in zip(names, processes):

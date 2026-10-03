@@ -25,6 +25,7 @@ class RealProfiles(unittest.TestCase):
             self.assertEqual(smf['plmnList'],[{'mcc':'208','mnc':'93'}])
             self.assertEqual(smf['snssaiInfos'][0]['sNssai']['sd'],'010203')
             self.assertEqual(upf['gtpu']['forwarder'],'gtp5g')
+            self.assertEqual(json.loads((root/'config/uerouting.yaml').read_text())['ueRoutingInfo'],{})
             self.assertFalse(smf['nwInstFqdnEncoding'])
             js=(root/'subscriber.js').read_text()
             self.assertIn('"staticIpAddress": [{"ipv4Addr": "'+UE_IP+'"}]',js)

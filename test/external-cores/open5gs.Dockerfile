@@ -5,7 +5,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     python3 python3-setuptools python3-wheel ninja-build build-essential flex bison git cmake meson \
     libsctp-dev libgnutls28-dev libgcrypt-dev libssl-dev libmongoc-dev libbson-dev libyaml-dev \
     libmicrohttpd-dev libcurl4-gnutls-dev libnghttp2-dev libtins-dev libtalloc-dev libidn-dev \
-    iproute2 tcpdump ca-certificates netbase pkg-config \
+    iproute2 tcpdump ethtool ca-certificates netbase pkg-config \
     && rm -rf /var/lib/apt/lists/*
 RUN git init /src && cd /src && git remote add origin https://github.com/open5gs/open5gs.git \
     && git fetch --depth=1 origin 157f611a530e292e40ec50f9d23f0ef5d4fcd6a6 \

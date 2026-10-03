@@ -11,13 +11,19 @@ permissions:
 
 jobs:
   external-core:
-    name: ${{ matrix.core }} real core
+    name: ${{ matrix.core }} ${{ matrix.backend }} real core
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        core: [free5gc, open5gs]
+        include:
+          - core: free5gc
+            backend: userspace # registration only: no PDU or backend claim
+          - core: open5gs
+            backend: userspace
+          - core: open5gs
+            backend: ebpf
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -28,6 +34,8 @@ jobs:
         run: |
           docker info
           docker compose version
+          kernel=$(uname -r | cut -d- -f1)
+          test "$(printf '%s\n' 6.6 "$kernel" | sort -V | head -n1)" = 6.6
           sudo modprobe sctp
           test ! -d /sys/module/gtp5g
           if [[ ! -c /dev/net/tun ]]; then
@@ -42,12 +50,13 @@ jobs:
       - name: Run real core
         env:
           CORE: ${{ matrix.core }}
-        run: test/external-cores/run.sh "$CORE" "$RUNNER_TEMP/external-$CORE"
+          BACKEND: ${{ matrix.backend }}
+        run: test/external-cores/run.sh "$CORE" "$RUNNER_TEMP/external-$CORE-$BACKEND" "$BACKEND"
       - name: Preserve core and packet evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: external-${{ matrix.core }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/external-${{ matrix.core }}/
+          name: external-${{ matrix.core }}-${{ matrix.backend }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/external-${{ matrix.core }}-${{ matrix.backend }}/
           if-no-files-found: error
           retention-days: 14

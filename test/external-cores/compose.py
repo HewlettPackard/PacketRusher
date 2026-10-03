@@ -5,9 +5,9 @@ import json
 from pathlib import Path
 from prepare import HERE, CORE_IP, RAN_IP, FREE_IPS, generate, write
 
-def compose(core, state):
+def compose(core, state, backend='userspace'):
     state = Path(state).resolve()
-    generate(core, state)
+    generate(core, state, backend=backend)
     versions = json.loads((HERE/'versions.json').read_text())
     repo = HERE.parent.parent
     mount = str(state)+':/artifacts'
@@ -22,11 +22,16 @@ def compose(core, state):
     else:
         services['core'] = {'build':{'context':str(repo),'dockerfile':'test/external-cores/open5gs.Dockerfile'}, 'networks':{'core':{'ipv4_address':CORE_IP}}, 'volumes':[mount], 'devices':['/dev/net/tun:/dev/net/tun'], 'cap_add':['NET_ADMIN'], 'command':['python3','/probe/core.py','--prefix','/opt/open5gs','--state','/artifacts'], 'depends_on':{'db':{'condition':'service_healthy'}}, 'init':True}
         services['ran'].update({'devices':['/dev/net/tun:/dev/net/tun'], 'cap_add':['NET_ADMIN']})
+        if backend == 'ebpf':
+            # Moby's default seccomp profile allows bpf with CAP_BPF. Keep the
+            # default filter; no privileged container or host network/mount.
+            services['ran']['cap_add'].append('BPF')
     write(state/'compose.json',{'services':services,'networks':{'core':{'ipam':{'config':[{'subnet':'172.30.5.0/24'}]}}},'volumes':{'db':{}}})
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--core',choices=['free5gc','open5gs'],required=True)
     parser.add_argument('--state',required=True)
+    parser.add_argument('--backend',choices=['userspace','ebpf'],default='userspace')
     args=parser.parse_args()
-    compose(args.core,args.state)
+    compose(args.core,args.state,args.backend)

@@ -160,6 +160,8 @@ def probe(binary, state):
     log = (state / "packetrusher.log").open("wb")
     capture_log = (state / "capture.log").open("wb")
     try:
+        if backend == 'ebpf' and not profile.get('native'):
+            subprocess.run(['ethtool','-K','eth0','tx','off','rx','off','tso','off','gso','off','gro','off'],check=True)
         if sessions or profile.get("native"):
             until(lambda: (state/"core-ready").exists(), 65, "real NF registration and accepted SMF/UPF PFCP association")
         else:
