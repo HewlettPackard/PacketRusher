@@ -7,6 +7,7 @@ import os
 import signal
 import subprocess
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from prepare import HERE, CORE_IP, RAN_IP, generate
 from probe import until
@@ -30,6 +31,20 @@ def stop_owned(process, timeout=12):
 
 def interrupt(signum, _):
     raise InterruptedError(f"native runner interrupted by signal {signum}")
+
+
+@contextmanager
+def defer_cancellation():
+    # The original cancellation still propagates after finally. Further
+    # signals cannot strand the remaining owned cohorts during bounded reaping.
+    handlers = {signum:signal.getsignal(signum) for signum in (signal.SIGINT,signal.SIGTERM)}
+    for signum in handlers:
+        signal.signal(signum,signal.SIG_IGN)
+    try:
+        yield
+    finally:
+        for signum,handler in handlers.items():
+            signal.signal(signum,handler)
 
 
 def run(core, prefix, binary, state, sessions=None, backend="userspace", upf=None, upf_prefix=None):
@@ -103,16 +118,16 @@ def run(core, prefix, binary, state, sessions=None, backend="userspace", upf=Non
         if status != 0:
             raise subprocess.CalledProcessError(status, probe_process.args)
     finally:
-        # Stop the UE/probe before retiring its endpoint's network namespace.
-        if probe_process:
-            stop_owned(probe_process)
-        if link_owned:
-            # Retire our veth while its owning child namespace still exists.
-            subprocess.run(['ip','link','del','core0'],check=False)
-        for process in reversed(processes):
-            stop_owned(process)
-        for file in files:
-            file.close()
+        with defer_cancellation():
+            # Stop the UE/probe before retiring its endpoint's namespace.
+            if probe_process:
+                stop_owned(probe_process)
+            if link_owned:
+                subprocess.run(['ip','link','del','core0'],check=False)
+            for process in reversed(processes):
+                stop_owned(process)
+            for file in files:
+                file.close()
 
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
