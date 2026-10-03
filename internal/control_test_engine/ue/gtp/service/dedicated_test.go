@@ -53,6 +53,7 @@ func testDedicatedHandover(t *testing.T, mode config.TunnelMode) {
 	oldMaster, oldUp, oldRoute, oldEndpoint, oldLinkDelete := setTunnelMaster, setTunnelUp, replaceTunnelRoute, makeUEEndpoint, deleteTunnelLink
 	oldRuleDel, oldRouteDel := ruleDel, routeDel
 	oldModPDR, oldModFAR, oldModQER := modifyTunnelPDR, modifyTunnelFAR, modifyTunnelQER
+	oldMTU, oldEndpointMTU := setTunnelMTU, setUEEndpointMTU
 	t.Cleanup(func() {
 		addDedicatedLink, deleteDedicatedLink, findTunnelLink = oldAdd, oldDelete, oldFind
 		addTunnelPDR, addTunnelFAR, addTunnelQER = oldPDR, oldFAR, oldQER
@@ -60,7 +61,13 @@ func testDedicatedHandover(t *testing.T, mode config.TunnelMode) {
 		setTunnelMaster, setTunnelUp, replaceTunnelRoute, makeUEEndpoint, deleteTunnelLink = oldMaster, oldUp, oldRoute, oldEndpoint, oldLinkDelete
 		ruleDel, routeDel = oldRuleDel, oldRouteDel
 		modifyTunnelPDR, modifyTunnelFAR, modifyTunnelQER = oldModPDR, oldModFAR, oldModQER
+		setTunnelMTU, setUEEndpointMTU = oldMTU, oldEndpointMTU
 	})
+	setTunnelMTU = func(link netlink.Link, ip netip.Addr, _ int) error {
+		link.Attrs().MTU = 1556 - 100*int(ip.As4()[3])
+		return nil
+	}
+	setUEEndpointMTU = func(netlink.Link, int) error { return nil }
 	var mu sync.Mutex
 	links := map[string]netlink.Link{}
 	var events []string
@@ -148,6 +155,8 @@ func testDedicatedHandover(t *testing.T, mode config.TunnelMode) {
 	}
 	SetupGtpInterface(ue, build("192.0.2.1", 10))
 	endpoint, policy, table, vrf := session.GetUEInterface(), session.GetTunRule(), session.GetTunRoute().Table, session.GetVrfDevice()
+	require.Equal(t, 1456, endpoint.Attrs().MTU)
+	require.Equal(t, endpoint.Attrs().MTU, session.GetTunInterface().Attrs().MTU)
 	reservation := sessionRoutingTables.sessions[session]
 	if mode == config.TunnelTun {
 		require.Equal(t, table, policy.Table)
@@ -157,6 +166,8 @@ func testDedicatedHandover(t *testing.T, mode config.TunnelMode) {
 	SetupGtpInterface(ue, build("192.0.2.2", 20))
 	require.Same(t, reservation, sessionRoutingTables.sessions[session])
 	require.Same(t, endpoint, session.GetUEInterface())
+	require.Equal(t, 1356, endpoint.Attrs().MTU)
+	require.Equal(t, endpoint.Attrs().MTU, session.GetTunInterface().Attrs().MTU)
 	if mode == config.TunnelTun {
 		require.Same(t, policy, session.GetTunRule())
 	} else {
@@ -197,6 +208,23 @@ func testDedicatedHandover(t *testing.T, mode config.TunnelMode) {
 	require.Same(t, reservation, sessionRoutingTables.sessions[session])
 	require.Equal(t, table, session.GetTunRoute().Table)
 	require.Len(t, kernel.routes, 1, "target failure removed or duplicated the source claim")
+	require.Equal(t, 1356, endpoint.Attrs().MTU, "failed route commit must restore source endpoint MTU")
+	require.Equal(t, 1356, source.Attrs().MTU, "source backend must remain unchanged")
+	// An endpoint update failure must not replace the source route or tunnel.
+	routeError = nil
+	setUEEndpointMTU = func(_ netlink.Link, mtu int) error {
+		if mtu != 1356 {
+			return errors.New("target endpoint MTU failed")
+		}
+		return nil
+	}
+	SetupGtpInterface(ue, build("192.0.2.3", 31))
+	require.Same(t, source, session.GetTunInterface())
+	require.Equal(t, 1356, endpoint.Attrs().MTU)
+	require.Equal(t, netip.MustParseAddr("192.0.2.2"), session.GetGnbIp())
+	require.Len(t, kernel.routes, 1)
+	setUEEndpointMTU = func(netlink.Link, int) error { return nil }
+	routeError = errors.New("target route failed")
 	// Failed initial commit does own its reservation and must return it, along
 	// with its newly created policy/VRF and endpoint.
 	freshUE := &context.UEContext{TunnelMode: mode}
@@ -212,6 +240,8 @@ func testDedicatedHandover(t *testing.T, mode config.TunnelMode) {
 	routeError = nil
 	SetupGtpInterface(freshUE, build("192.0.2.4", 10))
 	require.NotEqual(t, table, fresh.GetTunRoute().Table, "recycled TEID collided with the retained table")
+	require.Equal(t, 1156, fresh.GetUEInterface().Attrs().MTU)
+	require.Equal(t, fresh.GetUEInterface().Attrs().MTU, fresh.GetTunInterface().Attrs().MTU)
 	fresh.ReleaseTunnel()
 	session.ReleaseTunnel()
 	require.Empty(t, sessionRoutingTables.sessions)

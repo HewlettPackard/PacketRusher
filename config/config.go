@@ -79,6 +79,7 @@ type Ue struct {
 	Integrity              Integrity  `yaml:"integrity"`
 	Ciphering              Ciphering  `yaml:"ciphering"`
 	TunnelMode             TunnelMode `yaml:"-"`
+	TunnelMTU              int        `yaml:"tunnelmtu"`
 }
 
 type Hplmn struct {
@@ -142,6 +143,10 @@ func readConfig(configPath string) Config {
 	err = decoder.Decode(&cfg)
 	if err != nil {
 		log.Fatal("Could not unmarshal yaml config at \"", configPath, "\". ", err.Error())
+	}
+
+	if cfg.Ue.TunnelMTU < 0 {
+		log.Fatal("ue.tunnelmtu must be zero (automatic) or a positive IPv4 MTU")
 	}
 
 	sqn, err := strconv.ParseInt(cfg.Ue.Sqn, 16, 64)

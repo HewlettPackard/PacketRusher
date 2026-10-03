@@ -105,6 +105,8 @@ var (
 	setTunnelMaster    = netlink.LinkSetMaster
 	setTunnelUp        = netlink.LinkSetUp
 	replaceTunnelRoute = netlink.RouteReplace
+	setTunnelMTU       = gtp.SetTunnelMTU
+	setUEEndpointMTU   = netlink.LinkSetMTU
 	makeUEEndpoint     = createUEEndpoint
 	sharedDeviceFor    = func(msg gnbContext.UEMessage) sharedGTPDevice {
 		if msg.GtpDevice == nil {
@@ -392,6 +394,12 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 			dedicated.endpointOwned = true
 		}
 	}
+	if dedicated != nil {
+		if err := setTunnelMTU(link, ueGnbIp, ue.TunnelMTU); err != nil {
+			failed("[UE][GTP] Unable to configure tunnel MTU: ", err)
+			return
+		}
+	}
 	addrTun := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(ueIp).To4(), Mask: net.CIDRMask(32, 32)}}
 	sameAddressLink := previousLink != nil && previousLink.Attrs().Index == addressLink.Attrs().Index
 	if dedicated != nil && pduSession.GetUEInterface() != nil {
@@ -481,7 +489,12 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		Src:       net.ParseIP(ueIp).To4(),
 		Table:     int(tableId), // table <ECI>
 	}
-	if err := replaceTunnelRoute(route); err != nil {
+	if dedicated != nil {
+		err = replaceRouteWithEndpointMTU(route, addressLink, link.Attrs().MTU, !dedicated.endpointOwned)
+	} else {
+		err = replaceTunnelRoute(route)
+	}
+	if err != nil {
 		failed("[GNB][GTP] Unable to create Kernel Route ", err)
 		return
 	}
@@ -533,6 +546,25 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		log.Info(fmt.Sprintf("[UE][GTP] You can do traffic for this UE using VRF %s, eg:", vrfInf))
 		log.Info(fmt.Sprintf("[UE][GTP] sudo ip vrf exec %s iperf3 -c IPERF_SERVER -p PORT -t 9000", vrfInf))
 	}
+}
+
+// A retained UE endpoint still belongs to the source until the new route commits.
+// Match the target backend's already validated MTU, and restore the source MTU
+// if either the endpoint update or route replacement fails.
+func replaceRouteWithEndpointMTU(route *netlink.Route, endpoint netlink.Link, mtu int, preserve bool) error {
+	previous := endpoint.Attrs().MTU
+	err := setUEEndpointMTU(endpoint, mtu)
+	if err == nil {
+		endpoint.Attrs().MTU = mtu
+		err = replaceTunnelRoute(route)
+	}
+	if err != nil && preserve {
+		if restoreErr := setUEEndpointMTU(endpoint, previous); restoreErr != nil {
+			return errors.Join(err, fmt.Errorf("source endpoint MTU rollback failed: %w", restoreErr))
+		}
+		endpoint.Attrs().MTU = previous
+	}
+	return err
 }
 
 // A replaced route and its policy rule belong to the new binding. On the same

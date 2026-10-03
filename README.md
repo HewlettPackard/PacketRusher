@@ -143,4 +143,6 @@ back to the first gNB after the last one, and handovers advance through that
 same sequence. With `--dedicatedGnb`, ascending MSINs therefore use ascending
 gNB IDs and N2/N3 addresses.
 
+For automatic tunnel MTU calculation and the `ue.tunnelmtu` override, see [Tunnel MTU](docs/tunnel-mtu.md).
+
 For the current codec APIs and validation commands, see [Dependency migration](docs/dependency-migration.md).

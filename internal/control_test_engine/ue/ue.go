@@ -25,6 +25,7 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 	// new UE instance.
 	ue := &context.UEContext{Results: analytics.Current()}
 	scenarioChan := make(chan scenario.ScenarioMessage)
+	ue.TunnelMTU = conf.Ue.TunnelMTU
 
 	// new UE context
 	ue.NewRanUeContext(
