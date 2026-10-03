@@ -1,91 +1,33 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
- * © Copyright 2024 Valentin D'Emmanuele
+ * © Copyright 2023 Hewlett Packard Enterprise Development LP
  */
 package mm_5gs
 
 import (
-	"bytes"
-	"encoding/binary"
-	"fmt"
-	"my5G-RANTester/internal/control_test_engine/ue/context"
-
-	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasMessage"
-	"github.com/free5gc/nas/nasType"
-	"github.com/free5gc/nas/security"
+	"github.com/free5gc/nas/ie"
+	nas "github.com/free5gc/nas/message"
 	log "github.com/sirupsen/logrus"
+	"my5G-RANTester/internal/control_test_engine/ue/context"
 )
 
-func ServiceRequest(ue *context.UEContext) (nasPdu []byte) {
-	m := nas.NewMessage()
-	m.GmmMessage = nas.NewGmmMessage()
-	m.GmmHeader.SetMessageType(nas.MsgTypeServiceRequest)
-
-	serviceRequest := nasMessage.NewServiceRequest(0)
-	serviceRequest.SetExtendedProtocolDiscriminator(nasMessage.Epd5GSMobilityManagementMessage)
-	serviceRequest.SetSecurityHeaderType(nas.SecurityHeaderTypePlainNas)
-	serviceRequest.SetMessageType(nas.MsgTypeServiceRequest)
-	serviceRequest.SetServiceTypeValue(0x01)
-	serviceRequest.SetNasKeySetIdentifiler(uint8(ue.UeSecurity.NgKsi.Ksi))
-	serviceRequest.SetAMFSetID(ue.GetAmfSetId())
-	serviceRequest.SetAMFPointer(ue.GetAmfPointer())
-	serviceRequest.SetTypeOfIdentity(4) // 5G-S-TMSI
-	serviceRequest.SetTMSI5G(ue.GetTMSI5G())
-	serviceRequest.TMSI5GS.SetLen(7)
-
-	serviceRequest.UplinkDataStatus = new(nasType.UplinkDataStatus)
-	serviceRequest.UplinkDataStatus.SetIei(nasMessage.ServiceRequestUplinkDataStatusType)
-	serviceRequest.UplinkDataStatus.SetLen(2)
-
-	pduFlag := uint16(0)
-	for i, pduSession := range ue.PduSession {
-		pduFlag = pduFlag + (boolToUint16(pduSession != nil) << (i + 1))
+func ServiceRequest(ue *context.UEContext) []byte {
+	psi := sessionStatus(ue)
+	msg := &nas.SvcReq{
+		Ngksi: &ue.UeSecurity.NgKsi, SvcType: &ie.SvcType{Value: 1},
+		TMSI5GS:          &ie.MobileId5GS{TypeOfId: ie.IdType_5GS_TMSI, AllOneBits: 15, AMFSetID: ue.GetAmfSetId(), AMFPointer: ue.GetAmfPointer(), TMSI5G: ue.GetTMSI5G()},
+		UplinkDataStatus: &ie.UplinkDataStatus{Psi: psi}, PDUSessStatus: &ie.PDUSessStatus{Psi: psi},
 	}
-
-	serviceRequest.UplinkDataStatus.Buffer = make([]byte, 2)
-	binary.LittleEndian.PutUint16(serviceRequest.UplinkDataStatus.Buffer, pduFlag)
-
-	serviceRequest.PDUSessionStatus = new(nasType.PDUSessionStatus)
-	serviceRequest.PDUSessionStatus.SetIei(nasMessage.ServiceRequestPDUSessionStatusType)
-	serviceRequest.PDUSessionStatus.SetLen(2)
-	serviceRequest.PDUSessionStatus.Buffer = serviceRequest.UplinkDataStatus.Buffer
-
-	m.GmmMessage.ServiceRequest = serviceRequest
-
-	data := new(bytes.Buffer)
-	err := m.GmmMessageEncode(data)
+	b := encodePlain(msg)
+	if b == nil {
+		return nil
+	}
+	encrypted, err := ue.NASSecurityContext().NASEncrypt(nas.DirectionUplink, b)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Errorf("[UE][NAS] Encrypting service container: %v", err)
+		return nil
 	}
-
-	nasPdu = data.Bytes()
-	if err = security.NASEncrypt(ue.UeSecurity.CipheringAlg, ue.UeSecurity.KnasEnc, ue.UeSecurity.ULCount.Get(), security.Bearer3GPP,
-		security.DirectionUplink, nasPdu); err != nil {
-		log.Errorf("[UE][NAS] Error while encrypting NAS Message: %s", err)
-		return
-	}
-	serviceRequest.NASMessageContainer = nasType.NewNASMessageContainer(nasMessage.ServiceRequestNASMessageContainerType)
-	serviceRequest.NASMessageContainer.SetLen(uint16(len(nasPdu)))
-	serviceRequest.NASMessageContainer.Buffer = nasPdu
-
-	serviceRequest.UplinkDataStatus = nil
-	serviceRequest.PDUSessionStatus = nil
-
-	data = new(bytes.Buffer)
-	err = m.GmmMessageEncode(data)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-
-	nasPdu = data.Bytes()
-
-	return
-}
-
-func boolToUint16(b bool) uint16 {
-	if b {
-		return 1
-	}
-	return 0
+	msg.NASMsgCntr = &ie.NASMsgCntr{Contents: encrypted}
+	msg.UplinkDataStatus, msg.PDUSessStatus = nil, nil
+	return encodePlain(msg)
 }

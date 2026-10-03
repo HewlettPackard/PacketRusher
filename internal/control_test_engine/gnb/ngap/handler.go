@@ -16,50 +16,37 @@ import (
 
 	_ "net"
 
-	"github.com/free5gc/aper"
+	"github.com/free5gc/ngap/aper"
 
-	"github.com/free5gc/ngap/ngapConvert"
-	"github.com/free5gc/ngap/ngapType"
+	ngapType "github.com/free5gc/ngap/ie"
+	ngapmsg "github.com/free5gc/ngap/message"
 	log "github.com/sirupsen/logrus"
 	_ "github.com/vishvananda/netlink"
+	ngapConvert "my5G-RANTester/lib/ngap"
 )
 
-func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapmsg.DownlinkNASTransport) {
 
 	var ranUeId int64
 	var amfUeId int64
 	var messageNas []byte
 
-	valueMessage := message.InitiatingMessage.Value.DownlinkNASTransport
+	valueMessage := message
 
-	for _, ies := range valueMessage.ProtocolIEs.List {
+	if valueMessage.AMFUENGAPID != nil {
 
-		switch ies.Id.Value {
+		amfUeId = valueMessage.AMFUENGAPID.Value
 
-		case ngapType.ProtocolIEIDAMFUENGAPID:
-			if ies.Value.AMFUENGAPID == nil {
-				log.Error("[GNB][NGAP] AMF UE NGAP ID is missing")
-				// TODO SEND ERROR INDICATION
-				return
-			}
-			amfUeId = ies.Value.AMFUENGAPID.Value
+	}
+	if valueMessage.RANUENGAPID != nil {
 
-		case ngapType.ProtocolIEIDRANUENGAPID:
-			if ies.Value.RANUENGAPID == nil {
-				log.Error("[GNB][NGAP] RAN UE NGAP ID is missing")
-				// TODO SEND ERROR INDICATION
-				return
-			}
-			ranUeId = ies.Value.RANUENGAPID.Value
+		ranUeId = valueMessage.RANUENGAPID.Value
 
-		case ngapType.ProtocolIEIDNASPDU:
-			if ies.Value.NASPDU == nil {
-				log.Error("[GNB][NGAP] NAS PDU is missing")
-				// TODO SEND ERROR INDICATION
-				return
-			}
-			messageNas = ies.Value.NASPDU.Value
-		}
+	}
+	if valueMessage.NASPDU != nil {
+
+		messageNas = valueMessage.NASPDU.Value
+
 	}
 
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
@@ -72,7 +59,7 @@ func HandlerDownlinkNasTransport(gnb *context.GNBContext, message *ngapType.NGAP
 	sender.SendToUe(ue, messageNas)
 }
 
-func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapmsg.InitialContextSetupRequest) {
 
 	var ranUeId int64
 	var amfUeId int64
@@ -85,114 +72,82 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	var pDUSessionResourceSetupListCxtReq *ngapType.PDUSessionResourceSetupListCxtReq
 	// var securityKey []byte
 
-	valueMessage := message.InitiatingMessage.Value.InitialContextSetupRequest
+	valueMessage := message
 
-	for _, ies := range valueMessage.ProtocolIEs.List {
+	if valueMessage.AMFUENGAPID != nil {
 
-		// TODO MORE FIELDS TO CHECK HERE
-		switch ies.Id.Value {
+		amfUeId = valueMessage.AMFUENGAPID.Value
 
-		case ngapType.ProtocolIEIDAMFUENGAPID:
-			if ies.Value.AMFUENGAPID == nil {
-				log.Error("[GNB][NGAP] AMF UE NGAP ID is missing")
-				// TODO SEND ERROR INDICATION
-				return
-			}
-			amfUeId = ies.Value.AMFUENGAPID.Value
+	}
+	if valueMessage.RANUENGAPID != nil {
 
-		case ngapType.ProtocolIEIDRANUENGAPID:
-			if ies.Value.RANUENGAPID == nil {
-				log.Error("[GNB][NGAP] RAN UE NGAP ID is missing")
-				// TODO SEND ERROR INDICATION
-				return
-			}
-			ranUeId = ies.Value.RANUENGAPID.Value
+		ranUeId = valueMessage.RANUENGAPID.Value
 
-		case ngapType.ProtocolIEIDNASPDU:
-			if ies.Value.NASPDU == nil {
-				// Optional here, so an empty IE is treated as absent rather than
-				// dereferenced: that panic would end the process like a Fatal.
-				log.Info("[GNB][NGAP] NAS PDU is missing")
-				// TODO SEND ERROR INDICATION
-				break
-			}
-			messageNas = ies.Value.NASPDU.Value
+	}
+	if valueMessage.NASPDU != nil {
 
-		case ngapType.ProtocolIEIDSecurityKey:
-			// TODO using for create new security context between GNB and UE.
-			if ies.Value.SecurityKey == nil {
-				log.Error("[GNB][NGAP] Security-Key is missing")
-				return
-			}
-			// securityKey = ies.Value.SecurityKey.Value.Bytes
+		messageNas = valueMessage.NASPDU.Value
 
-		case ngapType.ProtocolIEIDGUAMI:
-			if ies.Value.GUAMI == nil {
-				log.Error("[GNB][NGAP] GUAMI is missing")
-				return
-			}
+	}
+	if valueMessage.SecurityKey != nil {
 
-		case ngapType.ProtocolIEIDAllowedNSSAI:
-			if ies.Value.AllowedNSSAI == nil {
-				log.Error("[GNB][NGAP] Allowed NSSAI is missing")
-				return
-			}
+		// TODO using for create new security context between GNB and UE.
 
-			valor := len(ies.Value.AllowedNSSAI.List)
-			sst = make([]string, valor)
-			sd = make([]string, valor)
+		// securityKey = valueMessage.SecurityKey.Value.Bytes
 
-			// list S-NSSAI(Single – Network Slice Selection Assistance Information).
-			for i, items := range ies.Value.AllowedNSSAI.List {
+	}
+	if valueMessage.GUAMI != nil {
 
-				if items.SNSSAI.SST.Value != nil {
-					sst[i] = fmt.Sprintf("%x", items.SNSSAI.SST.Value)
-				} else {
-					sst[i] = "not informed"
-				}
+	}
+	if valueMessage.AllowedNSSAI != nil {
 
-				if items.SNSSAI.SD != nil {
-					sd[i] = fmt.Sprintf("%x", items.SNSSAI.SD.Value)
-				} else {
-					sd[i] = "not informed"
-				}
-			}
+		valor := len(valueMessage.AllowedNSSAI.List)
+		sst = make([]string, valor)
+		sd = make([]string, valor)
 
-		case ngapType.ProtocolIEIDMobilityRestrictionList:
-			// that field is not mandatory.
-			if ies.Value.MobilityRestrictionList == nil {
-				log.Info("[GNB][NGAP] Mobility Restriction is missing")
-				mobilityRestrict = "not informed"
+		// list S-NSSAI(Single – Network Slice Selection Assistance Information).
+		for i, items := range valueMessage.AllowedNSSAI.List {
+
+			if items.SNSSAI.SST.Value != nil {
+				sst[i] = fmt.Sprintf("%x", items.SNSSAI.SST.Value)
 			} else {
-				mobilityRestrict = fmt.Sprintf("%x", ies.Value.MobilityRestrictionList.ServingPLMN.Value)
+				sst[i] = "not informed"
 			}
 
-		case ngapType.ProtocolIEIDMaskedIMEISV:
-			// that field is not mandatory.
-			// TODO using for mapping UE context
-			if ies.Value.MaskedIMEISV == nil {
-				log.Info("[GNB][NGAP] Masked IMEISV is missing")
-				maskedImeisv = "not informed"
+			if items.SNSSAI.SD != nil {
+				sd[i] = fmt.Sprintf("%x", items.SNSSAI.SD.Value)
 			} else {
-				maskedImeisv = fmt.Sprintf("%x", ies.Value.MaskedIMEISV.Value.Bytes)
+				sd[i] = "not informed"
 			}
-
-		case ngapType.ProtocolIEIDUESecurityCapabilities:
-			// TODO using for create new security context between UE and GNB.
-			// TODO algorithms for create new security context between UE and GNB.
-			if ies.Value.UESecurityCapabilities == nil {
-				log.Error("[GNB][NGAP] UE Security Capabilities is missing")
-				return
-			}
-			ueSecurityCapabilities = ies.Value.UESecurityCapabilities
-
-		case ngapType.ProtocolIEIDPDUSessionResourceSetupListCxtReq:
-			if ies.Value.PDUSessionResourceSetupListCxtReq == nil {
-				log.Error("[GNB][NGAP] PDUSessionResourceSetupListCxtReq is missing")
-				return
-			}
-			pDUSessionResourceSetupListCxtReq = ies.Value.PDUSessionResourceSetupListCxtReq
 		}
+
+	}
+	if valueMessage.MobilityRestrictionList != nil {
+
+		// that field is not mandatory.
+
+		mobilityRestrict = fmt.Sprintf("%x", valueMessage.MobilityRestrictionList.ServingPLMN.Value)
+
+	}
+	if valueMessage.MaskedIMEISV != nil {
+
+		// that field is not mandatory.
+		// TODO using for mapping UE context
+
+		maskedImeisv = fmt.Sprintf("%x", valueMessage.MaskedIMEISV.Value.Bytes)
+
+	}
+	if valueMessage.UESecurityCapabilities != nil {
+
+		// TODO using for create new security context between UE and GNB.
+		// TODO algorithms for create new security context between UE and GNB.
+
+		ueSecurityCapabilities = valueMessage.UESecurityCapabilities
+
+	}
+	if valueMessage.PDUSessionResourceSetupListCxtReq != nil {
+
+		pDUSessionResourceSetupListCxtReq = valueMessage.PDUSessionResourceSetupListCxtReq
 
 	}
 
@@ -229,7 +184,7 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 
 			pDUSessionResourceSetupRequestTransferBytes := pDUSessionResourceSetupItemCtxReq.PDUSessionResourceSetupRequestTransfer
 			pDUSessionResourceSetupRequestTransfer := &ngapType.PDUSessionResourceSetupRequestTransfer{}
-			err := aper.UnmarshalWithParams(pDUSessionResourceSetupRequestTransferBytes, pDUSessionResourceSetupRequestTransfer, "valueExt")
+			err := ngapConvert.Unmarshal(pDUSessionResourceSetupRequestTransferBytes, pDUSessionResourceSetupRequestTransfer)
 			if err != nil {
 				log.Error("[GNB] Unable to unmarshall PDUSessionResourceSetupRequestTransfer: ", err)
 				continue
@@ -239,12 +194,16 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 			var upfIp string
 			var teidUplink aper.OctetString
 			for _, ie := range pDUSessionResourceSetupRequestTransfer.ProtocolIEs.List {
-				switch ie.Id.Value {
+				switch ie.Id().Value {
 
 				case ngapType.ProtocolIEIDULNGUUPTNLInformation:
-					uLNGUUPTNLInformation := ie.Value.ULNGUUPTNLInformation
+					uLNGUUPTNLInformation := ie.ULNGUUPTNLInformation
 
-					gtpTunnel = uLNGUUPTNLInformation.GTPTunnel
+					gtpTunnel, err = ngapConvert.Tunnel(uLNGUUPTNLInformation)
+					if err != nil {
+						log.Error("[GNB][NGAP] Invalid uplink tunnel: ", err)
+						continue
+					}
 					upfIp, _ = ngapConvert.IPAddressToString(gtpTunnel.TransportLayerAddress)
 					teidUplink = gtpTunnel.GTPTEID.Value
 				}
@@ -275,44 +234,28 @@ func HandlerInitialContextSetupRequest(gnb *context.GNBContext, message *ngapTyp
 	trigger.SendInitialContextSetupResponse(ue, gnb)
 }
 
-func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *ngapmsg.PDUSessionResourceSetupRequest) {
 
 	var ranUeId int64
 	var amfUeId int64
 	var pDUSessionResourceSetupList *ngapType.PDUSessionResourceSetupListSUReq
 
-	valueMessage := message.InitiatingMessage.Value.PDUSessionResourceSetupRequest
+	valueMessage := message
 
-	for _, ies := range valueMessage.ProtocolIEs.List {
+	if valueMessage.AMFUENGAPID != nil {
 
-		// TODO MORE FIELDS TO CHECK HERE
-		switch ies.Id.Value {
+		amfUeId = valueMessage.AMFUENGAPID.Value
 
-		case ngapType.ProtocolIEIDAMFUENGAPID:
+	}
+	if valueMessage.RANUENGAPID != nil {
 
-			if ies.Value.AMFUENGAPID == nil {
-				log.Error("[GNB][NGAP] AMF UE ID is missing")
-				return
-			}
-			amfUeId = ies.Value.AMFUENGAPID.Value
+		ranUeId = valueMessage.RANUENGAPID.Value
 
-		case ngapType.ProtocolIEIDRANUENGAPID:
+	}
+	if valueMessage.PDUSessionResourceSetupListSUReq != nil {
 
-			if ies.Value.RANUENGAPID == nil {
-				log.Error("[GNB][NGAP] RAN UE ID is missing")
-				// TODO SEND ERROR INDICATION
-				return
-			}
-			ranUeId = ies.Value.RANUENGAPID.Value
+		pDUSessionResourceSetupList = valueMessage.PDUSessionResourceSetupListSUReq
 
-		case ngapType.ProtocolIEIDPDUSessionResourceSetupListSUReq:
-
-			if ies.Value.PDUSessionResourceSetupListSUReq == nil {
-				log.Error("[GNB][NGAP] PDU SESSION RESOURCE SETUP LIST SU REQ is missing")
-				return
-			}
-			pDUSessionResourceSetupList = ies.Value.PDUSessionResourceSetupListSUReq
-		}
 	}
 
 	// The loop above only catches the IE present but empty; an absent one leaves
@@ -370,26 +313,34 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 
 			pdu := &ngapType.PDUSessionResourceSetupRequestTransfer{}
 
-			err := aper.UnmarshalWithParams(item.PDUSessionResourceSetupRequestTransfer, pdu, "valueExt")
+			err := ngapConvert.Unmarshal(item.PDUSessionResourceSetupRequestTransfer, pdu)
 			if err == nil {
 				for _, ies := range pdu.ProtocolIEs.List {
 
-					switch ies.Id.Value {
+					switch ies.Id().Value {
 
 					case ngapType.ProtocolIEIDULNGUUPTNLInformation:
-						ulTeid = binary.BigEndian.Uint32(ies.Value.ULNGUUPTNLInformation.GTPTunnel.GTPTEID.Value)
-						upfAddress = ies.Value.ULNGUUPTNLInformation.GTPTunnel.TransportLayerAddress.Value.Bytes
+						tunnel, err := ngapConvert.Tunnel(ies.ULNGUUPTNLInformation)
+						if err != nil {
+							log.Error("[GNB][NGAP] Invalid uplink tunnel: ", err)
+							continue
+						}
+						ulTeid = binary.BigEndian.Uint32(tunnel.GTPTEID.Value)
+						upfAddress = tunnel.TransportLayerAddress.Value.Bytes
 
 					case ngapType.ProtocolIEIDQosFlowSetupRequestList:
-						for _, itemsQos := range ies.Value.QosFlowSetupRequestList.List {
+						for _, itemsQos := range ies.QosFlowSetupRequestList.List {
 							qosId = itemsQos.QosFlowIdentifier.Value
 							// QoS Characteristics is a CHOICE: a dynamic 5QI leaves NonDynamic5QI
 							// nil and carries its 5QI only optionally.
 							qosCharacteristics := itemsQos.QosFlowLevelQosParameters.QosCharacteristics
-							if qosCharacteristics.NonDynamic5QI != nil {
-								fiveQi = qosCharacteristics.NonDynamic5QI.FiveQI.Value
-							} else if qosCharacteristics.Dynamic5QI != nil && qosCharacteristics.Dynamic5QI.FiveQI != nil {
-								fiveQi = qosCharacteristics.Dynamic5QI.FiveQI.Value
+							switch descriptor := qosCharacteristics.Choice.(type) {
+							case *ngapType.NonDynamic5QIDescriptor:
+								fiveQi = descriptor.FiveQI.Value
+							case *ngapType.Dynamic5QIDescriptor:
+								if descriptor.FiveQI != nil {
+									fiveQi = descriptor.FiveQI.Value
+								}
 							}
 							priArp = itemsQos.QosFlowLevelQosParameters.AllocationAndRetentionPriority.PriorityLevelARP.Value
 						}
@@ -397,7 +348,7 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 					case ngapType.ProtocolIEIDPDUSessionAggregateMaximumBitRate:
 
 					case ngapType.ProtocolIEIDPDUSessionType:
-						pduSType = uint64(ies.Value.PDUSessionType.Value)
+						pduSType = uint64(ies.PDUSessionType.Value)
 
 					case ngapType.ProtocolIEIDSecurityIndication:
 
@@ -480,58 +431,37 @@ func HandlerPduSessionResourceSetupRequest(gnb *context.GNBContext, message *nga
 	trigger.SendPduSessionResourceSetupResponse(configuredPduSessions, ue, gnb)
 }
 
-func HandlerPduSessionReleaseCommand(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
-	valueMessage := message.InitiatingMessage.Value.PDUSessionResourceReleaseCommand
+func HandlerPduSessionReleaseCommand(gnb *context.GNBContext, message *ngapmsg.PDUSessionResourceReleaseCommand) {
+	valueMessage := message
 
 	var amfUeId int64
 	var ranUeId int64
 	var messageNas aper.OctetString
-	var pduSessionIds []ngapType.PDUSessionID
+	var pduSessionIds []*ngapType.PDUSessionID
 
-	for _, ies := range valueMessage.ProtocolIEs.List {
+	if valueMessage.AMFUENGAPID != nil {
 
-		// TODO MORE FIELDS TO CHECK HERE
-		switch ies.Id.Value {
+		amfUeId = valueMessage.AMFUENGAPID.Value
 
-		case ngapType.ProtocolIEIDAMFUENGAPID:
+	}
+	if valueMessage.RANUENGAPID != nil {
 
-			if ies.Value.AMFUENGAPID == nil {
-				log.Error("[GNB][NGAP] AMF UE ID is missing")
-				return
-			}
-			amfUeId = ies.Value.AMFUENGAPID.Value
+		ranUeId = valueMessage.RANUENGAPID.Value
 
-		case ngapType.ProtocolIEIDRANUENGAPID:
+	}
+	if valueMessage.NASPDU != nil {
 
-			if ies.Value.RANUENGAPID == nil {
-				log.Error("[GNB][NGAP] RAN UE ID is missing")
-				// TODO SEND ERROR INDICATION
-				return
-			}
-			ranUeId = ies.Value.RANUENGAPID.Value
+		messageNas = valueMessage.NASPDU.Value
 
-		case ngapType.ProtocolIEIDNASPDU:
-			if ies.Value.NASPDU == nil {
-				// Optional here, so an empty IE is treated as absent rather than
-				// dereferenced: that panic would end the process like a Fatal.
-				log.Info("[GNB][NGAP] NAS PDU is missing")
-				// TODO SEND ERROR INDICATION
-				break
-			}
-			messageNas = ies.Value.NASPDU.Value
+	}
+	if valueMessage.PDUSessionResourceToReleaseListRelCmd != nil {
 
-		case ngapType.ProtocolIEIDPDUSessionResourceToReleaseListRelCmd:
+		pDUSessionRessourceToReleaseListRelCmd := valueMessage.PDUSessionResourceToReleaseListRelCmd
 
-			if ies.Value.PDUSessionResourceToReleaseListRelCmd == nil {
-				log.Error("[GNB][NGAP] PDU SESSION RESOURCE SETUP LIST SU REQ is missing")
-				return
-			}
-			pDUSessionRessourceToReleaseListRelCmd := ies.Value.PDUSessionResourceToReleaseListRelCmd
-
-			for _, pDUSessionRessourceToReleaseItemRelCmd := range pDUSessionRessourceToReleaseListRelCmd.List {
-				pduSessionIds = append(pduSessionIds, pDUSessionRessourceToReleaseItemRelCmd.PDUSessionID)
-			}
+		for _, pDUSessionRessourceToReleaseItemRelCmd := range pDUSessionRessourceToReleaseListRelCmd.List {
+			pduSessionIds = append(pduSessionIds, pDUSessionRessourceToReleaseItemRelCmd.PDUSessionID)
 		}
+
 	}
 
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
@@ -555,7 +485,7 @@ func HandlerPduSessionReleaseCommand(gnb *context.GNBContext, message *ngapType.
 	sender.SendToUe(ue, messageNas)
 }
 
-func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapmsg.NGSetupResponse) {
 
 	err := false
 	var plmn string
@@ -563,95 +493,82 @@ func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, messag
 	// check information about AMF and add in AMF context. A re-established association
 	// runs NG Setup again, so start from empty lists rather than appending.
 	amf.ResetSupported()
-	valueMessage := message.SuccessfulOutcome.Value.NGSetupResponse
+	valueMessage := message
 
-	for _, ies := range valueMessage.ProtocolIEs.List {
+	if valueMessage.AMFName != nil {
 
-		switch ies.Id.Value {
+		amfName := valueMessage.AMFName.Value
+		amf.SetAmfName(string(amfName))
 
-		case ngapType.ProtocolIEIDAMFName:
-			if ies.Value.AMFName == nil {
-				// TODO error indication. This field is mandatory critically reject
-				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,AMF Name is missing")
+	}
+	if valueMessage.ServedGUAMIList != nil {
+
+		if valueMessage.ServedGUAMIList.List == nil {
+			// TODO error indication. This field is mandatory critically reject
+			log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,Serverd Guami list is missing")
+			log.Info("[GNB][NGAP] AMF is inactive")
+			err = true
+		}
+		for _, items := range valueMessage.ServedGUAMIList.List {
+			if items.GUAMI.AMFRegionID.Value.Bytes == nil {
+				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,Served Guami list is inappropriate")
+				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, AMFRegionId is missing")
 				log.Info("[GNB][NGAP] AMF is inactive")
 				err = true
-			} else {
-				amfName := ies.Value.AMFName.Value
-				amf.SetAmfName(amfName)
 			}
-
-		case ngapType.ProtocolIEIDServedGUAMIList:
-			if ies.Value.ServedGUAMIList.List == nil {
-				// TODO error indication. This field is mandatory critically reject
-				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,Serverd Guami list is missing")
+			if items.GUAMI.AMFPointer.Value.Bytes == nil {
+				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,Served Guami list is inappropriate")
+				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, AMFPointer is missing")
 				log.Info("[GNB][NGAP] AMF is inactive")
 				err = true
 			}
-			for _, items := range ies.Value.ServedGUAMIList.List {
-				if items.GUAMI.AMFRegionID.Value.Bytes == nil {
-					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,Served Guami list is inappropriate")
-					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, AMFRegionId is missing")
-					log.Info("[GNB][NGAP] AMF is inactive")
-					err = true
-				}
-				if items.GUAMI.AMFPointer.Value.Bytes == nil {
-					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,Served Guami list is inappropriate")
-					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, AMFPointer is missing")
-					log.Info("[GNB][NGAP] AMF is inactive")
-					err = true
-				}
-				if items.GUAMI.AMFSetID.Value.Bytes == nil {
-					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,Served Guami list is inappropriate")
-					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, AMFSetId is missing")
-					log.Info("[GNB][NGAP] AMF is inactive")
-					err = true
-				}
+			if items.GUAMI.AMFSetID.Value.Bytes == nil {
+				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE,Served Guami list is inappropriate")
+				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, AMFSetId is missing")
+				log.Info("[GNB][NGAP] AMF is inactive")
+				err = true
 			}
+		}
 
-		case ngapType.ProtocolIEIDRelativeAMFCapacity:
-			if ies.Value.RelativeAMFCapacity != nil {
-				amfCapacity := ies.Value.RelativeAMFCapacity.Value
-				amf.SetAmfCapacity(amfCapacity)
-			}
+	}
+	if valueMessage.RelativeAMFCapacity != nil {
 
-		case ngapType.ProtocolIEIDPLMNSupportList:
+		amfCapacity := valueMessage.RelativeAMFCapacity.Value
+		amf.SetAmfCapacity(amfCapacity)
 
-			if ies.Value.PLMNSupportList == nil {
-				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, PLMN Support list is missing")
+	}
+	if valueMessage.PLMNSupportList != nil {
+
+		for _, items := range valueMessage.PLMNSupportList.List {
+
+			plmn = fmt.Sprintf("%x", items.PLMNIdentity.Value)
+			amf.AddedPlmn(plmn)
+
+			if items.SliceSupportList.List == nil {
+				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, PLMN Support list is inappropriate")
+				log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, Slice Support list is missing")
 				err = true
 			}
 
-			for _, items := range ies.Value.PLMNSupportList.List {
+			for _, slice := range items.SliceSupportList.List {
 
-				plmn = fmt.Sprintf("%x", items.PLMNIdentity.Value)
-				amf.AddedPlmn(plmn)
+				var sd string
+				var sst string
 
-				if items.SliceSupportList.List == nil {
-					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, PLMN Support list is inappropriate")
-					log.Info("[GNB][NGAP] Error in NG SETUP RESPONSE, Slice Support list is missing")
-					err = true
+				if slice.SNSSAI.SST.Value != nil {
+					sst = fmt.Sprintf("%x", slice.SNSSAI.SST.Value)
+				} else {
+					sst = "was not informed"
 				}
 
-				for _, slice := range items.SliceSupportList.List {
-
-					var sd string
-					var sst string
-
-					if slice.SNSSAI.SST.Value != nil {
-						sst = fmt.Sprintf("%x", slice.SNSSAI.SST.Value)
-					} else {
-						sst = "was not informed"
-					}
-
-					if slice.SNSSAI.SD != nil {
-						sd = fmt.Sprintf("%x", slice.SNSSAI.SD.Value)
-					} else {
-						sd = "was not informed"
-					}
-
-					// update amf slice supported
-					amf.AddedSlice(sst, sd)
+				if slice.SNSSAI.SD != nil {
+					sd = fmt.Sprintf("%x", slice.SNSSAI.SD.Value)
+				} else {
+					sd = "was not informed"
 				}
+
+				// update amf slice supported
+				amf.AddedSlice(sst, sd)
 			}
 		}
 
@@ -677,44 +594,42 @@ func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, messag
 
 }
 
-func HandlerNgSetupFailure(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+func HandlerNgSetupFailure(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapmsg.NGSetupFailure) {
 
 	// check information about AMF and add in AMF context.
-	valueMessage := message.UnsuccessfulOutcome.Value.NGSetupFailure
+	valueMessage := message
 
-	for _, ies := range valueMessage.ProtocolIEs.List {
+	if valueMessage.Cause != nil {
 
-		switch ies.Id.Value {
+		log.Error("[GNB][NGAP] Received failure from AMF: ", causeToString(valueMessage.Cause))
 
-		case ngapType.ProtocolIEIDCause:
-			log.Error("[GNB][NGAP] Received failure from AMF: ", causeToString(ies.Value.Cause))
+	}
+	if valueMessage.TimeToWait != nil {
 
-		case ngapType.ProtocolIEIDTimeToWait:
+		switch valueMessage.TimeToWait.Value {
 
-			switch ies.Value.TimeToWait.Value {
-
-			case ngapType.TimeToWaitPresentV1s:
-			case ngapType.TimeToWaitPresentV2s:
-			case ngapType.TimeToWaitPresentV5s:
-			case ngapType.TimeToWaitPresentV10s:
-			case ngapType.TimeToWaitPresentV20s:
-			case ngapType.TimeToWaitPresentV60s:
-
-			}
-
-		case ngapType.ProtocolIEIDCriticalityDiagnostics:
-
-			// TODO treatment error
-
-			// ies.Value.CriticalityDiagnostics
-			// errors.IECriticality.Value
-			// ngapType.CriticalityPresentReject:
-			// ngapType.CriticalityPresentIgnore:
-			// ngapType.CriticalityPresentNotify:
-			// ngapType.TypeOfErrorPresentNotUnderstood:
-			// ngapType.TypeOfErrorPresentMissing:
+		case ngapType.TimeToWaitPresentV1s:
+		case ngapType.TimeToWaitPresentV2s:
+		case ngapType.TimeToWaitPresentV5s:
+		case ngapType.TimeToWaitPresentV10s:
+		case ngapType.TimeToWaitPresentV20s:
+		case ngapType.TimeToWaitPresentV60s:
 
 		}
+
+	}
+	if valueMessage.CriticalityDiagnostics != nil {
+
+		// TODO treatment error
+
+		// valueMessage.CriticalityDiagnostics
+		// errors.IECriticality.Value
+		// ngapType.CriticalityPresentReject:
+		// ngapType.CriticalityPresentIgnore:
+		// ngapType.CriticalityPresentNotify:
+		// ngapType.TypeOfErrorPresentNotUnderstood:
+		// ngapType.TypeOfErrorPresentMissing:
+
 	}
 
 	// redundant but useful for information about code.
@@ -723,34 +638,40 @@ func HandlerNgSetupFailure(amf *context.GNBAmf, gnb *context.GNBContext, message
 	log.Info("[GNB][NGAP] AMF is inactive")
 }
 
-func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapmsg.UEContextReleaseCommand) {
 
-	valueMessage := message.InitiatingMessage.Value.UEContextReleaseCommand
+	valueMessage := message
 
 	var cause *ngapType.Cause
 	var ue_ids *ngapType.UENGAPIDs
 
-	for _, ies := range valueMessage.ProtocolIEs.List {
+	if valueMessage.UENGAPIDs != nil {
 
-		switch ies.Id.Value {
+		ue_ids = valueMessage.UENGAPIDs
 
-		case ngapType.ProtocolIEIDUENGAPIDs:
-			ue_ids = ies.Value.UENGAPIDs
+	}
+	if valueMessage.Cause != nil {
 
-		case ngapType.ProtocolIEIDCause:
-			cause = ies.Value.Cause
-		}
+		cause = valueMessage.Cause
+
 	}
 
 	// UE NGAP IDs is a CHOICE (TS 38.413 9.2.2.5): the AMF may identify the UE
 	// by the pair or by its AMF UE NGAP ID alone.
 	var ue *context.GNBUe
 	var err error
-	switch {
-	case ue_ids != nil && ue_ids.UENGAPIDPair != nil:
-		ue, err = gnb.GetGnbUe(ue_ids.UENGAPIDPair.RANUENGAPID.Value)
-	case ue_ids != nil && ue_ids.AMFUENGAPID != nil:
-		ue, err = gnb.GetGnbUeByAmfUeId(ue_ids.AMFUENGAPID.Value)
+	if ue_ids == nil {
+		log.Warn("[GNB][NGAP] UE Context Release Command missing UE ID")
+		return
+	}
+	switch identifier := ue_ids.Choice.(type) {
+	case *ngapType.UENGAPIDPair:
+		if identifier.RANUENGAPID == nil {
+			return
+		}
+		ue, err = gnb.GetGnbUe(identifier.RANUENGAPID.Value)
+	case *ngapType.AMFUENGAPID:
+		ue, err = gnb.GetGnbUeByAmfUeId(identifier.Value)
 	default:
 		log.Warn("[GNB][NGAP] UE Context Release Command missing UE ID")
 		return
@@ -769,7 +690,7 @@ func HandlerUeContextReleaseCommand(gnb *context.GNBContext, message *ngapType.N
 	gnb.DeleteGnBUe(ue)
 }
 
-func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapmsg.AMFConfigurationUpdate) {
 	log.Debugf("Before Update:")
 	for oldAmf := range gnb.IterGnbAmf() {
 		tnla := oldAmf.GetTNLA()
@@ -781,104 +702,113 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 	var amfCapacity int64
 	var amfRegionId, amfSetId, amfPointer aper.BitString
 
-	valueMessage := message.InitiatingMessage.Value.AMFConfigurationUpdate
-	for _, ie := range valueMessage.ProtocolIEs.List {
-		switch ie.Id.Value {
+	valueMessage := message
+	if valueMessage.AMFName != nil {
 
-		case ngapType.ProtocolIEIDAMFName:
-			amfName = ie.Value.AMFName.Value
+		amfName = string(valueMessage.AMFName.Value)
 
-		case ngapType.ProtocolIEIDServedGUAMIList:
-			for _, servedGuamiItem := range ie.Value.ServedGUAMIList.List {
-				amfRegionId = servedGuamiItem.GUAMI.AMFRegionID.Value
-				amfSetId = servedGuamiItem.GUAMI.AMFSetID.Value
-				amfPointer = servedGuamiItem.GUAMI.AMFPointer.Value
-			}
-		case ngapType.ProtocolIEIDRelativeAMFCapacity:
-			amfCapacity = ie.Value.RelativeAMFCapacity.Value
+	}
+	if valueMessage.ServedGUAMIList != nil {
 
-		case ngapType.ProtocolIEIDAMFTNLAssociationToAddList:
-			toAddList := ie.Value.AMFTNLAssociationToAddList
-			for _, toAddItem := range toAddList.List {
-				ipv4String, _ := ngapConvert.IPAddressToString(*toAddItem.AMFTNLAssociationAddress.EndpointIPAddress)
-				if ipv4String == "" {
-					// ignore AMF that does not have IPv4 address
-					continue
-				}
-				ipv4Port := netip.AddrPortFrom(netip.MustParseAddr(ipv4String), 38412) // with default sctp port
-
-				if oldAmf := gnb.FindGnbAmfByIpPort(ipv4Port); oldAmf != nil {
-					log.Info("[GNB] SCTP/NGAP service exists")
-					continue
-				}
-
-				newAmf := gnb.NewGnBAmf(ipv4Port)
-				newAmf.SetAmfName(amfName)
-				newAmf.SetAmfCapacity(amfCapacity)
-				newAmf.SetRegionId(amfRegionId)
-				newAmf.SetSetId(amfSetId)
-				newAmf.SetPointer(amfPointer)
-				newAmf.SetTNLAUsage(toAddItem.TNLAssociationUsage.Value)
-				newAmf.SetTNLAWeight(toAddItem.TNLAddressWeightFactor.Value)
-
-				// start communication with AMF(SCTP).
-				if err := InitConn(newAmf, gnb); err != nil {
-					log.Fatal("Error in", err)
-				} else {
-					log.Info("[GNB] SCTP/NGAP service is running")
-					// wg.Add(1)
-				}
-
-				trigger.SendNgSetupRequest(gnb, newAmf)
-
-			}
-
-		case ngapType.ProtocolIEIDAMFTNLAssociationToRemoveList:
-			toRemoveList := ie.Value.AMFTNLAssociationToRemoveList
-			for _, toRemoveItem := range toRemoveList.List {
-				ipv4String, _ := ngapConvert.IPAddressToString(*toRemoveItem.AMFTNLAssociationAddress.EndpointIPAddress)
-				if ipv4String == "" {
-					// ignore AMF that does not have IPv4 address
-					continue
-				}
-				ipv4Port := netip.AddrPortFrom(netip.MustParseAddr(ipv4String), 38412) // with default sctp port
-
-				oldAmf := gnb.FindGnbAmfByIpPort(ipv4Port)
-				if oldAmf == nil {
-					continue
-				}
-
-				log.Info("[GNB][AMF] Remove AMF:", oldAmf.GetAmfName(), " IP:", oldAmf.GetAmfIpPort().Addr())
-				gnb.RemoveGnbAmf(oldAmf) // Close SCTP Conntection
-			}
-
-		case ngapType.ProtocolIEIDAMFTNLAssociationToUpdateList:
-			toUpdateList := ie.Value.AMFTNLAssociationToUpdateList
-			for _, toUpdateItem := range toUpdateList.List {
-				ipv4String, _ := ngapConvert.IPAddressToString(*toUpdateItem.AMFTNLAssociationAddress.EndpointIPAddress)
-				if ipv4String == "" {
-					// ignore AMF that does not have IPv4 address
-					continue
-				}
-				ipv4Port := netip.AddrPortFrom(netip.MustParseAddr(ipv4String), 38412) // with default sctp port
-
-				oldAmf := gnb.FindGnbAmfByIpPort(ipv4Port)
-				if oldAmf == nil {
-					continue
-				}
-
-				oldAmf.SetAmfName(amfName)
-				oldAmf.SetAmfCapacity(amfCapacity)
-				oldAmf.SetRegionId(amfRegionId)
-				oldAmf.SetSetId(amfSetId)
-				oldAmf.SetPointer(amfPointer)
-
-				oldAmf.SetTNLAUsage(toUpdateItem.TNLAssociationUsage.Value)
-				oldAmf.SetTNLAWeight(toUpdateItem.TNLAddressWeightFactor.Value)
-			}
-
-			// default:
+		for _, servedGuamiItem := range valueMessage.ServedGUAMIList.List {
+			amfRegionId = servedGuamiItem.GUAMI.AMFRegionID.Value
+			amfSetId = servedGuamiItem.GUAMI.AMFSetID.Value
+			amfPointer = servedGuamiItem.GUAMI.AMFPointer.Value
 		}
+
+	}
+	if valueMessage.RelativeAMFCapacity != nil {
+
+		amfCapacity = valueMessage.RelativeAMFCapacity.Value
+
+	}
+	if valueMessage.AMFTNLAssociationToAddList != nil {
+
+		toAddList := valueMessage.AMFTNLAssociationToAddList
+		for _, toAddItem := range toAddList.List {
+			ipv4String, _ := ngapConvert.IPAddressToString(ngapConvert.CPAddress(toAddItem.AMFTNLAssociationAddress))
+			if ipv4String == "" {
+				// ignore AMF that does not have IPv4 address
+				continue
+			}
+			ipv4Port := netip.AddrPortFrom(netip.MustParseAddr(ipv4String), 38412) // with default sctp port
+
+			if oldAmf := gnb.FindGnbAmfByIpPort(ipv4Port); oldAmf != nil {
+				log.Info("[GNB] SCTP/NGAP service exists")
+				continue
+			}
+
+			newAmf := gnb.NewGnBAmf(ipv4Port)
+			newAmf.SetAmfName(amfName)
+			newAmf.SetAmfCapacity(amfCapacity)
+			newAmf.SetRegionId(amfRegionId)
+			newAmf.SetSetId(amfSetId)
+			newAmf.SetPointer(amfPointer)
+			newAmf.SetTNLAUsage(toAddItem.TNLAssociationUsage.Value)
+			newAmf.SetTNLAWeight(toAddItem.TNLAddressWeightFactor.Value)
+
+			// start communication with AMF(SCTP).
+			if err := InitConn(newAmf, gnb); err != nil {
+				log.Fatal("Error in", err)
+			} else {
+				log.Info("[GNB] SCTP/NGAP service is running")
+				// wg.Add(1)
+			}
+
+			trigger.SendNgSetupRequest(gnb, newAmf)
+
+		}
+
+	}
+	if valueMessage.AMFTNLAssociationToRemoveList != nil {
+
+		toRemoveList := valueMessage.AMFTNLAssociationToRemoveList
+		for _, toRemoveItem := range toRemoveList.List {
+			ipv4String, _ := ngapConvert.IPAddressToString(ngapConvert.CPAddress(toRemoveItem.AMFTNLAssociationAddress))
+			if ipv4String == "" {
+				// ignore AMF that does not have IPv4 address
+				continue
+			}
+			ipv4Port := netip.AddrPortFrom(netip.MustParseAddr(ipv4String), 38412) // with default sctp port
+
+			oldAmf := gnb.FindGnbAmfByIpPort(ipv4Port)
+			if oldAmf == nil {
+				continue
+			}
+
+			log.Info("[GNB][AMF] Remove AMF:", oldAmf.GetAmfName(), " IP:", oldAmf.GetAmfIpPort().Addr())
+			gnb.RemoveGnbAmf(oldAmf) // Close SCTP Conntection
+		}
+
+	}
+	if valueMessage.AMFTNLAssociationToUpdateList != nil {
+
+		toUpdateList := valueMessage.AMFTNLAssociationToUpdateList
+		for _, toUpdateItem := range toUpdateList.List {
+			ipv4String, _ := ngapConvert.IPAddressToString(ngapConvert.CPAddress(toUpdateItem.AMFTNLAssociationAddress))
+			if ipv4String == "" {
+				// ignore AMF that does not have IPv4 address
+				continue
+			}
+			ipv4Port := netip.AddrPortFrom(netip.MustParseAddr(ipv4String), 38412) // with default sctp port
+
+			oldAmf := gnb.FindGnbAmfByIpPort(ipv4Port)
+			if oldAmf == nil {
+				continue
+			}
+
+			oldAmf.SetAmfName(amfName)
+			oldAmf.SetAmfCapacity(amfCapacity)
+			oldAmf.SetRegionId(amfRegionId)
+			oldAmf.SetSetId(amfSetId)
+			oldAmf.SetPointer(amfPointer)
+
+			oldAmf.SetTNLAUsage(toUpdateItem.TNLAssociationUsage.Value)
+			oldAmf.SetTNLAWeight(toUpdateItem.TNLAddressWeightFactor.Value)
+		}
+
+		// default:
+
 	}
 
 	log.Debugf("After Update:")
@@ -891,130 +821,121 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 	trigger.SendAmfConfigurationUpdateAcknowledge(amf)
 }
 
-func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
-	valueMessage := message.InitiatingMessage.Value.AMFStatusIndication
-	for _, ie := range valueMessage.ProtocolIEs.List {
-		switch ie.Id.Value {
-		case ngapType.ProtocolIEIDUnavailableGUAMIList:
-			for _, unavailableGuamiItem := range ie.Value.UnavailableGUAMIList.List {
-				octetStr := unavailableGuamiItem.GUAMI.PLMNIdentity.Value
-				hexStr := fmt.Sprintf("%02x%02x%02x", octetStr[0], octetStr[1], octetStr[2])
-				var unavailableMcc, unavailableMnc string
-				unavailableMcc = string(hexStr[1]) + string(hexStr[0]) + string(hexStr[3])
-				unavailableMnc = string(hexStr[5]) + string(hexStr[4])
-				if hexStr[2] != 'f' {
-					unavailableMnc = string(hexStr[2]) + string(hexStr[5]) + string(hexStr[4])
-				}
+func HandlerAmfStatusIndication(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapmsg.AMFStatusIndication) {
+	valueMessage := message
+	if valueMessage.UnavailableGUAMIList != nil {
 
-				// select backup AMF
-				var backupAmf *context.GNBAmf
-				for oldAmf := range gnb.IterGnbAmf() {
-					if unavailableGuamiItem.BackupAMFName != nil &&
-						oldAmf.GetAmfName() == unavailableGuamiItem.BackupAMFName.Value {
-						backupAmf = oldAmf
+		for _, unavailableGuamiItem := range valueMessage.UnavailableGUAMIList.List {
+			octetStr := unavailableGuamiItem.GUAMI.PLMNIdentity.Value
+			hexStr := fmt.Sprintf("%02x%02x%02x", octetStr[0], octetStr[1], octetStr[2])
+			var unavailableMcc, unavailableMnc string
+			unavailableMcc = string(hexStr[1]) + string(hexStr[0]) + string(hexStr[3])
+			unavailableMnc = string(hexStr[5]) + string(hexStr[4])
+			if hexStr[2] != 'f' {
+				unavailableMnc = string(hexStr[2]) + string(hexStr[5]) + string(hexStr[4])
+			}
+
+			// select backup AMF
+			var backupAmf *context.GNBAmf
+			for oldAmf := range gnb.IterGnbAmf() {
+				if unavailableGuamiItem.BackupAMFName != nil &&
+					oldAmf.GetAmfName() == string(unavailableGuamiItem.BackupAMFName.Value) {
+					backupAmf = oldAmf
+					break
+				}
+			}
+			if backupAmf == nil {
+				return
+			}
+
+			for oldAmf := range gnb.IterGnbAmf() {
+				for j := 0; j < oldAmf.GetLenPlmns(); j++ {
+					oldAmfSupportMcc, oldAmfSupportMnc := oldAmf.GetPlmnSupport(j)
+
+					if oldAmfSupportMcc == unavailableMcc && oldAmfSupportMnc == unavailableMnc &&
+						reflect.DeepEqual(oldAmf.GetRegionId(), unavailableGuamiItem.GUAMI.AMFRegionID.Value) &&
+						reflect.DeepEqual(oldAmf.GetSetId(), unavailableGuamiItem.GUAMI.AMFSetID.Value) &&
+						reflect.DeepEqual(oldAmf.GetPointer(), unavailableGuamiItem.GUAMI.AMFPointer.Value) {
+
+						log.Info("[GNB][AMF] Remove AMF: [",
+							"Id: ", oldAmf.GetAmfId(),
+							"Name: ", oldAmf.GetAmfName(),
+							"Ipv4: ", oldAmf.GetAmfIpPort().Addr(),
+							"]",
+						)
+
+						// NGAP UE-TNLA Rebinding
+						uePool := gnb.GetUePool()
+						uePool.Range(func(k, v any) bool {
+							ue, ok := v.(*context.GNBUe)
+							if !ok {
+								return true
+							}
+
+							if ue.GetAmfId() == oldAmf.GetAmfId() {
+								// set amfId and SCTP association for UE.
+								ue.SetAmfId(backupAmf.GetAmfId())
+								ue.SetSCTP(backupAmf.GetSCTPConn())
+							}
+
+							return true
+						})
+
+						prUePool := gnb.GetPrUePool()
+						prUePool.Range(func(k, v any) bool {
+							ue, ok := v.(*context.GNBUe)
+							if !ok {
+								return true
+							}
+
+							if ue.GetAmfId() == oldAmf.GetAmfId() {
+								// set amfId and SCTP association for UE.
+								ue.SetAmfId(backupAmf.GetAmfId())
+								ue.SetSCTP(backupAmf.GetSCTPConn())
+							}
+
+							return true
+						})
+
+						gnb.RemoveGnbAmf(oldAmf)
+
 						break
 					}
 				}
-				if backupAmf == nil {
-					return
-				}
-
-				for oldAmf := range gnb.IterGnbAmf() {
-					for j := 0; j < oldAmf.GetLenPlmns(); j++ {
-						oldAmfSupportMcc, oldAmfSupportMnc := oldAmf.GetPlmnSupport(j)
-
-						if oldAmfSupportMcc == unavailableMcc && oldAmfSupportMnc == unavailableMnc &&
-							reflect.DeepEqual(oldAmf.GetRegionId(), unavailableGuamiItem.GUAMI.AMFRegionID.Value) &&
-							reflect.DeepEqual(oldAmf.GetSetId(), unavailableGuamiItem.GUAMI.AMFSetID.Value) &&
-							reflect.DeepEqual(oldAmf.GetPointer(), unavailableGuamiItem.GUAMI.AMFPointer.Value) {
-
-							log.Info("[GNB][AMF] Remove AMF: [",
-								"Id: ", oldAmf.GetAmfId(),
-								"Name: ", oldAmf.GetAmfName(),
-								"Ipv4: ", oldAmf.GetAmfIpPort().Addr(),
-								"]",
-							)
-
-							// NGAP UE-TNLA Rebinding
-							uePool := gnb.GetUePool()
-							uePool.Range(func(k, v any) bool {
-								ue, ok := v.(*context.GNBUe)
-								if !ok {
-									return true
-								}
-
-								if ue.GetAmfId() == oldAmf.GetAmfId() {
-									// set amfId and SCTP association for UE.
-									ue.SetAmfId(backupAmf.GetAmfId())
-									ue.SetSCTP(backupAmf.GetSCTPConn())
-								}
-
-								return true
-							})
-
-							prUePool := gnb.GetPrUePool()
-							prUePool.Range(func(k, v any) bool {
-								ue, ok := v.(*context.GNBUe)
-								if !ok {
-									return true
-								}
-
-								if ue.GetAmfId() == oldAmf.GetAmfId() {
-									// set amfId and SCTP association for UE.
-									ue.SetAmfId(backupAmf.GetAmfId())
-									ue.SetSCTP(backupAmf.GetSCTPConn())
-								}
-
-								return true
-							})
-
-							gnb.RemoveGnbAmf(oldAmf)
-
-							break
-						}
-					}
-				}
 			}
 		}
+
 	}
+
 }
 
-func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapmsg.PathSwitchRequestAcknowledge) {
 	var pduSessionResourceSwitchedList *ngapType.PDUSessionResourceSwitchedList
-	valueMessage := message.SuccessfulOutcome.Value.PathSwitchRequestAcknowledge
+	valueMessage := message
 
 	var amfUeId, ranUeId int64
 
-	for _, ies := range valueMessage.ProtocolIEs.List {
-		switch ies.Id.Value {
+	if valueMessage.AMFUENGAPID != nil {
 
-		case ngapType.ProtocolIEIDAMFUENGAPID:
+		amfUeId = valueMessage.AMFUENGAPID.Value
 
-			if ies.Value.AMFUENGAPID == nil {
-				log.Error("[GNB][NGAP] AMF UE ID is missing")
-				return
-			}
-			amfUeId = ies.Value.AMFUENGAPID.Value
+	}
+	if valueMessage.RANUENGAPID != nil {
 
-		case ngapType.ProtocolIEIDRANUENGAPID:
+		ranUeId = valueMessage.RANUENGAPID.Value
 
-			if ies.Value.RANUENGAPID == nil {
-				log.Error("[GNB][NGAP] RAN UE ID is missing")
-				// TODO SEND ERROR INDICATION
-				return
-			}
-			ranUeId = ies.Value.RANUENGAPID.Value
+	}
+	if valueMessage.PDUSessionResourceSwitchedList != nil {
 
-		case ngapType.ProtocolIEIDPDUSessionResourceSwitchedList:
-			pduSessionResourceSwitchedList = ies.Value.PDUSessionResourceSwitchedList
-			if pduSessionResourceSwitchedList == nil {
-				log.Error("[GNB][NGAP] PduSessionResourceSwitchedList is missing")
-				// TODO SEND ERROR INDICATION
-				return
-			}
+		pduSessionResourceSwitchedList = valueMessage.PDUSessionResourceSwitchedList
+		if pduSessionResourceSwitchedList == nil {
+			log.Error("[GNB][NGAP] PduSessionResourceSwitchedList is missing")
+			// TODO SEND ERROR INDICATION
+			return
 		}
 
 	}
+
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
 	if ue == nil {
 		log.Errorf("[GNB][NGAP] Cannot Xn Handover unknown UE With RANUEID %d", ranUeId)
@@ -1037,14 +958,18 @@ func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapT
 
 		pathSwitchRequestAcknowledgeTransferBytes := pduSessionResourceSwitchedItem.PathSwitchRequestAcknowledgeTransfer
 		pathSwitchRequestAcknowledgeTransfer := &ngapType.PathSwitchRequestAcknowledgeTransfer{}
-		err = aper.UnmarshalWithParams(pathSwitchRequestAcknowledgeTransferBytes, pathSwitchRequestAcknowledgeTransfer, "valueExt")
+		err = ngapConvert.Unmarshal(pathSwitchRequestAcknowledgeTransferBytes, pathSwitchRequestAcknowledgeTransfer)
 		if err != nil {
 			log.Error("[GNB] Unable to unmarshall PathSwitchRequestAcknowledgeTransfer: ", err)
 			continue
 		}
 
 		if pathSwitchRequestAcknowledgeTransfer.ULNGUUPTNLInformation != nil {
-			gtpTunnel := pathSwitchRequestAcknowledgeTransfer.ULNGUUPTNLInformation.GTPTunnel
+			gtpTunnel, err := ngapConvert.Tunnel(pathSwitchRequestAcknowledgeTransfer.ULNGUUPTNLInformation)
+			if err != nil {
+				log.Error("[GNB][NGAP] Invalid path switch tunnel: ", err)
+				continue
+			}
 			upfIpv4, _ := ngapConvert.IPAddressToString(gtpTunnel.TransportLayerAddress)
 			teidUplink := gtpTunnel.GTPTEID.Value
 
@@ -1063,7 +988,7 @@ func HandlerPathSwitchRequestAcknowledge(gnb *context.GNBContext, message *ngapT
 	log.Info("[GNB] Handover completed successfully for UE ", ue.GetRanUeId())
 }
 
-func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapmsg.HandoverRequest) {
 	var ueSecurityCapabilities *ngapType.UESecurityCapabilities
 	var sst []string
 	var sd []string
@@ -1072,77 +997,68 @@ func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, messag
 	var pDUSessionResourceSetupListHOReq *ngapType.PDUSessionResourceSetupListHOReq
 	var amfUeId int64
 
-	valueMessage := message.InitiatingMessage.Value.HandoverRequest
+	valueMessage := message
 
-	for _, ies := range valueMessage.ProtocolIEs.List {
-		switch ies.Id.Value {
+	if valueMessage.AMFUENGAPID != nil {
 
-		case ngapType.ProtocolIEIDAMFUENGAPID:
-			if ies.Value.AMFUENGAPID == nil {
-				log.Error("[GNB][NGAP] AMF UE ID is missing")
-				return
-			}
-			amfUeId = ies.Value.AMFUENGAPID.Value
+		amfUeId = valueMessage.AMFUENGAPID.Value
 
-		case ngapType.ProtocolIEIDAllowedNSSAI:
-			if ies.Value.AllowedNSSAI == nil {
-				log.Error("[GNB][NGAP] Allowed NSSAI is missing")
-				return
-			}
+	}
+	if valueMessage.AllowedNSSAI != nil {
 
-			valor := len(ies.Value.AllowedNSSAI.List)
-			sst = make([]string, valor)
-			sd = make([]string, valor)
+		valor := len(valueMessage.AllowedNSSAI.List)
+		sst = make([]string, valor)
+		sd = make([]string, valor)
 
-			// list S-NSSAI(Single – Network Slice Selection Assistance Information).
-			for i, items := range ies.Value.AllowedNSSAI.List {
+		// list S-NSSAI(Single – Network Slice Selection Assistance Information).
+		for i, items := range valueMessage.AllowedNSSAI.List {
 
-				if items.SNSSAI.SST.Value != nil {
-					sst[i] = fmt.Sprintf("%x", items.SNSSAI.SST.Value)
-				} else {
-					sst[i] = "not informed"
-				}
-
-				if items.SNSSAI.SD != nil {
-					sd[i] = fmt.Sprintf("%x", items.SNSSAI.SD.Value)
-				} else {
-					sd[i] = "not informed"
-				}
-			}
-
-		case ngapType.ProtocolIEIDMaskedIMEISV:
-			// that field is not mandatory.
-			// TODO using for mapping UE context
-			if ies.Value.MaskedIMEISV == nil {
-				log.Info("[GNB][NGAP] Masked IMEISV is missing")
-				maskedImeisv = "not informed"
+			if items.SNSSAI.SST.Value != nil {
+				sst[i] = fmt.Sprintf("%x", items.SNSSAI.SST.Value)
 			} else {
-				maskedImeisv = fmt.Sprintf("%x", ies.Value.MaskedIMEISV.Value.Bytes)
+				sst[i] = "not informed"
 			}
 
-		case ngapType.ProtocolIEIDSourceToTargetTransparentContainer:
-			sourceToTargetContainer = ies.Value.SourceToTargetTransparentContainer
-			if sourceToTargetContainer == nil {
-				log.Error("[GNB][NGAP] sourceToTargetContainer is missing")
-				// TODO SEND ERROR INDICATION
-				return
+			if items.SNSSAI.SD != nil {
+				sd[i] = fmt.Sprintf("%x", items.SNSSAI.SD.Value)
+			} else {
+				sd[i] = "not informed"
 			}
-
-		case ngapType.ProtocolIEIDPDUSessionResourceSetupListHOReq:
-			pDUSessionResourceSetupListHOReq = ies.Value.PDUSessionResourceSetupListHOReq
-			if pDUSessionResourceSetupListHOReq == nil {
-				log.Error("[GNB][NGAP] pDUSessionResourceSetupListHOReq is missing")
-				// TODO SEND ERROR INDICATION
-				return
-			}
-
-		case ngapType.ProtocolIEIDUESecurityCapabilities:
-			if ies.Value.UESecurityCapabilities == nil {
-				log.Error("[GNB][NGAP] UE Security Capabilities is missing")
-				return
-			}
-			ueSecurityCapabilities = ies.Value.UESecurityCapabilities
 		}
+
+	}
+	if valueMessage.MaskedIMEISV != nil {
+
+		// that field is not mandatory.
+		// TODO using for mapping UE context
+
+		maskedImeisv = fmt.Sprintf("%x", valueMessage.MaskedIMEISV.Value.Bytes)
+
+	}
+	if valueMessage.SourceToTargetTransparentContainer != nil {
+
+		sourceToTargetContainer = valueMessage.SourceToTargetTransparentContainer
+		if sourceToTargetContainer == nil {
+			log.Error("[GNB][NGAP] sourceToTargetContainer is missing")
+			// TODO SEND ERROR INDICATION
+			return
+		}
+
+	}
+	if valueMessage.PDUSessionResourceSetupListHOReq != nil {
+
+		pDUSessionResourceSetupListHOReq = valueMessage.PDUSessionResourceSetupListHOReq
+		if pDUSessionResourceSetupListHOReq == nil {
+			log.Error("[GNB][NGAP] pDUSessionResourceSetupListHOReq is missing")
+			// TODO SEND ERROR INDICATION
+			return
+		}
+
+	}
+	if valueMessage.UESecurityCapabilities != nil {
+
+		ueSecurityCapabilities = valueMessage.UESecurityCapabilities
+
 	}
 
 	if sourceToTargetContainer == nil {
@@ -1157,7 +1073,7 @@ func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, messag
 
 	sourceToTargetContainerBytes := sourceToTargetContainer.Value
 	sourceToTargetContainerNgap := &ngapType.SourceNGRANNodeToTargetNGRANNodeTransparentContainer{}
-	err := aper.UnmarshalWithParams(sourceToTargetContainerBytes, sourceToTargetContainerNgap, "valueExt")
+	err := ngapConvert.Unmarshal(sourceToTargetContainerBytes, sourceToTargetContainerNgap)
 	if err != nil {
 		log.Error("[GNB] Unable to unmarshall SourceToTargetTransparentContainer: ", err)
 		return
@@ -1187,7 +1103,7 @@ func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, messag
 
 		handOverRequestTransferBytes := pDUSessionResourceSetupItemHOReq.HandoverRequestTransfer
 		handOverRequestTransfer := &ngapType.PDUSessionResourceSetupRequestTransfer{}
-		err := aper.UnmarshalWithParams(handOverRequestTransferBytes, handOverRequestTransfer, "valueExt")
+		err := ngapConvert.Unmarshal(handOverRequestTransferBytes, handOverRequestTransfer)
 		if err != nil {
 			log.Error("[GNB] Unable to unmarshall HandOverRequestTransfer: ", err)
 			continue
@@ -1197,12 +1113,16 @@ func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, messag
 		var upfIp string
 		var teidUplink aper.OctetString
 		for _, ie := range handOverRequestTransfer.ProtocolIEs.List {
-			switch ie.Id.Value {
+			switch ie.Id().Value {
 
 			case ngapType.ProtocolIEIDULNGUUPTNLInformation:
-				uLNGUUPTNLInformation := ie.Value.ULNGUUPTNLInformation
+				uLNGUUPTNLInformation := ie.ULNGUUPTNLInformation
 
-				gtpTunnel = uLNGUUPTNLInformation.GTPTunnel
+				gtpTunnel, err = ngapConvert.Tunnel(uLNGUUPTNLInformation)
+				if err != nil {
+					log.Error("[GNB][NGAP] Invalid uplink tunnel: ", err)
+					continue
+				}
 				upfIp, _ = ngapConvert.IPAddressToString(gtpTunnel.TransportLayerAddress)
 				teidUplink = gtpTunnel.GTPTEID.Value
 			}
@@ -1223,33 +1143,22 @@ func HandlerHandoverRequest(amf *context.GNBAmf, gnb *context.GNBContext, messag
 	trigger.SendHandoverRequestAcknowledge(gnb, ue)
 }
 
-func HandlerHandoverCommand(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapType.NGAPPDU) {
-	valueMessage := message.SuccessfulOutcome.Value.HandoverCommand
+func HandlerHandoverCommand(amf *context.GNBAmf, gnb *context.GNBContext, message *ngapmsg.HandoverCommand) {
+	valueMessage := message
 
 	var amfUeId, ranUeId int64
 
-	for _, ies := range valueMessage.ProtocolIEs.List {
-		switch ies.Id.Value {
+	if valueMessage.AMFUENGAPID != nil {
 
-		case ngapType.ProtocolIEIDAMFUENGAPID:
-
-			if ies.Value.AMFUENGAPID == nil {
-				log.Error("[GNB][NGAP] AMF UE ID is missing")
-				return
-			}
-			amfUeId = ies.Value.AMFUENGAPID.Value
-
-		case ngapType.ProtocolIEIDRANUENGAPID:
-
-			if ies.Value.RANUENGAPID == nil {
-				log.Error("[GNB][NGAP] RAN UE ID is missing")
-				// TODO SEND ERROR INDICATION
-				return
-			}
-			ranUeId = ies.Value.RANUENGAPID.Value
-		}
+		amfUeId = valueMessage.AMFUENGAPID.Value
 
 	}
+	if valueMessage.RANUENGAPID != nil {
+
+		ranUeId = valueMessage.RANUENGAPID.Value
+
+	}
+
 	ue := getUeFromContext(gnb, ranUeId, amfUeId)
 	if ue == nil {
 		log.Errorf("[GNB][NGAP] Cannot NGAP  Handover unknown UE With RANUEID %d", ranUeId)
@@ -1264,81 +1173,66 @@ func HandlerHandoverCommand(amf *context.GNBAmf, gnb *context.GNBContext, messag
 
 	newGnbRx := make(chan context.UEMessage, 1)
 	newGnbTx := make(chan context.UEMessage, 1)
-	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, PrUeId: ue.GetPrUeId(), IsHandover: true}
+	connectionLost := make(chan struct{})
+	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, ConnectionLost: connectionLost, PrUeId: ue.GetPrUeId(), IsHandover: true}
 
-	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, GNBInboundChannel: newGnb.GetInboundChannel()}
+	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, ConnectionLost: connectionLost, GNBInboundChannel: newGnb.GetInboundChannel()}
 
 	sender.SendMessageToUe(ue, msg)
 }
 
-func HandlerPaging(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+func HandlerPaging(gnb *context.GNBContext, message *ngapmsg.Paging) {
 
-	valueMessage := message.InitiatingMessage.Value.Paging
+	valueMessage := message
 
 	var uEPagingIdentity *ngapType.UEPagingIdentity
 	var tAIListForPaging *ngapType.TAIListForPaging
 
-	for _, ies := range valueMessage.ProtocolIEs.List {
-		switch ies.Id.Value {
+	if valueMessage.UEPagingIdentity != nil {
 
-		case ngapType.ProtocolIEIDUEPagingIdentity:
+		uEPagingIdentity = valueMessage.UEPagingIdentity
 
-			if ies.Value.UEPagingIdentity == nil {
-				log.Error("[GNB][NGAP] UE Paging Identity is missing")
-				return
-			}
-			uEPagingIdentity = ies.Value.UEPagingIdentity
-
-		case ngapType.ProtocolIEIDTAIListForPaging:
-
-			if ies.Value.TAIListForPaging == nil {
-				log.Error("[GNB][NGAP] TAI List For Paging is missing")
-				return
-			}
-			tAIListForPaging = ies.Value.TAIListForPaging
-		}
 	}
+	if valueMessage.TAIListForPaging != nil {
+
+		tAIListForPaging = valueMessage.TAIListForPaging
+
+	}
+
 	_ = tAIListForPaging
 
-	if uEPagingIdentity == nil || uEPagingIdentity.FiveGSTMSI == nil {
+	var tmsi *ngapType.FiveGSTMSI
+	if uEPagingIdentity != nil {
+		tmsi, _ = uEPagingIdentity.Choice.(*ngapType.FiveGSTMSI)
+	}
+	if tmsi == nil {
 		log.Error("[GNB][NGAP] Paging is missing mandatory UE Paging Identity")
 		return
 	}
 
-	gnb.AddPagedUE(uEPagingIdentity.FiveGSTMSI)
+	gnb.AddPagedUE(tmsi)
 
 	log.Info("[GNB][AMF] Paging UE")
 }
 
-func HandlerErrorIndication(gnb *context.GNBContext, message *ngapType.NGAPPDU) {
+func HandlerErrorIndication(gnb *context.GNBContext, message *ngapmsg.ErrorIndication) {
 
-	valueMessage := message.InitiatingMessage.Value.ErrorIndication
+	valueMessage := message
 
 	var amfUeId, ranUeId int64
 	var hasAmfUeId, hasRanUeId bool
 
-	for _, ies := range valueMessage.ProtocolIEs.List {
-		switch ies.Id.Value {
+	if valueMessage.AMFUENGAPID != nil {
 
-		case ngapType.ProtocolIEIDAMFUENGAPID:
+		amfUeId = valueMessage.AMFUENGAPID.Value
+		hasAmfUeId = true
 
-			if ies.Value.AMFUENGAPID == nil {
-				log.Error("[GNB][NGAP] AMF UE ID is missing")
-				return
-			}
-			amfUeId = ies.Value.AMFUENGAPID.Value
-			hasAmfUeId = true
+	}
+	if valueMessage.RANUENGAPID != nil {
 
-		case ngapType.ProtocolIEIDRANUENGAPID:
+		ranUeId = valueMessage.RANUENGAPID.Value
+		hasRanUeId = true
 
-			if ies.Value.RANUENGAPID == nil {
-				log.Error("[GNB][NGAP] RAN UE ID is missing")
-				// TODO SEND ERROR INDICATION
-				return
-			}
-			ranUeId = ies.Value.RANUENGAPID.Value
-			hasRanUeId = true
-		}
 	}
 
 	log.Warn("[GNB][AMF] Received an Error Indication for UE with AMF UE ID: ", amfUeId, " RAN UE ID: ", ranUeId)
@@ -1380,19 +1274,20 @@ func getUeFromContext(gnb *context.GNBContext, ranUeId int64, amfUeId int64) *co
 }
 
 func causeToString(cause *ngapType.Cause) string {
-	if cause != nil {
-		switch cause.Present {
-		case ngapType.CausePresentRadioNetwork:
-			return "radioNetwork: " + causeRadioNetworkToString(cause.RadioNetwork)
-		case ngapType.CausePresentTransport:
-			return "transport: " + causeTransportToString(cause.Transport)
-		case ngapType.CausePresentNas:
-			return "nas: " + causeNasToString(cause.Nas)
-		case ngapType.CausePresentProtocol:
-			return "protocol: " + causeProtocolToString(cause.Protocol)
-		case ngapType.CausePresentMisc:
-			return "misc: " + causeMiscToString(cause.Misc)
-		}
+	if cause == nil {
+		return "Cause not found"
+	}
+	switch value := cause.Choice.(type) {
+	case *ngapType.CauseRadioNetwork:
+		return "radioNetwork: " + causeRadioNetworkToString(value)
+	case *ngapType.CauseTransport:
+		return "transport: " + causeTransportToString(value)
+	case *ngapType.CauseNas:
+		return "nas: " + causeNasToString(value)
+	case *ngapType.CauseProtocol:
+		return "protocol: " + causeProtocolToString(value)
+	case *ngapType.CauseMisc:
+		return "misc: " + causeMiscToString(value)
 	}
 	return "Cause not found"
 }
@@ -1551,7 +1446,7 @@ func causeMiscToString(misc *ngapType.CauseMisc) string {
 		return "Hardware failure"
 	case ngapType.CauseMiscPresentOmIntervention:
 		return "OM (Operations and Maintenance) intervention"
-	case ngapType.CauseMiscPresentUnknownPLMN:
+	case ngapType.CauseMiscPresentUnknownPLMNOrSNPN:
 		return "Unknown PLMN (Public Land Mobile Network)"
 	case ngapType.CauseMiscPresentUnspecified:
 		return "Unspecified cause for miscellaneous"

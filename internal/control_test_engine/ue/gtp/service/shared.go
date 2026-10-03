@@ -33,10 +33,6 @@ func releaseSetupSlot() {
 	<-setupSlots
 }
 
-// routeTableOffset keeps per-UE routing tables clear of the identifiers Linux
-// reserves: 253 (default), 254 (main) and 255 (local).
-const routeTableOffset = 1000
-
 // setupConcurrency reports how many tunnels may be plumbed at once.
 func setupConcurrency() int {
 	if v := os.Getenv("PR_SETUP_SLOTS"); v != "" {

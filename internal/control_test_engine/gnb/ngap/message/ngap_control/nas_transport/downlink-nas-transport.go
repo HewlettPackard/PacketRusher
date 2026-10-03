@@ -8,14 +8,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/free5gc/ngap"
-	"github.com/free5gc/ngap/ngapType"
+	ngap "github.com/free5gc/ngap/message"
 
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
 )
 
-func DownlinkNasTransport(connN2 *sctp.SCTPConn, supi string) (*ngapType.NGAPPDU, error) {
+func DownlinkNasTransport(connN2 *sctp.SCTPConn, supi string) (ngap.Message, error) {
 
 	var recvMsg = make([]byte, 2048)
 	var n int
@@ -25,7 +24,7 @@ func DownlinkNasTransport(connN2 *sctp.SCTPConn, supi string) (*ngapType.NGAPPDU
 		return nil, fmt.Errorf("Error receiving %s ue NGAP message in downlinkNasTransport", supi)
 	}
 
-	ngapMsg, err := ngap.Decoder(recvMsg[:n])
+	ngapMsg, err := ngap.Parse(recvMsg[:n])
 	if err != nil {
 		return nil, fmt.Errorf("Error decoding %s ue NGAP message in downlinkNasTransport", supi)
 	}
@@ -33,11 +32,11 @@ func DownlinkNasTransport(connN2 *sctp.SCTPConn, supi string) (*ngapType.NGAPPDU
 	return ngapMsg, nil
 }
 
-func DownlinkNasTransportForConfigurationUpdateCommand(connN2 *sctp.SCTPConn, supi string) *ngapType.NGAPPDU {
+func DownlinkNasTransportForConfigurationUpdateCommand(connN2 *sctp.SCTPConn, supi string) ngap.Message {
 
 	// make channels
 	c1 := make(chan bool)
-	c2 := make(chan *ngapType.NGAPPDU)
+	c2 := make(chan ngap.Message)
 
 	// receive NGAP message from AMF.
 	go func() {
@@ -49,7 +48,7 @@ func DownlinkNasTransportForConfigurationUpdateCommand(connN2 *sctp.SCTPConn, su
 			c1 <- true
 		}
 
-		ngapMsg, err := ngap.Decoder(recvMsg[:n])
+		ngapMsg, err := ngap.Parse(recvMsg[:n])
 		if err != nil {
 			c1 <- true
 		}

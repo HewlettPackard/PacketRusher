@@ -12,7 +12,7 @@ Most of the Go standard library can be used in a custom scenario, but issues may
 
 Once the scenario has been built into a .wasm file, it can be run using PacketRusher's custom-scenario CLI:
 ```bash
-./app custom-scenario --scenario sample.go.wasm
+./packetrusher custom-scenario --scenario sample.go.wasm
 ```
 
 You can also reduce log level from 4 to 3 in config.yml if you are unable to see your fmt.Println() because there are too much logs :D
@@ -20,3 +20,4 @@ You can also reduce log level from 4 to 3 in config.yml if you are unable to see
 ## State
 
 Custom scenarios are WIP, and function names will change.
+The sample has a `tinygo` build constraint because its bodyless declarations import host functions through TinyGo. TinyGo sets this tag automatically ([compiler build tags](https://github.com/tinygo-org/tinygo/blob/dev/compileopts/config.go)). Native `go test ./...` excludes it; use `./build.sh` for the WebAssembly build.

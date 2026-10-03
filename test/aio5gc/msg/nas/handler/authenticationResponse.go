@@ -13,13 +13,13 @@ import (
 
 	"fmt"
 
-	"github.com/free5gc/nas"
-	"github.com/free5gc/ngap/ngapType"
+	nas "github.com/free5gc/nas/message"
+	ngapType "github.com/free5gc/ngap/ie"
 	"github.com/free5gc/util/fsm"
 	log "github.com/sirupsen/logrus"
 )
 
-func AuthenticationResponse(nasMsg *nas.Message, gnb *context.GNBContext, ue *context.UEContext, amf *context.AMFContext) error {
+func AuthenticationResponse(nasMsg *nas.AuthRsp, gnb *context.GNBContext, ue *context.UEContext, amf *context.AMFContext) error {
 	var err error
 	switch ue.GetState().Current() {
 	case context.AuthenticationInitiated:
@@ -30,12 +30,12 @@ func AuthenticationResponse(nasMsg *nas.Message, gnb *context.GNBContext, ue *co
 	return err
 }
 
-func DefaultAuthenticationResponse(nasMsg *nas.Message, gnb *context.GNBContext, ue *context.UEContext, amf *context.AMFContext) error {
+func DefaultAuthenticationResponse(nasMsg *nas.AuthRsp, gnb *context.GNBContext, ue *context.UEContext, amf *context.AMFContext) error {
 
-	if nasMsg.AuthenticationResponse.AuthenticationResponseParameter == nil {
+	if nasMsg.AuthRspParam == nil {
 		return errors.New("AuthenticationResponseParameter is nil")
 	}
-	resStarb := nasMsg.AuthenticationResponse.AuthenticationResponseParameter.GetRES()
+	resStarb := nasMsg.AuthRspParam.Res
 	resStar := hex.EncodeToString(resStarb[:])
 
 	xresStar := ue.GetSecurityContext().GetXresStar()
@@ -50,7 +50,7 @@ func DefaultAuthenticationResponse(nasMsg *nas.Message, gnb *context.GNBContext,
 			if err != nil {
 				log.Error(err)
 			}
-			msg.SendUEContextReleaseCommand(gnb, oldUe, ngapType.CausePresentNas, ngapType.CauseNasPresentUnspecified)
+			msg.SendUEContextReleaseCommand(gnb, oldUe, 3, ngapType.CauseNasPresentUnspecified)
 		}
 	} else {
 		return errors.New(("5G AKA confirmation failed, expected res* " + xresStar + " but got " + resStar))

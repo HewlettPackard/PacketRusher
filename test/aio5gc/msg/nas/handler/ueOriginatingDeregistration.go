@@ -10,14 +10,14 @@ import (
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg"
 
-	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasMessage"
-	"github.com/free5gc/ngap/ngapType"
+	ie "github.com/free5gc/nas/ie"
+	nas "github.com/free5gc/nas/message"
+	ngapType "github.com/free5gc/ngap/ie"
 	"github.com/free5gc/util/fsm"
 	log "github.com/sirupsen/logrus"
 )
 
-func UEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
+func UEOriginatingDeregistration(nasReq *nas.DeregReqUEOrig, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
 	var err error
 	switch ue.GetState().Current() {
 	case context.AuthenticationInitiated:
@@ -32,9 +32,9 @@ func UEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFContext, u
 	return err
 }
 
-func DefaultUEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
+func DefaultUEOriginatingDeregistration(nasReq *nas.DeregReqUEOrig, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
 
-	deregistrationRequest := nasReq.DeregistrationRequestUEOriginatingDeregistration
+	deregistrationRequest := nasReq
 	context.ForceReleaseAllPDUSession(ue)
 
 	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.DeregistrationRequest, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
@@ -43,14 +43,14 @@ func DefaultUEOriginatingDeregistration(nasReq *nas.Message, amf *context.AMFCon
 		return err
 	}
 	// if Deregistration type is not switch-off, send Deregistration Accept (need to implement)
-	if deregistrationRequest.GetSwitchOff() == 0 {
+	if !deregistrationRequest.DeregType.Switchoff {
 		return errors.New("[5GC][NAS] Not switch-off deregistration not supported")
 	}
 
 	// TS 23.502 4.2.6, 4.12.3
-	switch deregistrationRequest.GetAccessType() {
-	case nasMessage.AccessType3GPP:
-		msg.SendUEContextReleaseCommand(gnb, ue, ngapType.CausePresentNas, ngapType.CauseNasPresentDeregister)
+	switch deregistrationRequest.DeregType.AccessType {
+	case ie.AccessType_3gpp:
+		msg.SendUEContextReleaseCommand(gnb, ue, 3, ngapType.CauseNasPresentDeregister)
 	default:
 		return errors.New("[5GC][NAS] Deregistration procedure: unsupported access type")
 	}

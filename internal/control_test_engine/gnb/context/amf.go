@@ -9,7 +9,7 @@ import (
 	"net/netip"
 	"sync"
 
-	"github.com/free5gc/aper"
+	"github.com/free5gc/ngap/aper"
 	"github.com/ishidawataru/sctp"
 )
 
