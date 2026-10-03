@@ -4,6 +4,7 @@ package test
 import (
 	"context"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
+	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
+	"my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/interface_management"
 	"my5G-RANTester/test/aio5gc"
 	core "my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/service"
@@ -161,4 +164,108 @@ func TestNativeBuilderBindFailureReleasesEarlierListener(t *testing.T) {
 	listener, err := service.Listen(endpoint)
 	require.NoError(t, err, "failed multi-listener startup must release its first port")
 	require.NoError(t, listener.Close())
+}
+
+func TestNativeAbandonedNGSetupAssociationIsRetired(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	gate := testkit.NewGate()
+	accepted := make(chan *core.GNBContext, 1)
+	fgc, err := new(aio5gc.FiveGCBuilder).WithConfig(testkit.LocalConfig()).WithNGAPDispatcherHook(func(msg message.Message, owner *core.GNBContext, fgc *core.Aio5gc) (bool, error) {
+		if _, ok := msg.(*message.NGSetupRequest); ok {
+			accepted <- owner
+			return false, gate.Wait(fgc.Context())
+		}
+		return false, nil
+	}).Build()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, fgc.Close()) })
+	addr, err := sctp.ResolveSCTPAddr("sctp", fgc.Config().AMFs[0].String())
+	require.NoError(t, err)
+	peer, err := sctp.DialSCTP("sctp", nil, addr)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = peer.Close() })
+	packet := nativeNGSetupPacket(t)
+	_, err = peer.Write(packet)
+	require.NoError(t, err)
+	var owner *core.GNBContext
+	select {
+	case owner = <-accepted:
+	case <-ctx.Done():
+		t.Fatal("encoded NG Setup did not reach dispatch")
+	}
+	state, err := owner.SCTPAssociationState()
+	require.NoError(t, err)
+	require.Equal(t, uint32(4), state, "live native association must be established")
+	require.Equal(t, syscall.EPIPE, owner.ClassifyRetiredNGSetup(syscall.EPIPE), "a broken pipe without observed peer retirement remains a strict error")
+	require.NoError(t, peer.Close())
+	// Observe the kernel's close transition before releasing the real decoded
+	// request; this reproduces a startup peer abandoning an in-flight request.
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	for {
+		state, err = owner.SCTPAssociationState()
+		if err == nil && (state == 1 || state >= 5 && state <= 8) {
+			break
+		}
+		select {
+		case <-tick.C:
+		case <-ctx.Done():
+			t.Fatalf("peer close not observed: state=%d err=%v", state, err)
+		}
+	}
+	gate.Open()
+	snapshot, err := fgc.Wait(ctx, func(s core.Snapshot) bool {
+		return len(s.RetiredAssociations) == 1 && len(s.Associations) == 0 || len(s.Errors) != 0
+	})
+	require.NoError(t, err)
+	require.Empty(t, snapshot.UEs)
+	require.Empty(t, snapshot.Errors)
+	require.Len(t, snapshot.RetiredAssociations, 1)
+	require.Equal(t, state, snapshot.RetiredAssociations[0].State)
+	require.NotEmpty(t, snapshot.RetiredAssociations[0].Cause)
+	cause := snapshot.RetiredAssociations[0].Cause
+	snapshot.RetiredAssociations[0].Cause = "caller mutation"
+	require.Equal(t, cause, fgc.Snapshot().RetiredAssociations[0].Cause, "retirement observations must be detached values")
+	require.Equal(t, 1, fgc.ResourceCount(), "abandoned accepted socket must retire")
+}
+
+func TestNativeLiveNGSetupSendFailureRemainsStrict(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	fgc, err := new(aio5gc.FiveGCBuilder).WithConfig(testkit.LocalConfig()).WithNGAPDispatcherHook(func(msg message.Message, owner *core.GNBContext, fgc *core.Aio5gc) (bool, error) {
+		if _, ok := msg.(*message.NGSetupRequest); ok {
+			// The native socket is still established. An oversized outbound record
+			// induces a real send failure, rather than forging a protocol completion.
+			return true, owner.ClassifyRetiredNGSetup(owner.SendMsg(make([]byte, 1<<20)))
+		}
+		return false, nil
+	}).Build()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, fgc.Close()) })
+	addr, err := sctp.ResolveSCTPAddr("sctp", fgc.Config().AMFs[0].String())
+	require.NoError(t, err)
+	peer, err := sctp.DialSCTP("sctp", nil, addr)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = peer.Close() })
+	packet := nativeNGSetupPacket(t)
+	_, err = peer.Write(packet)
+	require.NoError(t, err)
+	snapshot, err := fgc.Wait(ctx, func(s core.Snapshot) bool { return len(s.Errors) != 0 })
+	require.NoError(t, err)
+	require.Len(t, snapshot.Errors, 1)
+	require.ErrorIs(t, snapshot.Errors[0], syscall.EMSGSIZE)
+	require.Empty(t, snapshot.RetiredAssociations)
+	require.Len(t, snapshot.Associations, 1, "live send failure must not be treated as peer retirement")
+	require.Empty(t, snapshot.UEs)
+}
+
+func nativeNGSetupPacket(t *testing.T) []byte {
+	t.Helper()
+	node := &gnbContext.GNBContext{}
+	cfg := testkit.LocalConfig()
+	node.NewRanGnbContext(cfg.GNodeB.PlmnList.GnbId, cfg.GNodeB.PlmnList.Mcc, cfg.GNodeB.PlmnList.Mnc, cfg.GNodeB.PlmnList.Tac, cfg.GNodeB.SliceSupportList.Sst, cfg.GNodeB.SliceSupportList.Sd, cfg.GNodeB.ControlIF.AddrPort, cfg.GNodeB.DataIF.AddrPort)
+	packet, err := interface_management.NGSetupRequest(node, "native-peer")
+	require.NoError(t, err)
+	return packet
 }

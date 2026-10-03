@@ -83,6 +83,14 @@ func listenAndServe(conn *sctp.SCTPConn, bufsize int, gnb *context.GNBContext, f
 		if n > 0 {
 			if err := ngap.Dispatch(buf[:n], gnb, fgc); err != nil {
 				if fgc.Context().Err() == nil {
+					// Only the default NG Setup handler returns this direct error.
+					// Wrapped scenario-hook failures remain strict, even if their
+					// cause happened to include a transport retirement.
+					if retired, ok := err.(*context.RetiredNGSetup); ok {
+						fgc.RecordRetiredAssociation(gnb, retired)
+						log.Info("[5GC] Retiring abandoned association: ", retired)
+						return err
+					}
 					fgc.RecordError(err)
 					log.Error("[5GC] Dispatch failed: ", err)
 				}
