@@ -72,6 +72,8 @@ func handleUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMess
 	loop := true
 	for loop {
 		select {
+		case retry := <-retries:
+			trigger.InitPduSessionRetry(ue, retry)
 		case msg, open := <-ue.GetGnbTx():
 			if !open {
 				log.Debug("[UE][", ue.GetMsin(), "] gNB context released; waiting for a new connection or scenario action")
@@ -99,8 +101,6 @@ func handleUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMess
 			loop = ueMgrHandler(msg, ue)
 		case work := <-ue.Deferred():
 			work()
-		case retry := <-retries:
-			trigger.InitPduSessionRetry(ue, retry)
 		case <-ue.GetDRX():
 			verifyPaging(ue)
 		}

@@ -10,6 +10,8 @@ import (
 	"my5G-RANTester/test/aio5gc/lib/convert"
 )
 
+// Read immutable setup configuration without copying the concurrently updated
+// AMF UE pool and ID allocator.
 func NGSetupResponse(amf *context.AMFContext) ([]byte, error) {
 	return BuilNGSetupResponse(amf.GetName(), amf.GetId(), amf.GetServedGuami(), amf.GetSupportedPlmnSnssai(), amf.GetRelativeCapacity()).MarshalBinary()
 }

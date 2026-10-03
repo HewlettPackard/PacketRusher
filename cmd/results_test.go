@@ -63,6 +63,9 @@ func TestRejectedCommandLeavesReportPathsAvailable(t *testing.T) {
 		{"-n=invalid"},
 		{"--tunnel", "true", "-n", "2"},
 		{"-n", "0"},
+		{"-n", "1", "--numPduSessions", "16"},
+		{"-n", "1", "--timeBeforeIdle", "-1"},
+		{"-n", "1", "--tunnel-vrf", "false"},
 		{"-n", "2", "--numPduSessions=0"},
 		{"-n", "2", "--timeBetweenRegistration=-1"},
 	} {
