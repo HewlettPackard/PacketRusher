@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	free5gcngap "github.com/free5gc/ngap"
+	ngapmsg "github.com/free5gc/ngap/message"
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
 )
@@ -242,7 +242,7 @@ func readAssociation(amf *context.GNBAmf, gnb *context.GNBContext, conn *sctp.SC
 
 		// Decode before enqueueing: launching a goroutine per packet can reorder
 		// a NAS PDU and the following UE Context Release Command.
-		message, err := free5gcngap.Decoder(forwardData)
+		message, err := ngapmsg.Parse(forwardData)
 		if err != nil || message == nil {
 			log.Error("[GNB][NGAP] Cannot decode received message: ", err)
 			continue

@@ -17,19 +17,19 @@ import (
 )
 
 // might move to nasMsgHandler.authenticationRequest if not used in other requests
-func AuthProcedure(authSub models.AuthenticationSubscription, servingNetworkName string) (
-	response *models.AuthenticationInfoResult, problemDetails *models.ProblemDetails,
+func AuthProcedure(authSub models.Udr_DR_AuthenticationSubscription, servingNetworkName string) (
+	response *models.Udm_UEAU_AuthenticationInfoResult, problemDetails *models.ProblemDetails,
 ) {
-	response = &models.AuthenticationInfoResult{}
+	response = &models.Udm_UEAU_AuthenticationInfoResult{}
 
 	RAND := make([]byte, 16)
 	cryptoRand.Read(RAND)
 
-	opc, err := hex.DecodeString(authSub.Opc.OpcValue)
+	opc, err := hex.DecodeString(authSub.EncOpcKey)
 	if err != nil {
 		log.Error("[5GC] err while decoding opcStr: ", err)
 	}
-	k, err := hex.DecodeString(authSub.PermanentKey.PermanentKeyValue)
+	k, err := hex.DecodeString(authSub.EncPermanentKey)
 	if err != nil {
 		log.Error("[5GC] err while decoding kStr: ", err)
 	}
@@ -53,9 +53,9 @@ func AuthProcedure(authSub models.AuthenticationSubscription, servingNetworkName
 
 	SQNxorAK, _, _ := milenage.CutAUTN(AUTN)
 
-	var av models.AuthenticationVector
+	var av models.Udm_UEAU_AuthenticationVector
 
-	response.AuthType = models.AuthType__5_G_AKA
+	response.AuthType = models.Udm_UEAU_AuthType_5_G_AKA
 
 	// derive XRES*
 	key := append(CK, IK...)
@@ -85,14 +85,14 @@ func AuthProcedure(authSub models.AuthenticationSubscription, servingNetworkName
 	av.XresStar = hex.EncodeToString(xresStar)
 	av.Autn = hex.EncodeToString(AUTN)
 	av.Kausf = hex.EncodeToString(kdfValForKausf)
-	av.AvType = models.AvType__5_G_HE_AKA
+	av.AvType = models.Udm_UEAU_AvType_5_G_HE_AKA
 
 	response.AuthenticationVector = &av
 	return response, nil
 }
 
-func DeriveHXRES(auth *models.AuthenticationInfoResult, servingNetworkName string) (models.UeAuthenticationCtx, string, error) {
-	authCtx := models.UeAuthenticationCtx{}
+func DeriveHXRES(auth *models.Udm_UEAU_AuthenticationInfoResult, servingNetworkName string) (models.Ausf_UEAU_UEAuthenticationCtx, string, error) {
+	authCtx := models.Ausf_UEAU_UEAuthenticationCtx{}
 	// Derive HXRES* from XRES*
 	concat := auth.AuthenticationVector.Rand + auth.AuthenticationVector.XresStar
 	var hxresStarBytes []byte
@@ -116,12 +116,12 @@ func DeriveHXRES(auth *models.AuthenticationInfoResult, servingNetworkName strin
 	P0 := []byte(servingNetworkName)
 	Kseaf, err := ueauth.GetKDFValue(KausfDecode, ueauth.FC_FOR_KSEAF_DERIVATION, P0, ueauth.KDFLen(P0))
 
-	var av5gAka models.Av5gAka
+	var av5gAka models.Ausf_UEAU_Av5gAka
 	av5gAka.Rand = auth.AuthenticationVector.Rand
 	av5gAka.Autn = auth.AuthenticationVector.Autn
 	av5gAka.HxresStar = hxresStar
 
 	authCtx.Var5gAuthData = av5gAka
-	authCtx.AuthType = auth.AuthType
+	authCtx.AuthType = models.Ausf_UEAU_AuthType(auth.AuthType)
 	return authCtx, hex.EncodeToString(Kseaf), nil
 }

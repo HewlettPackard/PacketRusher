@@ -10,10 +10,12 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/free5gc/aper"
-	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/ngap/aper"
+	ngapType "github.com/free5gc/ngap/ie"
+	ngapmsg "github.com/free5gc/ngap/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	ngapConvert "my5G-RANTester/lib/ngap"
 )
 
 func createTestGNBContext() *context.GNBContext {
@@ -102,32 +104,11 @@ func TestHandlerUeContextReleaseCommand_ValidUE(t *testing.T) {
 	ranUeId := ue.GetRanUeId()
 
 	// Create UE Context Release Command message
-	message := &ngapType.NGAPPDU{
-		Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentUEContextReleaseCommand,
-				UEContextReleaseCommand: &ngapType.UEContextReleaseCommand{
-					ProtocolIEs: ngapType.ProtocolIEContainerUEContextReleaseCommandIEs{
-						List: []ngapType.UEContextReleaseCommandIEs{
-							{
-								Id: ngapType.ProtocolIEID{
-									Value: ngapType.ProtocolIEIDUENGAPIDs,
-								},
-								Value: ngapType.UEContextReleaseCommandIEsValue{
-									Present: ngapType.UEContextReleaseCommandIEsPresentUENGAPIDs,
-									UENGAPIDs: &ngapType.UENGAPIDs{
-										Present: ngapType.UENGAPIDsPresentUENGAPIDPair,
-										UENGAPIDPair: &ngapType.UENGAPIDPair{
-											RANUENGAPID: ngapType.RANUENGAPID{
-												Value: ranUeId,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
+	message := &ngapmsg.UEContextReleaseCommand{
+		UENGAPIDs: &ngapType.UENGAPIDs{
+			Choice: &ngapType.UENGAPIDPair{
+				RANUENGAPID: &ngapType.RANUENGAPID{
+					Value: ranUeId,
 				},
 			},
 		},
@@ -153,32 +134,11 @@ func TestHandlerUeContextReleaseCommand_NonExistentUE(t *testing.T) {
 	nonExistentRanUeId := int64(99999)
 
 	// Create UE Context Release Command message for non-existent UE
-	message := &ngapType.NGAPPDU{
-		Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentUEContextReleaseCommand,
-				UEContextReleaseCommand: &ngapType.UEContextReleaseCommand{
-					ProtocolIEs: ngapType.ProtocolIEContainerUEContextReleaseCommandIEs{
-						List: []ngapType.UEContextReleaseCommandIEs{
-							{
-								Id: ngapType.ProtocolIEID{
-									Value: ngapType.ProtocolIEIDUENGAPIDs,
-								},
-								Value: ngapType.UEContextReleaseCommandIEsValue{
-									Present: ngapType.UEContextReleaseCommandIEsPresentUENGAPIDs,
-									UENGAPIDs: &ngapType.UENGAPIDs{
-										Present: ngapType.UENGAPIDsPresentUENGAPIDPair,
-										UENGAPIDPair: &ngapType.UENGAPIDPair{
-											RANUENGAPID: ngapType.RANUENGAPID{
-												Value: nonExistentRanUeId,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
+	message := &ngapmsg.UEContextReleaseCommand{
+		UENGAPIDs: &ngapType.UENGAPIDs{
+			Choice: &ngapType.UENGAPIDPair{
+				RANUENGAPID: &ngapType.RANUENGAPID{
+					Value: nonExistentRanUeId,
 				},
 			},
 		},
@@ -197,21 +157,7 @@ func TestHandlerUeContextReleaseCommand_MissingUEID(t *testing.T) {
 	gnb := createTestGNBContext()
 
 	// Create UE Context Release Command message without UE ID
-	message := &ngapType.NGAPPDU{
-		Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentUEContextReleaseCommand,
-				UEContextReleaseCommand: &ngapType.UEContextReleaseCommand{
-					ProtocolIEs: ngapType.ProtocolIEContainerUEContextReleaseCommandIEs{
-						List: []ngapType.UEContextReleaseCommandIEs{
-							// Empty list - no UE ID provided
-						},
-					},
-				},
-			},
-		},
-	}
+	message := &ngapmsg.UEContextReleaseCommand{}
 
 	// Call handler - should not panic
 	HandlerUeContextReleaseCommand(gnb, message)
@@ -240,32 +186,11 @@ func TestNGAPHandlers_ConcurrentProcessing(t *testing.T) {
 			ranUeId := ue.GetRanUeId()
 
 			// Create and process UE Context Release Command
-			message := &ngapType.NGAPPDU{
-				Present: ngapType.NGAPPDUPresentInitiatingMessage,
-				InitiatingMessage: &ngapType.InitiatingMessage{
-					Value: ngapType.InitiatingMessageValue{
-						Present: ngapType.InitiatingMessagePresentUEContextReleaseCommand,
-						UEContextReleaseCommand: &ngapType.UEContextReleaseCommand{
-							ProtocolIEs: ngapType.ProtocolIEContainerUEContextReleaseCommandIEs{
-								List: []ngapType.UEContextReleaseCommandIEs{
-									{
-										Id: ngapType.ProtocolIEID{
-											Value: ngapType.ProtocolIEIDUENGAPIDs,
-										},
-										Value: ngapType.UEContextReleaseCommandIEsValue{
-											Present: ngapType.UEContextReleaseCommandIEsPresentUENGAPIDs,
-											UENGAPIDs: &ngapType.UENGAPIDs{
-												Present: ngapType.UENGAPIDsPresentUENGAPIDPair,
-												UENGAPIDPair: &ngapType.UENGAPIDPair{
-													RANUENGAPID: ngapType.RANUENGAPID{
-														Value: ranUeId,
-													},
-												},
-											},
-										},
-									},
-								},
-							},
+			message := &ngapmsg.UEContextReleaseCommand{
+				UENGAPIDs: &ngapType.UENGAPIDs{
+					Choice: &ngapType.UENGAPIDPair{
+						RANUENGAPID: &ngapType.RANUENGAPID{
+							Value: ranUeId,
 						},
 					},
 				},
@@ -294,111 +219,39 @@ func TestNGAPHandlers_ConcurrentProcessing(t *testing.T) {
 
 // pduSessionResourceSetupRequest builds a request for one PDU session on the given slice,
 // carrying the transfer IEs the handler reads (UL tunnel, QoS flow, session type).
-func pduSessionResourceSetupRequest(t *testing.T, ue *context.GNBUe, sst []byte, sd []byte) *ngapType.NGAPPDU {
+func pduSessionResourceSetupRequest(t *testing.T, ue *context.GNBUe, sst, sd []byte) *ngapmsg.PDUSessionResourceSetupRequest {
 	return pduSessionResourceSetupRequestWith(t, ue, sst, sd, true)
 }
 
-func pduSessionResourceSetupRequestWith(t *testing.T, ue *context.GNBUe, sst []byte, sd []byte, withUlTunnel bool) *ngapType.NGAPPDU {
+func pduSessionResourceSetupRequestWith(t *testing.T, ue *context.GNBUe, sst, sd []byte, withUlTunnel bool) *ngapmsg.PDUSessionResourceSetupRequest {
 	t.Helper()
-
-	transfer := ngapType.PDUSessionResourceSetupRequestTransfer{}
-	transfer.ProtocolIEs.List = []ngapType.PDUSessionResourceSetupRequestTransferIEs{
-		{
-			Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDULNGUUPTNLInformation},
-			Value: ngapType.PDUSessionResourceSetupRequestTransferIEsValue{
-				Present: ngapType.PDUSessionResourceSetupRequestTransferIEsPresentULNGUUPTNLInformation,
-				ULNGUUPTNLInformation: &ngapType.UPTransportLayerInformation{
-					Present: ngapType.UPTransportLayerInformationPresentGTPTunnel,
-					GTPTunnel: &ngapType.GTPTunnel{
-						TransportLayerAddress: ngapType.TransportLayerAddress{
-							Value: aper.BitString{Bytes: []byte{10, 0, 0, 1}, BitLength: 32},
-						},
-						GTPTEID: ngapType.GTPTEID{Value: []byte{0, 0, 0, 1}},
+	transfer := &ngapType.PDUSessionResourceSetupRequestTransfer{
+		ProtocolIEs: &ngapType.ProtocolIEContainerPDUSessionResourceSetupRequestTransferIEs{List: []ngapType.PDUSessionResourceSetupRequestTransferIEs{
+			{ULNGUUPTNLInformation: ngapConvert.UPTransport(netip.MustParseAddr("10.0.0.1"), 1)},
+			{PDUSessionType: &ngapType.PDUSessionType{Value: ngapType.PDUSessionTypePresentIpv4}},
+			{QosFlowSetupRequestList: &ngapType.QosFlowSetupRequestList{List: []ngapType.QosFlowSetupRequestItem{{
+				QosFlowIdentifier: &ngapType.QosFlowIdentifier{Value: 1},
+				QosFlowLevelQosParameters: &ngapType.QosFlowLevelQosParameters{
+					QosCharacteristics: &ngapType.QosCharacteristics{Choice: &ngapType.NonDynamic5QIDescriptor{FiveQI: &ngapType.FiveQI{Value: 9}}},
+					AllocationAndRetentionPriority: &ngapType.AllocationAndRetentionPriority{
+						PriorityLevelARP:        &ngapType.PriorityLevelARP{Value: 1},
+						PreEmptionCapability:    &ngapType.PreEmptionCapability{Value: 0},
+						PreEmptionVulnerability: &ngapType.PreEmptionVulnerability{Value: 0},
 					},
 				},
-			},
-		},
-		{
-			Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDPDUSessionType},
-			Value: ngapType.PDUSessionResourceSetupRequestTransferIEsValue{
-				Present:        ngapType.PDUSessionResourceSetupRequestTransferIEsPresentPDUSessionType,
-				PDUSessionType: &ngapType.PDUSessionType{Value: ngapType.PDUSessionTypePresentIpv4},
-			},
-		},
-		{
-			Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDQosFlowSetupRequestList},
-			Value: ngapType.PDUSessionResourceSetupRequestTransferIEsValue{
-				Present: ngapType.PDUSessionResourceSetupRequestTransferIEsPresentQosFlowSetupRequestList,
-				QosFlowSetupRequestList: &ngapType.QosFlowSetupRequestList{
-					List: []ngapType.QosFlowSetupRequestItem{
-						{
-							QosFlowIdentifier: ngapType.QosFlowIdentifier{Value: 1},
-							QosFlowLevelQosParameters: ngapType.QosFlowLevelQosParameters{
-								QosCharacteristics: ngapType.QosCharacteristics{
-									Present:       ngapType.QosCharacteristicsPresentNonDynamic5QI,
-									NonDynamic5QI: &ngapType.NonDynamic5QIDescriptor{FiveQI: ngapType.FiveQI{Value: 9}},
-								},
-								AllocationAndRetentionPriority: ngapType.AllocationAndRetentionPriority{
-									PriorityLevelARP: ngapType.PriorityLevelARP{Value: 1},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
+			}}}},
+		}},
 	}
 	if !withUlTunnel {
 		transfer.ProtocolIEs.List = transfer.ProtocolIEs.List[1:]
 	}
-	encodedTransfer, err := aper.MarshalWithParams(transfer, "valueExt")
+	encoded, err := ngapConvert.Marshal(transfer)
 	require.NoError(t, err)
-
-	return &ngapType.NGAPPDU{
-		Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentPDUSessionResourceSetupRequest,
-				PDUSessionResourceSetupRequest: &ngapType.PDUSessionResourceSetupRequest{
-					ProtocolIEs: ngapType.ProtocolIEContainerPDUSessionResourceSetupRequestIEs{
-						List: []ngapType.PDUSessionResourceSetupRequestIEs{
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDAMFUENGAPID},
-								Value: ngapType.PDUSessionResourceSetupRequestIEsValue{
-									Present:     ngapType.PDUSessionResourceSetupRequestIEsPresentAMFUENGAPID,
-									AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890},
-								},
-							},
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDRANUENGAPID},
-								Value: ngapType.PDUSessionResourceSetupRequestIEsValue{
-									Present:     ngapType.PDUSessionResourceSetupRequestIEsPresentRANUENGAPID,
-									RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
-								},
-							},
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDPDUSessionResourceSetupListSUReq},
-								Value: ngapType.PDUSessionResourceSetupRequestIEsValue{
-									Present: ngapType.PDUSessionResourceSetupRequestIEsPresentPDUSessionResourceSetupListSUReq,
-									PDUSessionResourceSetupListSUReq: &ngapType.PDUSessionResourceSetupListSUReq{
-										List: []ngapType.PDUSessionResourceSetupItemSUReq{
-											{
-												PDUSessionID: ngapType.PDUSessionID{Value: 1},
-												SNSSAI: ngapType.SNSSAI{
-													SST: ngapType.SST{Value: sst},
-													SD:  &ngapType.SD{Value: sd},
-												},
-												PDUSessionResourceSetupRequestTransfer: encodedTransfer,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
+	return &ngapmsg.PDUSessionResourceSetupRequest{
+		AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890}, RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
+		PDUSessionResourceSetupListSUReq: &ngapType.PDUSessionResourceSetupListSUReq{List: []ngapType.PDUSessionResourceSetupItemSUReq{{
+			PDUSessionID: &ngapType.PDUSessionID{Value: 1}, SNSSAI: ngapConvert.Slice(sst, sd), PDUSessionResourceSetupRequestTransfer: ptrOctets(encoded),
+		}}},
 	}
 }
 
@@ -459,73 +312,19 @@ func TestHandlerPduSessionReleaseCommand_EmptyNasPdu(t *testing.T) {
 	gnb := createTestGNBContext()
 	ue := createTestUE(gnb, 12345)
 
-	message := &ngapType.NGAPPDU{
-		Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentPDUSessionResourceReleaseCommand,
-				PDUSessionResourceReleaseCommand: &ngapType.PDUSessionResourceReleaseCommand{
-					ProtocolIEs: ngapType.ProtocolIEContainerPDUSessionResourceReleaseCommandIEs{
-						List: []ngapType.PDUSessionResourceReleaseCommandIEs{
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDAMFUENGAPID},
-								Value: ngapType.PDUSessionResourceReleaseCommandIEsValue{
-									Present:     ngapType.PDUSessionResourceReleaseCommandIEsPresentAMFUENGAPID,
-									AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890},
-								},
-							},
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDRANUENGAPID},
-								Value: ngapType.PDUSessionResourceReleaseCommandIEsValue{
-									Present:     ngapType.PDUSessionResourceReleaseCommandIEsPresentRANUENGAPID,
-									RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
-								},
-							},
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDNASPDU},
-								Value: ngapType.PDUSessionResourceReleaseCommandIEsValue{
-									Present: ngapType.PDUSessionResourceReleaseCommandIEsPresentNASPDU,
-								},
-							},
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDPDUSessionResourceToReleaseListRelCmd},
-								Value: ngapType.PDUSessionResourceReleaseCommandIEsValue{
-									Present:                               ngapType.PDUSessionResourceReleaseCommandIEsPresentPDUSessionResourceToReleaseListRelCmd,
-									PDUSessionResourceToReleaseListRelCmd: &ngapType.PDUSessionResourceToReleaseListRelCmd{},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
+	message := &ngapmsg.PDUSessionResourceReleaseCommand{
+		AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890},
+
+		RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
+
+		PDUSessionResourceToReleaseListRelCmd: &ngapType.PDUSessionResourceToReleaseListRelCmd{},
 	}
 
 	assert.NotPanics(t, func() { HandlerPduSessionReleaseCommand(gnb, message) })
 }
 
-func errorIndication(ue *context.GNBUe) *ngapType.NGAPPDU {
-	return &ngapType.NGAPPDU{
-		Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentErrorIndication,
-				ErrorIndication: &ngapType.ErrorIndication{
-					ProtocolIEs: ngapType.ProtocolIEContainerErrorIndicationIEs{
-						List: []ngapType.ErrorIndicationIEs{
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDRANUENGAPID},
-								Value: ngapType.ErrorIndicationIEsValue{
-									Present:     ngapType.ErrorIndicationIEsPresentRANUENGAPID,
-									RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
+func errorIndication(ue *context.GNBUe) *ngapmsg.ErrorIndication {
+	return &ngapmsg.ErrorIndication{RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()}}
 }
 
 // With a release request pending, an Error Indication for the UE is its answer and the
@@ -577,8 +376,7 @@ func TestHandlerPduSessionResourceSetupRequest_AbsentList(t *testing.T) {
 	ue.CreateUeContext("not informed", "", []string{"01"}, []string{"010203"}, nil)
 
 	message := pduSessionResourceSetupRequest(t, ue, []byte{0x01}, []byte{0x01, 0x02, 0x03})
-	ies := &message.InitiatingMessage.Value.PDUSessionResourceSetupRequest.ProtocolIEs
-	ies.List = ies.List[:2]
+	message.PDUSessionResourceSetupListSUReq = nil
 
 	HandlerPduSessionResourceSetupRequest(gnb, message)
 
@@ -590,15 +388,7 @@ func TestHandlerPduSessionResourceSetupRequest_AbsentList(t *testing.T) {
 func TestHandlerPaging_AbsentIdentity(t *testing.T) {
 	gnb := createTestGNBContext()
 
-	message := &ngapType.NGAPPDU{
-		Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentPaging,
-				Paging:  &ngapType.Paging{},
-			},
-		},
-	}
+	message := &ngapmsg.Paging{}
 
 	HandlerPaging(gnb, message)
 
@@ -612,28 +402,9 @@ func TestHandlerUeContextReleaseCommand_AmfUeIdOnly(t *testing.T) {
 	ue := createTestUE(gnb, 12345)
 	ue.SetAmfUeId(67890)
 
-	message := &ngapType.NGAPPDU{
-		Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentUEContextReleaseCommand,
-				UEContextReleaseCommand: &ngapType.UEContextReleaseCommand{
-					ProtocolIEs: ngapType.ProtocolIEContainerUEContextReleaseCommandIEs{
-						List: []ngapType.UEContextReleaseCommandIEs{
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDUENGAPIDs},
-								Value: ngapType.UEContextReleaseCommandIEsValue{
-									Present: ngapType.UEContextReleaseCommandIEsPresentUENGAPIDs,
-									UENGAPIDs: &ngapType.UENGAPIDs{
-										Present:     ngapType.UENGAPIDsPresentAMFUENGAPID,
-										AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+	message := &ngapmsg.UEContextReleaseCommand{
+		UENGAPIDs: &ngapType.UENGAPIDs{
+			Choice: &ngapType.AMFUENGAPID{Value: 67890},
 		},
 	}
 
@@ -651,47 +422,19 @@ func TestHandlerInitialContextSetupRequest_NoUlTunnel(t *testing.T) {
 
 	// Reuse the transfer of a setup request built without an UL tunnel.
 	setup := pduSessionResourceSetupRequestWith(t, ue, []byte{0x01}, []byte{0x01, 0x02, 0x03}, false)
-	item := setup.InitiatingMessage.Value.PDUSessionResourceSetupRequest.ProtocolIEs.List[2].Value.PDUSessionResourceSetupListSUReq.List[0]
+	item := setup.PDUSessionResourceSetupListSUReq.List[0]
 
-	message := &ngapType.NGAPPDU{
-		Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentInitialContextSetupRequest,
-				InitialContextSetupRequest: &ngapType.InitialContextSetupRequest{
-					ProtocolIEs: ngapType.ProtocolIEContainerInitialContextSetupRequestIEs{
-						List: []ngapType.InitialContextSetupRequestIEs{
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDAMFUENGAPID},
-								Value: ngapType.InitialContextSetupRequestIEsValue{
-									Present:     ngapType.InitialContextSetupRequestIEsPresentAMFUENGAPID,
-									AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890},
-								},
-							},
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDRANUENGAPID},
-								Value: ngapType.InitialContextSetupRequestIEsValue{
-									Present:     ngapType.InitialContextSetupRequestIEsPresentRANUENGAPID,
-									RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
-								},
-							},
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDPDUSessionResourceSetupListCxtReq},
-								Value: ngapType.InitialContextSetupRequestIEsValue{
-									Present: ngapType.InitialContextSetupRequestIEsPresentPDUSessionResourceSetupListCxtReq,
-									PDUSessionResourceSetupListCxtReq: &ngapType.PDUSessionResourceSetupListCxtReq{
-										List: []ngapType.PDUSessionResourceSetupItemCxtReq{
-											{
-												PDUSessionID:                           item.PDUSessionID,
-												SNSSAI:                                 item.SNSSAI,
-												PDUSessionResourceSetupRequestTransfer: item.PDUSessionResourceSetupRequestTransfer,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
+	message := &ngapmsg.InitialContextSetupRequest{
+		AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890},
+
+		RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
+
+		PDUSessionResourceSetupListCxtReq: &ngapType.PDUSessionResourceSetupListCxtReq{
+			List: []ngapType.PDUSessionResourceSetupItemCxtReq{
+				{
+					PDUSessionID:                           item.PDUSessionID,
+					SNSSAI:                                 item.SNSSAI,
+					PDUSessionResourceSetupRequestTransfer: item.PDUSessionResourceSetupRequestTransfer,
 				},
 			},
 		},
@@ -704,87 +447,30 @@ func TestHandlerInitialContextSetupRequest_NoUlTunnel(t *testing.T) {
 	assert.Nil(t, pduSession, "a session without an UL tunnel should be skipped")
 }
 
-func handoverRequest(t *testing.T, gnb *context.GNBContext, prUeId int64, withList bool) *ngapType.NGAPPDU {
+func handoverRequest(t *testing.T, gnb *context.GNBContext, prUeId int64, withList bool) *ngapmsg.HandoverRequest {
 	t.Helper()
-
-	// The handler reads only the IndexToRFSP, which carries the simulator's UE id; the
-	// rest is the minimum the encoder accepts.
-	cell := ngapType.NGRANCGI{
-		Present: ngapType.NGRANCGIPresentNRCGI,
-		NRCGI: &ngapType.NRCGI{
-			PLMNIdentity:   ngapType.PLMNIdentity{Value: aper.OctetString("\x00\xf1\x10")},
-			NRCellIdentity: ngapType.NRCellIdentity{Value: aper.BitString{Bytes: []byte{0, 0, 0, 0x10, 0}, BitLength: 36}},
-		},
+	cell := &ngapType.NGRANCGI{Choice: &ngapType.NRCGI{
+		PLMNIdentity:   &ngapType.PLMNIdentity{Value: []byte{0, 0xf1, 0x10}},
+		NRCellIdentity: &ngapType.NRCellIdentity{Value: aper.BitString{Bytes: []byte{0, 0, 0, 0x10, 0}, BitLength: 36}},
+	}}
+	container := &ngapType.SourceNGRANNodeToTargetNGRANNodeTransparentContainer{
+		RRCContainer: &ngapType.RRCContainer{Value: []byte{0, 0, 0x11}}, IndexToRFSP: &ngapType.IndexToRFSP{Value: prUeId}, TargetCellID: cell,
+		UEHistoryInformation: &ngapType.UEHistoryInformation{List: []ngapType.LastVisitedCellItem{{
+			LastVisitedCellInformation: &ngapType.LastVisitedCellInformation{Choice: &ngapType.LastVisitedNGRANCellInformation{
+				GlobalCellID: cell, CellType: &ngapType.CellType{CellSize: &ngapType.CellSize{Value: 0}}, TimeUEStayedInCell: &ngapType.TimeUEStayedInCell{Value: 0},
+			}},
+		}}},
 	}
-	container := ngapType.SourceNGRANNodeToTargetNGRANNodeTransparentContainer{
-		RRCContainer: ngapType.RRCContainer{Value: aper.OctetString("\x00\x00\x11")},
-		IndexToRFSP:  &ngapType.IndexToRFSP{Value: prUeId},
-		TargetCellID: cell,
-		UEHistoryInformation: ngapType.UEHistoryInformation{
-			List: []ngapType.LastVisitedCellItem{
-				{
-					LastVisitedCellInformation: ngapType.LastVisitedCellInformation{
-						Present:   ngapType.LastVisitedCellInformationPresentNGRANCell,
-						NGRANCell: &ngapType.LastVisitedNGRANCellInformation{GlobalCellID: cell},
-					},
-				},
-			},
-		},
-	}
-	encodedContainer, err := aper.MarshalWithParams(container, "valueExt")
+	encoded, err := ngapConvert.Marshal(container)
 	require.NoError(t, err)
-
-	ies := []ngapType.HandoverRequestIEs{
-		{
-			Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDAMFUENGAPID},
-			Value: ngapType.HandoverRequestIEsValue{
-				Present:     ngapType.HandoverRequestIEsPresentAMFUENGAPID,
-				AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890},
-			},
-		},
-		{
-			Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDSourceToTargetTransparentContainer},
-			Value: ngapType.HandoverRequestIEsValue{
-				Present: ngapType.HandoverRequestIEsPresentSourceToTargetTransparentContainer,
-				SourceToTargetTransparentContainer: &ngapType.SourceToTargetTransparentContainer{
-					Value: encodedContainer,
-				},
-			},
-		},
-	}
+	request := &ngapmsg.HandoverRequest{AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 67890}, SourceToTargetTransparentContainer: &ngapType.SourceToTargetTransparentContainer{Value: encoded}}
 	if withList {
-		// Reuse the transfer of a setup request built without an UL tunnel.
 		ue := createTestUE(gnb, prUeId+1)
-		setup := pduSessionResourceSetupRequestWith(t, ue, []byte{0x01}, []byte{0x01, 0x02, 0x03}, false)
-		item := setup.InitiatingMessage.Value.PDUSessionResourceSetupRequest.ProtocolIEs.List[2].Value.PDUSessionResourceSetupListSUReq.List[0]
-		ies = append(ies, ngapType.HandoverRequestIEs{
-			Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDPDUSessionResourceSetupListHOReq},
-			Value: ngapType.HandoverRequestIEsValue{
-				Present: ngapType.HandoverRequestIEsPresentPDUSessionResourceSetupListHOReq,
-				PDUSessionResourceSetupListHOReq: &ngapType.PDUSessionResourceSetupListHOReq{
-					List: []ngapType.PDUSessionResourceSetupItemHOReq{
-						{
-							PDUSessionID:            item.PDUSessionID,
-							SNSSAI:                  item.SNSSAI,
-							HandoverRequestTransfer: item.PDUSessionResourceSetupRequestTransfer,
-						},
-					},
-				},
-			},
-		})
+		setup := pduSessionResourceSetupRequestWith(t, ue, []byte{1}, []byte{1, 2, 3}, false)
+		item := setup.PDUSessionResourceSetupListSUReq.List[0]
+		request.PDUSessionResourceSetupListHOReq = &ngapType.PDUSessionResourceSetupListHOReq{List: []ngapType.PDUSessionResourceSetupItemHOReq{{PDUSessionID: item.PDUSessionID, SNSSAI: item.SNSSAI, HandoverRequestTransfer: item.PDUSessionResourceSetupRequestTransfer}}}
 	}
-
-	return &ngapType.NGAPPDU{
-		Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentHandoverRequest,
-				HandoverRequest: &ngapType.HandoverRequest{
-					ProtocolIEs: ngapType.ProtocolIEContainerHandoverRequestIEs{List: ies},
-				},
-			},
-		},
-	}
+	return request
 }
 
 // PDU Session Resource Setup List HO Req is mandatory. An absent one left the list nil, and
@@ -820,21 +506,20 @@ func TestHandlerPduSessionResourceSetupRequest_Dynamic5QI(t *testing.T) {
 	ue.CreateUeContext("not informed", "", []string{"01"}, []string{"010203"}, nil)
 
 	message := pduSessionResourceSetupRequest(t, ue, []byte{0x01}, []byte{0x01, 0x02, 0x03})
-	item := &message.InitiatingMessage.Value.PDUSessionResourceSetupRequest.ProtocolIEs.List[2].Value.PDUSessionResourceSetupListSUReq.List[0]
+	item := &message.PDUSessionResourceSetupListSUReq.List[0]
 	transfer := ngapType.PDUSessionResourceSetupRequestTransfer{}
-	require.NoError(t, aper.UnmarshalWithParams(item.PDUSessionResourceSetupRequestTransfer, &transfer, "valueExt"))
-	transfer.ProtocolIEs.List[2].Value.QosFlowSetupRequestList.List[0].QosFlowLevelQosParameters.QosCharacteristics = ngapType.QosCharacteristics{
-		Present: ngapType.QosCharacteristicsPresentDynamic5QI,
-		Dynamic5QI: &ngapType.Dynamic5QIDescriptor{
-			PriorityLevelQos:  ngapType.PriorityLevelQos{Value: 1},
-			PacketDelayBudget: ngapType.PacketDelayBudget{Value: 100},
-			PacketErrorRate:   ngapType.PacketErrorRate{PERScalar: 1, PERExponent: 6},
+	require.NoError(t, ngapConvert.Unmarshal(*item.PDUSessionResourceSetupRequestTransfer, &transfer))
+	transfer.ProtocolIEs.List[2].QosFlowSetupRequestList.List[0].QosFlowLevelQosParameters.QosCharacteristics = &ngapType.QosCharacteristics{
+		Choice: &ngapType.Dynamic5QIDescriptor{
+			PriorityLevelQos:  &ngapType.PriorityLevelQos{Value: 1},
+			PacketDelayBudget: &ngapType.PacketDelayBudget{Value: 100},
+			PacketErrorRate:   &ngapType.PacketErrorRate{PERScalar: ptrInt64(1), PERExponent: ptrInt64(6)},
 			FiveQI:            &ngapType.FiveQI{Value: 7},
 		},
 	}
-	encoded, err := aper.MarshalWithParams(transfer, "valueExt")
+	encoded, err := ngapConvert.Marshal(&transfer)
 	require.NoError(t, err)
-	item.PDUSessionResourceSetupRequestTransfer = encoded
+	item.PDUSessionResourceSetupRequestTransfer = ptrOctets(encoded)
 
 	HandlerPduSessionResourceSetupRequest(gnb, message)
 
@@ -851,49 +536,26 @@ func TestHandlerPathSwitchRequestAcknowledge_UnknownSession(t *testing.T) {
 
 	transfer := ngapType.PathSwitchRequestAcknowledgeTransfer{
 		ULNGUUPTNLInformation: &ngapType.UPTransportLayerInformation{
-			Present: ngapType.UPTransportLayerInformationPresentGTPTunnel,
-			GTPTunnel: &ngapType.GTPTunnel{
-				TransportLayerAddress: ngapType.TransportLayerAddress{
+
+			Choice: &ngapType.GTPTunnel{
+				TransportLayerAddress: &ngapType.TransportLayerAddress{
 					Value: aper.BitString{Bytes: []byte{10, 0, 0, 1}, BitLength: 32},
 				},
-				GTPTEID: ngapType.GTPTEID{Value: []byte{0, 0, 0, 1}},
+				GTPTEID: &ngapType.GTPTEID{Value: []byte{0, 0, 0, 1}},
 			},
 		},
 	}
-	encoded, err := aper.MarshalWithParams(transfer, "valueExt")
+	encoded, err := ngapConvert.Marshal(&transfer)
 	require.NoError(t, err)
 
-	message := &ngapType.NGAPPDU{
-		Present: ngapType.NGAPPDUPresentSuccessfulOutcome,
-		SuccessfulOutcome: &ngapType.SuccessfulOutcome{
-			Value: ngapType.SuccessfulOutcomeValue{
-				Present: ngapType.SuccessfulOutcomePresentPathSwitchRequestAcknowledge,
-				PathSwitchRequestAcknowledge: &ngapType.PathSwitchRequestAcknowledge{
-					ProtocolIEs: ngapType.ProtocolIEContainerPathSwitchRequestAcknowledgeIEs{
-						List: []ngapType.PathSwitchRequestAcknowledgeIEs{
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDRANUENGAPID},
-								Value: ngapType.PathSwitchRequestAcknowledgeIEsValue{
-									Present:     ngapType.PathSwitchRequestAcknowledgeIEsPresentRANUENGAPID,
-									RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
-								},
-							},
-							{
-								Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDPDUSessionResourceSwitchedList},
-								Value: ngapType.PathSwitchRequestAcknowledgeIEsValue{
-									Present: ngapType.PathSwitchRequestAcknowledgeIEsPresentPDUSessionResourceSwitchedList,
-									PDUSessionResourceSwitchedList: &ngapType.PDUSessionResourceSwitchedList{
-										List: []ngapType.PDUSessionResourceSwitchedItem{
-											{
-												PDUSessionID:                         ngapType.PDUSessionID{Value: 5},
-												PathSwitchRequestAcknowledgeTransfer: encoded,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
+	message := &ngapmsg.PathSwitchRequestAcknowledge{
+		RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()},
+
+		PDUSessionResourceSwitchedList: &ngapType.PDUSessionResourceSwitchedList{
+			List: []ngapType.PDUSessionResourceSwitchedItem{
+				{
+					PDUSessionID:                         &ngapType.PDUSessionID{Value: 5},
+					PathSwitchRequestAcknowledgeTransfer: ptrOctets(encoded),
 				},
 			},
 		},
@@ -903,3 +565,10 @@ func TestHandlerPathSwitchRequestAcknowledge_UnknownSession(t *testing.T) {
 
 	assert.Empty(t, ue.GetGnbTx(), "nothing should have been sent to the UE for an unknown session")
 }
+
+func ptrOctets(value []byte) *aper.OctetString {
+	octets := aper.OctetString(value)
+	return &octets
+}
+
+func ptrInt64(value int64) *int64 { return &value }

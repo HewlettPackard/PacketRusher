@@ -10,11 +10,11 @@ import (
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg"
 
-	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasConvert"
+	"github.com/free5gc/nas/ie"
+	nas "github.com/free5gc/nas/message"
 )
 
-func SecurityModeComplete(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
+func SecurityModeComplete(nasReq *nas.SecModeComplete, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
 	var err error
 	switch ue.GetState().Current() {
 	case context.Authenticated:
@@ -25,30 +25,30 @@ func SecurityModeComplete(nasReq *nas.Message, amf *context.AMFContext, ue *cont
 	return err
 }
 
-func DefaultSecurityModeComplete(nasReq *nas.Message, ue *context.UEContext, gnb *context.GNBContext, amf *context.AMFContext) error {
+func DefaultSecurityModeComplete(nasReq *nas.SecModeComplete, ue *context.UEContext, gnb *context.GNBContext, amf *context.AMFContext) error {
 
-	securityModeComplete := nasReq.SecurityModeComplete
+	securityModeComplete := nasReq
 	if securityModeComplete.IMEISV != nil {
-		if pei, err := nasConvert.PeiToStringWithError(securityModeComplete.IMEISV.Octet[:]); err != nil {
+		if pei, err := peiString(securityModeComplete.IMEISV); err != nil {
 			return fmt.Errorf("[5GC][NAS] Decode PEI failed: %w", err)
 		} else {
 			ue.SetPei(pei)
 		}
 	}
 
-	if securityModeComplete.NASMessageContainer == nil {
-		return fmt.Errorf("[5GC][NAS] Empty NASMessageContainer in securityModeComplete message")
+	if securityModeComplete.NASMsgCntr == nil {
+		return fmt.Errorf("[5GC][NAS] Empty NASMsgCntr in securityModeComplete message")
 	}
-	contents := securityModeComplete.NASMessageContainer.GetNASMessageContainerContents()
-	m := nas.NewMessage()
-	if err := m.GmmMessageDecode(&contents); err != nil {
+	contents := securityModeComplete.NASMsgCntr.Contents
+	m, err := nas.Parse(contents, nil)
+	if err != nil {
 		return err
 	}
 
-	switch m.GmmMessage.GmmHeader.GetMessageType() {
-	case nas.MsgTypeRegistrationRequest:
-		registrationRequest := m.GmmMessage.RegistrationRequest
-		ue.SetSecurityCapability(registrationRequest.UESecurityCapability)
+	switch m.MsgType() {
+	case nas.MsgTypeRegReq:
+		registrationRequest := m.(*nas.RegReq)
+		ue.SetSecurityCapability(registrationRequest.UESecCapability)
 		ue.AllocateGuti(amf)
 		ue.GetSecurityContext().UpdateSecurityContext()
 		msg.SendRegistrationAccept(gnb, ue, amf)
@@ -57,3 +57,5 @@ func DefaultSecurityModeComplete(nasReq *nas.Message, ue *context.UEContext, gnb
 	}
 	return nil
 }
+
+func peiString(identity *ie.MobileId5GS) (string, error) { return identity.PEIStr(), nil }

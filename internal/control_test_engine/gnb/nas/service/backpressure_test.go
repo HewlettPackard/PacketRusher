@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	free5gcngap "github.com/free5gc/ngap"
-	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/ngap/ie"
+	ngapmsg "github.com/free5gc/ngap/message"
 	gnbcontext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap"
 	uecontext "my5G-RANTester/internal/control_test_engine/ue/context"
@@ -36,20 +36,12 @@ func backpressureUE(t *testing.T, capacity int) (*gnbcontext.GNBContext, *gnbcon
 		tx <- gnbcontext.UEMessage{IsNas: true, Nas: []byte{0}}
 		rx <- gnbcontext.UEMessage{IsNas: true}
 	}
-	pdu := ngapType.NGAPPDU{Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			ProcedureCode: ngapType.ProcedureCode{Value: ngapType.ProcedureCodeDownlinkNASTransport},
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentDownlinkNASTransport,
-				DownlinkNASTransport: &ngapType.DownlinkNASTransport{ProtocolIEs: ngapType.ProtocolIEContainerDownlinkNASTransportIEs{List: []ngapType.DownlinkNASTransportIEs{
-					{Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDAMFUENGAPID}, Value: ngapType.DownlinkNASTransportIEsValue{Present: ngapType.DownlinkNASTransportIEsPresentAMFUENGAPID, AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 42}}},
-					{Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDRANUENGAPID}, Value: ngapType.DownlinkNASTransportIEsValue{Present: ngapType.DownlinkNASTransportIEsPresentRANUENGAPID, RANUENGAPID: &ngapType.RANUENGAPID{Value: gnbUE.GetRanUeId()}}},
-					{Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDNASPDU}, Value: ngapType.DownlinkNASTransportIEsValue{Present: ngapType.DownlinkNASTransportIEsPresentNASPDU, NASPDU: &ngapType.NASPDU{Value: []byte{1}}}},
-				}}},
-			},
-		},
+	pdu := &ngapmsg.DownlinkNASTransport{
+		AMFUENGAPID: &ie.AMFUENGAPID{Value: 42},
+		RANUENGAPID: &ie.RANUENGAPID{Value: gnbUE.GetRanUeId()},
+		NASPDU:      &ie.NASPDU{Value: []byte{1}},
 	}
-	encoded, err := free5gcngap.Encoder(pdu)
+	encoded, err := pdu.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}

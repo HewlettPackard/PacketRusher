@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/ngap/ie"
+	ngapmsg "github.com/free5gc/ngap/message"
 	gnbcontext "my5G-RANTester/internal/control_test_engine/gnb/context"
 )
 
@@ -51,39 +52,15 @@ func TestOrderedDispatcherPreservesUEOrderAndConcurrency(t *testing.T) {
 }
 
 func TestAMFOnlyReleaseSharesNASQueueBeforeContextPublication(t *testing.T) {
-	nasPDU := &ngapType.NGAPPDU{Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{Value: ngapType.InitiatingMessageValue{
-			DownlinkNASTransport: &ngapType.DownlinkNASTransport{ProtocolIEs: ngapType.ProtocolIEContainerDownlinkNASTransportIEs{
-				List: []ngapType.DownlinkNASTransportIEs{{Value: ngapType.DownlinkNASTransportIEsValue{
-					RANUENGAPID: &ngapType.RANUENGAPID{Value: 12}, AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 34},
-				}}},
-			}},
-		}},
-	}
-	release := &ngapType.NGAPPDU{Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{Value: ngapType.InitiatingMessageValue{
-			UEContextReleaseCommand: &ngapType.UEContextReleaseCommand{ProtocolIEs: ngapType.ProtocolIEContainerUEContextReleaseCommandIEs{
-				List: []ngapType.UEContextReleaseCommandIEs{{Value: ngapType.UEContextReleaseCommandIEsValue{
-					UENGAPIDs: &ngapType.UENGAPIDs{AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 34}},
-				}}},
-			}},
-		}},
-	}
-	if messageUEKey(nasPDU) != messageUEKey(release) {
+	nas := &ngapmsg.DownlinkNASTransport{RANUENGAPID: &ie.RANUENGAPID{Value: 12}, AMFUENGAPID: &ie.AMFUENGAPID{Value: 34}}
+	release := &ngapmsg.UEContextReleaseCommand{UENGAPIDs: &ie.UENGAPIDs{Choice: &ie.AMFUENGAPID{Value: 34}}}
+	if messageUEKey(nas) != messageUEKey(release) {
 		t.Fatal("AMF-only release does not use the earlier NAS message's queue")
 	}
 }
 
 func TestZeroAMFIDRoutesToSameQueue(t *testing.T) {
-	message := &ngapType.NGAPPDU{Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{Value: ngapType.InitiatingMessageValue{
-			DownlinkNASTransport: &ngapType.DownlinkNASTransport{ProtocolIEs: ngapType.ProtocolIEContainerDownlinkNASTransportIEs{
-				List: []ngapType.DownlinkNASTransportIEs{{Value: ngapType.DownlinkNASTransportIEsValue{
-					RANUENGAPID: &ngapType.RANUENGAPID{Value: 12}, AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 0},
-				}}},
-			}},
-		}},
-	}
+	message := &ngapmsg.DownlinkNASTransport{RANUENGAPID: &ie.RANUENGAPID{Value: 12}, AMFUENGAPID: &ie.AMFUENGAPID{Value: 0}}
 	if got := messageUEKey(message); got != -1 {
 		t.Fatalf("AMF ID zero must have its own UE queue, got %d", got)
 	}
@@ -126,12 +103,8 @@ func TestSaturatedQueueHonorsProcessingDeadline(t *testing.T) {
 func TestRANOnlyProcedureFollowsUnpublishedAMFID(t *testing.T) {
 	dispatcher := newOrderedDispatcher(8)
 	gnb := &gnbcontext.GNBContext{}
-	nas := &ngapType.NGAPPDU{Present: ngapType.NGAPPDUPresentInitiatingMessage, InitiatingMessage: &ngapType.InitiatingMessage{Value: ngapType.InitiatingMessageValue{
-		DownlinkNASTransport: &ngapType.DownlinkNASTransport{ProtocolIEs: ngapType.ProtocolIEContainerDownlinkNASTransportIEs{List: []ngapType.DownlinkNASTransportIEs{{Value: ngapType.DownlinkNASTransportIEsValue{RANUENGAPID: &ngapType.RANUENGAPID{Value: 12}, AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 34}}}}}},
-	}}}
-	indication := &ngapType.NGAPPDU{Present: ngapType.NGAPPDUPresentInitiatingMessage, InitiatingMessage: &ngapType.InitiatingMessage{Value: ngapType.InitiatingMessageValue{
-		ErrorIndication: &ngapType.ErrorIndication{ProtocolIEs: ngapType.ProtocolIEContainerErrorIndicationIEs{List: []ngapType.ErrorIndicationIEs{{Value: ngapType.ErrorIndicationIEsValue{RANUENGAPID: &ngapType.RANUENGAPID{Value: 12}}}}}},
-	}}}
+	nas := &ngapmsg.DownlinkNASTransport{RANUENGAPID: &ie.RANUENGAPID{Value: 12}, AMFUENGAPID: &ie.AMFUENGAPID{Value: 34}}
+	indication := &ngapmsg.ErrorIndication{RANUENGAPID: &ie.RANUENGAPID{Value: 12}}
 	key := dispatcher.messageKey(gnb, nas)
 	started, release := make(chan struct{}), make(chan struct{})
 	dispatcher.enqueue(key, func() { close(started); <-release })
@@ -146,19 +119,11 @@ func TestRANOnlyProcedureFollowsUnpublishedAMFID(t *testing.T) {
 	}
 }
 
-func orderedNASMessage(ue *gnbcontext.GNBUe, payload byte) *ngapType.NGAPPDU {
-	return &ngapType.NGAPPDU{Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			ProcedureCode: ngapType.ProcedureCode{Value: ngapType.ProcedureCodeDownlinkNASTransport},
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentDownlinkNASTransport,
-				DownlinkNASTransport: &ngapType.DownlinkNASTransport{ProtocolIEs: ngapType.ProtocolIEContainerDownlinkNASTransportIEs{List: []ngapType.DownlinkNASTransportIEs{
-					{Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDAMFUENGAPID}, Value: ngapType.DownlinkNASTransportIEsValue{AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 42}}},
-					{Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDRANUENGAPID}, Value: ngapType.DownlinkNASTransportIEsValue{RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()}}},
-					{Id: ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDNASPDU}, Value: ngapType.DownlinkNASTransportIEsValue{NASPDU: &ngapType.NASPDU{Value: []byte{payload}}}},
-				}}},
-			},
-		},
+func orderedNASMessage(ue *gnbcontext.GNBUe, payload byte) *ngapmsg.DownlinkNASTransport {
+	return &ngapmsg.DownlinkNASTransport{
+		AMFUENGAPID: &ie.AMFUENGAPID{Value: 42},
+		RANUENGAPID: &ie.RANUENGAPID{Value: ue.GetRanUeId()},
+		NASPDU:      &ie.NASPDU{Value: []byte{payload}},
 	}
 }
 
@@ -174,17 +139,8 @@ func TestOrderedProductionNASDeliveryPrecedesAMFOnlyRelease(t *testing.T) {
 		message := orderedNASMessage(ue, payload)
 		dispatcher.enqueue(dispatcher.messageKey(gnb, message), func() { dispatchUEMessage(nil, gnb, message) })
 	}
-	release := &ngapType.NGAPPDU{Present: ngapType.NGAPPDUPresentInitiatingMessage,
-		InitiatingMessage: &ngapType.InitiatingMessage{
-			ProcedureCode: ngapType.ProcedureCode{Value: ngapType.ProcedureCodeUEContextRelease},
-			Value: ngapType.InitiatingMessageValue{
-				Present: ngapType.InitiatingMessagePresentUEContextReleaseCommand,
-				UEContextReleaseCommand: &ngapType.UEContextReleaseCommand{ProtocolIEs: ngapType.ProtocolIEContainerUEContextReleaseCommandIEs{List: []ngapType.UEContextReleaseCommandIEs{{
-					Id:    ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDUENGAPIDs},
-					Value: ngapType.UEContextReleaseCommandIEsValue{UENGAPIDs: &ngapType.UENGAPIDs{Present: ngapType.UENGAPIDsPresentAMFUENGAPID, AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 42}}},
-				}}}},
-			},
-		},
+	release := &ngapmsg.UEContextReleaseCommand{
+		UENGAPIDs: &ie.UENGAPIDs{Choice: &ie.AMFUENGAPID{Value: 42}},
 	}
 	dispatcher.enqueue(dispatcher.messageKey(gnb, release), func() { dispatchUEMessage(nil, gnb, release) })
 	for _, want := range []byte{1, 2} {

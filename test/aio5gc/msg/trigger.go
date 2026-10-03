@@ -9,7 +9,7 @@ import (
 	nasBuilder "my5G-RANTester/test/aio5gc/msg/nas/builder"
 	ngapBuilder "my5G-RANTester/test/aio5gc/msg/ngap/builder"
 
-	"github.com/free5gc/aper"
+	"github.com/free5gc/ngap/aper"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -17,7 +17,8 @@ import (
 func SendNGSetupResponse(gnb *context.GNBContext, amf *context.AMFContext) {
 	msg, err := ngapBuilder.NGSetupResponse(*amf)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	log.Info("[5GC][NGAP] Send NG Setup Response")
@@ -28,12 +29,14 @@ func SendAuthenticationRequest(gnb *context.GNBContext, ue *context.UEContext) {
 	log.Info("[5GC][NAS] Creating Authentication Request")
 	nasRes, err := nasBuilder.AuthenticationRequest(ue)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	msg, err := ngapBuilder.DownlinkNASTransport(nasRes, ue)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	log.Info("[5GC][NGAP] Send Downlink NAS Transport - Authentication Request")
@@ -44,12 +47,14 @@ func SendIdentityRequest(gnb *context.GNBContext, ue *context.UEContext) {
 	log.Info("[5GC][NAS] Creating Identity Request")
 	nasRes, err := nasBuilder.IdentityRequest(ue)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	msg, err := ngapBuilder.DownlinkNASTransport(nasRes, ue)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	log.Info("[5GC][NGAP] Send Downlink NAS Transport - Identity Request")
@@ -61,12 +66,14 @@ func SendSecurityModeCommand(gnb *context.GNBContext, ue *context.UEContext) {
 	log.Info("[5GC][NAS] Creating Security Mode Command")
 	nasRes, err := nasBuilder.SecurityModeCommand(ue)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	msg, err := ngapBuilder.DownlinkNASTransport(nasRes, ue)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	log.Info("[5GC][NGAP] Send Downlink NAS Transport - Security Mode Command")
@@ -78,12 +85,14 @@ func SendRegistrationAccept(gnb *context.GNBContext, ue *context.UEContext, amf 
 	log.Info("[5GC][NAS] Creating Registration Accept")
 	nasRes, err := nasBuilder.RegistrationAccept(ue)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	msg, err := ngapBuilder.InitialContextSetupRequest(nasRes, ue, *amf)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	log.Info("[5GC][NGAP] Send Initial Context Setup Request - Registration Accept")
@@ -95,12 +104,14 @@ func SendPDUSessionEstablishmentAccept(gnb *context.GNBContext, ue *context.UECo
 	log.Info("[5GC][NAS] Creating PDU Session Establishment Accept")
 	nasRes, err := nasBuilder.PDUSessionEstablishmentAccept(ue, smContext)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	msg, err := ngapBuilder.PDUSessionResourceSetup(nasRes, *smContext, ue, session)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	log.Info("[5GC][NGAP] Send PDU Session Establishment Accept")
@@ -112,12 +123,14 @@ func SendConfigurationUpdateCommand(gnb *context.GNBContext, ue *context.UEConte
 	log.Info("[5GC][NAS] Configuration Update Command")
 	nasRes, err := nasBuilder.ConfigurationUpdateCommand(ue, nwName)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	msg, err := ngapBuilder.DownlinkNASTransport(nasRes, ue)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	log.Info("[5GC][NGAP] Send Downlink NAS Transport - Configuration Update Command")
@@ -128,12 +141,14 @@ func SendPDUSessionReleaseCommand(gnb *context.GNBContext, ue *context.UEContext
 	log.Info("[5GC][NAS] PDU Session Release Command")
 	nasRes, err := nasBuilder.PDUSessionReleaseCommand(ue, smContext, cause)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	msg, err := ngapBuilder.PDUSessionResourceRelease(nasRes, ue, smContext.GetPduSessionId())
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	log.Info("[5GC][NGAP] Send PDU Session Ressource Release - PDU Session Release Command")
@@ -143,7 +158,8 @@ func SendPDUSessionReleaseCommand(gnb *context.GNBContext, ue *context.UEContext
 func SendUEContextReleaseCommand(gnb *context.GNBContext, ue *context.UEContext, causePresent int, cause aper.Enumerated) {
 	msg, err := ngapBuilder.UEContextReleaseCommand(ue, causePresent, cause)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Error(err.Error())
+		return
 	}
 
 	log.Info("[5GC][NGAP] UE Context Release Command")
