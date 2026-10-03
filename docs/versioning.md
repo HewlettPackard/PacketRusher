@@ -19,15 +19,20 @@ pushed. It builds Linux amd64/arm64 archives, verifies SHA-256 checksums, and
 publishes a release plus a matching multi-platform GHCR image. Tags containing
 a hyphen are marked as prereleases. Images use the exact tag and include source
 revision/version OCI labels. No mutable `latest` image is published.
+Release tags must also be valid Docker tags. SemVer build metadata containing
+`+` is rejected by the binary build jobs before publication; development builds
+can still use it as a version identifier.
 
 Each archive contains the CLI, example config, README, project license and the
 patched NAS library's license/provenance. NAS replacement source remains in the
-repository. The Docker image retains the host SCTP/TUN/gtp5g requirements of the
+repository. The image includes the same project and NAS license/provenance files.
+The Docker image retains the host SCTP/TUN/gtp5g requirements of the
 selected tunnel backend.
 
 `scripts/release.sh` only packages a clean, checked-out commit matching the named
 tag and revision. It disables implicit VCS metadata and injects that identity
-explicitly. Archive order, ownership and timestamps derive from the source
+explicitly. Archive modes are fixed regardless of the caller's umask. Archive
+order, ownership and timestamps derive from the source
 commit so repeating a build with the same source, Go toolchain and architecture
 produces the same archive and checksum.
 

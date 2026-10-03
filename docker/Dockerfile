@@ -26,6 +26,8 @@ RUN apt-get update \
 WORKDIR /packetrusher
 COPY --from=builder /out/packetrusher /packetrusher/packetrusher
 COPY docker/config.yml /packetrusher/config/config.yml
+COPY LICENSE /packetrusher/LICENSE
+COPY third_party/free5gc-nas/LICENSE third_party/free5gc-nas/UPSTREAM.json /packetrusher/licenses/free5gc-nas/
 
 STOPSIGNAL SIGINT
 ENTRYPOINT ["/packetrusher/packetrusher"]
