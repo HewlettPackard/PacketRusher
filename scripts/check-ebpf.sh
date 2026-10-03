@@ -15,4 +15,5 @@ run_namespace() {
   fi
 }
 run_namespace "$scratch/backend.test" '^TestActualVerifierLoad$|^TestActualKernelPacketBoundsChecksumsAndTupleIsolation$|^TestNativeManagementEchoAndJoinedClose$|^TestNativeBidirectionalHandoverAndCleanup$'
+run_namespace "$scratch/backend.test" '^TestNativeRemotePeerHandoverAndCleanup$'
 run_namespace "$scratch/service.test" '^TestNativeEBPFServiceRoutingHandoverRollbackAndRelease$'

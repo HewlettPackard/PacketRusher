@@ -42,9 +42,20 @@ func Run(t *testing.T) {
 	// same completed UDP checksums that a physical N3 NIC receives.
 	out, err := exec.Command("ethtool", "-K", "pr-core", "tx", "off", "rx", "off", "gro", "off", "gso", "off", "tso", "off").CombinedOutput()
 	require.NoError(t, err, string(out))
+	steps := strings.Split(os.Getenv("PACKETRUSHER_EBPF_PEER_STEPS"), ",")
+	if steps[0] == "" {
+		steps = []string{"1", "2", "1"}
+	}
 	socket, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("10.88.0.2"), Port: 2152})
 	require.NoError(t, err)
 	defer socket.Close()
+	var targetPeer *net.UDPConn
+	if strings.Contains(os.Getenv("PACKETRUSHER_EBPF_PEER_STEPS"), "2-remote") {
+		require.NoError(t, netlink.AddrAdd(peer, &netlink.Addr{IPNet: Network("10.88.0.4/24")}))
+		targetPeer, err = net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("10.88.0.4"), Port: 2152})
+		require.NoError(t, err)
+		defer targetPeer.Close()
+	}
 	plain, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("10.88.0.2"), Port: 9999})
 	require.NoError(t, err)
 	defer plain.Close()
@@ -57,14 +68,14 @@ func Run(t *testing.T) {
 	}()
 	_, err = ready.Write([]byte{1})
 	require.NoError(t, err)
-	steps := strings.Split(os.Getenv("PACKETRUSHER_EBPF_PEER_STEPS"), ",")
-	if steps[0] == "" {
-		steps = []string{"1", "2", "1"}
-	}
 	for _, step := range steps {
-		require.NoError(t, socket.SetReadDeadline(time.Now().Add(10*time.Second)))
+		activeSocket := socket
+		if step == "2-remote" {
+			activeSocket = targetPeer
+		}
+		require.NoError(t, activeSocket.SetReadDeadline(time.Now().Add(10*time.Second)))
 		packet := make([]byte, 1500)
-		n, source, e := socket.ReadFromUDP(packet)
+		n, source, e := activeSocket.ReadFromUDP(packet)
 		require.NoError(t, e)
 		packet = packet[:n]
 		require.GreaterOrEqual(t, n, 44)
@@ -73,7 +84,7 @@ func Run(t *testing.T) {
 		require.Equal(t, []byte{0, 0, 0, 0x85, 1, 0x10, 9, 0}, packet[8:16])
 		ul := binary.BigEndian.Uint32(packet[4:8])
 		dl := uint32(2001)
-		if step == "2" {
+		if step == "2" || step == "2-remote" {
 			require.Equal(t, uint32(1002), ul)
 			require.Equal(t, "10.88.0.3", source.IP.String())
 			dl = 2002
@@ -84,11 +95,11 @@ func Run(t *testing.T) {
 		// A real keepalive must traverse TCX into the joined Echo-only responder.
 		t.Logf("received real uplink TEID %d from %s; checking GTP keepalive", ul, source)
 		echo := []byte{0x32, 1, 0, 4, 0, 0, 0, 0, 0x12, 0x34, 0, 0}
-		_, err = socket.WriteToUDP(echo, source)
+		_, err = activeSocket.WriteToUDP(echo, source)
 		require.NoError(t, err)
-		require.NoError(t, socket.SetReadDeadline(time.Now().Add(2*time.Second)))
+		require.NoError(t, activeSocket.SetReadDeadline(time.Now().Add(2*time.Second)))
 		control := make([]byte, 100)
-		cn, echoSource, e := socket.ReadFromUDP(control)
+		cn, echoSource, e := activeSocket.ReadFromUDP(control)
 		require.NoError(t, e)
 		require.Equal(t, source, echoSource)
 		require.Equal(t, []byte{0x32, 2, 0, 6, 0, 0, 0, 0, 0x12, 0x34, 0, 0, 14, 0}, control[:cn])
@@ -115,15 +126,20 @@ func Run(t *testing.T) {
 		// Wrong TEID and valid-header/wrong-UE destination must never reach the app.
 		wrong := append([]byte(nil), reply...)
 		binary.BigEndian.PutUint32(wrong[4:8], dl+99)
-		_, err = socket.WriteToUDP(wrong, source)
+		_, err = activeSocket.WriteToUDP(wrong, source)
 		require.NoError(t, err)
 		wrong = append([]byte(nil), reply...)
 		wrong[35] = 2
 		wrong[26], wrong[27] = 0, 0
 		binary.BigEndian.PutUint16(wrong[26:28], Checksum(wrong[16:36]))
-		_, err = socket.WriteToUDP(wrong, source)
+		_, err = activeSocket.WriteToUDP(wrong, source)
 		require.NoError(t, err)
-		_, err = socket.WriteToUDP(reply, source)
+		if step == "2-remote" {
+			// The source UPF must not deliver with an otherwise current target TEID.
+			_, err = socket.WriteToUDP(reply, source)
+			require.NoError(t, err)
+		}
+		_, err = activeSocket.WriteToUDP(reply, source)
 		require.NoError(t, err)
 	}
 }
