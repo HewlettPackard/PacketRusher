@@ -32,7 +32,7 @@ def serve_echo(stop, errors, state):
         errors.append(error)
         stop.set()
 
-def start(prefix, state, upf_prefix=None):
+def start(prefix, state, upf_prefix=None, stop_capture_when_ready=False):
     state = Path(state).resolve()
     profile = json.loads((state / "profile.json").read_text())
     prefix = Path(prefix).resolve()
@@ -107,6 +107,13 @@ def start(prefix, state, upf_prefix=None):
             if time.monotonic() >= deadline or stop.is_set():
                 raise RuntimeError(f"core readiness deadline: listeners={sorted(remaining)}, registration/PFCP={evidence}")
             time.sleep(.1)
+        if stop_capture_when_ready and capture:
+            # Manual benchmarks retain startup PFCP proof without capturing
+            # their timed data. Ordinary acceptance/CI keeps capture enabled.
+            capture.send_signal(signal.SIGINT)
+            if capture.wait(timeout=5) != 0:
+                raise RuntimeError('PFCP startup capture failed before benchmark')
+            capture = None
         (state / "core-ready").write_text(json.dumps({"nf_listeners":profile["nf_addresses"],"registration_and_pfcp":evidence},indent=2)+"\n")
         while not stop.wait(.2):
             for name, process in zip(names, processes):
@@ -143,5 +150,6 @@ if __name__ == "__main__":
     parser.add_argument("--prefix", required=True)
     parser.add_argument("--state", required=True)
     parser.add_argument("--upf-prefix")
+    parser.add_argument("--stop-capture-when-ready", action="store_true", help="manual benchmarks only; retain startup proof then stop the owned PFCP capture")
     args = parser.parse_args()
-    start(args.prefix, args.state,args.upf_prefix)
+    start(args.prefix, args.state,args.upf_prefix,args.stop_capture_when_ready)

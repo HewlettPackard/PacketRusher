@@ -12,6 +12,11 @@ class RealProfiles(unittest.TestCase):
         for options in [dict(backend='ebpf'),dict(upf='free5gc')]:
             with self.assertRaises(ValueError): profile_options('free5gc',**options)
 
+    def test_kernel_backend_is_explicit_native_only_and_still_requires_a_pdu(self):
+        with self.assertRaises(ValueError): profile_options('free5gc',sessions=1,backend='gtp5g')
+        with self.assertRaises(ValueError): profile_options('free5gc',backend='gtp5g',native=True)
+        self.assertEqual(profile_options('free5gc',sessions=1,backend='gtp5g',native=True),(1,'gtp5g','free5gc'))
+
     def test_genuine_free5gc_has_real_smf_upf_and_static_subscribed_ue(self):
         with tempfile.TemporaryDirectory() as directory:
             generate('free5gc',directory,native=True,sessions=1,backend='ebpf')
