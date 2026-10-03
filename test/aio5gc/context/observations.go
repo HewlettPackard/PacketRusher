@@ -18,10 +18,17 @@ type AssociationRecord struct {
 	Remote string
 }
 
+type RetiredAssociationRecord struct {
+	AssociationRecord
+	State uint32
+	Cause string
+}
+
 type Snapshot struct {
-	Associations []AssociationRecord
-	UEs          []UERecord
-	Errors       []error
+	Associations        []AssociationRecord
+	UEs                 []UERecord
+	Errors              []error
+	RetiredAssociations []RetiredAssociationRecord
 }
 type UERecord struct {
 	AMFID    int64
@@ -39,6 +46,7 @@ type observations struct {
 	changed chan struct{}
 	ues     map[int64]UERecord
 	errors  []error
+	retired []RetiredAssociationRecord
 }
 
 func (o *observations) initLocked() {
@@ -56,7 +64,7 @@ func copyEntries(m map[fsm.StateType]uint64) map[fsm.StateType]uint64 {
 	return n
 }
 func (o *observations) snapshotLocked() Snapshot {
-	s := Snapshot{Errors: append([]error(nil), o.errors...)}
+	s := Snapshot{Errors: append([]error(nil), o.errors...), RetiredAssociations: append([]RetiredAssociationRecord(nil), o.retired...)}
 	for _, ue := range o.ues {
 		ue.Entries = copyEntries(ue.Entries)
 		sessions := make(map[int32]PDURecord, len(ue.Sessions))
@@ -113,6 +121,16 @@ func (a *Aio5gc) RecordError(err error) {
 	defer o.mu.Unlock()
 	o.initLocked()
 	o.errors = append(o.errors, err)
+	o.signalLocked()
+}
+
+func (a *Aio5gc) RecordRetiredAssociation(gnb *GNBContext, retired *RetiredNGSetup) {
+	local, remote := gnb.Endpoints()
+	o := &a.observations
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.initLocked()
+	o.retired = append(o.retired, RetiredAssociationRecord{AssociationRecord: AssociationRecord{Local: local, Remote: remote}, State: retired.State, Cause: fmt.Sprint(retired.Cause)})
 	o.signalLocked()
 }
 func (a *Aio5gc) observeCreatedUE(ue *UEContext) {

@@ -21,7 +21,7 @@ func SendNGSetupResponse(gnb *context.GNBContext, amf *context.AMFContext) error
 	}
 
 	log.Info("[5GC][NGAP] Send NG Setup Response")
-	return gnb.SendMsg(msg)
+	return gnb.ClassifyRetiredNGSetup(gnb.SendMsg(msg))
 }
 
 func SendAuthenticationRequest(gnb *context.GNBContext, ue *context.UEContext) error {

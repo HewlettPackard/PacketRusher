@@ -29,6 +29,8 @@ require.Equal(t, []uint8{1}, attachment.ActivePDUSessions)
 
 `core.Snapshot()` contains copied UE/PDU records and transition counts, sorted by AMF UE ID. `core.Wait(ctx, predicate)` checks a snapshot and subscribes to the next change atomically; no polling sleep is needed. `Entries[Authenticated]` and `Sessions[id].Entries[Active]` replace bespoke callback-counter maps. Session records retain the last observed transition after the live session is removed. An `Active` core entry occurs **before** the encoded PDU accept is sent; confirm client readiness independently through `simulation.Execute`. Assert `snapshot.Errors` when success is expected: decoder, scenario-hook, handler, encoder and send failures propagate through native dispatch.
 
+A startup peer can close an association after its NG Setup deadline while its request remains buffered. If its response fails and Linux confirms that accepted association is closing/closed, the reader retires it and retains endpoints, kernel state and original send cause in `snapshot.RetiredAssociations`. This is not successful NG Setup. Live or unknown association failures, build/hook failures and all NAS/PDU send failures remain in `snapshot.Errors`; scenario assertions do not exempt them. The native held-request/peer-close regression proves this boundary, and a live oversized send still produces a strict error.
+
 `testkit.Gate` pauses a real decoded protocol phase without preventing core shutdown:
 
 ```go
