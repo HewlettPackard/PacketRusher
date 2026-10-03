@@ -182,7 +182,7 @@ func (gnb *GNBContext) GetPrUePool() *sync.Map {
 func (gnb *GNBContext) DeleteGnBUe(ue *GNBUe) {
 	gnb.uePool.Delete(ue.ranUeNgapId)
 	gnb.prUePool.CompareAndDelete(ue.GetPrUeId(), ue)
-	for _, pduSession := range ue.context.pduSession {
+	for _, pduSession := range ue.GetPduSessions() {
 		if pduSession != nil {
 			gnb.teidPool.Delete(pduSession.GetTeidDownlink())
 		}
