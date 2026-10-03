@@ -84,6 +84,8 @@ def start(prefix, state, upf_prefix=None):
         remaining = set(profile["nf_addresses"])
         evidence = None
         while remaining or not evidence:
+            if capture and capture.poll() is not None:
+                raise RuntimeError('PFCP capture exited during readiness; no packet proof can be accepted')
             if errors:
                 raise RuntimeError(f"DN peer failed: {errors[0]}")
             for name, process in zip(names, processes):

@@ -82,6 +82,10 @@ def generate(core, output, native=False, prefix="/opt/open5gs", sessions=None, b
             if nf == "upf" and upf == "open5gs":
                 continue
             write(config / f"{nf}cfg.yaml", value)
+        if sessions:
+            # SMF requires this auxiliary file even with the default single-UPF
+            # topology. Empty optional overrides preserve upNodes/links routing.
+            write(config/'uerouting.yaml',{'info':{'version':'1.0.7','description':'Default configured single-UPF path'},'ueRoutingInfo':{}})
         if sessions and upf == "open5gs":
             write(config / "upf.yaml", {"logger": {"file": {"path": f"{logs}/upf.log"}}, "global": {"max": {"ue": 16}}, "upf": {"pfcp": {"server": [{"address": CORE_IP}]}, "gtpu": {"server": [{"address": CORE_IP}]}, "session": [session | {"dev": "ogstun"}]}})
         supi = "imsi-" + IMSI
