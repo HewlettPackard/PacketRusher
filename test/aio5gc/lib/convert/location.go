@@ -4,12 +4,13 @@ package convert
 import (
 	"encoding/hex"
 	"fmt"
-	nasie "github.com/free5gc/nas/ie"
+	"strconv"
+	"strings"
+
 	"github.com/free5gc/ngap/aper"
 	"github.com/free5gc/ngap/ie"
 	"github.com/free5gc/openapi/models"
-	"strconv"
-	"strings"
+	ngapCodec "my5G-RANTester/lib/ngap"
 )
 
 func GlobalGNBToModels(global *ie.GlobalGNBID) (models.GlobalRanNodeId, error) {
@@ -20,8 +21,8 @@ func GlobalGNBToModels(global *ie.GlobalGNBID) (models.GlobalRanNodeId, error) {
 	if !ok || id == nil || id.Value.BitLength < 22 || id.Value.BitLength > 32 || len(id.Value.Bytes) != int((id.Value.BitLength+7)/8) {
 		return models.GlobalRanNodeId{}, fmt.Errorf("invalid gNB identity bit string")
 	}
-	var plmn nasie.PlmnId
-	if err := plmn.UnmarshalBinary(global.PLMNIdentity.Value); err != nil {
+	mcc, mnc, err := ngapCodec.DecodePLMN(global.PLMNIdentity.Value)
+	if err != nil {
 		return models.GlobalRanNodeId{}, fmt.Errorf("invalid gNB PLMN: %w", err)
 	}
 	var value uint64
@@ -30,22 +31,23 @@ func GlobalGNBToModels(global *ie.GlobalGNBID) (models.GlobalRanNodeId, error) {
 	}
 	value >>= uint64(len(id.Value.Bytes)*8) - id.Value.BitLength
 	return models.GlobalRanNodeId{
-		PlmnId: &models.PlmnId{Mcc: plmn.MCC, Mnc: plmn.MNC},
+		PlmnId: &models.PlmnId{Mcc: mcc, Mnc: mnc},
 		GNbId:  &models.GNbId{BitLength: int32(id.Value.BitLength), GNBValue: fmt.Sprintf("%0*x", (id.Value.BitLength+3)/4, value)},
 	}, nil
 }
 
 func PLMNToModels(id *ie.PLMNIdentity) models.PlmnId {
-	var plmn nasie.PlmnId
-	if id != nil {
-		_ = plmn.UnmarshalBinary(id.Value)
+	if id == nil {
+		return models.PlmnId{}
 	}
-	return models.PlmnId{Mcc: plmn.MCC, Mnc: plmn.MNC}
+	mcc, mnc, _ := ngapCodec.DecodePLMN(id.Value)
+	return models.PlmnId{Mcc: mcc, Mnc: mnc}
 }
 func PLMNToNGAP(id models.PlmnId) *ie.PLMNIdentity {
-	b := make([]byte, 3)
-	plmn := nasie.PlmnId{MCC: id.Mcc, MNC: id.Mnc}
-	_ = plmn.MarshalBinary(b)
+	b, err := ngapCodec.EncodePLMN(id.Mcc, id.Mnc)
+	if err != nil {
+		return nil
+	}
 	return &ie.PLMNIdentity{Value: b}
 }
 func SNSSAIToNGAP(id models.Snssai) *ie.SNSSAI {

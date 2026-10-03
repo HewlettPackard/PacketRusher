@@ -52,7 +52,7 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 	go func() {
 		// starting communication with GNB and listen.
 		service.InitConn(ue, ue.GetGnbInboundChannel())
-		runUE(ue, ueMgrChannel)
+		handleUE(ue, ueMgrChannel)
 
 		ue.Terminate()
 		wg.Done()
@@ -65,12 +65,15 @@ func runUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMessage
 	handleUE(ue, ueMgrChannel)
 }
 
+// handleUE runs messages and deferred work serially on the UE's goroutine until
+// the scenario stops it or its gNB association fails.
 func handleUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMessage) {
 	retries := ue.PduSessionRetries()
-	// Block until a signal is received.
 	loop := true
 	for loop {
 		select {
+		case retry := <-retries:
+			trigger.InitPduSessionRetry(ue, retry)
 		case msg, open := <-ue.GetGnbTx():
 			if !open {
 				log.Debug("[UE][", ue.GetMsin(), "] gNB context released; waiting for a new connection or scenario action")
@@ -94,12 +97,11 @@ func handleUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMess
 				break
 			}
 			loop = ueMgrHandler(msg, ue)
-		case work := <-ue.Deferred():
-			work()
-		case retry := <-retries:
-			trigger.InitPduSessionRetry(ue, retry)
 		case <-ue.GetDRX():
 			verifyPaging(ue)
+		case f := <-ue.Deferred():
+			// Work such as a rejected session's retry shares the UE's NAS counters.
+			f()
 		}
 	}
 }

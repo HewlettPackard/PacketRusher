@@ -4,6 +4,9 @@ PacketRusher sets the inner IPv4 MTU for both shared and dedicated GTP-U
 interfaces. By default it finds the host interface holding the gNB's N3 source
 address and subtracts 44 bytes from that interface's MTU. An Ethernet N3 interface
 with MTU 1500 therefore produces a tunnel MTU of 1456. IP aliases are supported.
+In dedicated and VRF modes the stable UE-facing interface has the same MTU as
+its GTP-U backend. Handover updates both to the target N3 limit; an unsuccessful
+route commit restores the retained UE interface's source MTU.
 
 The 44 bytes cover outer IPv4 (20), UDP (8), the GTP-U base header (8), optional
 GTP-U fields (4), and the PDU Session Container (4). The same conservative limit
