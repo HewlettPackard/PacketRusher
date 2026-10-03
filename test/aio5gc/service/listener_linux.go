@@ -105,6 +105,16 @@ func (l *Listener) Accept() (net.Conn, error) {
 	if acceptErr != nil {
 		return nil, acceptErr
 	}
+	// The pinned SCTPConn.Close ignores descriptor zero. A caller may have
+	// closed stdin while accept was pending; keep that valid fd owned/closable.
+	if accepted == 0 {
+		owned, err := unix.FcntlInt(uintptr(accepted), unix.F_DUPFD_CLOEXEC, 3)
+		_ = unix.Close(accepted)
+		if err != nil {
+			return nil, err
+		}
+		accepted = owned
+	}
 	return sctp.NewSCTPConn(accepted, nil), nil
 }
 func (l *Listener) Close() error {

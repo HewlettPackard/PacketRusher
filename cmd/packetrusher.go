@@ -89,8 +89,7 @@ func newApp() *cli.App {
 						log.Info("[TESTER][AMF] AMF IP/Port: ", amf.AddrPort)
 					}
 					log.Info("---------------------------------------")
-					templates.TestAttachGnbWithConfiguration()
-					return nil
+					return templates.TestAttachGnbWithConfiguration()
 				},
 			},
 			{
@@ -182,9 +181,7 @@ func newApp() *cli.App {
 						return nil
 					}
 
-					templates.TestWithCustomScenario(scenarioPath)
-
-					return nil
+					return templates.TestWithCustomScenario(scenarioPath)
 				},
 			},
 			{

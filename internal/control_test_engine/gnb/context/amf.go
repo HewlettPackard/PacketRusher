@@ -5,6 +5,7 @@
 package context
 
 import (
+	stdcontext "context"
 	"encoding/hex"
 	"net/netip"
 	"sync"
@@ -29,6 +30,8 @@ type GNBAmf struct {
 	tnla                TNLAssociation // AMF sctp associations
 	relativeAmfCapacity int64          // AMF capacity
 	state               int
+	stateChanged        chan struct{}
+	setupError          error
 	name                string // amf name.
 	regionId            aper.BitString
 	setId               aper.BitString
@@ -203,19 +206,76 @@ func (tnla *TNLAssociation) GetUsage() aper.Enumerated {
 func (amf *GNBAmf) SetStateInactive() {
 	amf.mu.Lock()
 	amf.state = Inactive
+	amf.setupError = nil
+	amf.notifyStateLocked()
 	amf.mu.Unlock()
 }
 
 func (amf *GNBAmf) SetStateActive() {
 	amf.mu.Lock()
 	amf.state = Active
+	amf.setupError = nil
+	amf.notifyStateLocked()
 	amf.mu.Unlock()
+}
+
+// RejectSetup preserves a failed decoded NG Setup outcome for its waiter.
+// Failure is local to this AMF; it must not terminate the whole simulator.
+func (amf *GNBAmf) RejectSetup(err error) {
+	amf.mu.Lock()
+	defer amf.mu.Unlock()
+	amf.state = Inactive
+	amf.setupError = err
+	amf.notifyStateLocked()
 }
 
 func (amf *GNBAmf) SetStateOverload() {
 	amf.mu.Lock()
 	amf.state = Overload
+	amf.notifyStateLocked()
 	amf.mu.Unlock()
+}
+
+func (amf *GNBAmf) notifyStateLocked() {
+	if amf.stateChanged != nil {
+		close(amf.stateChanged)
+	}
+	amf.stateChanged = make(chan struct{})
+}
+
+// WaitActive observes the decoded NG Setup Response; no polling delay or
+// assumed response time is required. A stopped gNB cancels the wait as well.
+func (amf *GNBAmf) WaitActive(ctx stdcontext.Context, stopped <-chan struct{}) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		select {
+		case <-stopped:
+			return stdcontext.Canceled
+		default:
+		}
+		amf.mu.Lock()
+		active, setupErr := amf.state == Active, amf.setupError
+		if amf.stateChanged == nil {
+			amf.stateChanged = make(chan struct{})
+		}
+		changed := amf.stateChanged
+		amf.mu.Unlock()
+		if setupErr != nil {
+			return setupErr
+		}
+		if active {
+			return nil
+		}
+		select {
+		case <-changed:
+		case <-stopped:
+			return stdcontext.Canceled
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 func (amf *GNBAmf) GetState() int {
@@ -247,6 +307,16 @@ func (amf *GNBAmf) SetSCTPConn(conn *sctp.SCTPConn) {
 	amf.mu.Lock()
 	amf.tnla.sctpConn = conn
 	amf.mu.Unlock()
+}
+
+// ClearSCTPConn retires only the association read by the failed worker. A
+// replacement published meanwhile must retain its transport owner.
+func (amf *GNBAmf) ClearSCTPConn(conn *sctp.SCTPConn) {
+	amf.mu.Lock()
+	defer amf.mu.Unlock()
+	if amf.tnla.sctpConn == conn {
+		amf.tnla.sctpConn = nil
+	}
 }
 
 func (amf *GNBAmf) SetTNLAWeight(weight int64) {
