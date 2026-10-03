@@ -155,7 +155,7 @@ def probe(binary, state):
     profile = json.loads((state / "profile.json").read_text())
     sessions = profile.get('sessions',0 if profile["core"] == "free5gc" else 1)
     backend = profile.get('tunnel_backend','userspace')
-    result, process, capture = {"core": profile["core"], "sessions":sessions, "tunnel_backend":backend, "upf_implementation":profile.get('upf_implementation'), "success": False}, None, None
+    result, process, capture = {"core": profile["core"], "sessions":sessions, "tunnel_backend":backend if sessions else None, "upf_implementation":profile.get('upf_implementation'), "success": False}, None, None
     nonce = b"PACKETRUSHER-EXTERNAL-" + os.urandom(32).hex().encode()
     log = (state / "packetrusher.log").open("wb")
     capture_log = (state / "capture.log").open("wb")
