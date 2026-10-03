@@ -8,7 +8,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/gtp"
 	"net/netip"
 
-	"github.com/free5gc/nas/nasType"
+	nasType "github.com/free5gc/nas/ie"
 )
 
 type UEMessage struct {
@@ -21,8 +21,9 @@ type UEMessage struct {
 	IsNas             bool
 	Nas               []byte
 	ConnectionClosed  bool
+	ConnectionLost    chan struct{} // closed only when this logical connection fails
 	PrUeId            int64
-	Tmsi              *nasType.GUTI5G
+	Tmsi              *nasType.MobileId5GS
 	Mcc               string
 	Mnc               string
 	UEContext         *GNBUe

@@ -9,7 +9,8 @@ import (
 	"encoding/hex"
 	"my5G-RANTester/internal/common/auth"
 
-	"github.com/free5gc/nas/security"
+	nasType "github.com/free5gc/nas/ie"
+	security "github.com/free5gc/nas/message"
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/util/ueauth"
 	log "github.com/sirupsen/logrus"
@@ -26,7 +27,7 @@ type SecurityContext struct {
 	knasEnc            [16]uint8
 	knasInt            [16]uint8
 	kamf               string
-	authenticationSubs models.AuthenticationSubscription
+	authenticationSubs models.Udr_DR_AuthenticationSubscription
 	suci               string
 	kseaf              string
 	kgnb               []uint8
@@ -34,26 +35,20 @@ type SecurityContext struct {
 	NH                 []byte
 }
 
-func (s *SecurityContext) GetAuthSubscription() models.AuthenticationSubscription {
+func (s *SecurityContext) GetAuthSubscription() models.Udr_DR_AuthenticationSubscription {
 	return s.authenticationSubs
 }
 
 func (s *SecurityContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
-	s.authenticationSubs.PermanentKey = &models.PermanentKey{
-		PermanentKeyValue: k,
+	// The upstream model names the key fields Enc*, matching free5GC's local provisioning convention.
+	s.authenticationSubs = models.Udr_DR_AuthenticationSubscription{
+		EncPermanentKey:               k,
+		EncOpcKey:                     opc,
+		AuthenticationManagementField: amf,
+		SequenceNumber:                &models.Udr_DR_SequenceNumber{Sqn: sqn},
+		AuthenticationMethod:          models.Udr_DR_AuthMethod_5_G_AKA,
 	}
-	s.authenticationSubs.Opc = &models.Opc{
-		OpcValue: opc,
-	}
-	s.authenticationSubs.Milenage = &models.Milenage{
-		Op: &models.Op{
-			OpValue: op,
-		},
-	}
-	s.authenticationSubs.AuthenticationManagementField = amf
 
-	s.authenticationSubs.SequenceNumber = sqn
-	s.authenticationSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
 }
 
 func (s *SecurityContext) GetMsin() string {
@@ -93,7 +88,7 @@ func (s *SecurityContext) GetDLCount() security.Count {
 }
 
 func (s *SecurityContext) SetDLCount(dlCount security.Count) {
-	s.ulCount = dlCount
+	s.dlCount = dlCount
 }
 
 func (s *SecurityContext) GetIntegrityAlg() uint8 {
@@ -138,7 +133,7 @@ func (s *SecurityContext) DerivateAnKey() {
 	P0 := make([]byte, 4)
 	binary.BigEndian.PutUint32(P0, s.ulCount.Get())
 	L0 := ueauth.KDFLen(P0)
-	P1 := []byte{accessType}
+	P1 := []byte{uint8(accessType)}
 	L1 := ueauth.KDFLen(P1)
 
 	KamfBytes, err := hex.DecodeString(s.kamf)
@@ -197,5 +192,14 @@ func (s *SecurityContext) DerivateAlgKey() {
 
 	if err != nil {
 		log.Printf("[5GC] Algorithm key derivation failed  %v", err)
+	}
+}
+
+func (s *SecurityContext) NASSecurityContext() *security.SecCtx {
+	return &security.SecCtx{
+		Side: security.CoreNetworkSide, Bearer: security.Bearer3GPP,
+		UplinkCount: &s.ulCount, DownlinkCount: &s.dlCount,
+		CipheringAlg: nasType.AlgCiphering(s.cipheringAlg), IntegrityAlg: nasType.AlgIntegrity(s.integrityAlg),
+		KnasEnc: s.knasEnc, KnasInt: s.knasInt,
 	}
 }

@@ -41,7 +41,7 @@ The following is a quick start guide, for more details on the installation, conf
   - All Linux distributions with kernel from 5.4 up to the 7.0.x series should work, but untested.
   - There might be issues with frankenstein kernel from RHEL/CentOS/Rocky, feel free to open a bug if you encounter one!
 - Windows is not supported (Windows does not support SCTP)
-- Go 1.23.0 or more recent
+- Go 1.26.2 or more recent
 - Root privilege
 - Secure boot disabled (for custom kernel module)
 
@@ -51,7 +51,7 @@ PacketRusher is not yet supported on Docker.
 ```bash
 $ sudo apt install build-essential linux-headers-generic make git wget tar linux-modules-extra-$(uname -r)
 # Warning this command will remove your existing local Go installation if you have one:
-$ wget https://go.dev/dl/go1.24.1.linux-amd64.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.24.1.linux-amd64.tar.gz
+$ wget https://go.dev/dl/go1.26.2.linux-amd64.tar.gz && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.26.2.linux-amd64.tar.gz
 # Add go binary to the executable PATH variable:
 $ echo 'export PATH=$PATH:/usr/local/go/bin' >> $HOME/.profile
 ```
@@ -74,7 +74,7 @@ $ make clean && make && sudo make install
 ```bash
 $ cd $PACKETRUSHER
 $ go mod download
-$ go build cmd/packetrusher.go
+$ go build -o packetrusher ./cmd
 $ ./packetrusher --help
 ```
 
@@ -139,3 +139,5 @@ the next UE uses the next gNB when multiple gNBs are present. Selection wraps
 back to the first gNB after the last one, and handovers advance through that
 same sequence. With `--dedicatedGnb`, ascending MSINs therefore use ascending
 gNB IDs and N2/N3 addresses.
+
+For the current codec APIs and validation commands, see [Dependency migration](docs/dependency-migration.md).
