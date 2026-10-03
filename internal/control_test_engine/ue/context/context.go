@@ -64,10 +64,11 @@ type UEContext struct {
 	amfInfo           Amf
 
 	// TODO: Modify config so you can configure these parameters per PDUSession
-	Dnn        string
-	Snssai     models.Snssai
-	TunnelMode config.TunnelMode
-	TunnelMTU  int
+	Dnn           string
+	Snssai        models.Snssai
+	TunnelMode    config.TunnelMode
+	TunnelMTU     int
+	TunnelBackend config.TunnelBackend
 
 	// Sync primitive
 	scenarioChan chan scenario.ScenarioMessage

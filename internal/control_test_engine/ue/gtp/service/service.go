@@ -184,6 +184,24 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		return
 	}
 
+	if ue.TunnelBackend == config.TunnelBackendUserspace {
+		if pduSession.Id != 1 {
+			log.Warn("[UE][GTP] Only PDU session 1 has a tunnel")
+			return
+		}
+		if err := setupUserspaceTunnel(ue, pduSession, gnbPduSession, msg.GnbIp); err != nil {
+			log.Error("[UE][GTP] Unable to configure userspace tunnel: ", err)
+			if errors.Is(err, errTunnelRollback) {
+				pduSession.ReleaseTunnel()
+				log.Error("[UE][GTP] Released userspace tunnel after unsuccessful rollback")
+			}
+			return
+		}
+		pduSession.SetGnbIp(msg.GnbIp)
+		committed = true
+		return
+	}
+
 	// Bounded concurrency through the plumbing below; see setupSlots. A dedicated
 	// device per UE keeps its own pacing, the 500 ms registration floor.
 	if ue.TunnelMode == config.TunnelShared {
@@ -495,6 +513,10 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		err = replaceTunnelRoute(route)
 	}
 	if err != nil {
+		if errors.Is(err, errTunnelRollback) {
+			pduSession.ReleaseTunnel()
+			log.Error("[UE][GTP] Released tunnel after unsuccessful endpoint MTU rollback")
+		}
 		failed("[GNB][GTP] Unable to create Kernel Route ", err)
 		return
 	}
@@ -560,7 +582,7 @@ func replaceRouteWithEndpointMTU(route *netlink.Route, endpoint netlink.Link, mt
 	}
 	if err != nil && preserve {
 		if restoreErr := setUEEndpointMTU(endpoint, previous); restoreErr != nil {
-			return errors.Join(err, fmt.Errorf("source endpoint MTU rollback failed: %w", restoreErr))
+			return errors.Join(err, fmt.Errorf("%w: source endpoint MTU rollback failed: %w", errTunnelRollback, restoreErr))
 		}
 		endpoint.Attrs().MTU = previous
 	}

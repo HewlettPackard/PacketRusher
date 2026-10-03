@@ -146,3 +146,6 @@ gNB IDs and N2/N3 addresses.
 For automatic tunnel MTU calculation and the `ue.tunnelmtu` override, see [Tunnel MTU](docs/tunnel-mtu.md).
 
 For the current codec APIs and validation commands, see [Dependency migration](docs/dependency-migration.md).
+
+See [userspace GTP-U tunnels](docs/userspace-tunnels.md) to run user traffic without
+the gtp5g kernel module. The default backend remains `gtp5g`.
