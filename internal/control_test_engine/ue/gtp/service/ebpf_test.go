@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"syscall"
 	"testing"
 	"time"
 
@@ -138,6 +139,62 @@ func TestNativeEBPFServiceRoutingHandoverRollbackAndRelease(t *testing.T) {
 	exchange("production-reinstall")
 	pdu.ReleaseTunnel()
 	join()
+}
+
+func TestNativeEBPFServiceInitialOpenFailureRetiresStaging(t *testing.T) {
+	if os.Getenv("PACKETRUSHER_EBPF_TEST") != "1" {
+		t.Skip("requires private privileged namespace")
+	}
+	join := testpeer.Start(t, "TestEBPFServicePeerProcess", "1")
+	previous, previousTables := ebpfRegistry, sessionRoutingTables
+	ebpfRegistry = ebpfgtp.NewRegistry()
+	sessionRoutingTables = newRoutingTableAllocator(netlink.RouteAdd, netlink.RouteDel, routingTableInUse)
+	t.Cleanup(func() { ebpfRegistry, sessionRoutingTables = previous, previousTables })
+	occupied, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("10.88.0.1"), Port: 2152})
+	require.NoError(t, err)
+	defer occupied.Close()
+	ue, pdu := sharedSetupUE(t, 1)
+	ue.TunnelBackend = config.TunnelBackendEBPF
+	pdu.SetIp([12]uint8{10, 60, 0, 1})
+	source := ebpfTestMessage(t, "10.88.0.1", 1001, 2001)
+	// Real Registry.Open reaches the initial bind failure after staging the
+	// owned TUN and policy. Its concrete nil must never enter cleanup's interface.
+	err = setupEBPFTunnel(ue, pdu, source.GNBPduSessions[0], source.GnbIp)
+	require.ErrorIs(t, err, syscall.EADDRINUSE, "preserve the original constructor error")
+	require.Nil(t, pdu.GetTunInterface())
+	require.NotContains(t, sessionRoutingTables.sessions, pdu)
+	_, err = netlink.LinkByName("val" + ue.GetMsin())
+	require.Error(t, err)
+	routes, err := netlink.RouteListFiltered(netlink.FAMILY_V4, &netlink.Route{Table: firstRoutingTable}, netlink.RT_FILTER_TABLE)
+	require.NoError(t, err)
+	require.Empty(t, routes)
+	rules, err := netlink.RuleList(netlink.FAMILY_V4)
+	require.NoError(t, err)
+	for _, rule := range rules {
+		require.NotEqual(t, firstRoutingTable, rule.Table)
+	}
+	require.NoError(t, occupied.Close())
+	// Freed staging resources permit a complete fresh setup and actual traffic.
+	SetupGtpInterface(ue, source)
+	require.NotNil(t, pdu.GetTunInterface())
+	defer pdu.ReleaseTunnel()
+	require.Equal(t, firstRoutingTable, pdu.GetTunRoute().Table)
+	app, err := net.DialUDP("udp4", &net.UDPAddr{IP: net.ParseIP("10.60.0.1")}, &net.UDPAddr{IP: net.ParseIP("192.0.2.1"), Port: 9000})
+	require.NoError(t, err)
+	defer app.Close()
+	require.NoError(t, app.SetDeadline(time.Now().Add(5*time.Second)))
+	_, err = app.Write([]byte("after-initial-open-failure"))
+	require.NoError(t, err)
+	packet := make([]byte, 100)
+	n, err := app.Read(packet)
+	require.NoError(t, err)
+	require.Equal(t, "after-initial-open-failure", string(packet[:n]))
+	require.NoError(t, app.Close())
+	pdu.ReleaseTunnel()
+	join()
+	port, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("10.88.0.1"), Port: 2152})
+	require.NoError(t, err)
+	require.NoError(t, port.Close())
 }
 
 type ebpfFailureSession struct {
