@@ -49,15 +49,25 @@ def open_registered_count(raw, initial=False):
     return sum(numbers)
 
 
-def core_count(profile, initial=False):
+def core_snapshot(profile, initial=False):
     with HTTP.open(profile["oam"], timeout=2) as response:
         raw = response.read(1024*1024)
     if profile["core"] == "free5gc":
         value = json.loads(raw)
         require(value is None or isinstance(value, list), "unexpected free5GC registered-UE response")
         require(all(ue.get("Supi") == "imsi-"+IMSI for ue in value or []), "AMF registered an unexpected subscriber")
-        return len(value or [])
-    return open_registered_count(raw,initial)
+        return len(value or []), raw
+    return open_registered_count(raw,initial), raw
+
+
+def await_core_count(profile, state, label, expected, seconds, initial=False):
+    def matches():
+        count, raw = core_snapshot(profile,initial)
+        if count != expected:
+            return False
+        (state/f"core-{label}.txt").write_bytes(raw)
+        return True
+    until(matches,seconds,f"real AMF {label} count={expected}")
 
 def validate_report(report, sessions):
     require(report.get("schema_version") == 1 and report.get("ended_at"), "report is not completed schema1")
@@ -144,7 +154,7 @@ def probe(binary, state):
             until(lambda: (state/"core-ready").exists(), 65, "real NF registration and accepted SMF/UPF PFCP association")
         else:
             until(lambda: free_registered(profile), 65, "real free5GC NRF registrations")
-        until(lambda: core_count(profile,initial=True) == 0, 60, "real core initial empty registered state")
+        await_core_count(profile,state,"initial",0,60,initial=True)
         command = [str(binary), "--config", str(state/"config/packetrusher.yaml"), "--report-json", str(state/"report.json"), "multi-ue", "-n", "1", "--numPduSessions", str(sessions), "--control-socket", str(state/"control.sock")]
         if sessions:
             command.append("--tunnel")
@@ -161,7 +171,7 @@ def probe(binary, state):
             return value["ues"][0]
         ready = control("wait")
         require(ready["ready"] and ready["connected"] and ready["state"] == "registered" and ready["active_pdu_sessions"] == ([1] if sessions else []), f"incomplete real NAS readiness: {ready}")
-        until(lambda: core_count(profile) == 1, 5, "real AMF registered UE")
+        await_core_count(profile,state,"registered",1,5)
         if sessions:
             route = subprocess.check_output(["ip", "-json", "route", "get", DN_IP, "from", UE_IP], text=True)
             (state/"ue-route.json").write_text(route)
@@ -181,7 +191,8 @@ def probe(binary, state):
             require(control("deregister")["state"] == "parked", "manual deregistration did not park")
         # Free5GC automatic termination must take the positive readiness path,
         # well before the legacy30s unresolved-readiness cleanup fallback.
-        until(lambda: core_count(profile) == 0, 12, "real AMF deregistration")
+        await_core_count(profile,state,"deregistered",0,12)
+        result["core_registered_counts"] = [0,1,0]
         process.send_signal(signal.SIGINT)
         require(process.wait(timeout=10) == 0, "PacketRusher shutdown failed")
         validate_report(json.loads((state/"report.json").read_text()), sessions)
