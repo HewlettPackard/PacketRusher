@@ -94,6 +94,11 @@ type UESimulationConfig struct {
 // round-robin sequence. UE IDs start at 1; gNB offsets start at 0.
 func (simConfig UESimulationConfig) gnbID(handoverOffset int) string {
 	index := (simConfig.UeId - 1 + handoverOffset) % len(simConfig.Gnbs)
+	if index == 0 {
+		// CreateGnbs preserves the configured ID as the first map key. Hex
+		// letter case must therefore be retained when returning to that gNB.
+		return simConfig.Cfg.GNodeB.PlmnList.GnbId
+	}
 	return gnbIdGenerator(index, simConfig.Cfg.GNodeB.PlmnList.GnbId)
 }
 
