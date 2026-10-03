@@ -4,7 +4,7 @@
 
 ## Test author API
 
-Use `testkit` for ordinary registration/session scenarios. It owns the core, production gNBs and UE simulations; provisioning errors are returned. Kernel-assigned SCTP endpoints eliminate process-derived port arithmetic. Fixed endpoint configurations remain supported for retry, reassociation and address allocation tests.
+Use `testkit` for ordinary registration/session scenarios. It owns the core, production gNBs and UE simulations; provisioning errors are returned. Kernel-assigned SCTP endpoints eliminate process-derived port arithmetic. Fixed endpoint configurations remain supported for retry, reassociation and address allocation tests. A configured builder with no AMF endpoints creates a listenerless core for tests that register and restart their own `service.Listener`.
 
 ```go
 ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

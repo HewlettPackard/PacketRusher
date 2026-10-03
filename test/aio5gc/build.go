@@ -98,9 +98,6 @@ func (f *FiveGCBuilder) Build() (*context.Aio5gc, error) {
 	if f.ngapHook != nil {
 		fgc.SetNgapHooks(f.ngapHook)
 	}
-	if len(f.config.AMFs) == 0 {
-		return nil, errors.New("no AMF endpoints provided")
-	}
 	for index, amf := range f.config.AMFs {
 		if amf == nil {
 			_ = fgc.Close()
