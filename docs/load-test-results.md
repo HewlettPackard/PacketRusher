@@ -29,7 +29,10 @@ Both registration and PDU session establishment have these counters:
   or released, or its UE terminates; stale queued retries cannot start attempts.
 - `success`: registration reaches the registered state or a PDU session reaches
   the active state.
-- `failure`: an explicit authentication/registration or PDU establishment reject.
+- `failure`: an explicit authentication/registration or PDU establishment reject,
+  including a matching pending establishment request returned in DL NAS Transport
+  with a 5GMM refusal cause (for example, an unsupported or unsubscribed DNN).
+  This accounting does not introduce automatic retries or backoff policy.
 - `cancelled`: an unfinished attempt ended by session deletion, UE termination or scenario shutdown.
 - `pending`: attempts still waiting for completion in a live snapshot.
 
@@ -53,6 +56,12 @@ These measurements describe UE control-plane procedure completion. They do not
 measure user-plane throughput, prove that kernel tunnel rules installed, or
 measure handover/deregistration latency. A missing response remains pending
 until termination; it is not silently classified as a protocol rejection.
+
+Transport refusals must match the current session and establishment transaction.
+The existing NAS sender uses PTI 1 for each establishment; a delayed wire response
+that is identical to a new request after session-ID reuse cannot be distinguished
+without changing that transaction allocation. Non-pending sessions, stale context
+objects, mismatched IDs/PTIs and duplicate completed attempts are not counted.
 
 The latest free5GC util NAS/NGAP helpers count messages. Procedure attempts and
 latencies here are separate measurements and work with both old and migrated

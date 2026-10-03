@@ -912,6 +912,21 @@ func (pdu *UEPDUSession) EstablishmentFailed() {
 	pdu.results.Finish(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment, analytics.Failure)
 }
 
+// EstablishmentTransportFailed accounts for an explicitly refused uplink request,
+// not a session-state transition or a new retry policy. Establishment requests
+// currently use PTI 1; verify that transaction and the current pending lifetime.
+func (pdu *UEPDUSession) EstablishmentTransportFailed(pti uint8) {
+	if pdu.owner == nil {
+		return
+	}
+	pdu.owner.Lock()
+	defer pdu.owner.Unlock()
+	if pti != 1 || !pdu.owner.hasSessionLocked(pdu) || pdu.StateSM != SM5G_PDU_SESSION_ACTIVE_PENDING {
+		return
+	}
+	pdu.results.Finish(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment, analytics.Failure)
+}
+
 // The backend keeps an immutable snapshot of its last completed rules so an
 // in-place update can roll back independently of mutable gNB session context.
 func (pduSession *UEPDUSession) SetTunnelUpdate(update func(*context.GnbPDUSession, netip.Addr) error) {
