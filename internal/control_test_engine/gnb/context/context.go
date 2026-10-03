@@ -29,20 +29,22 @@ import (
 )
 
 type GNBContext struct {
-	dataInfo       DataInfo    // gnb data plane information
-	controlInfo    ControlInfo // gnb control plane information
-	uePool         sync.Map    // map[int64]*GNBUe, UeRanNgapId as key
-	prUePool       sync.Map    // map[int64]*GNBUe, PrUeId as key
-	amfPool        sync.Map    // map[int64]*GNBAmf, AmfId as key
-	teidPool       sync.Map    // map[uint32]*GNBUe, downlinkTeid as key
-	sliceInfo      Slice
-	idUeGenerator  atomic.Int64  // ran UE id, incremented atomically.
-	idAmfGenerator atomic.Int64  // ran amf id, incremented atomically.
-	teidGenerator  atomic.Uint32 // ran UE downlink Teid, incremented atomically.
-	ueIpGenerator  uint8         // ran ue ip.
-	pagedUEs       []PagedUE
-	pagedUELock    sync.Mutex
-	gtpDevice      atomic.Pointer[gtp.Device] // GTP-U device shared by this gNB's UEs, if any
+	dataInfo           DataInfo    // gnb data plane information
+	controlInfo        ControlInfo // gnb control plane information
+	uePool             sync.Map    // map[int64]*GNBUe, UeRanNgapId as key
+	prUePool           sync.Map    // map[int64]*GNBUe, PrUeId as key
+	amfPool            sync.Map    // map[int64]*GNBAmf, AmfId as key
+	teidPool           sync.Map    // map[uint32]*GNBUe, downlinkTeid as key
+	sliceInfo          Slice
+	idUeGenerator      atomic.Int64  // ran UE id, incremented atomically.
+	idAmfGenerator     atomic.Int64  // ran amf id, incremented atomically.
+	teidGenerator      atomic.Uint32 // ran UE downlink Teid, incremented atomically.
+	ueIpGenerator      uint8         // ran ue ip.
+	pagedUEs           []PagedUE
+	pagedUELock        sync.Mutex
+	gtpDevice          atomic.Pointer[gtp.Device] // GTP-U device shared by this gNB's UEs, if any
+	endpointMu         sync.RWMutex
+	associationWorkers sync.WaitGroup
 }
 
 type DataInfo struct {
@@ -181,14 +183,57 @@ func (gnb *GNBContext) QueueHandover(message UEMessage) error {
 }
 
 func (gnb *GNBContext) GetN3GnbIp() netip.Addr {
+	gnb.endpointMu.RLock()
+	defer gnb.endpointMu.RUnlock()
 	return gnb.dataInfo.gnbIpPort.Addr()
 }
+
+// SetStartupEndpoints advances retry addresses without replacing this gNB's
+// immutable shutdown signal or UE admission channel. NGAP readers can remain
+// alive for other AMFs while a later association is being established.
+func (gnb *GNBContext) SetStartupEndpoints(n2, n3 netip.AddrPort) {
+	gnb.endpointMu.Lock()
+	defer gnb.endpointMu.Unlock()
+	gnb.controlInfo.gnbIpPort = n2
+	gnb.dataInfo.gnbIpPort = n3
+}
+
+// RunAssociation owns a transport worker until it exits. Admission and
+// Terminate share the lifecycle lock; waiting after Terminate cannot race Add.
+func (gnb *GNBContext) RunAssociation(worker func()) bool {
+	gnb.controlInfo.lifecycle.Lock()
+	defer gnb.controlInfo.lifecycle.Unlock()
+	if gnb.IsTerminated() {
+		return false
+	}
+	gnb.associationWorkers.Add(1)
+	go func() {
+		defer gnb.associationWorkers.Done()
+		worker()
+	}()
+	return true
+}
+
+// WaitAssociations joins admitted transport workers after Terminate.
+func (gnb *GNBContext) WaitAssociations() { gnb.associationWorkers.Wait() }
 
 // SetGtpDevice gives this gNB the GTP-U device its UEs' tunnels share. The gNB owns
 // it: it is closed when the gNB terminates. It is set after the NGAP receiver has
 // started, and read from there, hence atomic.
 func (gnb *GNBContext) SetGtpDevice(dev *gtp.Device) {
 	gnb.gtpDevice.Store(dev)
+}
+
+// PublishGtpDevice orders a slow device creation against startup cancellation.
+// A rejected device is still owned by the creator and must be closed there.
+func (gnb *GNBContext) PublishGtpDevice(dev *gtp.Device) bool {
+	gnb.controlInfo.lifecycle.Lock()
+	defer gnb.controlInfo.lifecycle.Unlock()
+	if gnb.IsTerminated() {
+		return false
+	}
+	gnb.gtpDevice.Store(dev)
+	return true
 }
 
 // GetGtpDevice returns the GTP-U device this gNB's UEs share, or nil when each UE
@@ -467,6 +512,8 @@ func (gnb *GNBContext) GetGnbId() string {
 }
 
 func (gnb *GNBContext) GetGnbIpPort() netip.AddrPort {
+	gnb.endpointMu.RLock()
+	defer gnb.endpointMu.RUnlock()
 	return gnb.controlInfo.gnbIpPort
 }
 

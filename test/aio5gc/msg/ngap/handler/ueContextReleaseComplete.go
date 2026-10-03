@@ -6,7 +6,7 @@ import (
 	"my5G-RANTester/test/aio5gc/context"
 )
 
-func UEContextReleaseComplete(req *message.UEContextReleaseComplete, fgc *context.Aio5gc) error {
-	_, err := resolveUE(fgc.GetAMFContext(), req.RANUENGAPID, req.AMFUENGAPID)
+func UEContextReleaseComplete(req *message.UEContextReleaseComplete, fgc *context.Aio5gc, gnbs ...*context.GNBContext) error {
+	_, err := resolveUE(fgc.GetAMFContext(), req.RANUENGAPID, req.AMFUENGAPID, gnbs...)
 	return err
 }

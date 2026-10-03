@@ -144,21 +144,20 @@ func SendAmfConfigurationUpdateAcknowledge(amf *context.GNBAmf) {
 	}
 }
 
-func SendNgSetupRequest(gnb *context.GNBContext, amf *context.GNBAmf) {
+// SendNgSetupRequest returns native build/write failures to startup callers.
+// Existing call sites may retain their fire-and-log behavior by ignoring it.
+func SendNgSetupRequest(gnb *context.GNBContext, amf *context.GNBAmf) error {
 	log.Info("[GNB] Initiating NG Setup Request")
-
-	// send NG setup response.
 	ngapMsg, err := interface_management.NGSetupRequest(gnb, "PacketRusher")
 	if err != nil {
-		log.Info("[GNB][NGAP] Error sending NG Setup Request: ", err)
+		log.Error("[GNB][NGAP] Error building NG Setup Request: ", err)
+		return fmt.Errorf("build NG Setup Request: %w", err)
 	}
-
-	conn := amf.GetSCTPConn()
-	err = sender.SendToAmF(ngapMsg, conn)
-	if err != nil {
-		log.Info("[GNB][AMF] Error sending NG Setup Request: ", err)
+	if err := sender.SendToAmF(ngapMsg, amf.GetSCTPConn()); err != nil {
+		log.Error("[GNB][AMF] Error sending NG Setup Request: ", err)
+		return fmt.Errorf("send NG Setup Request: %w", err)
 	}
-
+	return nil
 }
 
 func SendPathSwitchRequest(gnb *context.GNBContext, ue *context.GNBUe) {

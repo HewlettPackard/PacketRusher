@@ -5,12 +5,14 @@
 package templates
 
 import (
+	"context"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue"
 	"my5G-RANTester/internal/script"
 	"os"
+	"os/signal"
 	"sync"
 	"time"
 
@@ -18,16 +20,20 @@ import (
 	"github.com/tetratelabs/wazero"
 )
 
-func TestWithCustomScenario(scenarioPath string) {
+func TestWithCustomScenario(scenarioPath string) error {
+	startupCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 	wg := sync.WaitGroup{}
 
 	cfg := config.GetConfig()
 
 	wg.Add(1)
 
-	gnb := gnb.InitGnb(cfg, &wg)
-
-	time.Sleep(1 * time.Second)
+	gnb, err := gnb.InitGnbContext(startupCtx, cfg, &wg)
+	if err != nil {
+		return err
+	}
+	defer gnb.Terminate()
 
 	ueChan := make(chan procedures.UeTesterMessage)
 
@@ -37,7 +43,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	ctx, runtime := script.NewCustomScenario(scenarioPath)
 
-	_, err := runtime.NewHostModuleBuilder("env").
+	_, err = runtime.NewHostModuleBuilder("env").
 		NewFunctionBuilder().
 		WithFunc(func(ueId uint32) {
 			ueChan <- procedures.UeTesterMessage{Type: procedures.Registration}
@@ -94,4 +100,5 @@ func TestWithCustomScenario(scenarioPath string) {
 	log.Info(results)
 
 	wg.Wait()
+	return nil
 }

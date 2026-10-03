@@ -5,12 +5,17 @@
 package templates
 
 import (
+	"context"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
+	"os"
+	"os/signal"
 	"sync"
 )
 
-func TestAttachGnbWithConfiguration() {
+func TestAttachGnbWithConfiguration() error {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
 
 	wg := sync.WaitGroup{}
 
@@ -23,9 +28,13 @@ func TestAttachGnbWithConfiguration() {
 	// cfg.GNodeB.SliceSupportList.St = "10"
 	// cfg.GNodeB.SliceSupportList.Sst = "010239"
 
-	go gnb.InitGnb(cfg, &wg)
-
 	wg.Add(1)
+	node, err := gnb.InitGnbContext(ctx, cfg, &wg)
+	if err != nil {
+		return err
+	}
+	defer node.Terminate()
 
 	wg.Wait()
+	return nil
 }

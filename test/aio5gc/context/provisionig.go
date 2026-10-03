@@ -16,5 +16,5 @@ func (p *provisionedData) GetDefaultSNssai() models.Snssai {
 }
 
 func (p *provisionedData) GetSecurityContext() SecurityContext {
-	return p.securityContext
+	return p.securityContext.clone()
 }

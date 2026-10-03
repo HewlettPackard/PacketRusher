@@ -39,104 +39,79 @@ const (
 // serving through the AMF, while the dial was in progress.
 var errAssociationUnwanted = errors.New("association no longer wanted")
 
+// InitConn preserves the original API with a bounded dial. Context-aware
+// constructors use InitConnContext to share their total startup budget.
 func InitConn(amf *context.GNBAmf, gnb *context.GNBContext) error {
-	if err := dialAmf(amf, gnb); err != nil {
+	return InitConnContext(stdcontext.Background(), amf, gnb)
+}
+
+func InitConnContext(ctx stdcontext.Context, amf *context.GNBAmf, gnb *context.GNBContext) error {
+	if err := dialAmfContext(ctx, amf, gnb); err != nil {
 		return err
 	}
-
-	log.Info("[GNB][SCTP] Starting GnbListen goroutine...")
-	go GnbListen(amf, gnb)
-
+	if !gnb.RunAssociation(func() { GnbListen(amf, gnb) }) {
+		_ = amf.GetSCTPConn().Close()
+		return errAssociationUnwanted
+	}
 	return nil
 }
 
 func dialAmf(amf *context.GNBAmf, gnb *context.GNBContext) error {
+	return dialAmfContext(stdcontext.Background(), amf, gnb)
+}
 
-	// check AMF IP and AMF port.
-	remote := amf.GetAmfIpPort().String()
+func dialAmfContext(parent stdcontext.Context, amf *context.GNBAmf, gnb *context.GNBContext) error {
+	ctx, cancel := stdcontext.WithTimeout(parent, 5*time.Second)
+	// The small cancellation watcher is joined before returning; the actual
+	// native dial has no background socket/goroutine left after cancellation.
+	watcherDone := make(chan struct{})
+	go func() {
+		defer close(watcherDone)
+		select {
+		case <-gnb.Done():
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	defer func() { cancel(); <-watcherDone }()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if gnb.IsTerminated() || !gnb.HasGnbAmf(amf.GetAmfId()) {
+		return errAssociationUnwanted
+	}
+	remote := amf.GetAmfIpPort()
 	gnbAddrPort := gnb.GetGnbIpPort()
 	port := amf.GetLocalPort()
 	if port == 0 {
-		port = gnbAddrPort.Port() + uint16(ConnCount.Add(1)-1)
+		port = localAssociationPort(gnbAddrPort.Port(), ConnCount.Add(1)-1)
 		amf.SetLocalPort(port)
 	}
 	DialCount.Add(1)
-	local := netip.AddrPortFrom(gnbAddrPort.Addr(), port).String()
-
+	local := netip.AddrPortFrom(gnbAddrPort.Addr(), port)
 	log.Info("[GNB][SCTP] Initializing connection: local=", local, " remote=", remote)
-
-	rem, err := sctp.ResolveSCTPAddr("sctp", remote)
+	conn, err := dialSCTPContext(ctx, local, remote)
 	if err != nil {
-		log.Error("[GNB][SCTP] Failed to resolve remote address: ", err)
+		return fmt.Errorf("SCTP dial local=%s remote=%s: %w", local, remote, err)
+	}
+	// Install receive metadata before publishing or starting a native reader.
+	if err := conn.SubscribeEvents(sctp.SCTP_EVENT_DATA_IO); err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("subscribe SCTP data events: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		_ = conn.Close()
 		return err
 	}
-	loc, err := sctp.ResolveSCTPAddr("sctp", local)
-	if err != nil {
-		log.Error("[GNB][SCTP] Failed to resolve local address: ", err)
-		return err
+	if gnbAddrPort.Port() == 0 {
+		if addr, ok := conn.LocalAddr().(*sctp.SCTPAddr); ok {
+			amf.SetLocalPort(uint16(addr.Port))
+		}
 	}
-
-	log.Info("[GNB][SCTP] Attempting SCTP dial...")
-
-	// streams := amf.GetTNLAStreams()
-
-	// Wrap SCTP dial in a goroutine with timeout
-	type dialResult struct {
-		conn *sctp.SCTPConn
-		err  error
-	}
-	dialChan := make(chan dialResult, 1)
-
-	go func() {
-		conn, err := sctp.DialSCTPExt(
-			"sctp",
-			loc,
-			rem,
-			sctp.InitMsg{NumOstreams: 2, MaxInstreams: 2})
-		dialChan <- dialResult{conn: conn, err: err}
-	}()
-
-	// Wait for dial with 5-second timeout
-	var conn *sctp.SCTPConn
-	select {
-	case result := <-dialChan:
-		conn = result.conn
-		err = result.err
-	case <-time.After(5 * time.Second):
-		// The dial may still complete; nothing will read what it yields, so close it.
-		go func() {
-			if result := <-dialChan; result.conn != nil {
-				_ = result.conn.Close()
-			}
-		}()
-		// The dial goroutine keeps its socket bound to this port until SCTP gives up on
-		// the INIT, so a redial from the same port would fail to bind until then. Take a
-		// fresh port next time.
-		amf.SetLocalPort(0)
-		err = fmt.Errorf("SCTP dial timeout after 5 seconds")
-		log.Error("[GNB][SCTP] SCTP dial timeout")
-		return err
-	}
-
-	if err != nil {
-		log.Error("[GNB][SCTP] SCTP dial failed: ", err)
-		amf.SetSCTPConn(nil)
-		return err
-	}
-
-	log.Info("[GNB][SCTP] SCTP connection established successfully")
-
-	// set streams and other information about TNLA
-
-	// successful established SCTP (TNLA - N2)
 	if !gnb.PublishAssociation(amf, conn) {
 		_ = conn.Close()
-		log.Warn("[GNB][SCTP] Closing association with AMF ", amf.GetAmfIpPort(), ": ", errAssociationUnwanted)
 		return errAssociationUnwanted
 	}
-
-	conn.SubscribeEvents(sctp.SCTP_EVENT_DATA_IO)
-
 	return nil
 }
 
@@ -165,6 +140,10 @@ func GnbListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 			return
 		}
 
+		// Retire this reader's transport before retry/backoff, preserving a
+		// replacement published meanwhile.
+		amf.ClearSCTPConn(conn)
+
 		if amf.GetState() == context.Active {
 			// An established association was lost: start a new outage.
 			amf.SetStateInactive()
@@ -178,11 +157,14 @@ func GnbListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 		} else if lostAt.IsZero() {
 			// Never set up: not ours to re-establish.
 			log.Warn("[GNB][SCTP] Association with AMF ", amf.GetAmfIpPort(), " closed before NG Setup completed: ", err)
+			amf.RejectSetup(fmt.Errorf("SCTP association closed before NG Setup: %w", err))
 			return
 		} else {
 			// A re-establishment attempt that did not complete NG Setup.
 			_ = conn.Close()
-			time.Sleep(backoff)
+			if !waitBackoff(gnb.Done(), backoff) {
+				return
+			}
 			backoff = min(2*backoff, reassociateMaxBackoff)
 		}
 
@@ -204,11 +186,14 @@ func GnbListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 			}
 			log.Error("[GNB][SCTP] Still no association with AMF ", amf.GetAmfIpPort(), " after ",
 				time.Since(lostAt).Round(time.Second), " (attempt ", attempt, "); retrying in ", backoff)
-			time.Sleep(backoff)
+			if !waitBackoff(gnb.Done(), backoff) {
+				return
+			}
 			backoff = min(2*backoff, reassociateMaxBackoff)
 		}
 		trigger.SendNgSetupRequest(gnb, amf)
-		go awaitReassociation(amf, amf.GetSCTPConn(), lostAt, attempt)
+		reassociatedConn, outage, completedAttempt := amf.GetSCTPConn(), lostAt, attempt
+		gnb.RunAssociation(func() { awaitReassociationContext(gnb.Done(), amf, reassociatedConn, outage, completedAttempt) })
 	}
 }
 
@@ -262,6 +247,10 @@ func readAssociation(amf *context.GNBAmf, gnb *context.GNBContext, conn *sctp.SC
 // awaitReassociation reports a re-established association once NG Setup completes, and closes
 // it if setup does not complete in time so that GnbListen tries again.
 func awaitReassociation(amf *context.GNBAmf, conn *sctp.SCTPConn, lostAt time.Time, attempt int) {
+	awaitReassociationContext(nil, amf, conn, lostAt, attempt)
+}
+
+func awaitReassociationContext(stopped <-chan struct{}, amf *context.GNBAmf, conn *sctp.SCTPConn, lostAt time.Time, attempt int) {
 	deadline := time.After(reassociateSetupTimeout)
 	tick := time.NewTicker(100 * time.Millisecond)
 	defer tick.Stop()
@@ -278,6 +267,8 @@ func awaitReassociation(amf *context.GNBAmf, conn *sctp.SCTPConn, lostAt time.Ti
 					time.Since(lostAt).Round(time.Second), " (attempt ", attempt, ")")
 				return
 			}
+		case <-stopped:
+			return
 		case <-deadline:
 			if amf.CloseIfNotActive(conn) {
 				log.Error("[GNB][SCTP] NG Setup with AMF ", amf.GetAmfIpPort(), " did not complete within ",
@@ -286,4 +277,24 @@ func awaitReassociation(amf *context.GNBAmf, conn *sctp.SCTPConn, lostAt time.Ti
 			return
 		}
 	}
+}
+
+func waitBackoff(stopped <-chan struct{}, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-stopped:
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+// Configured port zero requests a kernel-assigned endpoint for every association;
+// counting associations must not turn it into a privileged fixed port.
+func localAssociationPort(configured uint16, offset int32) uint16 {
+	if configured == 0 {
+		return 0
+	}
+	return configured + uint16(offset)
 }

@@ -6,8 +6,8 @@ import (
 	"my5G-RANTester/test/aio5gc/context"
 )
 
-func PDUSessionResourceRelease(req *message.PDUSessionResourceReleaseResponse, fgc *context.Aio5gc) error {
-	ue, err := resolveUE(fgc.GetAMFContext(), req.RANUENGAPID, req.AMFUENGAPID)
+func PDUSessionResourceRelease(req *message.PDUSessionResourceReleaseResponse, fgc *context.Aio5gc, gnbs ...*context.GNBContext) error {
+	ue, err := resolveUE(fgc.GetAMFContext(), req.RANUENGAPID, req.AMFUENGAPID, gnbs...)
 	if err != nil {
 		return err
 	}
