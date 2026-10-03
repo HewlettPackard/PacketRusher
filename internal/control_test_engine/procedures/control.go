@@ -3,6 +3,7 @@ package procedures
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	gnb "my5G-RANTester/internal/control_test_engine/gnb/context"
 )
@@ -26,6 +27,20 @@ type Attachment struct {
 	Connected            bool    `json:"connected"`
 	Ready                bool    `json:"ready"`
 	ActivePDUSessions    []uint8 `json:"active_pdu_sessions"`
+}
+
+// MarshalJSON exposes session identities as numbers. encoding/json otherwise
+// treats []uint8 as bytes and writes a base64 string, including for zero sessions.
+func (a Attachment) MarshalJSON() ([]byte, error) {
+	type attachmentJSON Attachment
+	sessions := make([]int, len(a.ActivePDUSessions))
+	for i, id := range a.ActivePDUSessions {
+		sessions[i] = int(id)
+	}
+	return json.Marshal(struct {
+		attachmentJSON
+		ActivePDUSessions []int `json:"active_pdu_sessions"`
+	}{attachmentJSON(a), sessions})
 }
 
 type ControlResult struct {
