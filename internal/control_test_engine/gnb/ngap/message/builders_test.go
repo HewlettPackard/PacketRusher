@@ -2,6 +2,7 @@ package message_test
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"net/netip"
 	"reflect"
 	"testing"
@@ -18,6 +19,35 @@ import (
 	mobility "my5G-RANTester/internal/control_test_engine/gnb/ngap/message/ngap_control/ue_mobility_management"
 	codec "my5G-RANTester/lib/ngap"
 )
+
+func TestNGSetupPLMNWireVectors(t *testing.T) {
+	for _, tc := range []struct{ mcc, mnc, wire string }{
+		{"208", "93", "02f839"}, {"208", "010", "020801"},
+		{"001", "001", "000110"}, {"001", "01", "00f110"},
+		{"999", "070", "990907"}, {"999", "07", "99f970"},
+	} {
+		t.Run(tc.mcc+"/"+tc.mnc, func(t *testing.T) {
+			gnb := &context.GNBContext{}
+			gnb.NewRanGnbContext("000001", tc.mcc, tc.mnc, "000001", "01", "000001", netip.MustParseAddrPort("127.0.0.1:9487"), netip.MustParseAddrPort("127.0.0.1:2152"))
+			encoded, err := interfaces.NGSetupRequest(gnb, "test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := message.Parse(encoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			setup := decoded.(*message.NGSetupRequest)
+			global := setup.GlobalRANNodeID.Choice.(*ie.GlobalGNBID)
+			broadcast := setup.SupportedTAList.List[0].BroadcastPLMNList.List[0].PLMNIdentity
+			for name, identity := range map[string]*ie.PLMNIdentity{"global gNB": global.PLMNIdentity, "broadcast TAI": broadcast} {
+				if got := hex.EncodeToString(identity.Value); got != tc.wire {
+					t.Fatalf("%s PLMN: got %s, want %s", name, got, tc.wire)
+				}
+			}
+		})
+	}
+}
 
 func fixture(t *testing.T, id string) (*context.GNBContext, *context.GNBUe, *context.GnbPDUSession) {
 	t.Helper()

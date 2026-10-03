@@ -5,12 +5,13 @@
 package context
 
 import (
-	"fmt"
+	"encoding/hex"
 	"net/netip"
 	"sync"
 
 	"github.com/free5gc/ngap/aper"
 	"github.com/ishidawataru/sctp"
+	ngapCodec "my5G-RANTester/lib/ngap"
 )
 
 // AMF main states in the GNB Context.
@@ -102,14 +103,11 @@ func (amf *GNBAmf) ResetSupported() {
 }
 
 func convertMccMnc(plmn string) (mcc string, mnc string) {
-	if plmn[2] == 'f' {
-		mcc = fmt.Sprintf("%c%c%c", plmn[1], plmn[0], plmn[3])
-		mnc = fmt.Sprintf("%c%c", plmn[5], plmn[4])
-	} else {
-		mcc = fmt.Sprintf("%c%c%c", plmn[1], plmn[0], plmn[3])
-		mnc = fmt.Sprintf("%c%c%c", plmn[2], plmn[5], plmn[4])
+	encoded, err := hex.DecodeString(plmn)
+	if err != nil {
+		return "", ""
 	}
-
+	mcc, mnc, _ = ngapCodec.DecodePLMN(encoded)
 	return mcc, mnc
 }
 
