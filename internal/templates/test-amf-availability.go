@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package templates
 
@@ -25,8 +26,6 @@ func TestAvailability(interval int) {
 		monitor.InitAvaibility()
 
 		for i := 1; i <= 1; i++ {
-
-			conf.GNodeB.PlmnList.GnbId = gnbIdGenerator(i)
 
 			conf.GNodeB.ControlIF = conf.GNodeB.ControlIF.WithPort(ranPort)
 
