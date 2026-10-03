@@ -4,32 +4,8 @@
  */
 package sm_5gs
 
-import (
-	"bytes"
-	"fmt"
-	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasMessage"
-)
+import nas "github.com/free5gc/nas/message"
 
-func GetPduSessionReleaseComplete(pduSessionId uint8) (nasPdu []byte) {
-	m := nas.NewMessage()
-	m.GsmMessage = nas.NewGsmMessage()
-	m.GsmHeader.SetMessageType(nas.MsgTypePDUSessionReleaseComplete)
-
-	pduSessionReleaseComplete := nasMessage.NewPDUSessionReleaseComplete(0)
-	pduSessionReleaseComplete.ExtendedProtocolDiscriminator.SetExtendedProtocolDiscriminator(nasMessage.Epd5GSSessionManagementMessage)
-	pduSessionReleaseComplete.SetMessageType(nas.MsgTypePDUSessionReleaseComplete)
-	pduSessionReleaseComplete.PDUSessionID.SetPDUSessionID(pduSessionId)
-	pduSessionReleaseComplete.PTI.SetPTI(0x01)
-
-	m.GsmMessage.PDUSessionReleaseComplete = pduSessionReleaseComplete
-
-	data := new(bytes.Buffer)
-	err := m.GsmMessageEncode(data)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-
-	nasPdu = data.Bytes()
-	return
+func GetPduSessionReleaseComplete(id uint8) []byte {
+	return encodePlain(&nas.PDUSessRelComplete{PDUSessId: id, PTI: 1})
 }

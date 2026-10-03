@@ -1,62 +1,25 @@
-/**
- * SPDX-License-Identifier: Apache-2.0
- * © Copyright 2023 Hewlett Packard Enterprise Development LP
- */
+/** SPDX-License-Identifier: Apache-2.0 */
 package builder
 
 import (
+	"github.com/free5gc/nas/ie"
+	nas "github.com/free5gc/nas/message"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg/nas/codec"
-
-	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasConvert"
-	"github.com/free5gc/nas/nasMessage"
-	log "github.com/sirupsen/logrus"
 )
 
-func ConfigurationUpdateCommand(ue *context.UEContext, nwName *context.NetworkName) ([]byte, error) {
-
-	nasMsg := buildConfigurationUpdateCommand(nwName)
-	return codec.Encode(ue, nasMsg)
+func ConfigurationUpdateCommand(ue *context.UEContext, name *context.NetworkName) ([]byte, error) {
+	return codec.Encode(ue, buildConfigurationUpdateCommand(name), nas.SecHdrTypeIntegrityProtectedAndCiphered)
 }
-
-func buildConfigurationUpdateCommand(networkName *context.NetworkName) *nas.Message {
-
-	m := nas.NewMessage()
-	m.GmmMessage = nas.NewGmmMessage()
-	m.GmmHeader.SetMessageType(nas.MsgTypeConfigurationUpdateCommand)
-
-	m.SecurityHeader = nas.SecurityHeader{
-		ProtocolDiscriminator: nasMessage.Epd5GSMobilityManagementMessage,
-		SecurityHeaderType:    nas.SecurityHeaderTypeIntegrityProtectedAndCiphered,
-	}
-
-	configurationUpdateCommand := nasMessage.NewConfigurationUpdateCommand(0)
-	configurationUpdateCommand.SetExtendedProtocolDiscriminator(nasMessage.Epd5GSMobilityManagementMessage)
-	configurationUpdateCommand.SpareHalfOctetAndSecurityHeaderType.SetSecurityHeaderType(nas.SecurityHeaderTypePlainNas)
-	configurationUpdateCommand.SpareHalfOctetAndSecurityHeaderType.SetSpareHalfOctet(0)
-	configurationUpdateCommand.SetMessageType(nas.MsgTypeConfigurationUpdateCommand)
-
-	if networkName != nil {
-		// Full network name
-		if networkName.Full != "" {
-			fullNetworkName := nasConvert.FullNetworkNameToNas(networkName.Full)
-			configurationUpdateCommand.FullNameForNetwork = &fullNetworkName
-			configurationUpdateCommand.FullNameForNetwork.SetIei(nasMessage.ConfigurationUpdateCommandFullNameForNetworkType)
-		} else {
-			log.Info("[5GC][NAS] ConfigurationUpdateCommand: Require Full Network Name, but got nothing.")
+func buildConfigurationUpdateCommand(name *context.NetworkName) *nas.CfgUpdateCmd {
+	msg := new(nas.CfgUpdateCmd)
+	if name != nil {
+		if name.Full != "" {
+			msg.FullNameForNw = &ie.NwName{Ext: 1, TextStr: name.Full}
 		}
-		// Short network name
-		if networkName.Short != "" {
-			shortNetworkName := nasConvert.ShortNetworkNameToNas(networkName.Short)
-			configurationUpdateCommand.ShortNameForNetwork = &shortNetworkName
-			configurationUpdateCommand.ShortNameForNetwork.SetIei(nasMessage.ConfigurationUpdateCommandShortNameForNetworkType)
-		} else {
-			log.Info("[5GC][NAS] ConfigurationUpdateCommand: Require Short Network Name, but got nothing.")
+		if name.Short != "" {
+			msg.ShortNameForNw = &ie.NwName{Ext: 1, TextStr: name.Short}
 		}
 	}
-
-	m.GmmMessage.ConfigurationUpdateCommand = configurationUpdateCommand
-
-	return m
+	return msg
 }

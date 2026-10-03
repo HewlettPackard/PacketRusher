@@ -8,7 +8,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
 
-	"github.com/free5gc/nas/nasMessage"
+	"github.com/free5gc/nas/message"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -18,8 +18,8 @@ const maxRejectRetries = 5
 // handleEstablishmentReject records a failed attempt and schedules a retry on the
 // UE goroutine. The typed token preserves session lifetime and cancellation; the
 // retry count advances only when that goroutine executes an eligible attempt.
-func handleEstablishmentReject(ue *context.UEContext, reject *nasMessage.PDUSessionEstablishmentReject) {
-	pduSessionId := reject.GetPDUSessionID()
+func handleEstablishmentReject(ue *context.UEContext, reject *message.PDUSessEstRej) {
+	pduSessionId := reject.PDUSessId
 	pduSession, err := ue.GetPduSession(pduSessionId)
 
 	if err != nil {

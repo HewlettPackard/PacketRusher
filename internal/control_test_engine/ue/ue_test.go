@@ -6,8 +6,7 @@
 package ue
 
 import (
-	"github.com/free5gc/nas/nasMessage"
-	"github.com/free5gc/nas/nasType"
+	"github.com/free5gc/nas/ie"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/sidf"
 	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
@@ -115,9 +114,7 @@ func TestHandoverReplacesAssociationLossSignal(t *testing.T) {
 // Work handed to the UE with RunOnUE is run by the UE's own goroutine, between the
 // messages it handles.
 func TestHandleUERunsHandedOverWork(t *testing.T) {
-	capability := nasType.NewUESecurityCapability(nasMessage.RegistrationRequestUESecurityCapabilityType)
-	capability.SetLen(2)
-	capability.Buffer = []uint8{0x80, 0x80}
+	capability := &ie.UESecCapability{Length: 2, EA05G: true, IA05G: true}
 	ue := &context.UEContext{}
 	ue.NewRanUeContext("0000000001", capability, "", "", "", "", "", "001", "01", sidf.HomeNetworkPublicKey{},
 		"0000", "internet", 1, "", config.TunnelDisabled, make(chan scenario.ScenarioMessage, 16), nil, 1)
@@ -148,9 +145,7 @@ func TestHandleUERunsHandedOverWork(t *testing.T) {
 
 // Production loop dispatch must consume typed retries as well as generic work.
 func TestHandleUERunsSessionRetry(t *testing.T) {
-	capability := nasType.NewUESecurityCapability(nasMessage.RegistrationRequestUESecurityCapabilityType)
-	capability.SetLen(2)
-	capability.Buffer = []uint8{0x80, 0x80}
+	capability := &ie.UESecCapability{Length: 2, EA05G: true, IA05G: true}
 	ue := &context.UEContext{}
 	ue.NewRanUeContext("0000000001", capability, "", "", "", "", "", "001", "01", sidf.HomeNetworkPublicKey{},
 		"0000", "internet", 1, "", config.TunnelDisabled, make(chan scenario.ScenarioMessage, 16), nil, 1)

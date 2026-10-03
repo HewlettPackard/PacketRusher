@@ -6,7 +6,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/ngap/ie"
+	ngapmsg "github.com/free5gc/ngap/message"
 	gnbcontext "my5G-RANTester/internal/control_test_engine/gnb/context"
 )
 
@@ -93,121 +94,49 @@ func (d *orderedDispatcher) run(key int64) {
 // Called after the association reader stops enqueueing, before releasing its UEs.
 func (d *orderedDispatcher) wait() { d.workers.Wait() }
 
-func messageUEIDs(pdu *ngapType.NGAPPDU) (ran, amf int64, hasAMF bool) {
-	switch pdu.Present {
-	case ngapType.NGAPPDUPresentInitiatingMessage:
-		if pdu.InitiatingMessage == nil {
-			return 0, 0, false
-		}
-		value := pdu.InitiatingMessage.Value
-		if value.DownlinkNASTransport != nil {
-			for _, ie := range value.DownlinkNASTransport.ProtocolIEs.List {
-				if ie.Value.RANUENGAPID != nil {
-					ran = ie.Value.RANUENGAPID.Value
-				}
-				if ie.Value.AMFUENGAPID != nil {
-					amf = ie.Value.AMFUENGAPID.Value
-					hasAMF = true
-				}
-			}
-		} else if value.InitialContextSetupRequest != nil {
-			for _, ie := range value.InitialContextSetupRequest.ProtocolIEs.List {
-				if ie.Value.RANUENGAPID != nil {
-					ran = ie.Value.RANUENGAPID.Value
-				}
-				if ie.Value.AMFUENGAPID != nil {
-					amf = ie.Value.AMFUENGAPID.Value
-					hasAMF = true
-				}
-			}
-		} else if value.PDUSessionResourceSetupRequest != nil {
-			for _, ie := range value.PDUSessionResourceSetupRequest.ProtocolIEs.List {
-				if ie.Value.RANUENGAPID != nil {
-					ran = ie.Value.RANUENGAPID.Value
-				}
-				if ie.Value.AMFUENGAPID != nil {
-					amf = ie.Value.AMFUENGAPID.Value
-					hasAMF = true
-				}
-			}
-		} else if value.PDUSessionResourceReleaseCommand != nil {
-			for _, ie := range value.PDUSessionResourceReleaseCommand.ProtocolIEs.List {
-				if ie.Value.RANUENGAPID != nil {
-					ran = ie.Value.RANUENGAPID.Value
-				}
-				if ie.Value.AMFUENGAPID != nil {
-					amf = ie.Value.AMFUENGAPID.Value
-					hasAMF = true
-				}
-			}
-		} else if value.ErrorIndication != nil {
-			for _, ie := range value.ErrorIndication.ProtocolIEs.List {
-				if ie.Value.RANUENGAPID != nil {
-					ran = ie.Value.RANUENGAPID.Value
-				}
-				if ie.Value.AMFUENGAPID != nil {
-					amf = ie.Value.AMFUENGAPID.Value
-					hasAMF = true
-				}
-			}
-		} else if value.UEContextReleaseCommand != nil {
-			for _, ie := range value.UEContextReleaseCommand.ProtocolIEs.List {
-				ids := ie.Value.UENGAPIDs
-				if ids == nil {
-					continue
-				}
-				if ids.UENGAPIDPair != nil {
-					ran = ids.UENGAPIDPair.RANUENGAPID.Value
-					amf = ids.UENGAPIDPair.AMFUENGAPID.Value
-					hasAMF = true
-				} else if ids.AMFUENGAPID != nil {
-					amf = ids.AMFUENGAPID.Value
-					hasAMF = true
-				}
-			}
-		} else if value.HandoverRequest != nil {
-			for _, ie := range value.HandoverRequest.ProtocolIEs.List {
-				if ie.Value.AMFUENGAPID != nil {
-					amf = ie.Value.AMFUENGAPID.Value
-					hasAMF = true
-				}
-			}
-		}
-	case ngapType.NGAPPDUPresentSuccessfulOutcome:
-		if pdu.SuccessfulOutcome == nil {
-			return 0, 0, false
-		}
-		value := pdu.SuccessfulOutcome.Value
-		if value.PathSwitchRequestAcknowledge != nil {
-			for _, ie := range value.PathSwitchRequestAcknowledge.ProtocolIEs.List {
-				if ie.Value.RANUENGAPID != nil {
-					ran = ie.Value.RANUENGAPID.Value
-				}
-				if ie.Value.AMFUENGAPID != nil {
-					amf = ie.Value.AMFUENGAPID.Value
-					hasAMF = true
-				}
-			}
-		} else if value.HandoverCommand != nil {
-			for _, ie := range value.HandoverCommand.ProtocolIEs.List {
-				if ie.Value.RANUENGAPID != nil {
-					ran = ie.Value.RANUENGAPID.Value
-				}
-				if ie.Value.AMFUENGAPID != nil {
-					amf = ie.Value.AMFUENGAPID.Value
-					hasAMF = true
-				}
+func messageUEIDs(message ngapmsg.Message) (ran, amf int64, hasAMF bool) {
+	var ranID *ie.RANUENGAPID
+	var amfID *ie.AMFUENGAPID
+	switch value := message.(type) {
+	case *ngapmsg.DownlinkNASTransport:
+		ranID, amfID = value.RANUENGAPID, value.AMFUENGAPID
+	case *ngapmsg.InitialContextSetupRequest:
+		ranID, amfID = value.RANUENGAPID, value.AMFUENGAPID
+	case *ngapmsg.PDUSessionResourceSetupRequest:
+		ranID, amfID = value.RANUENGAPID, value.AMFUENGAPID
+	case *ngapmsg.PDUSessionResourceReleaseCommand:
+		ranID, amfID = value.RANUENGAPID, value.AMFUENGAPID
+	case *ngapmsg.ErrorIndication:
+		ranID, amfID = value.RANUENGAPID, value.AMFUENGAPID
+	case *ngapmsg.PathSwitchRequestAcknowledge:
+		ranID, amfID = value.RANUENGAPID, value.AMFUENGAPID
+	case *ngapmsg.HandoverCommand:
+		ranID, amfID = value.RANUENGAPID, value.AMFUENGAPID
+	case *ngapmsg.HandoverRequest:
+		amfID = value.AMFUENGAPID
+	case *ngapmsg.UEContextReleaseCommand:
+		if value.UENGAPIDs != nil {
+			switch ids := value.UENGAPIDs.Choice.(type) {
+			case *ie.UENGAPIDPair:
+				ranID, amfID = ids.RANUENGAPID, ids.AMFUENGAPID
+			case *ie.AMFUENGAPID:
+				amfID = ids
 			}
 		}
 	}
-	return ran, amf, hasAMF
+	if ranID != nil {
+		ran = ranID.Value
+	}
+	if amfID != nil {
+		amf, hasAMF = amfID.Value, true
+	}
+	return
 }
 
-// UE-associated procedures carry the AMF ID, including the AMF-only release
-// CHOICE. Prefer it so routing never depends on whether an earlier handler has
-// already published that ID into the UE context.
-func messageUEKey(pdu *ngapType.NGAPPDU) int64 {
-	ran, amf, hasAMF := messageUEIDs(pdu)
+// The AMF ID also appears in AMF-only release commands. Route at receipt time,
+// independently of whether the previous handler has published it into context.
+func messageUEKey(message ngapmsg.Message) int64 {
+	ran, amf, hasAMF := messageUEIDs(message)
 	if hasAMF {
 		return -amf - 1
 	}
@@ -217,7 +146,7 @@ func messageUEKey(pdu *ngapType.NGAPPDU) int64 {
 // A RAN-only procedure must follow earlier PDUs carrying both IDs, even before
 // the first handler publishes the AMF ID. Temporary aliases live only while the
 // worker is active; once it idles, context publication supplies the identity.
-func (d *orderedDispatcher) messageKey(gnb *gnbcontext.GNBContext, message *ngapType.NGAPPDU) int64 {
+func (d *orderedDispatcher) messageKey(gnb *gnbcontext.GNBContext, message ngapmsg.Message) int64 {
 	ran, amf, hasAMF := messageUEIDs(message)
 	key := ran
 	d.mu.Lock()

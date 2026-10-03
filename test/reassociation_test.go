@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/free5gc/ngap/ngapType"
+	ngapType "github.com/free5gc/ngap/message"
 	"github.com/free5gc/openapi/models"
 	"github.com/ishidawataru/sctp"
 	"github.com/stretchr/testify/require"
@@ -51,6 +51,7 @@ func TestGnbDoesNotReestablishRemovedAmf(t *testing.T) {
 
 	fiveGC, err := (&aio5gc.FiveGCBuilder{}).WithConfig(conf).Build()
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = fiveGC.Close() })
 	time.Sleep(1 * time.Second)
 
 	wg := sync.WaitGroup{}
@@ -64,6 +65,7 @@ func TestGnbDoesNotReestablishRemovedAmf(t *testing.T) {
 			amf = a
 		}
 	}
+	t.Cleanup(gnb.Terminate)
 	require.NotNil(t, amf, "the gNB should have completed NG Setup")
 
 	gnb.DeleteGnBAmf(amf.GetAmfId())
@@ -91,7 +93,7 @@ func TestGnbRedialsRefusedAssociation(t *testing.T) {
 
 	ln, err := service.Listen(amfAddr)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = ln.Close() })
+	fiveGC.RegisterCloser(ln.Close)
 	go service.Serve(ln, fiveGC)
 
 	require.Eventually(t, func() bool {
@@ -120,7 +122,7 @@ func TestGnbStopsRedialingAmfRemovedDuringOutage(t *testing.T) {
 
 	ln, err := service.Listen(amfAddr)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = ln.Close() })
+	fiveGC.RegisterCloser(ln.Close)
 	go service.Serve(ln, fiveGC)
 
 	// Longer than the backoff the dial loop has reached, so a dial it still makes is seen.
@@ -139,8 +141,10 @@ func startWithStoppableAmf(t *testing.T, n2, n3 string, amfAddr netip.AddrPort) 
 	amfConf.AMFs = nil
 	fiveGC, err := (&aio5gc.FiveGCBuilder{}).WithConfig(amfConf).Build()
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = fiveGC.Close() })
 	ln, err := service.Listen(amfAddr)
 	require.NoError(t, err)
+	fiveGC.RegisterCloser(ln.Close)
 	go service.Serve(ln, fiveGC)
 
 	wg := sync.WaitGroup{}
@@ -154,6 +158,7 @@ func startWithStoppableAmf(t *testing.T, n2, n3 string, amfAddr netip.AddrPort) 
 			amf = a
 		}
 	}
+	t.Cleanup(gnb.Terminate)
 	require.NotNil(t, amf, "the gNB should have completed NG Setup")
 	return gnb, amf, fiveGC, ln
 }
@@ -180,17 +185,22 @@ func testReassociation(t *testing.T, n2, n3, amfAddr string, dropFirstSetup bool
 	// Armed just before the association is dropped, so the initial NG Setup is answered.
 	var dropNextSetup atomic.Bool
 	fiveGC, err := (&aio5gc.FiveGCBuilder{}).WithConfig(conf).
-		WithNGAPDispatcherHook(func(msg *ngapType.NGAPPDU, _ *context.GNBContext, _ *context.Aio5gc) (bool, error) {
-			isSetup := msg.Present == ngapType.NGAPPDUPresentInitiatingMessage &&
-				msg.InitiatingMessage.ProcedureCode.Value == ngapType.ProcedureCodeNGSetup
+		WithNGAPDispatcherHook(func(msg ngapType.Message, _ *context.GNBContext, _ *context.Aio5gc) (bool, error) {
+			_, isSetup := msg.(*ngapType.NGSetupRequest)
 			return isSetup && dropNextSetup.CompareAndSwap(true, false), nil
 		}).
 		Build()
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = fiveGC.Close() })
 	time.Sleep(1 * time.Second)
 
 	wg := sync.WaitGroup{}
 	gnbs := tools.CreateGnbs(1, conf, &wg)
+	t.Cleanup(func() {
+		for _, gnb := range gnbs {
+			gnb.Terminate()
+		}
+	})
 	require.Len(t, gnbs, 1)
 	var gnb *gnbContext.GNBContext
 	for _, g := range gnbs {

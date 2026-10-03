@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// A PDU Session ID is 0..255 on the wire, but the gNB keeps sessions 1..16. The range
-// check was "< 1 && > 16", which is never true, so an ID outside 1..16 from the AMF
+// A PDU Session ID is 0..255 on the wire, but only IDs 1..15 are assigned by TS 24.007.
+// The range check was "< 1 && > 16", which is never true, so an invalid ID from the AMF
 // indexed the session array out of range and ended the process.
 func TestGnbPduSessionIdOutOfRangeIsRefused(t *testing.T) {
-	for _, id := range []int64{0, 17, 200, -1} {
+	for _, id := range []int64{0, 16, 17, 200, -1} {
 		ue := &GNBUe{}
 
 		_, err := ue.CreatePduSession(id, "10.0.0.1", "01", "010203", 1, 1, 1, 9, 1, 1)
@@ -28,7 +28,7 @@ func TestGnbPduSessionIdOutOfRangeIsRefused(t *testing.T) {
 }
 
 func TestGnbPduSessionIdAtTheBoundsIsAccepted(t *testing.T) {
-	for _, id := range []int64{1, 16} {
+	for _, id := range []int64{1, 15} {
 		ue := &GNBUe{}
 
 		_, err := ue.GetPduSession(id)

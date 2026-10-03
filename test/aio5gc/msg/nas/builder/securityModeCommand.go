@@ -1,73 +1,30 @@
-/**
- * SPDX-License-Identifier: Apache-2.0
- * © Copyright 2023 Hewlett Packard Enterprise Development LP
- */
+/** SPDX-License-Identifier: Apache-2.0 */
 package builder
 
 import (
+	"github.com/free5gc/nas/ie"
+	nas "github.com/free5gc/nas/message"
 	"my5G-RANTester/internal/common/auth"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg/nas/codec"
-
-	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasConvert"
-	"github.com/free5gc/nas/nasMessage"
-	"github.com/free5gc/nas/nasType"
 )
 
 func SecurityModeCommand(ue *context.UEContext) ([]byte, error) {
-
-	integAlg, cipherAlg := auth.SelectAlgorithms(ue.GetSecurityCapability())
-	ue.GetSecurityContext().SetCipheringAlg(cipherAlg)
-	ue.GetSecurityContext().SetIntegrityAlg(integAlg)
-
+	integrity, ciphering := auth.SelectAlgorithms(ue.GetSecurityCapability())
+	ue.GetSecurityContext().SetCipheringAlg(ciphering)
+	ue.GetSecurityContext().SetIntegrityAlg(integrity)
 	ue.GetSecurityContext().DerivateAlgKey()
-	nasMsg := buildSecurityModeCommand(ue)
-
-	return codec.Encode(ue, nasMsg)
+	return codec.Encode(ue, buildSecurityModeCommand(ue), nas.SecHdrTypeIntegrityProtectedWithNew5gNasSecCtx)
 }
-
-func buildSecurityModeCommand(ue *context.UEContext) *nas.Message {
-	m := nas.NewMessage()
-	m.GmmMessage = nas.NewGmmMessage()
-	m.GmmHeader.SetMessageType(nas.MsgTypeSecurityModeCommand)
-
-	m.SecurityHeader = nas.SecurityHeader{
-		ProtocolDiscriminator: nasMessage.Epd5GSMobilityManagementMessage,
-		SecurityHeaderType:    nas.SecurityHeaderTypeIntegrityProtectedWithNew5gNasSecurityContext,
+func buildSecurityModeCommand(ue *context.UEContext) *nas.SecModeCmd {
+	ksi := ue.GetNgKsi()
+	requestIMEISV := uint8(0)
+	if ue.GetPei() == "" {
+		requestIMEISV = 1
 	}
-
-	securityModeCommand := nasMessage.NewSecurityModeCommand(0)
-	securityModeCommand.SetExtendedProtocolDiscriminator(nasMessage.Epd5GSMobilityManagementMessage)
-	securityModeCommand.SpareHalfOctetAndSecurityHeaderType.SetSecurityHeaderType(nas.SecurityHeaderTypePlainNas)
-	securityModeCommand.SpareHalfOctetAndSecurityHeaderType.SetSpareHalfOctet(0)
-	securityModeCommand.SecurityModeCommandMessageIdentity.SetMessageType(nas.MsgTypeSecurityModeCommand)
-
-	securityModeCommand.SelectedNASSecurityAlgorithms.SetTypeOfIntegrityProtectionAlgorithm(ue.GetSecurityContext().GetIntegrityAlg())
-	securityModeCommand.SelectedNASSecurityAlgorithms.SetTypeOfCipheringAlgorithm(ue.GetSecurityContext().GetCipheringAlg())
-
-	securityModeCommand.SpareHalfOctetAndNgksi = nasConvert.SpareHalfOctetAndNgksiToNas(ue.GetNgKsi())
-
-	securityModeCommand.ReplayedUESecurityCapabilities.SetLen(ue.GetSecurityCapability().GetLen())
-	securityModeCommand.ReplayedUESecurityCapabilities.Buffer = ue.GetSecurityCapability().Buffer
-
-	var isIMEISVRequested uint8
-	if ue.GetPei() != "" {
-		isIMEISVRequested = nasMessage.IMEISVNotRequested
-	} else {
-		isIMEISVRequested = nasMessage.IMEISVRequested
+	return &nas.SecModeCmd{
+		SelectedNASSecAlgos: &ie.NASSecAlgos{CipheringAlgo: ie.AlgCiphering(ue.GetSecurityContext().GetCipheringAlg()), MsgIntAlgo: ie.AlgIntegrity(ue.GetSecurityContext().GetIntegrityAlg())},
+		Ngksi:               &ksi, ReplayedUESecCapabilities: ue.GetSecurityCapability(),
+		IMEISVReq: &ie.IMEISVReq{Value: requestIMEISV}, Additional5GSecInfo: &ie.Additional5GSecInfo{RINMR: true},
 	}
-
-	securityModeCommand.IMEISVRequest = nasType.NewIMEISVRequest(nasMessage.SecurityModeCommandIMEISVRequestType)
-	securityModeCommand.IMEISVRequest.SetIMEISVRequestValue(isIMEISVRequested)
-
-	securityModeCommand.Additional5GSecurityInformation = nasType.
-		NewAdditional5GSecurityInformation(nasMessage.SecurityModeCommandAdditional5GSecurityInformationType)
-	securityModeCommand.Additional5GSecurityInformation.SetLen(1)
-	securityModeCommand.Additional5GSecurityInformation.SetRINMR(1)
-	securityModeCommand.Additional5GSecurityInformation.SetHDP(0)
-
-	m.GmmMessage.SecurityModeCommand = securityModeCommand
-
-	return m
 }

@@ -13,28 +13,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasMessage"
-	"github.com/free5gc/nas/nasType"
+	"github.com/free5gc/nas/ie"
+	"github.com/free5gc/nas/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestUE() *context.UEContext {
-	capability := nasType.NewUESecurityCapability(nasMessage.RegistrationRequestUESecurityCapabilityType)
-	capability.SetLen(2)
-	capability.Buffer = []uint8{0x80, 0x80}
+func newTestUE(t *testing.T) *context.UEContext {
+	t.Helper()
+	capability := &ie.UESecCapability{Length: 2, EA05G: true, IA05G: true}
 	ue := &context.UEContext{}
 	ue.NewRanUeContext("0000000001", capability, "", "", "", "", "", "001", "01", sidf.HomeNetworkPublicKey{},
 		"0000", "internet", 1, "", config.TunnelDisabled, make(chan scenario.ScenarioMessage, 16), nil, 1)
+	t.Cleanup(ue.Terminate)
 	return ue
 }
 
-func reject(id uint8) *nasMessage.PDUSessionEstablishmentReject {
-	r := nasMessage.NewPDUSessionEstablishmentReject(0)
-	r.SetPDUSessionID(id)
-	r.SetCauseValue(nasMessage.Cause5GSMInsufficientResources)
-	return r
+func reject(id uint8) *message.PDUSessEstRej {
+	return &message.PDUSessEstRej{PDUSessId: id, PTI: 1, Cause5GSM: &ie.Cause5GSM{Value: 26}}
 }
 
 func noHandOff(t *testing.T, ue *context.UEContext, why string) {
@@ -48,34 +44,23 @@ func noHandOff(t *testing.T, ue *context.UEContext, why string) {
 
 // dlReject wraps a 5GSM message in a plain DL NAS Transport for PDU session id, as the
 // AMF sends a PDU Session Establishment Reject.
-func dlReject(id uint8, gsm []byte) *nas.Message {
-	m := nas.NewMessage()
-	m.GmmMessage = nas.NewGmmMessage()
-	m.GmmHeader.SetMessageType(nas.MsgTypeDLNASTransport)
-	d := nasMessage.NewDLNASTransport(0)
-	d.SpareHalfOctetAndSecurityHeaderType.SetSecurityHeaderType(nas.SecurityHeaderTypePlainNas)
-	d.SetExtendedProtocolDiscriminator(nasMessage.Epd5GSMobilityManagementMessage)
-	d.SetMessageType(nas.MsgTypeDLNASTransport)
-	d.SpareHalfOctetAndPayloadContainerType.SetPayloadContainerType(nasMessage.PayloadContainerTypeN1SMInfo)
-	d.PayloadContainer.SetLen(uint16(len(gsm)))
-	d.PayloadContainer.SetPayloadContainerContents(gsm)
-	d.PduSessionID2Value = new(nasType.PduSessionID2Value)
-	d.PduSessionID2Value.SetIei(nasMessage.DLNASTransportPduSessionID2ValueType)
-	d.PduSessionID2Value.SetPduSessionID2Value(id)
-	m.GmmMessage.DLNASTransport = d
-	return m
+func dlReject(id uint8, gsm []byte) *message.DLNASTransport {
+	return &message.DLNASTransport{
+		PayloadCntrType: &ie.PayloadCntrType{Value: ie.PayloadCntrType_N1SMInfo},
+		PayloadCntr:     &ie.PayloadCntr{Pct: ie.PayloadCntrType_N1SMInfo, Contents: gsm},
+		PDUSessID:       &ie.PDUSessId2{Value: id},
+	}
 }
 
 // rejectBytes is a PDU Session Establishment Reject on the wire: EPD 5GSM (0x2e), the PDU
 // session ID, PTI 1, message type 0xc3 and the 5GSM cause, then any optional IEs.
 func rejectBytes(id, cause uint8, ies ...byte) []byte {
-	return append([]byte{0x2e, id, 0x01, nas.MsgTypePDUSessionEstablishmentReject, cause}, ies...)
+	return append([]byte{0x2e, id, 0x01, byte(message.MsgTypePDUSessEstRej), cause}, ies...)
 }
 
 // A reject arriving in a DL NAS Transport reaches the cancellable retry queue.
 func TestDlNasTransportRejectSchedulesTheRetry(t *testing.T) {
-	ue := newTestUE()
-	t.Cleanup(ue.Terminate)
+	ue := newTestUE(t)
 	session, err := ue.CreatePDUSession()
 	require.NoError(t, err)
 	session.SetStateSM_PDU_SESSION_PENDING()
@@ -94,8 +79,7 @@ func TestDlNasTransportRejectSchedulesTheRetry(t *testing.T) {
 // The timer hands a typed token to the UE's goroutine after its 1 s backoff.
 // NAS is encoded, sent and counted only when that goroutine executes the token.
 func TestHandleEstablishmentRejectRetriesOnTheUEGoroutine(t *testing.T) {
-	ue := newTestUE()
-	t.Cleanup(ue.Terminate)
+	ue := newTestUE(t)
 	session, err := ue.CreatePDUSession()
 	require.NoError(t, err)
 	session.SetStateSM_PDU_SESSION_PENDING()
@@ -120,8 +104,7 @@ func TestHandleEstablishmentRejectRetriesOnTheUEGoroutine(t *testing.T) {
 }
 
 func TestHandleEstablishmentRejectStopsAfterFiveRetries(t *testing.T) {
-	ue := newTestUE()
-	t.Cleanup(ue.Terminate)
+	ue := newTestUE(t)
 	session, err := ue.CreatePDUSession()
 	require.NoError(t, err)
 	session.SetStateSM_PDU_SESSION_PENDING()

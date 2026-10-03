@@ -16,8 +16,8 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
 
-	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasMessage"
+	nasMessage "github.com/free5gc/nas/ie"
+	nas "github.com/free5gc/nas/message"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -27,7 +27,7 @@ func InitRegistration(ue *context.UEContext) {
 
 	// registration procedure started.
 	registrationRequest := mm_5gs.GetRegistrationRequest(
-		nasMessage.RegistrationType5GSInitialRegistration,
+		nasMessage.RegType_InitialReg,
 		nil,
 		nil,
 		false,
@@ -35,7 +35,7 @@ func InitRegistration(ue *context.UEContext) {
 
 	var err error
 	if len(ue.UeSecurity.Kamf) != 0 {
-		registrationRequest, err = nas_control.EncodeNasPduWithSecurity(ue, registrationRequest, nas.SecurityHeaderTypeIntegrityProtected, true, false)
+		registrationRequest, err = nas_control.EncodeNasPduWithSecurity(ue, registrationRequest, nas.SecHdrTypeIntegrityProtected, true, false)
 		if err != nil {
 			log.Fatalf("[UE][NAS] Unable to encode with integrity protection Registration Request: %s", err)
 		}
@@ -161,7 +161,7 @@ func InitServiceRequest(ue *context.UEContext) {
 
 	// trigger ServiceRequest.
 	serviceRequest := mm_5gs.ServiceRequest(ue)
-	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, serviceRequest, nas.SecurityHeaderTypeIntegrityProtected, true, false)
+	pdu, err := nas_control.EncodeNasPduWithSecurity(ue, serviceRequest, nas.SecHdrTypeIntegrityProtected, true, false)
 
 	if err != nil {
 		log.Fatalf("Error encoding %s IMSI UE PduSession Establishment Request Msg", ue.UeSecurity.Supi)

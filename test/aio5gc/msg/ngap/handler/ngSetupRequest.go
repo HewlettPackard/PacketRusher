@@ -1,39 +1,33 @@
-/**
- * SPDX-License-Identifier: Apache-2.0
- * © Copyright 2023 Hewlett Packard Enterprise Development LP
- */
+/** SPDX-License-Identifier: Apache-2.0 */
 package handler
 
 import (
-	"errors"
+	"fmt"
+	"github.com/free5gc/ngap/ie"
+	"github.com/free5gc/ngap/message"
 	"my5G-RANTester/test/aio5gc/context"
+	"my5G-RANTester/test/aio5gc/lib/convert"
 	"my5G-RANTester/test/aio5gc/lib/types"
 	"my5G-RANTester/test/aio5gc/msg"
-
-	"github.com/free5gc/ngap/ngapConvert"
-	"github.com/free5gc/ngap/ngapType"
 )
 
-func NGSetupRequest(req *ngapType.NGSetupRequest, gnb *context.GNBContext, fgc *context.Aio5gc) (err error) {
-	// assert req contains wanted values?
-	for ie := range req.ProtocolIEs.List {
-		switch req.ProtocolIEs.List[ie].Id.Value {
-		case ngapType.ProtocolIEIDGlobalRANNodeID:
-			globalRANNodeID := ngapConvert.RanIdToModels(*req.ProtocolIEs.List[ie].Value.GlobalRANNodeID)
-			gnb.SetGlobalRanNodeID(globalRANNodeID)
-		case ngapType.ProtocolIEIDRANNodeName:
-			gnb.SetRanNodename(req.ProtocolIEs.List[ie].Value.RANNodeName.Value)
-		case ngapType.ProtocolIEIDSupportedTAList:
-			supportedTaiList := types.TaiListToModels(*req.ProtocolIEs.List[ie].Value.SupportedTAList)
-			gnb.SetSuportedTAList(supportedTaiList)
-		case ngapType.ProtocolIEIDDefaultPagingDRX:
-			gnb.SetDefautlPagingDRX(*req.ProtocolIEs.List[ie].Value.DefaultPagingDRX)
-		default:
-			return errors.New("[5GC][NGAP] Received unknown ie for NGSetupRequest")
-		}
+func NGSetupRequest(req *message.NGSetupRequest, gnb *context.GNBContext, fgc *context.Aio5gc) error {
+	global, ok := req.GlobalRANNodeID.Choice.(*ie.GlobalGNBID)
+	if !ok {
+		return fmt.Errorf("mock core requires a gNB identity")
 	}
-
+	identity, err := convert.GlobalGNBToModels(global)
+	if err != nil {
+		return err
+	}
+	gnb.SetGlobalRanNodeID(identity)
+	if req.RANNodeName != nil {
+		gnb.SetRanNodename(string(req.RANNodeName.Value))
+	}
+	gnb.SetSuportedTAList(types.TaiListToModels(*req.SupportedTAList))
+	if req.DefaultPagingDRX != nil {
+		gnb.SetDefautlPagingDRX(*req.DefaultPagingDRX)
+	}
 	msg.SendNGSetupResponse(gnb, fgc.GetAMFContext())
-
 	return nil
 }
