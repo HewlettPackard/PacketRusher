@@ -3,15 +3,17 @@
 set -euo pipefail
 fixture_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_dir=$(cd -- "$fixture_dir/../.." && pwd)
-core=${1:?usage: run.sh free5gc|open5gs /absolute/new/artifact-directory}
+core=${1:?usage: run.sh free5gc|open5gs /absolute/new/artifact-directory [userspace|ebpf]}
 state=${2:?provide an absolute fresh artifact directory}
+backend=${3:-userspace}
 [[ "$core" == free5gc || "$core" == open5gs ]] || { echo 'unsupported core' >&2; exit 2; }
+[[ "$backend" == userspace || "$backend" == ebpf ]] || { echo 'unsupported backend' >&2; exit 2; }
 [[ "$state" == /* ]] || { echo 'artifact path must be absolute' >&2; exit 2; }
 docker info >/dev/null
 docker compose version
-project="packetrusher-${core}-$$"
+project="packetrusher-${core}-${backend}-$$"
 mkdir -p "$state"
-python3 "$fixture_dir/compose.py" --core "$core" --state "$state"
+python3 "$fixture_dir/compose.py" --core "$core" --state "$state" --backend "$backend"
 compose=(docker compose --project-name "$project" --file "$state/compose.json")
 cleanup() {
   status=$?
@@ -28,7 +30,7 @@ trap 'exit 143' TERM
 trap 'exit 130' INT
 "${compose[@]}" config --quiet
 mkdir -p "$fixture_dir/.runtime"
-(cd "$repo_dir"; CGO_ENABLED=0 go build -o "$fixture_dir/.runtime/client" ./cmd)
+(cd "$repo_dir"; CGO_ENABLED=0 scripts/build.sh "$fixture_dir/.runtime/client")
 "${compose[@]}" pull --ignore-buildable
 "${compose[@]}" build
 "${compose[@]}" up --detach --wait --wait-timeout 90 db
