@@ -9,7 +9,7 @@ import (
 
 // The factory and selector canonicalize the same configured hexadecimal range,
 // including a return to the first gNB after a handover.
-func TestUEGnbSelectionCanonicalizesConfiguredID(t *testing.T) {
+func TestUEGnbSelectionPreservesConfiguredID(t *testing.T) {
 	for _, configuredID := range []string{"00000a", "00000A"} {
 		t.Run(configuredID, func(t *testing.T) {
 			plmn := config.PlmnList{GnbId: configuredID}
