@@ -72,6 +72,7 @@ func (h *simulationHarness) nextUE(t *testing.T) gnbcontext.UEMessage {
 			t.Fatal(err)
 		}
 		gu.SetStateReady()
+		gu.SetAmfUeId(0) // Model the fixture's established AMF-owned context.
 		return connection
 	case <-time.After(2 * time.Second):
 		t.Fatal("scenario did not create its next UE")
