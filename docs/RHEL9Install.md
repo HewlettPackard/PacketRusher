@@ -43,7 +43,7 @@ $ make clean && make && sudo make install
 ```bash
 $ cd $PACKETRUSHER
 $ go mod download
-$ go build cmd/packetrusher.go
+$ go build -o packetrusher ./cmd
 $ ./packetrusher --help
 ```
 

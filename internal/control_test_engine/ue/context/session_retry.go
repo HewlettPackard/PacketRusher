@@ -2,6 +2,7 @@
 package context
 
 import (
+	"my5G-RANTester/internal/analytics"
 	gnbcontext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"time"
 
@@ -63,7 +64,7 @@ func (ue *UEContext) StartPduSessionRequest(session *UEPDUSession, encode func()
 }
 
 func (ue *UEContext) startPduSessionRequestLocked(session *UEPDUSession, encode func() ([]byte, error)) error {
-	if ue.gnbRx == nil {
+	if !ue.gnbConnectionOpenLocked() {
 		log.Warn("[UE] Do not start a PDU session request as the gNB channel is closed")
 		return nil
 	}
@@ -72,8 +73,27 @@ func (ue *UEContext) startPduSessionRequestLocked(session *UEPDUSession, encode 
 		return err
 	}
 	session.setPendingLocked()
-	ue.gnbRx <- gnbcontext.UEMessage{IsNas: true, Nas: payload}
+	select {
+	case ue.gnbRx <- gnbcontext.UEMessage{IsNas: true, Nas: payload}:
+	case <-ue.gnbConnectionLost:
+		session.results.Finish(session.resultsUE, session.Id, analytics.SessionEstablishment, analytics.Cancelled)
+		log.Warn("[UE] Cancelled a PDU session request after the gNB association failed")
+	}
 	return nil
+}
+
+// An association can fail while the UE event loop waits on a full gNB channel.
+// Its out-of-band signal releases the send before Terminate acquires the UE lock.
+func (ue *UEContext) gnbConnectionOpenLocked() bool {
+	if ue.gnbRx == nil {
+		return false
+	}
+	select {
+	case <-ue.gnbConnectionLost:
+		return false
+	default:
+		return true
+	}
 }
 
 // SchedulePduSessionRetry schedules at most one retry for the current session,
@@ -118,7 +138,7 @@ func (ue *UEContext) StartPduSessionRetry(retry PduSessionRetry, encode func() (
 		return nil
 	}
 	session.cancelRetryLocked()
-	if ue.gnbRx == nil {
+	if !ue.gnbConnectionOpenLocked() {
 		log.Warn("[UE] Do not retry a PDU session request as the gNB channel is closed")
 		return nil
 	}
