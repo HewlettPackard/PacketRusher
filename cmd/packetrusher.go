@@ -2,6 +2,7 @@ package main
 
 import (
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/buildinfo"
 	"my5G-RANTester/internal/templates"
 	pcap "my5G-RANTester/internal/utils"
 
@@ -13,7 +14,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const version = "1.0.1"
+var version = buildinfo.Current().String()
 
 func init() {
 
@@ -24,7 +25,9 @@ func init() {
 func newApp() *cli.App {
 	beforeResults, afterResults := resultsHooks()
 	app := &cli.App{
-		After: afterResults,
+		Name:    "packetrusher",
+		Version: version,
+		After:   afterResults,
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "tunnel-backend", Usage: "Tunnel datapath: gtp5g (default) or userspace; overrides ue.tunnelbackend"},
 			&cli.PathFlag{Name: "config", Usage: "Configuration file path. (Default: ./config/config.yml)"},
@@ -33,6 +36,7 @@ func newApp() *cli.App {
 			&cli.StringFlag{Name: "metrics-addr", Usage: "Serve Prometheus metrics at /metrics on this address, e.g. 127.0.0.1:9090"},
 		},
 		Commands: []*cli.Command{
+			versionCommand(),
 			{
 				Name:  "ue",
 				Usage: "Launch a gNB and a UE with a PDU Session\nFor more complex scenario and features, use instead packetrusher multi-ue\n",
@@ -241,6 +245,10 @@ func newApp() *cli.App {
 		},
 	}
 	for _, command := range app.Commands {
+		if command.Name == "version" {
+			command.Before = validateArguments
+			continue
+		}
 		command.Before = resultsBefore(validateArguments, beforeResults)
 	}
 	return app
