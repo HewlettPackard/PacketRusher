@@ -5,9 +5,13 @@
 package templates
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control_test_engine/procedures"
+	"my5G-RANTester/internal/scenario"
 	"os"
 	"os/signal"
 	"sync"
@@ -16,7 +20,21 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb bool, loop bool, loopCount int, timeBeforeReregistration int, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int) {
+type ControlOptions struct {
+	Socket       string
+	NumberOfGnbs int
+}
+
+func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb bool, loop bool, loopCount int, timeBeforeReregistration int, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int, controlOptions ...ControlOptions) error {
+	var options ControlOptions
+	if len(controlOptions) != 0 {
+		options = controlOptions[0]
+	}
+	if options.NumberOfGnbs < 0 || options.NumberOfGnbs > 0 && dedicatedGnb {
+		return fmt.Errorf("--number-of-gnbs requires a non-dedicated gNB configuration")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 	if tunnelMode != config.TunnelDisabled {
 		if !dedicatedGnb && tunnelMode != config.TunnelShared {
 			log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
@@ -44,21 +62,42 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	} else {
 		numGnb = 1
 	}
+	if options.NumberOfGnbs > 0 {
+		numGnb = options.NumberOfGnbs
+	}
 	if numGnb <= 1 && (timeBeforeXnHandover != 0 || timeBeforeNgapHandover != 0) {
 		log.Warn("[TESTER] We are increasing the number of gNodeB to two for handover test cases. Make you sure you fill the requirements for having two gNodeBs.")
 		numGnb++
 	}
 	gnbs := tools.CreateGnbs(numGnb, cfg, &wg)
+	defer func() {
+		for _, node := range gnbs {
+			node.Terminate()
+		}
+	}()
+	registry := scenario.NewRegistry(gnbs)
+	var controlServer *scenario.Server
+	if options.Socket != "" {
+		server, err := scenario.Listen(options.Socket, registry)
+		if err != nil {
+			return err
+		}
+		controlServer = server
+		defer server.Close()
+	}
 
-	// Wait for gNB to be connected before registering UEs
-	// TODO: We should wait for NGSetupResponse instead
-	time.Sleep(1 * time.Second)
+	// A connected SCTP socket does not mean the AMF accepted NG Setup.
+	readyCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	err := tools.WaitGnbs(readyCtx, gnbs)
+	cancel()
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+		return err
+	}
 
 	simulations := make([]*tools.UESimulation, 0, numUes)
-
-	sigStop := make(chan os.Signal, 1)
-	signal.Notify(sigStop, os.Interrupt)
-	defer signal.Stop(sigStop)
 
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
@@ -78,12 +117,14 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	// If CTRL-C signal has been received,
 	// stop creating new UEs, else we create numUes UEs
 	for ueSimCfg.UeId = 1; stopSignal && ueSimCfg.UeId <= numUes; ueSimCfg.UeId++ {
-		simulations = append(simulations, tools.SimulateSingleUE(ueSimCfg, &wg))
+		simulation := tools.SimulateSingleUE(ueSimCfg, &wg)
+		simulations = append(simulations, simulation)
+		registry.Add(ueSimCfg.UeId, simulation)
 
 		// Before creating a new UE, we wait for timeBetweenRegistration ms
 		registrationDelay := time.NewTimer(time.Duration(timeBetweenRegistration) * time.Millisecond)
 		select {
-		case <-sigStop:
+		case <-ctx.Done():
 			registrationDelay.Stop()
 			stopSignal = false
 		case <-registrationDelay.C:
@@ -91,7 +132,10 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	}
 
 	if stopSignal {
-		<-sigStop
+		<-ctx.Done()
+	}
+	if controlServer != nil {
+		_ = controlServer.Close()
 	}
 	stopUESimulations(simulations)
 
@@ -100,6 +144,7 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	for _, gnb := range gnbs {
 		gnb.CloseGtpDevice(5*time.Second, 60*time.Second)
 	}
+	return nil
 }
 
 // Completed scenarios no longer have a command receiver. Send checks their

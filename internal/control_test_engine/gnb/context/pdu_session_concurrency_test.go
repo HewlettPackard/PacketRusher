@@ -33,8 +33,18 @@ func TestPduSessionMembershipSnapshotAndHandoverCopy(t *testing.T) {
 	if got, _ := source.GetPduSession(1); got != nil {
 		t.Fatal("source session was not removed")
 	}
-	if got, _ := target.GetPduSession(1); got != session || snapshot[0] != session {
-		t.Fatal("source deletion changed the copied membership or session identity")
+	copied, err := target.GetPduSession(1)
+	if err != nil || copied == nil || copied == session || snapshot[0] != session {
+		t.Fatal("handover must retain independent membership and PDU transport state")
+	}
+	if copied.GetPduSessionId() != session.GetPduSessionId() || copied.GetUpfIp() != session.GetUpfIp() || copied.GetTeidUplink() != session.GetTeidUplink() || copied.GetTeidDownlink() != session.GetTeidDownlink() {
+		t.Fatal("handover changed the copied transport values")
+	}
+	copied.SetUpfIp("10.0.0.2")
+	copied.SetTeidUplink(301)
+	copied.SetTeidDownlink(401)
+	if session.GetUpfIp() != "10.0.0.1" || session.GetTeidUplink() != 100 || session.GetTeidDownlink() != 200 {
+		t.Fatal("target handover transport changes affected the source")
 	}
 	if err := target.DeletePduSession(1); err != nil {
 		t.Fatal(err)
@@ -137,7 +147,7 @@ func TestConcurrentPduSessionAccessAndContextCopy(t *testing.T) {
 	})
 	close(start)
 	workers.Wait()
-	if snapshot := source.GetPduSessions(); snapshot[14] != shared {
-		t.Fatal("stable session identity lost during concurrent context copies")
+	if snapshot := source.GetPduSessions(); snapshot[14] == nil || snapshot[14].GetPduSessionId() != 15 {
+		t.Fatal("stable session membership lost during concurrent context copies")
 	}
 }

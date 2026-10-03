@@ -18,6 +18,7 @@ type UEMessage struct {
 	GNBRx             chan UEMessage
 	GNBTx             chan UEMessage
 	GNBInboundChannel chan UEMessage
+	GNB               *GNBContext // owner of connection admission and shutdown
 	IsNas             bool
 	Nas               []byte
 	ConnectionClosed  bool

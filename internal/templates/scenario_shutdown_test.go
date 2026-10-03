@@ -170,3 +170,18 @@ func TestScenarioShutdownFollowsHandoverTargetAssociation(t *testing.T) {
 	waitShutdown(t, simulation.Done())
 	stopSimulationsForTest(t, simulation)
 }
+
+// The next attempt is deliberately delayed for a minute by this fixture.
+// Shutdown must release it without waiting for that timer or starting a new UE.
+func TestScenarioLoopDelayStopsWhenGNBTerminates(t *testing.T) {
+	simulation, connection, node, _ := startShutdownSimulation(t, true, 0)
+	close(connection.ConnectionLost)
+	close(connection.GNBTx)
+	for range connection.GNBRx {
+	}
+	node.Terminate()
+	waitShutdown(t, simulation.Done())
+	for range node.GetInboundChannel() {
+		t.Fatal("gNB termination created another registration attempt")
+	}
+}

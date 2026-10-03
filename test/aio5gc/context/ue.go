@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
 	nasType "github.com/free5gc/nas/ie"
 	"github.com/free5gc/openapi/models"
@@ -20,7 +21,7 @@ import (
 )
 
 type UEContext struct {
-	ranNgapId            int64
+	ranNgapId            atomic.Int64
 	amfNgapId            int64
 	location             *models.NrLocation
 	ueSecurityCapability *nasType.UESecCapability
@@ -69,11 +70,11 @@ func (ue *UEContext) GetGuti() string {
 }
 
 func (ue *UEContext) SetRanNgapId(id int64) {
-	ue.ranNgapId = id
+	ue.ranNgapId.Store(id)
 }
 
 func (ue *UEContext) GetRanNgapId() (id int64) {
-	return ue.ranNgapId
+	return ue.ranNgapId.Load()
 }
 
 func (ue *UEContext) SetAmfNgapId(id int64) {

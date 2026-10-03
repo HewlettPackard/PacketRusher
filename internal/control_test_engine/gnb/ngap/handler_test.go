@@ -9,6 +9,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb/ngap/trigger"
 	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/free5gc/ngap/aper"
 	ngapType "github.com/free5gc/ngap/ie"
@@ -454,7 +455,7 @@ func handoverRequest(t *testing.T, gnb *context.GNBContext, prUeId int64, withLi
 		NRCellIdentity: &ngapType.NRCellIdentity{Value: aper.BitString{Bytes: []byte{0, 0, 0, 0x10, 0}, BitLength: 36}},
 	}}
 	container := &ngapType.SourceNGRANNodeToTargetNGRANNodeTransparentContainer{
-		RRCContainer: &ngapType.RRCContainer{Value: []byte{0, 0, 0x11}}, IndexToRFSP: &ngapType.IndexToRFSP{Value: prUeId}, TargetCellID: cell,
+		RRCContainer: &ngapType.RRCContainer{Value: ngapConvert.VirtualUERrc(prUeId)}, TargetCellID: cell,
 		UEHistoryInformation: &ngapType.UEHistoryInformation{List: []ngapType.LastVisitedCellItem{{
 			LastVisitedCellInformation: &ngapType.LastVisitedCellInformation{Choice: &ngapType.LastVisitedNGRANCellInformation{
 				GlobalCellID: cell, CellType: &ngapType.CellType{CellSize: &ngapType.CellSize{Value: 0}}, TimeUEStayedInCell: &ngapType.TimeUEStayedInCell{Value: 0},
@@ -572,3 +573,40 @@ func ptrOctets(value []byte) *aper.OctetString {
 }
 
 func ptrInt64(value int64) *int64 { return &value }
+
+func TestHandlerHandoverCommandUnavailableTargetDoesNotBlock(t *testing.T) {
+	for _, state := range []string{"full", "association-lost", "terminated"} {
+		t.Run(state, func(t *testing.T) {
+			source, target := createTestGNBContext(), createTestGNBContext()
+			ue := createTestUE(source, 1)
+			ue.SetAmfUeId(23)
+			ue.SetHandoverGnodeB(target)
+			switch state {
+			case "full":
+				for i := 0; i < cap(target.GetInboundChannel()); i++ {
+					target.GetInboundChannel() <- context.UEMessage{}
+				}
+			case "association-lost":
+				for amf := range target.IterGnbAmf() {
+					amf.SetStateInactive()
+				}
+			case "terminated":
+				target.Terminate()
+			}
+			done := make(chan struct{})
+			go func() {
+				ue.ProcessDownlink(func() {
+					HandlerHandoverCommand(nil, source, &ngapmsg.HandoverCommand{AMFUENGAPID: &ngapType.AMFUENGAPID{Value: 23}, RANUENGAPID: &ngapType.RANUENGAPID{Value: ue.GetRanUeId()}})
+				})
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatal("source dispatcher blocked by unavailable target")
+			}
+			require.Nil(t, ue.GetHandoverGnodeB())
+			require.Empty(t, ue.GetGnbTx())
+		})
+	}
+}
