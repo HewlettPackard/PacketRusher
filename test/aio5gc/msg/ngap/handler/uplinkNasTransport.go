@@ -1,68 +1,44 @@
-/**
- * SPDX-License-Identifier: Apache-2.0
- * © Copyright 2023 Hewlett Packard Enterprise Development LP
- */
+/** SPDX-License-Identifier: Apache-2.0 */
 package handler
 
 import (
-	"errors"
+	"fmt"
+	"github.com/free5gc/ngap/ie"
+	"github.com/free5gc/ngap/message"
 	"my5G-RANTester/test/aio5gc/context"
+	"my5G-RANTester/test/aio5gc/lib/convert"
 	"my5G-RANTester/test/aio5gc/msg/nas"
-
-	"github.com/free5gc/ngap/ngapConvert"
-
-	"github.com/free5gc/ngap/ngapType"
-	"github.com/free5gc/openapi/models"
 )
 
-func UplinkNASTransport(req *ngapType.UplinkNASTransport, gnb *context.GNBContext, fgc *context.Aio5gc) error {
-
-	var ue *context.UEContext
-	var ranUe *context.UEContext
-	var err error
-	var naspdu *ngapType.NASPDU
-	nrLocation := models.NrLocation{}
-	amf := fgc.GetAMFContext()
-
-	for ie := range req.ProtocolIEs.List {
-		switch req.ProtocolIEs.List[ie].Id.Value {
-		case ngapType.ProtocolIEIDRANUENGAPID:
-			ranUe, err = amf.FindUEByRanId(req.ProtocolIEs.List[ie].Value.RANUENGAPID.Value)
-			if err != nil {
-				return err
-			}
-		case ngapType.ProtocolIEIDAMFUENGAPID:
-			ue, err = amf.FindUEById(req.ProtocolIEs.List[ie].Value.AMFUENGAPID.Value)
-			if err != nil {
-				return err
-			}
-
-		case ngapType.ProtocolIEIDNASPDU:
-			naspdu = req.ProtocolIEs.List[ie].Value.NASPDU
-
-		case ngapType.ProtocolIEIDUserLocationInformation:
-			UserLocationInformationNR := req.ProtocolIEs.List[ie].Value.UserLocationInformation.UserLocationInformationNR
-			tai := ngapConvert.TaiToModels(UserLocationInformationNR.TAI)
-			nrLocation.Tai = &tai
-			ncgi := models.Ncgi{}
-			ncgi.NrCellId = ngapConvert.BitStringToHex(&UserLocationInformationNR.NRCGI.NRCellIdentity.Value)
-			plmn := ngapConvert.PlmnIdToModels(UserLocationInformationNR.NRCGI.PLMNIdentity)
-			ncgi.PlmnId = &plmn
-			nrLocation.Ncgi = &ncgi
-			nrLocation.GlobalGnbId = gnb.GetGlobalRanNodeID()
-
-		case ngapType.ProtocolIEIDRRCEstablishmentCause:
-
-		case ngapType.ProtocolIEIDUEContextRequest:
-
-		default:
-			return errors.New("[5GC][NGAP] Received unknown ie for UplinkNASTransport")
-		}
+func resolveUE(amf *context.AMFContext, ran *ie.RANUENGAPID, core *ie.AMFUENGAPID) (*context.UEContext, error) {
+	if ran == nil || core == nil {
+		return nil, fmt.Errorf("missing UE NGAP identifiers")
 	}
-	if ue != ranUe {
-		return errors.New("[5GC][NGAP] RanUeNgapId does not match the one Registered for this UE")
+	ue, err := amf.FindUEById(core.Value)
+	if err != nil {
+		return nil, err
 	}
-
-	nas.Dispatch(naspdu, ue, fgc, gnb)
+	ranUE, err := amf.FindUEByRanId(ran.Value)
+	if err != nil {
+		return nil, err
+	}
+	if ue != ranUE {
+		return nil, fmt.Errorf("RAN and AMF UE identifiers do not match")
+	}
+	return ue, nil
+}
+func UplinkNASTransport(req *message.UplinkNASTransport, gnb *context.GNBContext, fgc *context.Aio5gc) error {
+	ue, err := resolveUE(fgc.GetAMFContext(), req.RANUENGAPID, req.AMFUENGAPID)
+	if err != nil {
+		return err
+	}
+	location, ok := req.UserLocationInformation.Choice.(*ie.UserLocationInformationNR)
+	if !ok {
+		return fmt.Errorf("mock core requires NR location")
+	}
+	model := convert.NRLocationToModels(location)
+	model.GlobalGnbId = gnb.GetGlobalRanNodeID()
+	ue.SetUserLocationInfo(model)
+	nas.Dispatch(req.NASPDU, ue, fgc, gnb)
 	return nil
 }

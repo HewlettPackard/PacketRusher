@@ -6,21 +6,22 @@ package aio5gc
 
 import (
 	"errors"
+	"fmt"
 	"my5G-RANTester/config"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/service"
 	"reflect"
 
-	"github.com/free5gc/nas"
-	"github.com/free5gc/ngap/ngapType"
+	nas "github.com/free5gc/nas/message"
+	ngapType "github.com/free5gc/ngap/message"
 	"github.com/free5gc/util/fsm"
 	log "github.com/sirupsen/logrus"
 )
 
 type FiveGCBuilder struct {
 	config       config.Config
-	nasHooks     map[uint8]func(*nas.Message, *context.UEContext, *context.GNBContext, *context.Aio5gc) (bool, error)
-	ngapHook     []func(*ngapType.NGAPPDU, *context.GNBContext, *context.Aio5gc) (bool, error)
+	nasHooks     map[nas.MsgType]func(nas.Message, *context.UEContext, *context.GNBContext, *context.Aio5gc) (bool, error)
+	ngapHook     []func(ngapType.Message, *context.GNBContext, *context.Aio5gc) (bool, error)
 	pduCallbacks map[fsm.StateType]fsm.Callback
 	ueCallbacks  map[fsm.StateType]fsm.Callback
 }
@@ -30,9 +31,9 @@ func (f *FiveGCBuilder) WithConfig(conf config.Config) *FiveGCBuilder {
 	return f
 }
 
-func (f *FiveGCBuilder) WithNASDispatcherHook(ProcedureCode uint8, hook func(*nas.Message, *context.UEContext, *context.GNBContext, *context.Aio5gc) (bool, error)) *FiveGCBuilder {
+func (f *FiveGCBuilder) WithNASDispatcherHook(ProcedureCode nas.MsgType, hook func(nas.Message, *context.UEContext, *context.GNBContext, *context.Aio5gc) (bool, error)) *FiveGCBuilder {
 	if f.nasHooks == nil {
-		f.nasHooks = map[uint8]func(*nas.Message, *context.UEContext, *context.GNBContext, *context.Aio5gc) (bool, error){}
+		f.nasHooks = map[nas.MsgType]func(nas.Message, *context.UEContext, *context.GNBContext, *context.Aio5gc) (bool, error){}
 	}
 	_, ok := f.nasHooks[ProcedureCode]
 	if ok {
@@ -43,7 +44,7 @@ func (f *FiveGCBuilder) WithNASDispatcherHook(ProcedureCode uint8, hook func(*na
 	return f
 }
 
-func (f *FiveGCBuilder) WithNGAPDispatcherHook(hook func(*ngapType.NGAPPDU, *context.GNBContext, *context.Aio5gc) (bool, error)) *FiveGCBuilder {
+func (f *FiveGCBuilder) WithNGAPDispatcherHook(hook func(ngapType.Message, *context.GNBContext, *context.Aio5gc) (bool, error)) *FiveGCBuilder {
 	f.ngapHook = append(f.ngapHook, hook)
 	return f
 }
@@ -95,7 +96,13 @@ func (f *FiveGCBuilder) Build() (*context.Aio5gc, error) {
 		fgc.SetNgapHooks(f.ngapHook)
 	}
 	for _, amf := range f.config.AMFs {
-		go service.RunServer(amf.AddrPort, &fgc)
+		listener, err := service.Listen(amf.AddrPort)
+		if err != nil {
+			_ = fgc.Close()
+			return nil, fmt.Errorf("start mock AMF: %w", err)
+		}
+		fgc.RegisterCloser(listener.Close)
+		go service.Serve(listener, &fgc)
 	}
 	return &fgc, nil
 }

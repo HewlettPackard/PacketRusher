@@ -11,16 +11,15 @@ import (
 	"my5G-RANTester/test/aio5gc/msg"
 	"strings"
 
-	"github.com/free5gc/nas/nasMessage"
-	"github.com/free5gc/nas/nasType"
-	"github.com/free5gc/openapi/models"
+	ie "github.com/free5gc/nas/ie"
+
 	"github.com/free5gc/util/fsm"
 
-	"github.com/free5gc/nas"
+	nas "github.com/free5gc/nas/message"
 	log "github.com/sirupsen/logrus"
 )
 
-func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
+func RegistrationRequest(nasReq *nas.RegReq, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
 	var err error
 	switch ue.GetState().Current() {
 	case context.Deregistered:
@@ -32,76 +31,51 @@ func RegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *conte
 	return err
 }
 
-func DefaultRegistrationRequest(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
+func DefaultRegistrationRequest(nasReq *nas.RegReq, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
 
 	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.RegistrationRequest, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
 	if err != nil {
 		return err
 	}
-	regType := nasReq.RegistrationRequest.NgksiAndRegistrationType5GS.GetRegistrationType5GS()
-	if regType != nasMessage.RegistrationType5GSInitialRegistration {
+	regType := nasReq.RegType5GS.Value
+	if regType != ie.RegType_InitialReg {
 		return errors.New("[5GC][NAS] Received unsupported registration type")
 	}
 
-	// NgKsi
-	ngKsi := models.NgKsi{}
-	switch nasReq.NgksiAndRegistrationType5GS.GetTSC() {
-	case nasMessage.TypeOfSecurityContextFlagNative:
-		ngKsi.Tsc = models.ScType_NATIVE
-	default:
-		return errors.New("[5GC] Unsupported KSI sc type")
+	ngKsi := *nasReq.Ngksi
+	if ngKsi.Tsc != ie.SecCtxTypeNative {
+		return errors.New("[5GC] Unsupported KSI context type")
 	}
-	ngKsi.Ksi = int32(nasReq.NgksiAndRegistrationType5GS.GetNasKeySetIdentifiler())
-	if ngKsi.Tsc == models.ScType_NATIVE && ngKsi.Ksi != 7 {
-	} else {
-		ngKsi.Tsc = models.ScType_NATIVE
+	if ngKsi.Ksi == ie.NASKeyNA {
 		ngKsi.Ksi = 0
 	}
-
-	gmm := nasReq.GmmMessage
-	ue.SetSecurityCapability(gmm.RegistrationRequest.UESecurityCapability)
+	ue.SetSecurityCapability(nasReq.UESecCapability)
 	ue.SetNgKsi(ngKsi)
-
-	mobileIdentity5GS := gmm.RegistrationRequest.MobileIdentity5GS
-	if mobileIdentity5GS.Len <= 1 {
-		// RegistrationRequest is missing MobileIdentity, we send an Identity Request
+	mobileIdentity5GS := nasReq.MobileId5GS
+	if mobileIdentity5GS == nil || mobileIdentity5GS.TypeOfId != ie.IdType_5GS_SUCI {
 		msg.SendIdentityRequest(gnb, ue)
 		return nil
 	}
 
-	_, mobileIdType, err := mobileIdentity5GS.GetMobileIdentity()
-	if mobileIdType != "SUCI" {
-		log.Warn("[5GC][NAS] UE id uses IDType " + mobileIdType + " but is not yet supported by aio5gc. Try to request SUCI identity.")
-		msg.SendIdentityRequest(gnb, ue)
-		return nil
-	}
 	return SetMobileIdentity(amf, ue, mobileIdentity5GS, gnb)
 }
 
-func IdentityResponse(nasReq *nas.Message, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) (err error) {
+func IdentityResponse(nasReq *nas.IdRsp, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) (err error) {
 
-	identityResponse := nasReq.GmmMessage.IdentityResponse
-	if identityResponse == nil {
-		return errors.New("[5GC][NAS] Received Unexpected Message")
+	if nasReq.MobileId == nil {
+		return errors.New("[5GC][NAS] Missing mobile identity")
 	}
-
-	mobileIdentity := nasReq.GmmMessage.IdentityResponse.MobileIdentity
-
-	mobileIdentity5GS := nasType.MobileIdentity5GS{
-		Iei:    mobileIdentity.Iei,
-		Len:    mobileIdentity.Len,
-		Buffer: mobileIdentity.Buffer,
-	}
+	mobileIdentity5GS := nasReq.MobileId
 
 	err = SetMobileIdentity(amf, ue, mobileIdentity5GS, gnb)
 
 	return err
 }
 
-func SetMobileIdentity(amf *context.AMFContext, ue *context.UEContext, mobileIdentity nasType.MobileIdentity5GS, gnb *context.GNBContext) (err error) {
-	mobileId, mobileIdType, err := mobileIdentity.GetMobileIdentity()
-	if mobileIdType != "SUCI" {
-		return errors.New("[5GC][NAS] UE id uses IDType " + mobileIdType + " but is not yet supported by aio5gc.")
+func SetMobileIdentity(amf *context.AMFContext, ue *context.UEContext, mobileIdentity *ie.MobileId5GS, gnb *context.GNBContext) (err error) {
+	mobileId := mobileIdentity.SUCIStr()
+	if mobileIdentity.TypeOfId != ie.IdType_5GS_SUCI {
+		return errors.New("[5GC][NAS] Mobile identity must be SUCI")
 	}
 	suci := strings.Split(mobileId, "-")
 	prov, err := amf.FindProvisionedData(suci[len(suci)-1])

@@ -1,566 +1,142 @@
-/**
- * SPDX-License-Identifier: Apache-2.0
- * © Copyright 2023 Hewlett Packard Enterprise Development LP
- */
+/** SPDX-License-Identifier: Apache-2.0 */
 package handler
 
 import (
 	"fmt"
+	"github.com/free5gc/nas/ie"
+	nas "github.com/free5gc/nas/message"
+	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
-	"reflect"
-
-	"github.com/free5gc/nas"
-	"github.com/free5gc/nas/nasMessage"
-	"github.com/free5gc/openapi/models"
-	log "github.com/sirupsen/logrus"
 )
 
-func HandlerAuthenticationReject(ue *context.UEContext, message *nas.Message) {
-
-	log.Info("[UE][NAS] Authentication of UE ", ue.GetUeId(), " failed")
-
+func HandlerAuthenticationReject(ue *context.UEContext, msg *nas.AuthRej) {
 	ue.SetStateMM_DEREGISTERED()
 }
 
-func HandlerAuthenticationRequest(ue *context.UEContext, message *nas.Message) {
-	var authenticationResponse []byte
-
-	// check the mandatory fields
-	if reflect.ValueOf(message.AuthenticationRequest.ExtendedProtocolDiscriminator).IsZero() {
-		log.Fatal("[UE][NAS] Error in Authentication Request, Extended Protocol is missing")
+func HandlerAuthenticationRequest(ue *context.UEContext, msg *nas.AuthReq) {
+	if msg.Ngksi == nil || msg.Ngksi.Ksi == ie.NASKeyNA || msg.AuthParamRAND5GAuthChlg == nil || msg.AuthParamAUTN5GAuthChlg == nil || msg.ABBA == nil {
+		log.Error("[UE][NAS] Authentication Request missing mandatory AKA parameters")
+		return
 	}
-
-	if message.AuthenticationRequest.ExtendedProtocolDiscriminator.GetExtendedProtocolDiscriminator() != 126 {
-		log.Fatal("[UE][NAS] Error in Authentication Request, Extended Protocol not the expected value")
-	}
-
-	if message.AuthenticationRequest.SpareHalfOctetAndSecurityHeaderType.GetSpareHalfOctet() != 0 {
-		log.Fatal("[UE][NAS] Error in Authentication Request, Spare Half Octet not the expected value")
-	}
-
-	if message.AuthenticationRequest.SpareHalfOctetAndSecurityHeaderType.GetSecurityHeaderType() != 0 {
-		log.Fatal("[UE][NAS] Error in Authentication Request, Security Header Type not the expected value")
-	}
-
-	if reflect.ValueOf(message.AuthenticationRequest.AuthenticationRequestMessageIdentity).IsZero() {
-		log.Fatal("[UE][NAS] Error in Authentication Request, Message Type is missing")
-	}
-
-	if message.AuthenticationRequest.AuthenticationRequestMessageIdentity.GetMessageType() != 86 {
-		log.Fatal("[UE][NAS] Error in Authentication Request, Message Type not the expected value")
-	}
-
-	if message.AuthenticationRequest.SpareHalfOctetAndNgksi.GetSpareHalfOctet() != 0 {
-		log.Fatal("[UE][NAS] Error in Authentication Request, Spare Half Octet not the expected value")
-	}
-
-	if message.AuthenticationRequest.SpareHalfOctetAndNgksi.GetNasKeySetIdentifiler() == 7 {
-		log.Fatal("[UE][NAS] Error in Authentication Request, ngKSI not the expected value")
-	}
-
-	if reflect.ValueOf(message.AuthenticationRequest.ABBA).IsZero() {
-		log.Fatal("[UE][NAS] Error in Authentication Request, ABBA is missing")
-	}
-
-	if message.AuthenticationRequest.GetABBAContents() == nil {
-		log.Fatal("[UE][NAS] Error in Authentication Request, ABBA Content is missing")
-	}
-
-	// getting RAND and AUTN from the message.
-	rand := message.AuthenticationRequest.GetRANDValue()
-	autn := message.AuthenticationRequest.GetAUTN()
-
-	// getting resStar
-	paramAutn, check := ue.DeriveRESstarAndSetKey(ue.UeSecurity.AuthenticationSubs, rand[:], ue.UeSecurity.Snn, autn[:])
-
-	switch check {
-
-	case "MAC failure":
-		log.Info("[UE][NAS][MAC] Authenticity of the authentication request message: FAILED")
-		log.Info("[UE][NAS] Send authentication failure with MAC failure")
-		authenticationResponse = mm_5gs.AuthenticationFailure("MAC failure", "", paramAutn)
-		// not change the state of UE.
-
-	case "SQN failure":
-		log.Info("[UE][NAS][MAC] Authenticity of the authentication request message: OK")
-		log.Info("[UE][NAS][SQN] SQN of the authentication request message: INVALID")
-		log.Info("[UE][NAS] Send authentication failure with Synch failure")
-		authenticationResponse = mm_5gs.AuthenticationFailure("SQN failure", "", paramAutn)
-		// not change the state of UE.
-
+	param, result := ue.DeriveRESstarAndSetKey(ue.UeSecurity.AuthenticationSubs, msg.AuthParamRAND5GAuthChlg.Rand, ue.UeSecurity.Snn, msg.AuthParamAUTN5GAuthChlg.Autn)
+	var response []byte
+	switch result {
+	case "MAC failure", "SQN failure":
+		response = mm_5gs.AuthenticationFailure(result, "", param)
 	case "successful":
-		// getting NAS Authentication Response.
-		log.Info("[UE][NAS][MAC] Authenticity of the authentication request message: OK")
-		log.Info("[UE][NAS][SQN] SQN of the authentication request message: VALID")
-		log.Info("[UE][NAS] Send authentication response")
-		authenticationResponse = mm_5gs.AuthenticationResponse(paramAutn, "")
-
-		// change state of UE for registered-initiated
+		response = mm_5gs.AuthenticationResponse(param, "")
 		ue.SetStateMM_REGISTERED_INITIATED()
+	default:
+		log.Errorf("[UE][NAS] Authentication failed: %s", result)
+		return
 	}
-
-	// sending to GNB
-	sender.SendToGnb(ue, authenticationResponse)
+	sender.SendToGnb(ue, response)
 }
 
-func HandlerSecurityModeCommand(ue *context.UEContext, message *nas.Message) { // check the mandatory fields
-	if reflect.ValueOf(message.SecurityModeCommand.ExtendedProtocolDiscriminator).IsZero() {
-		log.Fatal("[UE][NAS] Error in Security Mode Command, Extended Protocol is missing")
+func HandlerSecurityModeCommand(ue *context.UEContext, msg *nas.SecModeCmd) {
+	if msg.Ngksi == nil || msg.Ngksi.Ksi == ie.NASKeyNA || msg.SelectedNASSecAlgos == nil || msg.ReplayedUESecCapabilities == nil {
+		log.Error("[UE][NAS] Invalid Security Mode Command")
+		return
 	}
-
-	if message.SecurityModeCommand.ExtendedProtocolDiscriminator.GetExtendedProtocolDiscriminator() != 126 {
-		log.Fatal("[UE][NAS] Error in Security Mode Command, Extended Protocol not the expected value")
-	}
-
-	if message.SecurityModeCommand.SpareHalfOctetAndSecurityHeaderType.GetSecurityHeaderType() != 0 {
-		log.Fatal("[UE][NAS] Error in Security Mode Command, Security Header Type not the expected value")
-	}
-
-	if message.SecurityModeCommand.SpareHalfOctetAndSecurityHeaderType.GetSpareHalfOctet() != 0 {
-		log.Fatal("[UE][NAS] Error in Security Mode Command, Spare Half Octet not the expected value")
-	}
-
-	if reflect.ValueOf(message.SecurityModeCommand.SecurityModeCommandMessageIdentity).IsZero() {
-		log.Fatal("[UE][NAS] Error in Security Mode Command, Message Type is missing")
-	}
-
-	if message.SecurityModeCommand.SecurityModeCommandMessageIdentity.GetMessageType() != 93 {
-		log.Fatal("[UE][NAS] Error in Security Mode Command, Message Type not the expected value")
-	}
-
-	if reflect.ValueOf(message.SecurityModeCommand.SelectedNASSecurityAlgorithms).IsZero() {
-		log.Fatal("[UE][NAS] Error in Security Mode Command, NAS Security Algorithms is missing")
-	}
-
-	if message.SecurityModeCommand.SpareHalfOctetAndNgksi.GetSpareHalfOctet() != 0 {
-		log.Fatal("[UE][NAS] Error in Security Mode Command, Spare Half Octet is missing")
-	}
-
-	if message.SecurityModeCommand.SpareHalfOctetAndNgksi.GetNasKeySetIdentifiler() == 7 {
-		log.Fatal("[UE][NAS] Error in Security Mode Command, ngKSI not the expected value")
-	}
-
-	if reflect.ValueOf(message.SecurityModeCommand.ReplayedUESecurityCapabilities).IsZero() {
-		log.Fatal("[UE][NAS] Error in Security Mode Command, Replayed UE Security Capabilities is missing")
-	}
-
-	switch ue.UeSecurity.CipheringAlg {
-	case 0:
-		log.Info("[UE][NAS] Type of ciphering algorithm is 5G-EA0")
-	case 1:
-		log.Info("[UE][NAS] Type of ciphering algorithm is 128-5G-EA1")
-	case 2:
-		log.Info("[UE][NAS] Type of ciphering algorithm is 128-5G-EA2")
-	}
-
-	switch ue.UeSecurity.IntegrityAlg {
-	case 0:
-		log.Info("[UE][NAS] Type of integrity protection algorithm is 5G-IA0")
-	case 1:
-		log.Info("[UE][NAS] Type of integrity protection algorithm is 128-5G-IA1")
-	case 2:
-		log.Info("[UE][NAS] Type of integrity protection algorithm is 128-5G-IA2")
-	}
-
+	ue.UeSecurity.NgKsi = *msg.Ngksi
 	rinmr := uint8(0)
-	if message.SecurityModeCommand.Additional5GSecurityInformation != nil {
-		// checking BIT RINMR that triggered registration request in security mode complete.
-		rinmr = message.SecurityModeCommand.Additional5GSecurityInformation.GetRINMR()
+	if msg.Additional5GSecInfo != nil && msg.Additional5GSecInfo.RINMR {
+		rinmr = 1
 	}
-
-	ue.UeSecurity.NgKsi.Ksi = int32(message.SecurityModeCommand.SpareHalfOctetAndNgksi.GetNasKeySetIdentifiler())
-
-	// NgKsi: TS 24.501 9.11.3.32
-	switch message.SecurityModeCommand.SpareHalfOctetAndNgksi.GetTSC() {
-	case nasMessage.TypeOfSecurityContextFlagNative:
-		ue.UeSecurity.NgKsi.Tsc = models.ScType_NATIVE
-	case nasMessage.TypeOfSecurityContextFlagMapped:
-		ue.UeSecurity.NgKsi.Tsc = models.ScType_MAPPED
-	}
-
-	// getting NAS Security Mode Complete.
-	securityModeComplete, err := mm_5gs.SecurityModeComplete(ue, rinmr)
+	pdu, err := mm_5gs.SecurityModeComplete(ue, rinmr)
 	if err != nil {
-		log.Fatal("[UE][NAS] Error sending Security Mode Complete: ", err)
+		log.Errorf("[UE][NAS] Security Mode Complete: %v", err)
+		return
 	}
-
-	// sending to GNB
-	sender.SendToGnb(ue, securityModeComplete)
+	sender.SendToGnb(ue, pdu)
 }
 
-func HandlerRegistrationAccept(ue *context.UEContext, message *nas.Message) {
-	// check the mandatory fields
-	if reflect.ValueOf(message.RegistrationAccept.ExtendedProtocolDiscriminator).IsZero() {
-		log.Fatal("[UE][NAS] Error in Registration Accept, Extended Protocol is missing")
+func HandlerRegistrationAccept(ue *context.UEContext, msg *nas.RegAccept) {
+	if msg.RegResult5GS == nil || msg.RegResult5GS.Value != ie.RegResult_3gpp {
+		log.Error("[UE][NAS] Registration Accept does not register 3GPP access")
+		return
 	}
-
-	if message.RegistrationAccept.ExtendedProtocolDiscriminator.GetExtendedProtocolDiscriminator() != 126 {
-		log.Fatal("[UE][NAS] Error in Registration Accept, Extended Protocol not the expected value")
-	}
-
-	if message.RegistrationAccept.SpareHalfOctetAndSecurityHeaderType.GetSpareHalfOctet() != 0 {
-		log.Fatal("[UE][NAS] Error in Registration Accept, Spare Half not the expected value")
-	}
-
-	if message.RegistrationAccept.SpareHalfOctetAndSecurityHeaderType.GetSecurityHeaderType() != 0 {
-		log.Fatal("[UE][NAS] Error in Registration Accept, Security Header not the expected value")
-	}
-
-	if reflect.ValueOf(message.RegistrationAccept.RegistrationAcceptMessageIdentity).IsZero() {
-		log.Fatal("[UE][NAS] Error in Registration Accept, Message Type is missing")
-	}
-
-	if message.RegistrationAccept.RegistrationAcceptMessageIdentity.GetMessageType() != 66 {
-		log.Fatal("[UE][NAS] Error in Registration Accept, Message Type not the expected value")
-	}
-
-	if reflect.ValueOf(message.RegistrationAccept.RegistrationResult5GS).IsZero() {
-		log.Fatal("[UE][NAS] Error in Registration Accept, Registration Result 5GS is missing")
-	}
-
-	if message.RegistrationAccept.RegistrationResult5GS.GetRegistrationResultValue5GS() != 1 {
-		log.Fatal("[UE][NAS] Error in Registration Accept, Registration Result 5GS not the expected value")
-	}
-
-	// change the state of ue for registered
 	ue.SetStateMM_REGISTERED()
-
-	// saved 5g GUTI and others information.
-	if message.RegistrationAccept.GUTI5G != nil {
-		ue.Set5gGuti(message.RegistrationAccept.GUTI5G)
+	if msg.GUTI5G != nil {
+		ue.Set5gGuti(msg.GUTI5G)
 	} else {
-		log.Warn("[UE][NAS] UE was not assigned a 5G-GUTI by AMF")
+		log.Warn("[UE][NAS] AMF did not assign a 5G-GUTI")
 	}
-
-	// use the slice allowed by the network
-	// in PDU session request
-	if ue.Snssai.Sst == 0 {
-
-		// check the allowed NSSAI received from the 5GC
-		snssai := message.RegistrationAccept.AllowedNSSAI.GetSNSSAIValue()
-
-		// update UE slice selected for PDU Session
-		ue.Snssai.Sst = int32(snssai[1])
-		ue.Snssai.Sd = fmt.Sprintf("0%x0%x0%x", snssai[2], snssai[3], snssai[4])
-
-		log.Warn("[UE][NAS] ALLOWED NSSAI: SST: ", ue.Snssai.Sst, " SD: ", ue.Snssai.Sd)
+	if ue.Snssai.Sst == 0 && msg.AllowedNSSAI != nil && len(msg.AllowedNSSAI.SNSSAIs) > 0 {
+		allowed := msg.AllowedNSSAI.SNSSAIs[0]
+		ue.Snssai.Sst, ue.Snssai.Sd = int32(allowed.SST), allowed.SD
 	}
-
-	log.Info("[UE][NAS] UE 5G GUTI: ", ue.Get5gGuti())
-
-	// getting NAS registration complete.
-	registrationComplete, err := mm_5gs.RegistrationComplete(ue)
+	pdu, err := mm_5gs.RegistrationComplete(ue)
 	if err != nil {
-		log.Fatal("[UE][NAS] Error sending Registration Complete: ", err)
+		log.Errorf("[UE][NAS] Registration Complete: %v", err)
+		return
 	}
-
-	// sending to GNB
-	sender.SendToGnb(ue, registrationComplete)
+	sender.SendToGnb(ue, pdu)
 }
 
-func HandlerServiceAccept(ue *context.UEContext, message *nas.Message) {
-	// change the state of ue for registered
-	ue.SetStateMM_REGISTERED()
-}
+func HandlerServiceAccept(ue *context.UEContext, msg *nas.SvcAccept) { ue.SetStateMM_REGISTERED() }
 
-func HandlerDlNasTransportPduaccept(ue *context.UEContext, message *nas.Message) {
-
-	// check the mandatory fields
-	if reflect.ValueOf(message.DLNASTransport.ExtendedProtocolDiscriminator).IsZero() {
-		log.Fatal("[UE][NAS] Error in DL NAS Transport, Extended Protocol is missing")
+func HandlerDlNasTransportPduaccept(ue *context.UEContext, msg *nas.DLNASTransport) {
+	if msg.PayloadCntrType == nil || msg.PayloadCntrType.Value != ie.PayloadCntrType_N1SMInfo || msg.PayloadCntr == nil || msg.PDUSessID == nil {
+		log.Error("[UE][NAS] Invalid DL NAS Transport")
+		return
 	}
-
-	if message.DLNASTransport.ExtendedProtocolDiscriminator.GetExtendedProtocolDiscriminator() != 126 {
-		log.Fatal("[UE][NAS] Error in DL NAS Transport, Extended Protocol not expected value")
+	payload := nas_control.GetNasPduFromPduAccept(msg)
+	if payload == nil {
+		log.Error("[UE][NAS] Invalid N1 SM payload")
+		return
 	}
-
-	if message.DLNASTransport.SpareHalfOctetAndSecurityHeaderType.GetSpareHalfOctet() != 0 {
-		log.Fatal("[UE][NAS] Error in DL NAS Transport, Spare Half not expected value")
-	}
-
-	if message.DLNASTransport.SpareHalfOctetAndSecurityHeaderType.GetSecurityHeaderType() != 0 {
-		log.Fatal("[UE][NAS] Error in DL NAS Transport, Security Header not expected value")
-	}
-
-	if message.DLNASTransport.DLNASTRANSPORTMessageIdentity.GetMessageType() != 104 {
-		log.Fatal("[UE][NAS] Error in DL NAS Transport, Message Type is missing or not expected value")
-	}
-
-	if reflect.ValueOf(message.DLNASTransport.SpareHalfOctetAndPayloadContainerType).IsZero() {
-		log.Fatal("[UE][NAS] Error in DL NAS Transport, Payload Container Type is missing")
-	}
-
-	if message.DLNASTransport.SpareHalfOctetAndPayloadContainerType.GetPayloadContainerType() != 1 {
-		log.Fatal("[UE][NAS] Error in DL NAS Transport, Payload Container Type not expected value")
-	}
-
-	if reflect.ValueOf(message.DLNASTransport.PayloadContainer).IsZero() || message.DLNASTransport.PayloadContainer.GetPayloadContainerContents() == nil {
-		log.Fatal("[UE][NAS] Error in DL NAS Transport, Payload Container is missing")
-	}
-
-	if reflect.ValueOf(message.DLNASTransport.PduSessionID2Value).IsZero() {
-		log.Fatal("[UE][NAS] Error in DL NAS Transport, PDU Session ID is missing")
-	}
-
-	if message.DLNASTransport.PduSessionID2Value.GetIei() != 18 {
-		log.Fatal("[UE][NAS] Error in DL NAS Transport, PDU Session ID not expected value")
-	}
-
-	//getting PDU Session establishment accept.
-	payloadContainer := nas_control.GetNasPduFromPduAccept(message)
-
-	switch payloadContainer.GsmHeader.GetMessageType() {
-	case nas.MsgTypePDUSessionEstablishmentAccept:
-		log.Info("[UE][NAS] Receiving PDU Session Establishment Accept")
-
-		// get UE ip
-		pduSessionEstablishmentAccept := payloadContainer.PDUSessionEstablishmentAccept
-
-		// check the mandatory fields
-		if reflect.ValueOf(pduSessionEstablishmentAccept.ExtendedProtocolDiscriminator).IsZero() {
-			log.Fatal("[UE][NAS] Error in PDU Session Establishment Accept, Extended Protocol Discriminator is missing")
-		}
-
-		if pduSessionEstablishmentAccept.GetExtendedProtocolDiscriminator() != 46 {
-			log.Fatal("[UE][NAS] Error in PDU Session Establishment Accept, Extended Protocol Discriminator not expected value")
-		}
-
-		if reflect.ValueOf(pduSessionEstablishmentAccept.PDUSessionID).IsZero() {
-			log.Fatal("[UE][NAS] Error in PDU Session Establishment Accept, PDU Session ID is missing or not expected value")
-		}
-
-		if reflect.ValueOf(pduSessionEstablishmentAccept.PTI).IsZero() {
-			log.Fatal("[UE][NAS] Error in PDU Session Establishment Accept, PTI is missing")
-		}
-
-		if pduSessionEstablishmentAccept.PTI.GetPTI() != 1 {
-			log.Fatal("[UE][NAS] Error in PDU Session Establishment Accept, PTI not the expected value")
-		}
-
-		if pduSessionEstablishmentAccept.PDUSESSIONESTABLISHMENTACCEPTMessageIdentity.GetMessageType() != 194 {
-			log.Fatal("[UE][NAS] Error in PDU Session Establishment Accept, Message Type is missing or not expected value")
-		}
-
-		if reflect.ValueOf(pduSessionEstablishmentAccept.SelectedSSCModeAndSelectedPDUSessionType).IsZero() {
-			log.Fatal("[UE][NAS] Error in PDU Session Establishment Accept, SSC Mode or PDU Session Type is missing")
-		}
-
-		if pduSessionEstablishmentAccept.SelectedSSCModeAndSelectedPDUSessionType.GetPDUSessionType() != 1 {
-			log.Fatal("[UE][NAS] Error in PDU Session Establishment Accept, PDU Session Type not the expected value")
-		}
-
-		if reflect.ValueOf(pduSessionEstablishmentAccept.AuthorizedQosRules).IsZero() {
-			log.Fatal("[UE][NAS] Error in PDU Session Establishment Accept, Authorized QoS Rules is missing")
-		}
-
-		if reflect.ValueOf(pduSessionEstablishmentAccept.SessionAMBR).IsZero() {
-			log.Fatal("[UE][NAS] Error in PDU Session Establishment Accept, Session AMBR is missing")
-		}
-
-		// update PDU Session information.
-		pduSessionId := pduSessionEstablishmentAccept.GetPDUSessionID()
-		pduSession, err := ue.GetPduSession(pduSessionId)
-		// change the state of ue(SM)(PDU Session Active).
-		pduSession.SetStateSM_PDU_SESSION_ACTIVE()
-		if err != nil {
-			log.Error("[UE][NAS] Receiving PDU Session Establishment Accept about an unknown PDU Session, id: ", pduSessionId)
+	switch m := payload.(type) {
+	case *nas.PDUSessEstAccept:
+		if m.SelectedPDUSessType == nil || m.SelectedPDUSessType.Value != ie.PDUSessType_IPv4 || m.PDUAddr == nil || len(m.PDUAddr.IPv4) != 4 {
+			log.Error("[UE][NAS] PDU session requires an IPv4 address")
 			return
 		}
-
-		// get UE IP
-		UeIp := pduSessionEstablishmentAccept.GetPDUAddressInformation()
-		pduSession.SetIp(UeIp)
-
-		// get QoS Rules
-		QosRule := pduSessionEstablishmentAccept.AuthorizedQosRules.GetQosRule()
-		// get DNN
-		dnn := pduSessionEstablishmentAccept.DNN.GetDNN()
-		// get SNSSAI
-		sst := pduSessionEstablishmentAccept.SNSSAI.GetSST()
-		sd := pduSessionEstablishmentAccept.SNSSAI.GetSD()
-
-		log.Info("[UE][NAS] PDU session QoS RULES: ", QosRule)
-		log.Info("[UE][NAS] PDU session DNN: ", string(dnn))
-		log.Info("[UE][NAS] PDU session NSSAI -- sst: ", sst, " sd: ",
-			fmt.Sprintf("%x%x%x", sd[0], sd[1], sd[2]))
-		log.Info("[UE][NAS] PDU address received: ", pduSession.GetIp())
-	case nas.MsgTypePDUSessionReleaseCommand:
-		log.Info("[UE][NAS] Receiving PDU Session Release Command")
-
-		pduSessionReleaseCommand := payloadContainer.PDUSessionReleaseCommand
-		pduSessionId := pduSessionReleaseCommand.GetPDUSessionID()
-		pduSession, err := ue.GetPduSession(pduSessionId)
-		if pduSession == nil || err != nil {
-			log.Error("[UE][NAS] Unable to delete PDU Session ", pduSessionId, " from UE ", ue.GetMsin(), " as the PDU Session was not found. Ignoring.")
-			break
+		session, err := ue.GetPduSession(m.PDUSessId)
+		if err != nil {
+			log.Errorf("[UE][NAS] Unknown PDU session %d: %v", m.PDUSessId, err)
+			return
 		}
-		ue.DeletePduSession(pduSessionId)
-		log.Info("[UE][NAS] Successfully released PDU Session ", pduSessionId, " from UE Context")
-		trigger.InitPduSessionReleaseComplete(ue, pduSession)
-
-	case nas.MsgTypePDUSessionEstablishmentReject:
-		log.Error("[UE][NAS] Receiving PDU Session Establishment Reject")
-
-		pduSessionEstablishmentReject := payloadContainer.PDUSessionEstablishmentReject
-		pduSessionId := pduSessionEstablishmentReject.GetPDUSessionID()
-
-		log.Error("[UE][NAS] PDU Session Establishment Reject for PDU Session ID ", pduSessionId, ", 5GSM Cause: ", cause5GSMToString(pduSessionEstablishmentReject.GetCauseValue()))
-
-		// Per 5GSM state machine in TS 24.501 - 6.1.3.2.1., we re-try the setup until it's successful
-		handleEstablishmentReject(ue, pduSessionEstablishmentReject)
-
+		var ip [12]uint8
+		copy(ip[:], m.PDUAddr.IPv4)
+		session.SetIp(ip)
+		session.SetStateSM_PDU_SESSION_ACTIVE()
+		log.Infof("[UE][NAS] PDU session %d address: %s", m.PDUSessId, session.GetIp())
+		if m.DNN != nil {
+			log.Infof("[UE][NAS] PDU session DNN: %s", m.DNN.Value)
+		}
+		if m.SNSSAI != nil {
+			log.Infof("[UE][NAS] PDU session NSSAI: SST %d, SD %s", m.SNSSAI.SST, m.SNSSAI.SD)
+		}
+		log.Infof("[UE][NAS] PDU session QoS rules: %+v", m.AuthoQosRules)
+	case *nas.PDUSessRelCmd:
+		session, err := ue.GetPduSession(m.PDUSessId)
+		if err != nil || session == nil {
+			log.Errorf("[UE][NAS] Unknown PDU session %d", m.PDUSessId)
+			return
+		}
+		ue.DeletePduSession(m.PDUSessId)
+		trigger.InitPduSessionReleaseComplete(ue, session)
+	case *nas.PDUSessEstRej:
+		log.Errorf("[UE][NAS] PDU session %d rejected: %s", m.PDUSessId, m.Cause5GSM)
+		handleEstablishmentReject(ue, m)
 	default:
-		log.Error("[UE][NAS] Receiving Unknown Dl NAS Transport message!! ", payloadContainer.GsmHeader.GetMessageType())
+		log.Errorf("[UE][NAS] Unsupported N1 SM payload: %s", payload.MsgType())
 	}
 }
 
-func HandlerIdentityRequest(ue *context.UEContext, message *nas.Message) {
-
-	// check the mandatory fields
-	if reflect.ValueOf(message.IdentityRequest.ExtendedProtocolDiscriminator).IsZero() {
-		log.Fatal("[UE][NAS] Error in Identity Request, Extended Protocol is missing")
+func HandlerIdentityRequest(ue *context.UEContext, msg *nas.IdReq) {
+	if msg.IdType == nil || msg.IdType.IdType != ie.IdType_5GS_SUCI {
+		log.Error("[UE][NAS] Only SUCI identity requests are supported")
+		return
 	}
-
-	if message.IdentityRequest.ExtendedProtocolDiscriminator.GetExtendedProtocolDiscriminator() != 126 {
-		log.Fatal("[UE][NAS] Error in Identity Request, Extended Protocol not the expected value")
-	}
-
-	if message.IdentityRequest.SpareHalfOctetAndSecurityHeaderType.GetSpareHalfOctet() != 0 {
-		log.Fatal("[UE][NAS] Error in Identity Request, Spare Half Octet not the expected value")
-	}
-
-	if message.IdentityRequest.SpareHalfOctetAndSecurityHeaderType.GetSecurityHeaderType() != 0 {
-		log.Fatal("[UE][NAS] Error in Identity Request, Security Header Type not the expected value")
-	}
-
-	if reflect.ValueOf(message.IdentityRequest.IdentityRequestMessageIdentity).IsZero() {
-		log.Fatal("[UE][NAS] Error in Identity Request, Message Type is missing")
-	}
-
-	if message.IdentityRequest.IdentityRequestMessageIdentity.GetMessageType() != 91 {
-		log.Fatal("[UE][NAS] Error in Identity Request, Message Type not the expected value")
-	}
-
-	if reflect.ValueOf(message.IdentityRequest.SpareHalfOctetAndIdentityType).IsZero() {
-		log.Fatal("[UE][NAS] Error in Identity Request, Spare Half Octet And Identity Type is missing")
-	}
-
-	switch message.IdentityRequest.GetTypeOfIdentity() {
-	case 1:
-		log.Info("[UE][NAS] Requested SUCI 5GS type")
-	default:
-		log.Fatal("[UE][NAS] Only SUCI identity is supported for now inside PacketRusher")
-	}
-
 	trigger.InitIdentifyResponse(ue)
 }
-
-func HandlerConfigurationUpdateCommand(ue *context.UEContext, message *nas.Message) {
-
-	// check the mandatory fields
-	if reflect.ValueOf(message.ConfigurationUpdateCommand.ExtendedProtocolDiscriminator).IsZero() {
-		log.Fatal("[UE][NAS] Error in Configuration Update Command, Extended Protocol Discriminator is missing")
-	}
-
-	if message.ConfigurationUpdateCommand.ExtendedProtocolDiscriminator.GetExtendedProtocolDiscriminator() != 126 {
-		log.Fatal("[UE][NAS] Error in Configuration Update Command, Extended Protocol Discriminator not the expected value")
-	}
-
-	if message.ConfigurationUpdateCommand.SpareHalfOctetAndSecurityHeaderType.GetSpareHalfOctet() != 0 {
-		log.Fatal("[UE][NAS] Error in Configuration Update Command, Spare Half not the expected value")
-	}
-
-	if message.ConfigurationUpdateCommand.SpareHalfOctetAndSecurityHeaderType.GetSecurityHeaderType() != 0 {
-		log.Fatal("[UE][NAS] Error in Configuration Update Command, Security Header not the expected value")
-	}
-
-	if reflect.ValueOf(message.ConfigurationUpdateCommand.ConfigurationUpdateCommandMessageIdentity).IsZero() {
-		log.Fatal("[UE][NAS] Error in Configuration Update Command, Message type not the expected value")
-	}
-
-	if message.ConfigurationUpdateCommand.ConfigurationUpdateCommandMessageIdentity.GetMessageType() != 84 {
-		log.Fatal("[UE][NAS] Error in Configuration Update Command, Message Type not the expected value")
-	}
-
-	// return configuration update complete
+func HandlerConfigurationUpdateCommand(ue *context.UEContext, msg *nas.CfgUpdateCmd) {
 	trigger.InitConfigurationUpdateComplete(ue)
 }
-
-func cause5GSMToString(causeValue uint8) string {
-	switch causeValue {
-	case nasMessage.Cause5GSMInsufficientResources:
-		return "Insufficient Ressources"
-	case nasMessage.Cause5GSMMissingOrUnknownDNN:
-		return "Missing or Unknown DNN"
-	case nasMessage.Cause5GSMUnknownPDUSessionType:
-		return "Unknown PDU Session Type"
-	case nasMessage.Cause5GSMUserAuthenticationOrAuthorizationFailed:
-		return "User authentification or authorization failed"
-	case nasMessage.Cause5GSMRequestRejectedUnspecified:
-		return "Request rejected, unspecified"
-	case nasMessage.Cause5GSMServiceOptionTemporarilyOutOfOrder:
-		return "Service option temporarily out of order."
-	case nasMessage.Cause5GSMPTIAlreadyInUse:
-		return "PTI already in use"
-	case nasMessage.Cause5GSMRegularDeactivation:
-		return "Regular deactivation"
-	case nasMessage.Cause5GSMReactivationRequested:
-		return "Reactivation requested"
-	case nasMessage.Cause5GSMInvalidPDUSessionIdentity:
-		return "Invalid PDU session identity"
-	case nasMessage.Cause5GSMSemanticErrorsInPacketFilter:
-		return "Semantic errors in packet filter(s)"
-	case nasMessage.Cause5GSMSyntacticalErrorInPacketFilter:
-		return "Syntactical error in packet filter(s)"
-	case nasMessage.Cause5GSMOutOfLADNServiceArea:
-		return "Out of LADN service area"
-	case nasMessage.Cause5GSMPTIMismatch:
-		return "PTI mismatch"
-	case nasMessage.Cause5GSMPDUSessionTypeIPv4OnlyAllowed:
-		return "PDU session type IPv4 only allowed"
-	case nasMessage.Cause5GSMPDUSessionTypeIPv6OnlyAllowed:
-		return "PDU session type IPv6 only allowed"
-	case nasMessage.Cause5GSMPDUSessionDoesNotExist:
-		return "PDU session does not exist"
-	case nasMessage.Cause5GSMInsufficientResourcesForSpecificSliceAndDNN:
-		return "Insufficient resources for specific slice and DNN"
-	case nasMessage.Cause5GSMNotSupportedSSCMode:
-		return "Not supported SSC mode"
-	case nasMessage.Cause5GSMInsufficientResourcesForSpecificSlice:
-		return "Insufficient resources for specific slice"
-	case nasMessage.Cause5GSMMissingOrUnknownDNNInASlice:
-		return "Missing or unknown DNN in a slice"
-	case nasMessage.Cause5GSMInvalidPTIValue:
-		return "Invalid PTI value"
-	case nasMessage.Cause5GSMMaximumDataRatePerUEForUserPlaneIntegrityProtectionIsTooLow:
-		return "Maximum data rate per UE for user-plane integrity protection is too low"
-	case nasMessage.Cause5GSMSemanticErrorInTheQoSOperation:
-		return "Semantic error in the QoS operation"
-	case nasMessage.Cause5GSMSyntacticalErrorInTheQoSOperation:
-		return "Syntactical error in the QoS operation"
-	case nasMessage.Cause5GSMInvalidMappedEPSBearerIdentity:
-		return "Invalid mapped EPS bearer identity"
-	case nasMessage.Cause5GSMSemanticallyIncorrectMessage:
-		return "Semantically incorrect message"
-	case nasMessage.Cause5GSMInvalidMandatoryInformation:
-		return "Invalid mandatory information"
-	case nasMessage.Cause5GSMMessageTypeNonExistentOrNotImplemented:
-		return "Message type non-existent or not implemented"
-	case nasMessage.Cause5GSMMessageTypeNotCompatibleWithTheProtocolState:
-		return "Message type not compatible with the protocol state"
-	case nasMessage.Cause5GSMInformationElementNonExistentOrNotImplemented:
-		return "Information element non-existent or not implemented"
-	case nasMessage.Cause5GSMConditionalIEError:
-		return "Conditional IE error"
-	case nasMessage.Cause5GSMMessageNotCompatibleWithTheProtocolState:
-		return "Message not compatible with the protocol state"
-	case nasMessage.Cause5GSMProtocolErrorUnspecified:
-		return "Protocol error, unspecified. Please open an issue on Github with pcap."
-	default:
-		return "Service option temporarily out of order."
-	}
-}
+func cause5GSMToString(value uint8) string { return fmt.Sprint(&ie.Cause5GSM{Value: value}) }

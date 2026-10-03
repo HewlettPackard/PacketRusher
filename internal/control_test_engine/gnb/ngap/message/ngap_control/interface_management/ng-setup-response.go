@@ -7,13 +7,12 @@ package interface_management
 import (
 	"fmt"
 
-	"github.com/free5gc/ngap"
-	"github.com/free5gc/ngap/ngapType"
+	ngap "github.com/free5gc/ngap/message"
 
 	"github.com/ishidawataru/sctp"
 )
 
-func NgSetupResponse(connN2 *sctp.SCTPConn) (*ngapType.NGAPPDU, error) {
+func NgSetupResponse(connN2 *sctp.SCTPConn) (ngap.Message, error) {
 	var recvMsg = make([]byte, 2048)
 	var n int
 
@@ -23,7 +22,7 @@ func NgSetupResponse(connN2 *sctp.SCTPConn) (*ngapType.NGAPPDU, error) {
 		return nil, fmt.Errorf("Error receiving %w NG-SETUP-RESPONSE", err)
 	}
 
-	ngapMsg, err := ngap.Decoder(recvMsg[:n])
+	ngapMsg, err := ngap.Parse(recvMsg[:n])
 	if err != nil {
 		return nil, fmt.Errorf("Error decoding %w NG-SETUP-RESPONSE", err)
 	}

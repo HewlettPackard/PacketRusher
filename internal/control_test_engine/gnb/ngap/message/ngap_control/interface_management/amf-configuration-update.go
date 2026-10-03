@@ -5,28 +5,16 @@
 package interface_management
 
 import (
-	"github.com/free5gc/ngap"
-
-	"github.com/free5gc/ngap/ngapType"
+	ngap "github.com/free5gc/ngap/message"
 )
 
 func AmfConfigurationUpdateAcknowledge() ([]byte, error) {
 	message := BuildAmfConfigurationUpdateAcknowledge()
 
-	return ngap.Encoder(message)
+	return message.MarshalBinary()
 }
 
-func BuildAmfConfigurationUpdateAcknowledge() (pdu ngapType.NGAPPDU) {
-
-	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
-	pdu.SuccessfulOutcome = new(ngapType.SuccessfulOutcome)
-
-	successfulOutcome := pdu.SuccessfulOutcome
-	successfulOutcome.ProcedureCode.Value = ngapType.ProcedureCodeAMFConfigurationUpdate
-	successfulOutcome.Criticality.Value = ngapType.CriticalityPresentReject
-
-	successfulOutcome.Value.Present = ngapType.SuccessfulOutcomePresentAMFConfigurationUpdateAcknowledge
-	successfulOutcome.Value.AMFConfigurationUpdateAcknowledge = new(ngapType.AMFConfigurationUpdateAcknowledge)
-
+func BuildAmfConfigurationUpdateAcknowledge() (pdu *ngap.AMFConfigurationUpdateAcknowledge) {
+	pdu = &ngap.AMFConfigurationUpdateAcknowledge{}
 	return
 }
