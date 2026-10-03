@@ -64,7 +64,7 @@ def cohort(args):
         probe.until(lambda:capture.poll() is None and (state/'preflight-n3.pcap').exists() and (state/'preflight-n3.pcap').stat().st_size>=24,5,'preflight capture')
         process=native.launch_owned([str(binary),'--config',str(state/'config.json'),'--tunnel-backend',args.backend,
              '--report-json',str(state/'report.json'),'multi-ue','-n','1','--numPduSessions','1',
-             '--tunnel','--tunnel-vrf=false','--control-socket',str(state/'control.sock')],stdout=log,stderr=subprocess.STDOUT)
+             '--tunnel','--tunnel-shared=true','--tunnel-vrf=false','--control-socket',str(state/'control.sock')],stdout=log,stderr=subprocess.STDOUT)
         owned.append(process)
         probe.until(lambda:process.poll() is None and (state/'control.sock').is_socket(),20,'UE control socket')
         ready=control('wait')
@@ -72,11 +72,12 @@ def cohort(args):
         probe.await_core_count(profile,state,'registered',1,5)
         route=json.loads(subprocess.check_output(['ip','-json','route','get',prepare.DN_IP,'from',prepare.UE_IP],text=True))
         record(state/'ue-route.json',route)
-        expected='gtp00000000120' if args.backend=='gtp5g' else 'val0000000120'
+        expected='valgnb'+socket.inet_aton(prepare.RAN_IP).hex() if args.backend=='gtp5g' else 'val0000000120'
         probe.require(route[0]['dev']==expected,f'unexpected owned backend route: {route}')
         link=json.loads(subprocess.check_output(['ip','-json','link','show','dev',route[0]['dev']],text=True))
         record(state/'ue-link.json',link)
         probe.require(link[0]['mtu']==1400,'backend MTU differs from1400')
+        if args.backend=='gtp5g':probe.require(link[0].get('linkinfo',{}).get('info_kind')=='gtp5g','route does not select kernel gtp5g')
         endpoint=json.loads(subprocess.check_output(['ip','-json','addr','show','dev','val0000000120'],text=True))
         record(state/'ue-endpoint.json',endpoint)
         probe.require(any(addr.get('local')==prepare.UE_IP for addr in endpoint[0]['addr_info']),'stable endpoint does not own UE address')
@@ -128,7 +129,9 @@ def cohort(args):
         result['error']=str(error)
         # Retire a live owned UE on failure before the next cohort can proceed.
         if not isinstance(error,Cancelled) and process and process.poll() is None and (state/'control.sock').is_socket():
-            try: control('deregister','failure-deregister')
+            try:
+                control('deregister','failure-deregister')
+                probe.await_core_count(profile,state,'failure-deregistered',0,12)
             except Exception as cleanup: result['retirement_error']=str(cleanup)
     finally:
         with native.defer_cancellation():
@@ -156,6 +159,14 @@ def run(args):
     subscription=subscriber.read_text()
     if '"1 Gbps"' not in subscription:raise RuntimeError('expected benchmark AMBR schema missing')
     subscriber.write_text(subscription.replace('"1 Gbps"','"10 Gbps"'))
+    smf_path=state/'config/smfcfg.yaml'
+    smf=json.loads(smf_path.read_text())
+    # The release's default1000-byte URR threshold caused one real PFCP usage
+    # report per payload and dominated the pilot. Match a quiet1TB/1h policy
+    # for all backends, retaining the same genuine SMF/UPF and packet rules.
+    smf['configuration']['urrPeriod']=3600
+    smf['configuration']['urrThreshold']=1_000_000_000_000
+    record(smf_path,smf)
     binary=Path(args.packetrusher).resolve()
     record(state/'environment.json',{'kernel':subprocess.check_output(['uname','-a'],text=True).strip(),
         'iperf':subprocess.check_output(['iperf3','--version'],text=True).strip(),
@@ -166,6 +177,7 @@ def run(args):
         'module_version':Path('/sys/module/gtp5g/version').read_text().strip(),
         'logging_level':4,'routing':'source policy, no VRF','captures_during_timing':False,
         'pilot':args.pilot,'setup_complete':True,'ue_and_session_ambr':'10 Gbps',
+        'urr_period_seconds':3600,'urr_threshold_bytes':1_000_000_000_000,
         'iperf_binary_sha256':hashlib.sha256(Path('/usr/bin/iperf3').read_bytes()).hexdigest(),
         'module_sha256':hashlib.sha256(Path(args.module).read_bytes()).hexdigest(),
         'source_hashes':{str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in
