@@ -191,6 +191,10 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		}
 		if err := setupUserspaceTunnel(ue, pduSession, gnbPduSession, msg.GnbIp); err != nil {
 			log.Error("[UE][GTP] Unable to configure userspace tunnel: ", err)
+			if errors.Is(err, errTunnelRollback) {
+				pduSession.ReleaseTunnel()
+				log.Error("[UE][GTP] Released userspace tunnel after unsuccessful rollback")
+			}
 			return
 		}
 		pduSession.SetGnbIp(msg.GnbIp)
