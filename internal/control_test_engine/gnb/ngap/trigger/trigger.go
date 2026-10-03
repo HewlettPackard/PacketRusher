@@ -221,9 +221,12 @@ func TriggerXnHandover(oldGnb *context.GNBContext, newGnb *context.GNBContext, p
 	newGnbRx := make(chan context.UEMessage, 1)
 	newGnbTx := make(chan context.UEMessage, 1)
 	connectionLost := make(chan struct{})
-	newGnb.GetInboundChannel() <- context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, ConnectionLost: connectionLost, PrUeId: gnbUeContext.GetPrUeId(), UEContext: gnbUeContext, IsHandover: true}
+	if err := newGnb.QueueHandover(context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, ConnectionLost: connectionLost, PrUeId: gnbUeContext.GetPrUeId(), UEContext: gnbUeContext, IsHandover: true}); err != nil {
+		log.Error("[GNB] Unable to connect Xn handover target: ", err)
+		return
+	}
 
-	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, ConnectionLost: connectionLost, GNBInboundChannel: newGnb.GetInboundChannel()}
+	msg := context.UEMessage{GNBRx: newGnbRx, GNBTx: newGnbTx, ConnectionLost: connectionLost, GNBInboundChannel: newGnb.GetInboundChannel(), GNB: newGnb}
 
 	ueSender.SendMessageToUe(gnbUeContext, msg)
 }
@@ -285,5 +288,5 @@ func PrepareXnHandover(ctx stdContext.Context, oldGnb, newGnb *context.GNBContex
 	if err := newGnb.QueueHandover(message); err != nil {
 		return context.UEMessage{}, err
 	}
-	return context.UEMessage{GNBRx: rx, GNBTx: tx, ConnectionLost: lost, GNBInboundChannel: newGnb.GetInboundChannel()}, nil
+	return context.UEMessage{GNBRx: rx, GNBTx: tx, ConnectionLost: lost, GNBInboundChannel: newGnb.GetInboundChannel(), GNB: newGnb}, nil
 }

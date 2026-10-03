@@ -65,6 +65,7 @@ type ControlInfo struct {
 	inboundChannel chan UEMessage
 	n2             atomic.Pointer[sctp.SCTPConn]
 	terminated     atomic.Bool
+	done           chan struct{}
 	// lifecycle orders publishing a new association against Terminate and against
 	// removing its AMF, so that either the dialler sees it is no longer wanted, or the
 	// closer sees the association and closes it. This holds for each AMF, because
@@ -85,6 +86,7 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd string, n2
 	gnb.controlInfo.gnbIDLength = 24
 	gnb.controlInfo.cellID = 0
 	gnb.controlInfo.inboundChannel = make(chan UEMessage, 100)
+	gnb.controlInfo.done = make(chan struct{})
 	gnb.sliceInfo.sd = sd
 	gnb.sliceInfo.sst = sst
 	gnb.controlInfo.gnbIpPort = n2
@@ -93,6 +95,11 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd string, n2
 }
 
 func (gnb *GNBContext) NewGnBUe(gnbTx chan UEMessage, gnbRx chan UEMessage, prUeId int64, tmsi *nasType.MobileId5GS, connectionLost ...chan struct{}) (*GNBUe, error) {
+	gnb.controlInfo.lifecycle.Lock()
+	defer gnb.controlInfo.lifecycle.Unlock()
+	if gnb.IsTerminated() {
+		return nil, errors.New("gNB is terminated")
+	}
 
 	// TODO if necessary add more information for UE.
 
@@ -140,20 +147,37 @@ func (gnb *GNBContext) GetInboundChannel() chan UEMessage {
 	return gnb.controlInfo.inboundChannel
 }
 
-// QueueHandover serializes enqueue with channel closure. A full or unavailable
-// target is reported immediately, so its source's ordered dispatcher can continue.
+// Done closes when this gNB stops accepting UE connections.
+func (gnb *GNBContext) Done() <-chan struct{} { return gnb.controlInfo.done }
+
+// QueueUE serializes admission with channel closure. It never holds lifecycle
+// while waiting for a receiver, so a full queue cannot prevent termination.
+func (gnb *GNBContext) QueueUE(message UEMessage) error {
+	gnb.controlInfo.lifecycle.Lock()
+	defer gnb.controlInfo.lifecycle.Unlock()
+	return gnb.queueUELocked(message)
+}
+
+func (gnb *GNBContext) queueUELocked(message UEMessage) error {
+	if gnb.IsTerminated() {
+		return errors.New("gNB is terminated")
+	}
+	select {
+	case gnb.controlInfo.inboundChannel <- message:
+		return nil
+	default:
+		return errors.New("gNB connection queue is full")
+	}
+}
+
+// QueueHandover additionally requires the target's successful NG Setup.
 func (gnb *GNBContext) QueueHandover(message UEMessage) error {
 	gnb.controlInfo.lifecycle.Lock()
 	defer gnb.controlInfo.lifecycle.Unlock()
 	if !gnb.NGSetupReady() {
 		return errors.New("target gNB has not completed NG Setup")
 	}
-	select {
-	case gnb.controlInfo.inboundChannel <- message:
-		return nil
-	default:
-		return errors.New("target gNB connection queue is full")
-	}
+	return gnb.queueUELocked(message)
 }
 
 func (gnb *GNBContext) GetN3GnbIp() netip.Addr {
@@ -579,6 +603,7 @@ func (gnb *GNBContext) Terminate() {
 		return
 	}
 	gnb.controlInfo.terminated.Store(true)
+	close(gnb.controlInfo.done)
 	close(gnb.GetInboundChannel())
 	// N2 is also the conn of the AMF that published it; collect each conn once.
 	conns := []*sctp.SCTPConn{gnb.GetN2()}

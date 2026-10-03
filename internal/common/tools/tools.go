@@ -158,9 +158,12 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 		initialGNB := simConfig.gnbID(0)
 	iterations:
 		for iteration := 1; ; iteration++ {
+			if simConfig.Gnbs[initialGNB].IsTerminated() {
+				return
+			}
 			wg.Add(1)
 			ueRx := make(chan procedures.UeTesterMessage)
-			ueTx := ue.NewUE(ueCfg, simConfig.UeId, ueRx, simConfig.Gnbs[initialGNB].GetInboundChannel(), wg)
+			ueTx := ue.NewUE(ueCfg, simConfig.UeId, ueRx, simConfig.Gnbs[initialGNB], wg)
 			pending := []procedures.UeTesterMessage{{Type: procedures.Registration}}
 
 			after := func(milliseconds int) <-chan time.Time {
@@ -360,7 +363,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 					}
 				}
 			}
-			if stopping || !simConfig.RegistrationLoop || (simConfig.LoopCount != 0 && iteration >= simConfig.LoopCount) {
+			if stopping || simConfig.Gnbs[initialGNB].IsTerminated() || !simConfig.RegistrationLoop || (simConfig.LoopCount != 0 && iteration >= simConfig.LoopCount) {
 				return
 			}
 			// Global shutdown remains receivable between registration attempts.
@@ -368,6 +371,9 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 			waiting := true
 			for waiting {
 				select {
+				case <-simConfig.Gnbs[initialGNB].Done():
+					restart.Stop()
+					return
 				case <-restart.C:
 					waiting = false
 				case msg := <-simulation.commands:

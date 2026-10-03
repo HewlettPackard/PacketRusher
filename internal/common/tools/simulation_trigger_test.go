@@ -242,3 +242,14 @@ func TestPendingDeregistrationTriggerAllowsGlobalShutdown(t *testing.T) {
 		})
 	}
 }
+
+func TestRegistrationLoopStopsWhenGNBTerminates(t *testing.T) {
+	h := newSimulationHarness(t, nil, 1, 0)
+	connection := h.nextUE(t)
+	h.gnb.Terminate()
+	expectConnectionClosed(t, connection)
+	waitSimulationDone(t, h.simulation)
+	for range h.inbound {
+		t.Fatal("registration loop created another UE after gNB termination")
+	}
+}
