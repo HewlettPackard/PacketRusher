@@ -25,7 +25,7 @@ type GNBUe struct {
 	amfUeNgapId      atomic.Int64
 	amfUeIDSet       atomic.Bool    // Identifier for UE in AMF Context.
 	amfId            int64          // Identifier for AMF in UE/GNB Context.
-	state            atomic.Int32   // State of UE in NAS/GNB Context.
+	state            atomic.Int64   // State of UE in NAS/GNB Context.
 	sctpConnection   *sctp.SCTPConn // Sctp association in using by the UE.
 	gnbRx            chan UEMessage
 	gnbTx            chan UEMessage
