@@ -7,9 +7,9 @@ package ue_context_management
 import (
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 
-	"github.com/free5gc/ngap"
+	ngap "github.com/free5gc/ngap/message"
 
-	"github.com/free5gc/ngap/ngapType"
+	ngapType "github.com/free5gc/ngap/ie"
 )
 
 /*
@@ -31,47 +31,31 @@ func initialContextSetupResponse(connN2 *sctp.SCTPConn, amfUeNgapID int64, ranUe
 func UeContextReleaseComplete(ue *context.GNBUe) ([]byte, error) {
 	message := BuildUeContextReleaseComplete(ue.GetAmfUeId(), ue.GetRanUeId())
 
-	return ngap.Encoder(message)
+	return message.MarshalBinary()
 }
 
-func BuildUeContextReleaseComplete(amfUeNgapID, ranUeNgapID int64) (pdu ngapType.NGAPPDU) {
-
-	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
-	pdu.SuccessfulOutcome = new(ngapType.SuccessfulOutcome)
-
-	successfulOutcome := pdu.SuccessfulOutcome
-	successfulOutcome.ProcedureCode.Value = ngapType.ProcedureCodeUEContextRelease
-	successfulOutcome.Criticality.Value = ngapType.CriticalityPresentReject
-
-	successfulOutcome.Value.Present = ngapType.SuccessfulOutcomePresentUEContextReleaseComplete
-	successfulOutcome.Value.UEContextReleaseComplete = new(ngapType.UEContextReleaseComplete)
-
-	initialContextSetupResponse := successfulOutcome.Value.UEContextReleaseComplete
-	initialContextSetupResponseIEs := &initialContextSetupResponse.ProtocolIEs
+func BuildUeContextReleaseComplete(amfUeNgapID, ranUeNgapID int64) (pdu *ngap.UEContextReleaseComplete) {
+	pdu = &ngap.UEContextReleaseComplete{}
 
 	// AMF UE NGAP ID
 	ie := ngapType.UEContextReleaseCompleteIEs{}
-	ie.Id.Value = ngapType.ProtocolIEIDAMFUENGAPID
-	ie.Criticality.Value = ngapType.CriticalityPresentIgnore
-	ie.Value.Present = ngapType.UEContextReleaseCompleteIEsPresentAMFUENGAPID
-	ie.Value.AMFUENGAPID = new(ngapType.AMFUENGAPID)
 
-	aMFUENGAPID := ie.Value.AMFUENGAPID
+	ie.AMFUENGAPID = new(ngapType.AMFUENGAPID)
+
+	aMFUENGAPID := ie.AMFUENGAPID
 	aMFUENGAPID.Value = amfUeNgapID
 
-	initialContextSetupResponseIEs.List = append(initialContextSetupResponseIEs.List, ie)
+	pdu.AMFUENGAPID = ie.AMFUENGAPID
 
 	// RAN UE NGAP ID
 	ie = ngapType.UEContextReleaseCompleteIEs{}
-	ie.Id.Value = ngapType.ProtocolIEIDRANUENGAPID
-	ie.Criticality.Value = ngapType.CriticalityPresentIgnore
-	ie.Value.Present = ngapType.UEContextReleaseCompleteIEsPresentRANUENGAPID
-	ie.Value.RANUENGAPID = new(ngapType.RANUENGAPID)
 
-	rANUENGAPID := ie.Value.RANUENGAPID
+	ie.RANUENGAPID = new(ngapType.RANUENGAPID)
+
+	rANUENGAPID := ie.RANUENGAPID
 	rANUENGAPID.Value = ranUeNgapID
 
-	initialContextSetupResponseIEs.List = append(initialContextSetupResponseIEs.List, ie)
+	pdu.RANUENGAPID = ie.RANUENGAPID
 
 	return
 }

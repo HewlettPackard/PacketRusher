@@ -26,8 +26,8 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 		}
 	}
 
-	if numPduSessions > 16 {
-		log.Fatal("You can't have more than 16 PDU Sessions per UE as per spec.")
+	if numPduSessions < 1 || numPduSessions > 15 {
+		log.Fatal("Each UE requires 1 to 15 PDU Sessions (NAS PDU session identities 1 to 15).")
 	}
 
 	wg := sync.WaitGroup{}
@@ -54,10 +54,11 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	// TODO: We should wait for NGSetupResponse instead
 	time.Sleep(1 * time.Second)
 
-	scenarioChans := make([]chan procedures.UeTesterMessage, numUes+1)
+	simulations := make([]*tools.UESimulation, 0, numUes)
 
 	sigStop := make(chan os.Signal, 1)
 	signal.Notify(sigStop, os.Interrupt)
+	defer signal.Stop(sigStop)
 
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
@@ -77,45 +78,37 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	// If CTRL-C signal has been received,
 	// stop creating new UEs, else we create numUes UEs
 	for ueSimCfg.UeId = 1; stopSignal && ueSimCfg.UeId <= numUes; ueSimCfg.UeId++ {
-		// If there is currently a coroutine handling current UE
-		// kill it, before creating a new coroutine with same UE
-		// Use case: Registration of N UEs in loop, when loop = true
-		if scenarioChans[ueSimCfg.UeId] != nil {
-			scenarioChans[ueSimCfg.UeId] <- procedures.UeTesterMessage{Type: procedures.Kill}
-			close(scenarioChans[ueSimCfg.UeId])
-			scenarioChans[ueSimCfg.UeId] = nil
-		}
-		scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage)
-		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
-
-		tools.SimulateSingleUE(ueSimCfg, &wg)
+		simulations = append(simulations, tools.SimulateSingleUE(ueSimCfg, &wg))
 
 		// Before creating a new UE, we wait for timeBetweenRegistration ms
-		time.Sleep(time.Duration(timeBetweenRegistration) * time.Millisecond)
-
+		registrationDelay := time.NewTimer(time.Duration(timeBetweenRegistration) * time.Millisecond)
 		select {
 		case <-sigStop:
+			registrationDelay.Stop()
 			stopSignal = false
-		default:
+		case <-registrationDelay.C:
 		}
 	}
 
 	if stopSignal {
 		<-sigStop
 	}
-	for _, scenarioChan := range scenarioChans {
-		if scenarioChan != nil {
-			scenarioChan <- procedures.UeTesterMessage{Type: procedures.Terminate}
-		}
-	}
+	stopUESimulations(simulations)
 
-	time.Sleep(time.Second * 1)
-
-	// Each gNB removes the GTP-U device its UEs shared, once they have released their
-	// tunnels on it. It stops waiting when releases stop coming for 5 s, or after 60 s:
-	// UEs that cannot reach the AMF never release, and in --loop mode UEs register
-	// again after they terminate.
+	// Each scenario has finished local UE cleanup before its shared device closes.
+	// Keep the existing bounds for any residual holds from interrupted procedures.
 	for _, gnb := range gnbs {
 		gnb.CloseGtpDevice(5*time.Second, 60*time.Second)
+	}
+}
+
+// Completed scenarios no longer have a command receiver. Send checks their
+// completion, and remains blocking for live scenarios so none misses shutdown.
+func stopUESimulations(simulations []*tools.UESimulation) {
+	for _, simulation := range simulations {
+		simulation.Send(procedures.UeTesterMessage{Type: procedures.Terminate})
+	}
+	for _, simulation := range simulations {
+		<-simulation.Done()
 	}
 }

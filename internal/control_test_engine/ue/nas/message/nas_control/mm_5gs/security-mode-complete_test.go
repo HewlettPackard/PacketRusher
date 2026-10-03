@@ -8,7 +8,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/free5gc/nas"
+	"github.com/free5gc/nas/ie"
+	nas "github.com/free5gc/nas/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,18 +21,21 @@ import (
 func decodeImeisv(t *testing.T, pdu []byte) string {
 	t.Helper()
 
-	m := nas.NewMessage()
-	require.NoError(t, m.GmmMessageDecode(&pdu))
-	require.NotNil(t, m.SecurityModeComplete.IMEISV, "Security Mode Complete should carry an IMEISV")
-
-	imeisv := m.SecurityModeComplete.IMEISV
-	require.Equal(t, uint16(9), imeisv.GetLen())
-	assert.Equal(t, uint8(5), imeisv.GetTypeOfIdentity(), "type of identity should be IMEISV")
-	assert.Equal(t, uint8(0), imeisv.GetOddEvenIdic(), "an IMEISV has an even number of digits")
+	m, err := nas.Parse(pdu, nil)
+	require.NoError(t, err)
+	message, ok := m.(*nas.SecModeComplete)
+	require.True(t, ok)
+	require.NotNil(t, message.IMEISV, "Security Mode Complete should carry an IMEISV")
+	require.Equal(t, ie.IdType_5GS_IMEISV, message.IMEISV.TypeOfId)
+	imeisv, err := message.IMEISV.MarshalBinary()
+	require.NoError(t, err)
+	require.Len(t, imeisv, 9)
+	assert.Equal(t, uint8(5), imeisv[0]&7, "type of identity should be IMEISV")
+	assert.Zero(t, imeisv[0]&8, "an IMEISV has an even number of digits")
 
 	var digits bytes.Buffer
-	nibbles := []uint8{imeisv.Octet[0] >> 4}
-	for _, octet := range imeisv.Octet[1:imeisv.GetLen()] {
+	nibbles := []uint8{imeisv[0] >> 4}
+	for _, octet := range imeisv[1:] {
 		nibbles = append(nibbles, octet&0x0f, octet>>4)
 	}
 	last := len(nibbles) - 1

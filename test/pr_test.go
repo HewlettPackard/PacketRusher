@@ -13,15 +13,14 @@ import (
 	"my5G-RANTester/test/aio5gc/context"
 	amfTools "my5G-RANTester/test/aio5gc/lib/tools"
 	"net/netip"
-	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/util/fsm"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
@@ -40,12 +39,18 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	}
 
 	ueChecks := map[string]*UECheck{}
+	var checksMu sync.Mutex
 
 	// Setup 5GC
 	builder := aio5gc.FiveGCBuilder{}
 	fiveGC, err := builder.
 		WithConfig(conf).
 		WithPDUCallback(context.Active, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			if event != fsm.EntryEvent {
+				return
+			}
+			checksMu.Lock()
+			defer checksMu.Unlock()
 			ue := args["ue"].(*context.UEContext)
 			sm := args["sm"].(*context.SmContext)
 			check := ueChecks[ue.GetSecurityContext().GetMsin()]
@@ -55,6 +60,11 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 			check.PduActivated[sm.GetPduSessionId()] = true
 		}).
 		WithUeCallback(context.Authenticated, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			if event != fsm.EntryEvent {
+				return
+			}
+			checksMu.Lock()
+			defer checksMu.Unlock()
 			ue := args["ue"].(*context.UEContext)
 			check, ok := ueChecks[ue.GetSecurityContext().GetMsin()]
 			if !ok {
@@ -64,16 +74,18 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 			check.HasAuthOnce = true
 		}).
 		Build()
-	if err != nil {
-		log.Printf("[5GC] Error during 5GC creation  %v", err)
-		os.Exit(1)
-	}
-	time.Sleep(1 * time.Second)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = fiveGC.Close() })
 
 	// Setup gNodeB
 	gnbCount := 1
 	wg := sync.WaitGroup{}
 	gnbs := tools.CreateGnbs(gnbCount, conf, &wg)
+	t.Cleanup(func() {
+		for _, gnb := range gnbs {
+			gnb.Terminate()
+		}
+	})
 
 	time.Sleep(1 * time.Second)
 
@@ -120,7 +132,11 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 		func(ue *context.UEContext) {
 			i++
 			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
+			checksMu.Lock()
+			defer checksMu.Unlock()
 			check := ueChecks[ue.GetSecurityContext().GetMsin()]
+			require.NotNil(t, check)
+			assert.Equal(t, map[int32]bool{1: true}, check.PduActivated, "PDU session must have been activated before deregistration")
 			assert.True(t, check.HasAuthOnce, "UE has never changed state")
 			ue.ExecuteForAllSmContexts(
 				func(sm *context.SmContext) {
@@ -143,6 +159,7 @@ func TestUERegistrationLoop(t *testing.T) {
 		authCounter int
 	}
 	ueChecks := map[string]*UECheck{}
+	var checksMu sync.Mutex
 
 	conf := amfTools.GenerateDefaultConf(controlIFConfig, dataIFConfig, amfListConfig)
 
@@ -151,6 +168,11 @@ func TestUERegistrationLoop(t *testing.T) {
 	fiveGC, err := builder.
 		WithConfig(conf).
 		WithUeCallback(context.Authenticated, func(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
+			if event != fsm.EntryEvent {
+				return
+			}
+			checksMu.Lock()
+			defer checksMu.Unlock()
 			ue := args["ue"].(*context.UEContext)
 			check, ok := ueChecks[ue.GetSecurityContext().GetMsin()]
 			if !ok {
@@ -160,16 +182,18 @@ func TestUERegistrationLoop(t *testing.T) {
 			check.authCounter++
 		}).
 		Build()
-	if err != nil {
-		log.Printf("[5GC] Error during 5GC creation  %v", err)
-		os.Exit(1)
-	}
-	time.Sleep(1 * time.Second)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = fiveGC.Close() })
 
 	// Setup gNodeB
 	gnbCount := 1
 	wg := sync.WaitGroup{}
 	gnbs := tools.CreateGnbs(gnbCount, conf, &wg)
+	t.Cleanup(func() {
+		for _, gnb := range gnbs {
+			gnb.Terminate()
+		}
+	})
 
 	time.Sleep(1 * time.Second)
 
@@ -208,7 +232,10 @@ func TestUERegistrationLoop(t *testing.T) {
 	fiveGC.GetAMFContext().ExecuteForAllUe(
 		func(ue *context.UEContext) {
 			assert.Equalf(t, context.Deregistered, ue.GetState().Current(), "Expected all ue to be in Deregistered state but was not")
-			assert.Equalf(t, 15, ueChecks[ue.GetSecurityContext().GetMsin()].authCounter, "Number of registrations should be 15 (counter triggered 3x per loop)")
-			// authCounter = 3*loopCount because callback is triggered 3x per state transition in fsm.go from free5gc util
+			checksMu.Lock()
+			defer checksMu.Unlock()
+			check := ueChecks[ue.GetSecurityContext().GetMsin()]
+			require.NotNil(t, check)
+			assert.Equal(t, 5, check.authCounter, "each loop must authenticate once")
 		})
 }

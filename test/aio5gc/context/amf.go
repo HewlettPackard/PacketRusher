@@ -27,7 +27,7 @@ var (
 type AMFContext struct {
 	amfName             string
 	id                  string
-	supportedPlmnSnssai []models.PlmnSnssai
+	supportedPlmnSnssai []models.Nrf_NFMgmt_PlmnSnssai
 	servedGuami         []models.Guami
 	relativeCapacity    int64
 	gnbs                map[string]*GNBContext
@@ -48,7 +48,7 @@ func init() {
 	tmsiGenerator = idgenerator.NewGenerator(1, math.MaxInt32)
 }
 
-func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssai []models.PlmnSnssai, servedGuami []models.Guami, relativeCapacity int64, ueFsm *fsm.FSM, pduFsm *fsm.FSM) {
+func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssai []models.Nrf_NFMgmt_PlmnSnssai, servedGuami []models.Guami, relativeCapacity int64, ueFsm *fsm.FSM, pduFsm *fsm.FSM) {
 	c.amfName = amfName
 	c.id = id
 	c.supportedPlmnSnssai = supportedPlmnSnssai
@@ -120,7 +120,7 @@ func (c *AMFContext) FindRegisteredUEByMsin(msin string) (*UEContext, error) {
 	ueMutex.Lock()
 	defer ueMutex.Unlock()
 	for ue := range c.ues {
-		if c.ues[ue].securityContext.msin == msin && c.ues[ue].GetState().Is(Registered) {
+		if c.ues[ue].GetState().Is(Registered) && c.ues[ue].GetSecurityContext() != nil && c.ues[ue].GetSecurityContext().msin == msin {
 			return c.ues[ue], nil
 		}
 	}
@@ -129,20 +129,21 @@ func (c *AMFContext) FindRegisteredUEByMsin(msin string) (*UEContext, error) {
 
 func (c *AMFContext) ExecuteForAllUe(function func(ue *UEContext)) {
 	ueMutex.Lock()
-	defer ueMutex.Unlock()
-	for ue := range c.ues {
-		function(c.ues[ue])
+	ues := append([]*UEContext(nil), c.ues...)
+	ueMutex.Unlock()
+	for _, ue := range ues {
+		function(ue)
 	}
 }
 
 func (c *AMFContext) Provision(nssai models.Snssai, securityContext SecurityContext) error {
+	scMutex.Lock()
+	defer scMutex.Unlock()
 	_, ok := c.provisionedData[securityContext.msin]
 	if ok {
 		return errors.New("[5GC] Cannot create new subscriber: subscriber with msin " + securityContext.msin + " already exist")
 	}
-	scMutex.Lock()
 	c.provisionedData[securityContext.msin] = provisionedData{defaultSNssai: nssai, securityContext: securityContext}
-	scMutex.Unlock()
 	return nil
 }
 
@@ -169,7 +170,7 @@ func (c *AMFContext) GetServedGuamiPlmns(plmnIds []models.PlmnId) []models.Guami
 	guamis := []models.Guami{}
 	for i := range c.servedGuami {
 		for j := range plmnIds {
-			if *c.servedGuami[i].PlmnId == plmnIds[j] {
+			if c.servedGuami[i].PlmnId.Mcc == plmnIds[j].Mcc && c.servedGuami[i].PlmnId.Mnc == plmnIds[j].Mnc {
 				guamis = append(guamis, c.servedGuami[i])
 			}
 		}
@@ -177,7 +178,7 @@ func (c *AMFContext) GetServedGuamiPlmns(plmnIds []models.PlmnId) []models.Guami
 	return guamis
 }
 
-func (c *AMFContext) GetSupportedPlmnSnssai() []models.PlmnSnssai {
+func (c *AMFContext) GetSupportedPlmnSnssai() []models.Nrf_NFMgmt_PlmnSnssai {
 	return c.supportedPlmnSnssai
 }
 
