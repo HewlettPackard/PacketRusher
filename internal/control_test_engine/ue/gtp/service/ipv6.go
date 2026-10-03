@@ -41,6 +41,7 @@ type ipv6Binding struct {
 	addresses []*netlink.Addr
 	rules     []*netlink.Rule
 	route     *netlink.Route
+	claim     *netlink.Route
 	address   *netlink.Addr
 	rule      *netlink.Rule
 }
@@ -48,41 +49,77 @@ type ipv6Binding struct {
 // install stages a new prefix before replacing its route; failed staging leaves
 // the previous prefix routed. Addresses and policies remain tracked even if a
 // cleanup call fails, so final cleanup can retry and quarantine the table.
-func (b *ipv6Binding) install(advertisement ipv6.Advertisement) error {
+func (b *ipv6Binding) install(advertisement ipv6.Advertisement) (bool, error) {
 	address := &netlink.Addr{IPNet: addressNet(advertisement.Address), Flags: unix.IFA_F_NODAD, PreferedLft: lifetime(advertisement.PreferredLifetime), ValidLft: lifetime(advertisement.ValidLifetime)}
-	if b.address != nil && b.address.IP.Equal(address.IP) {
+	sameAddress := b.address != nil && b.address.IP.Equal(address.IP)
+	if sameAddress {
 		if err := b.ops.addressReplace(b.link, address); err != nil {
-			return fmt.Errorf("renew UE IPv6 prefix: %w", err)
+			return false, fmt.Errorf("renew UE IPv6 prefix: %w", err)
 		}
-		b.address = address
-		return nil
+	} else {
+		if err := b.ops.addressAdd(b.link, address); err != nil {
+			return false, fmt.Errorf("install UE IPv6 address: %w", err)
+		}
+		b.addresses = append(b.addresses, address)
 	}
-	if err := b.ops.addressAdd(b.link, address); err != nil {
-		return fmt.Errorf("install UE IPv6 address: %w", err)
-	}
-	b.addresses = append(b.addresses, address)
-	var rule *netlink.Rule
-	if !b.vrf {
+	rule := b.rule
+	if !sameAddress && !b.vrf {
 		rule = netlink.NewRule()
 		rule.Family = netlink.FAMILY_V6
 		rule.Priority = 100
 		rule.Table = int(b.table)
 		rule.Src = address.IPNet
 		if err := b.ops.ruleAdd(rule); err != nil {
-			return errors.Join(fmt.Errorf("install IPv6 source routing policy: %w", err), b.removeAddress(address))
+			return false, errors.Join(fmt.Errorf("install IPv6 source routing policy: %w", err), b.removeAddress(address))
 		}
 		b.rules = append(b.rules, rule)
 	}
-	route := &netlink.Route{Family: netlink.FAMILY_V6, Dst: &net.IPNet{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)}, LinkIndex: b.link.Attrs().Index, Table: int(b.table), Scope: netlink.SCOPE_LINK, Protocol: 4, Priority: 1, Src: net.IP(advertisement.Address.AsSlice())}
-	if err := b.ops.routeAdd(route); err != nil {
-		return errors.Join(fmt.Errorf("install IPv6 default route: %w", err), b.removeRule(rule), b.removeAddress(address))
+	if err := b.updateRouter(advertisement.Address, advertisement.RouterLifetime); err != nil {
+		if sameAddress {
+			return true, err
+		}
+		return false, errors.Join(err, b.retire(address, rule))
 	}
 	oldRule, oldAddress := b.rule, b.address
-	b.route, b.rule, b.address = route, rule, address
+	b.rule, b.address = rule, address
 	if err := b.session.SetIPv6(advertisement.Address); err != nil {
+		return true, err
+	}
+	if sameAddress {
+		return true, nil
+	}
+	return true, b.retire(oldAddress, oldRule)
+}
+
+// Keep an address's source policy until the address has gone. A failed deletion
+// must not leave its source eligible for the host's main routing table.
+func (b *ipv6Binding) retire(address *netlink.Addr, rule *netlink.Rule) error {
+	if err := b.removeAddress(address); err != nil {
 		return err
 	}
-	return errors.Join(b.removeRule(oldRule), b.removeAddress(oldAddress))
+	return b.removeRule(rule)
+}
+
+func (b *ipv6Binding) updateRouter(address netip.Addr, lifetime uint16) error {
+	if lifetime == 0 {
+		return b.withdrawRouter()
+	}
+	route := &netlink.Route{Family: netlink.FAMILY_V6, Dst: &net.IPNet{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)}, LinkIndex: b.link.Attrs().Index, Table: int(b.table), Scope: netlink.SCOPE_LINK, Protocol: 4, Priority: 1, Src: net.IP(address.AsSlice())}
+	if err := b.ops.routeAdd(route); err != nil {
+		return fmt.Errorf("install IPv6 default router: %w", err)
+	}
+	b.route = route
+	return nil
+}
+func (b *ipv6Binding) withdrawRouter() error {
+	if b.route == nil {
+		return nil
+	}
+	if err := b.ops.routeDel(b.route); !routingObjectRemoved(err) {
+		return err
+	}
+	b.route = nil
+	return nil
 }
 func (b *ipv6Binding) removeRule(rule *netlink.Rule) error {
 	if rule == nil {
@@ -116,22 +153,18 @@ func (b *ipv6Binding) removeAddress(address *netlink.Addr) error {
 }
 func (b *ipv6Binding) withdraw() error {
 	var failures []error
-	if b.route != nil {
-		if err := b.ops.routeDel(b.route); !routingObjectRemoved(err) {
-			failures = append(failures, err)
-		} else {
-			b.route = nil
-		}
-	}
-	if err := b.removeRule(b.rule); err != nil {
+	if err := b.withdrawRouter(); err != nil {
 		failures = append(failures, err)
-	} else {
-		b.rule = nil
 	}
 	if err := b.removeAddress(b.address); err != nil {
 		failures = append(failures, err)
 	} else {
 		b.address = nil
+		if err := b.removeRule(b.rule); err != nil {
+			failures = append(failures, err)
+		} else {
+			b.rule = nil
+		}
 	}
 	b.session.ClearIPv6()
 	return errors.Join(failures...)
@@ -141,14 +174,30 @@ func (b *ipv6Binding) cleanup() error {
 	if err := b.withdraw(); err != nil {
 		failures = append(failures, err)
 	}
-	for _, rule := range append([]*netlink.Rule(nil), b.rules...) {
-		if err := b.removeRule(rule); err != nil {
-			failures = append(failures, err)
-		}
-	}
 	for _, address := range append([]*netlink.Addr(nil), b.addresses...) {
 		if err := b.removeAddress(address); err != nil {
 			failures = append(failures, err)
+		}
+	}
+	for _, rule := range append([]*netlink.Rule(nil), b.rules...) {
+		addressPresent := false
+		for _, address := range b.addresses {
+			if rule.Src != nil && rule.Src.IP.Equal(address.IP) {
+				addressPresent = true
+				break
+			}
+		}
+		if !addressPresent {
+			if err := b.removeRule(rule); err != nil {
+				failures = append(failures, err)
+			}
+		}
+	}
+	if len(failures) == 0 && b.claim != nil {
+		if err := b.ops.routeDel(b.claim); !routingObjectRemoved(err) {
+			failures = append(failures, err)
+		} else {
+			b.claim = nil
 		}
 	}
 	return errors.Join(failures...)
@@ -194,6 +243,12 @@ func setupIPv6Session(ue *context.UEContext, session *context.UEPDUSession, link
 		return cleanup, fmt.Errorf("install allocated IPv6 link-local address: %w", err)
 	}
 	binding.addresses = append(binding.addresses, linkLocal)
+	// Keep an unavailable IPv6 router from falling through to host main routes.
+	binding.claim = &netlink.Route{Family: netlink.FAMILY_V6, Dst: &net.IPNet{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)}, Table: int(table), Priority: routingTableClaimPriority, Protocol: 4, Type: unix.RTN_BLACKHOLE, Scope: netlink.SCOPE_UNIVERSE}
+	if err := ops.routeAdd(binding.claim); err != nil {
+		binding.claim = nil
+		return cleanup, fmt.Errorf("reserve IPv6 session routing: %w", err)
+	}
 	var advertisement ipv6.Advertisement
 	for attempt := 0; attempt < 3 && !advertisement.Address.IsValid(); attempt++ {
 		if err := send(ipv6.RouterSolicitation(iid)); err != nil {
@@ -208,7 +263,7 @@ func setupIPv6Session(ue *context.UEContext, session *context.UEPDUSession, link
 					timer.Stop()
 					return cleanup, fmt.Errorf("IPv6 transport ended before prefix discovery")
 				}
-				if candidate, err := ipv6.ParseAdvertisement(packet, iid); err == nil && candidate.ValidLifetime > 0 && candidate.RouterLifetime > 0 {
+				if candidate, err := ipv6.ParseAdvertisement(packet, iid); err == nil && candidate.ValidLifetime > 0 {
 					advertisement = candidate
 					waiting = false
 				}
@@ -224,15 +279,20 @@ func setupIPv6Session(ue *context.UEContext, session *context.UEPDUSession, link
 	if !advertisement.Address.IsValid() {
 		return cleanup, fmt.Errorf("UPF did not advertise a usable IPv6 /64 prefix after three solicitations")
 	}
-	if err := binding.install(advertisement); err != nil {
+	if _, err := binding.install(advertisement); err != nil {
 		return cleanup, err
 	}
 	started = true
 	go func() {
 		defer close(done)
-		expiry := time.NewTimer(advertisementLifetime(advertisement))
-		defer expiry.Stop()
-		refresh := time.NewTimer(advertisementLifetime(advertisement) / 2)
+		validity := time.NewTimer(time.Duration(advertisement.ValidLifetime) * time.Second)
+		defer validity.Stop()
+		router := time.NewTimer(time.Duration(advertisement.RouterLifetime) * time.Second)
+		defer router.Stop()
+		if advertisement.RouterLifetime == 0 {
+			router.Stop()
+		}
+		refresh := time.NewTimer(refreshDelay(advertisement))
 		defer refresh.Stop()
 		for {
 			select {
@@ -245,46 +305,74 @@ func setupIPv6Session(ue *context.UEContext, session *context.UEPDUSession, link
 					return
 				}
 				candidate, err := ipv6.ParseAdvertisement(packet, iid)
-				if err != nil {
+				if err != nil && !errors.Is(err, ipv6.ErrNoAutonomousPrefix) {
 					continue
 				}
-				if candidate.RouterLifetime == 0 || candidate.ValidLifetime == 0 {
+				if !candidate.Address.IsValid() {
+					if allocation := session.GetIPv6(); allocation.IsValid() {
+						if err := binding.updateRouter(allocation, candidate.RouterLifetime); err != nil {
+							log.Warn("[UE][GTP] IPv6 router update failed: ", err)
+						}
+						if candidate.RouterLifetime > 0 {
+							router.Reset(time.Duration(candidate.RouterLifetime) * time.Second)
+						} else {
+							router.Stop()
+						}
+					}
+					continue
+				}
+				if candidate.ValidLifetime == 0 {
 					allocation := session.GetIPv6()
-					if candidate.RouterLifetime == 0 || (allocation.IsValid() && candidate.Prefix.Contains(allocation)) {
+					if allocation.IsValid() && candidate.Prefix.Contains(allocation) {
 						if err := binding.withdraw(); err != nil {
 							log.Warn("[UE][GTP] Withdrawn IPv6 prefix cleanup failed: ", err)
 						}
-						expiry.Stop()
+						validity.Stop()
+						router.Stop()
 						refresh.Reset(retryDelay)
 					}
 					continue
 				}
-				if err = binding.install(candidate); err != nil {
+				committed, err := binding.install(candidate)
+				if err != nil {
 					log.Warn("[UE][GTP] IPv6 advertisement update failed: ", err)
+				}
+				if !committed {
 					continue
 				}
-				expiry.Reset(advertisementLifetime(candidate))
-				refresh.Reset(advertisementLifetime(candidate) / 2)
+				// Retirement failures cannot preserve the previous allocation's timers.
+				validity.Reset(time.Duration(candidate.ValidLifetime) * time.Second)
+				if candidate.RouterLifetime > 0 {
+					router.Reset(time.Duration(candidate.RouterLifetime) * time.Second)
+				} else {
+					router.Stop()
+				}
+				refresh.Reset(refreshDelay(candidate))
 			case <-refresh.C:
 				if err := send(ipv6.RouterSolicitation(iid)); err != nil {
 					log.Warn("[UE][GTP] IPv6 prefix refresh solicitation failed: ", err)
 				}
 				refresh.Reset(retryDelay)
-			case <-expiry.C:
+			case <-router.C:
+				if err := binding.withdrawRouter(); err != nil {
+					log.Warn("[UE][GTP] Expired IPv6 router cleanup failed: ", err)
+				}
+			case <-validity.C:
 				if err := binding.withdraw(); err != nil {
 					log.Warn("[UE][GTP] Expired IPv6 prefix cleanup failed: ", err)
 				}
+				router.Stop()
 			}
 		}
 	}()
 	return cleanup, nil
 }
-func advertisementLifetime(a ipv6.Advertisement) time.Duration {
-	lifetime := a.ValidLifetime
-	if uint32(a.RouterLifetime) < lifetime {
-		lifetime = uint32(a.RouterLifetime)
+func refreshDelay(a ipv6.Advertisement) time.Duration {
+	seconds := a.ValidLifetime
+	if a.RouterLifetime > 0 && uint32(a.RouterLifetime) < seconds {
+		seconds = uint32(a.RouterLifetime)
 	}
-	return time.Duration(lifetime) * time.Second
+	return time.Duration(seconds) * time.Second / 2
 }
 func addressNet(address netip.Addr) *net.IPNet {
 	return &net.IPNet{IP: net.IP(address.AsSlice()), Mask: net.CIDRMask(128, 128)}

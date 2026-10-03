@@ -65,6 +65,19 @@ func userspaceIPv6RoundTrip(t *testing.T, app net.Conn, peer *net.UDPConn, local
 	wire, err := userspace.Encode(downID, 9, reply)
 	require.NoError(t, err)
 	_, err = peer.WriteToUDPAddrPort(wire, source)
+	if err != nil {
+		routes, routeErr := netlink.RouteGetWithOptions(net.IP(source.Addr().AsSlice()), &netlink.RouteGetOptions{SrcAddr: net.IPv4(127, 88, 4, 9)})
+		links, _ := netlink.LinkList()
+		t.Logf("N3 send failed: IPv4 route %+v (%v), links %+v", routes, routeErr, links)
+		for _, link := range links {
+			t.Logf("link %s index%d flags%s", link.Attrs().Name, link.Attrs().Index, link.Attrs().Flags)
+		}
+		raw, _ := peer.SyscallConn()
+		_ = raw.Control(func(fd uintptr) {
+			bound, e := unix.GetsockoptString(int(fd), unix.SOL_SOCKET, unix.SO_BINDTODEVICE)
+			t.Logf("peer bound device %q error %v", bound, e)
+		})
+	}
 	require.NoError(t, err)
 	n, err = app.Read(buffer)
 	require.NoError(t, err)
@@ -77,7 +90,7 @@ func TestUserspaceRealIPv6DualStackPolicyVRFAndHandover(t *testing.T) {
 	}
 	lo, err := netlink.LinkByName("lo")
 	require.NoError(t, err)
-	for _, address := range []string{"127.88.4.1/32", "127.88.4.2/32"} {
+	for _, address := range []string{"127.88.4.1/32", "127.88.4.2/32", "127.88.4.9/32"} {
 		parsed, err := netlink.ParseAddr(address)
 		require.NoError(t, err)
 		require.NoError(t, netlink.AddrAdd(lo, parsed))
@@ -88,6 +101,10 @@ func TestUserspaceRealIPv6DualStackPolicyVRFAndHandover(t *testing.T) {
 	smallAddress, err := netlink.ParseAddr("127.88.4.3/32")
 	require.NoError(t, err)
 	require.NoError(t, netlink.AddrAdd(small, smallAddress))
+	hostUnderlay := &netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: "hostunderlay"}}
+	require.NoError(t, netlink.LinkAdd(hostUnderlay))
+	require.NoError(t, netlink.LinkSetUp(hostUnderlay))
+	require.NoError(t, netlink.RouteAdd(&netlink.Route{Family: netlink.FAMILY_V6, Dst: &net.IPNet{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)}, LinkIndex: hostUnderlay.Attrs().Index, Scope: netlink.SCOPE_LINK, Table: unix.RT_TABLE_MAIN, Priority: 100}))
 	for _, family := range []uint8{ie.PDUSessType_IPv6, ie.PDUSessType_IPv4v6} {
 		for _, mode := range []config.TunnelMode{config.TunnelTun, config.TunnelVrf} {
 			t.Run(fmt.Sprintf("family%d-mode%d", family, mode), func(t *testing.T) {
@@ -153,6 +170,9 @@ func TestUserspaceRealIPv6DualStackPolicyVRFAndHandover(t *testing.T) {
 				require.NoError(t, err)
 				var defaults []netlink.Route
 				for _, route := range routes {
+					if route.Type == unix.RTN_BLACKHOLE {
+						continue
+					}
 					if route.Dst == nil {
 						defaults = append(defaults, route)
 					} else if bits, _ := route.Dst.Mask.Size(); bits == 0 {
@@ -212,6 +232,61 @@ func TestUserspaceRealIPv6DualStackPolicyVRFAndHandover(t *testing.T) {
 					}
 				}
 				require.True(t, found, "failed target setup must retain the source IPv6 address")
+				userspaceIPv6RoundTrip(t, app, peer, target.GnbIp, 70, 71)
+
+				// A zero-router RA preserves the address but blocks fallback to the host's
+				// configured IPv6 default route, for both source policy and VRF routing.
+				withdrawal, _ := hex.DecodeString(raWire)
+				withdrawal = withdrawal[:56]
+				binary.BigEndian.PutUint16(withdrawal[4:6], 16)
+				withdrawal[46], withdrawal[47] = 0, 0
+				withdrawal[42], withdrawal[43] = 0, 0
+				binary.BigEndian.PutUint16(withdrawal[42:44], udp6Checksum(withdrawal))
+				wire, err := userspace.Encode(71, 9, withdrawal)
+				require.NoError(t, err)
+				_, err = peer.WriteToUDPAddrPort(wire, netip.AddrPortFrom(target.GnbIp, 2152))
+				if err != nil {
+					routes, routeErr := netlink.RouteGet(net.IP(target.GnbIp.AsSlice()))
+					links, _ := netlink.LinkList()
+					t.Logf("N3 RA send failed: IPv4 route %+v (%v), links %+v", routes, routeErr, links)
+				}
+				require.NoError(t, err)
+				require.Eventually(t, func() bool {
+					current, err := netlink.RouteListFiltered(netlink.FAMILY_V6, &netlink.Route{Table: table}, netlink.RT_FILTER_TABLE)
+					if err != nil {
+						return false
+					}
+					blocked := false
+					for _, route := range current {
+						if route.Type == unix.RTN_BLACKHOLE {
+							blocked = true
+							continue
+						}
+						if route.Dst == nil {
+							return false
+						}
+						if bits, _ := route.Dst.Mask.Size(); bits == 0 {
+							return false
+						}
+					}
+					return blocked
+				}, time.Second, time.Millisecond)
+				require.Equal(t, "2001:db8:1234::7", pdu.GetIPv6().String(), "zero-router RA must not withdraw a valid address")
+				options := &netlink.RouteGetOptions{SrcAddr: net.IP(pdu.GetIPv6().AsSlice())}
+				if mode == config.TunnelVrf {
+					options.VrfName = pdu.GetVrfDevice().Attrs().Name
+				}
+				_, err = netlink.RouteGetWithOptions(net.ParseIP("2001:db8:ffff::9"), options)
+				require.Error(t, err, "IPv6 must not escape through the host underlay without a PDU default router")
+				renewed, _ := hex.DecodeString(raWire)
+				wire, err = userspace.Encode(71, 9, renewed)
+				require.NoError(t, err)
+				_, err = peer.WriteToUDPAddrPort(wire, netip.AddrPortFrom(target.GnbIp, 2152))
+				require.NoError(t, err)
+				require.Eventually(t, func() bool {
+					_, err := netlink.RouteGetWithOptions(net.ParseIP("2001:db8:ffff::9"), options)
+					return err == nil
+				}, time.Second, time.Millisecond)
 				userspaceIPv6RoundTrip(t, app, peer, target.GnbIp, 70, 71)
 				app.Close()
 				pdu.ReleaseTunnel()

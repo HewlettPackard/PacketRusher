@@ -5,9 +5,12 @@ package ipv6
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/netip"
 )
+
+var ErrNoAutonomousPrefix = errors.New("Router Advertisement has no usable autonomous /64 prefix")
 
 type Advertisement struct {
 	Address           netip.Addr
@@ -52,6 +55,8 @@ func ParseAdvertisement(packet []byte, iid [8]byte) (Advertisement, error) {
 	if !source.IsLinkLocalUnicast() || (destination != netip.MustParseAddr("ff02::1") && destination != LinkLocal(iid)) || checksum(packet) != 0 {
 		return result, fmt.Errorf("invalid IPv6 Router Advertisement source, destination, or checksum")
 	}
+	result.Router = source
+	result.RouterLifetime = binary.BigEndian.Uint16(packet[46:48])
 	for offset := 56; offset < len(packet); {
 		if len(packet)-offset < 2 || packet[offset+1] == 0 {
 			return result, fmt.Errorf("invalid Router Advertisement option length")
@@ -76,7 +81,7 @@ func ParseAdvertisement(packet []byte, iid [8]byte) (Advertisement, error) {
 		offset += length
 	}
 	if !result.Address.IsValid() {
-		return result, fmt.Errorf("Router Advertisement has no usable autonomous /64 prefix")
+		return result, ErrNoAutonomousPrefix
 	}
 	return result, nil
 }

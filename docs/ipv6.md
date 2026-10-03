@@ -52,9 +52,14 @@ These are documentation addresses; substitute the addresses allocated and
 reachable through your core. The IPv6 packet validator requires the allocated
 prefix and interface identifier. Prefix renewal refreshes address lifetimes;
 renumbering stages the new address and policy before replacing the route and
-retiring the old address. Expired or withdrawn allocations stop global traffic,
-remove their routing, and solicit a replacement. The SMF's globally unique
-per-session prefix permits skipping Duplicate Address Detection, as specified
+retiring the old address. Address validity and default-router lifetimes are
+tracked separately, following [RFC 4861 §4.2](https://www.rfc-editor.org/rfc/rfc4861.html#section-4.2)
+and [RFC 4862 §§5.5.3–5.5.4](https://www.rfc-editor.org/rfc/rfc4862.html#section-5.5.3). Router
+expiry or a zero router lifetime removes the default route while retaining a
+still-valid address and source policy; a session-table IPv6 blackhole prevents
+fallback to host routes. Expired or withdrawn prefixes stop global traffic,
+remove their routing and addresses, and solicit a replacement. The SMF's
+globally unique per-session prefix permits skipping Duplicate Address Detection, as specified
 in TS 23.501. Existing application connections survive an N3/TEID handover that
 retains the IPv6 prefix.
 
@@ -64,8 +69,10 @@ telecom sockets. Automatic MTU validation also happens before modifying a live
 TUN, so a small target N3 interface cannot disable IPv6 during failed handover.
 The existing gtp5g datapath remains available for IPv4. N2/N3 configuration
 continues to use an IPv4 underlay; IPv6 and IPv4v6 describe the inner PDU traffic.
-DHCPv6 prefix delegation and multiple simultaneous IPv6 prefixes are outside
-this initial implementation.
+This implementation treats the advertised prefix as a UPF-managed session
+lease. It does not apply RFC 4862's unauthenticated two-hour valid-lifetime floor.
+DHCPv6 prefix delegation, privacy addresses and multiple simultaneous IPv6
+prefixes are outside this initial implementation.
 
 The aio5gc mock encodes IPv6/IPv4v6 NAS addresses and matching NGAP session
 types, with deterministic documentation prefixes and non-wrapping allocation.
