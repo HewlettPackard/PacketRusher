@@ -9,9 +9,9 @@ trap 'rm -rf -- "$scratch"' EXIT HUP INT TERM
 "${GO:-go}" test -race -c -o "$scratch/service.test" ./internal/control_test_engine/ue/gtp/service
 run_namespace() {
   if [ "$(id -u)" -eq 0 ]; then
-    unshare --net --mount sh -eu -c 'mount --make-rprivate /; ip link set lo up; PACKETRUSHER_EBPF_TEST=1 "$1" -test.run "$2" -test.v -test.timeout=40s' sh "$1" "$2"
+    ./scripts/run-ebpf-netns.sh "$1" "$2"
   else
-    sudo -n unshare --net --mount sh -eu -c 'mount --make-rprivate /; ip link set lo up; PACKETRUSHER_EBPF_TEST=1 "$1" -test.run "$2" -test.v -test.timeout=40s' sh "$1" "$2"
+    sudo -n ./scripts/run-ebpf-netns.sh "$1" "$2"
   fi
 }
 run_namespace "$scratch/backend.test" '^TestActualVerifierLoad$|^TestActualKernelPacketBoundsChecksumsAndTupleIsolation$|^TestNativeManagementEchoAndJoinedClose$|^TestNativeBidirectionalHandoverAndCleanup$'

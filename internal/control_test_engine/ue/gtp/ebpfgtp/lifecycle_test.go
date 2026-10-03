@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/stretchr/testify/require"
@@ -284,4 +285,74 @@ func TestEchoResponseRequiresExactControlHeader(t *testing.T) {
 	}
 	require.Nil(t, echoResponse(request[:11]))
 	require.Nil(t, echoResponse(append(request, 0)))
+}
+
+func TestWarningHandlerMayReenterStatsAndReconfigureAfterCommit(t *testing.T) {
+	r, state, c := isolatedRegistry()
+	s, err := r.Open(c)
+	require.NoError(t, err)
+	next := c
+	next.Local = netip.MustParseAddr("10.88.0.3")
+	next.DownlinkTEID++
+	next.UplinkTEID++
+	state.fail = func(op, name string, k, v any) error {
+		if op == "del" && name == "locals" && k == ipv4(c.Local) {
+			return errors.New("retirement failed")
+		}
+		return nil
+	}
+	observed := make(chan struct{})
+	r.SetWarningHandler(func(error) {
+		_, _, _, err := r.Stats()
+		require.NoError(t, err)
+		r.SetWarningHandler(nil)
+		close(observed)
+	})
+	done := make(chan error, 1)
+	go func() { done <- s.Update(next) }()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("warning callback deadlocked while inspecting registry")
+	}
+	select {
+	case <-observed:
+	default:
+		t.Fatal("committed-state warning was not delivered")
+	}
+	require.Equal(t, next, s.cfg)
+	state.fail = nil
+	require.NoError(t, s.Close())
+}
+func TestPartiallyRetiredStagingLeaseCannotCommitOnRepeatedHandover(t *testing.T) {
+	r, state, c := isolatedRegistry()
+	s, err := r.Open(c)
+	require.NoError(t, err)
+	next := c
+	next.Local = netip.MustParseAddr("10.88.0.3")
+	next.DownlinkTEID++
+	next.UplinkTEID++
+	targetSocket := &fakeCloser{err: errors.New("target close failed")}
+	r.listen = func(netip.Addr) (closer, error) { return targetSocket, nil }
+	state.fail = func(op, name string, k, v any) error {
+		if op == "put" && name == "sessions" && v.(binding).Local == ipv4(next.Local) {
+			return errors.New("target canonical update failed")
+		}
+		return nil
+	}
+	require.Error(t, s.Update(next))
+	require.True(t, s.leases[next.Local])
+	require.False(t, r.locals[next.Local].mapped)
+	require.False(t, r.locals[next.Local].linked)
+	require.Equal(t, c.binding(), state.values["sessions"][ipv4(c.IPv4)])
+	state.fail = nil
+	require.ErrorContains(t, s.Update(next), "incomplete cleanup")
+	require.Equal(t, c, s.cfg)
+	require.Equal(t, c.binding(), state.values["sessions"][ipv4(c.IPv4)], "a retired target must never become canonical")
+	require.Len(t, r.links, 1, "source ingress remains attached")
+	targetSocket.err = nil
+	require.NoError(t, s.Close())
+	require.Empty(t, r.locals)
+	require.Empty(t, r.links)
 }

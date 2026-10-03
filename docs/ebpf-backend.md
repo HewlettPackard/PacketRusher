@@ -75,7 +75,9 @@ CLANG=clang-18 ./scripts/build-ebpf.sh
 ./scripts/check-ebpf.sh
 ```
 
-The checks create private network/mount namespaces and a second private fake
+The runner creates a TUN device node in a private `/dev` mount when needed;
+it never creates a device or mount on the host. The checks create private
+network/mount namespaces and a second private fake
 UPF namespace. They require real verifier loading and actual bidirectional UDP
 payloads, keepalive responses, TEID/N3 handover, wrong-TEID/destination drops,
 unrelated UDP passthrough, release and reinstall. Separate encoded fixtures

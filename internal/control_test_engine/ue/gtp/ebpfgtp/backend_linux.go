@@ -93,19 +93,20 @@ type ingress struct {
 // Its socket worker answers only owned Echo Requests; user-plane packets are
 // encapsulated and decapsulated entirely by the kernel programs.
 type Registry struct {
-	peers      atomic.Pointer[map[peerKey]bool]
-	mu         sync.Mutex
-	collection *ebpf.Collection
-	state      store
-	sessions   map[uint32]*Session
-	orphans    []*Session
-	ports      map[netip.Addr]closer
-	locals     map[netip.Addr]*n3Lease
-	links      map[int]*ingress
-	discover   func(Config) (int, error)
-	listen     func(netip.Addr) (closer, error)
-	attach     func(int) (closer, error)
-	warning    func(error)
+	peers           atomic.Pointer[map[peerKey]bool]
+	mu              sync.Mutex
+	collection      *ebpf.Collection
+	state           store
+	sessions        map[uint32]*Session
+	orphans         []*Session
+	ports           map[netip.Addr]closer
+	locals          map[netip.Addr]*n3Lease
+	links           map[int]*ingress
+	discover        func(Config) (int, error)
+	listen          func(netip.Addr) (closer, error)
+	attach          func(int) (closer, error)
+	warning         func(error)
+	pendingWarnings []error
 }
 
 func NewRegistry() *Registry {
@@ -129,8 +130,24 @@ var DefaultRegistry = NewRegistry()
 func (r *Registry) SetWarningHandler(fn func(error)) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if fn == nil {
+		fn = func(error) {}
+	}
 	r.warning = fn
 }
+
+// unlock delivers observations after committing ownership and releasing mu.
+// Handlers may inspect the registry without deadlocking setup or release.
+func (r *Registry) unlock() {
+	warnings := r.pendingWarnings
+	r.pendingWarnings = nil
+	handler := r.warning
+	r.mu.Unlock()
+	for _, err := range warnings {
+		handler(err)
+	}
+}
+func (r *Registry) queueWarning(err error) { r.pendingWarnings = append(r.pendingWarnings, err) }
 func (r *Registry) load() error {
 	if r.state != nil {
 		return nil
@@ -289,7 +306,7 @@ func (r *Registry) Open(c Config) (*Session, error) {
 		return nil, err
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	defer r.unlock()
 	if r.sessions[ipv4(c.IPv4)] != nil {
 		return nil, errors.New("eBPF UE IPv4 address already has a session")
 	}
@@ -309,7 +326,7 @@ func (r *Registry) Open(c Config) (*Session, error) {
 	if err = r.state.put("downlinks", c.downKey(), ipv4(c.IPv4), ebpf.UpdateNoExist); err != nil {
 		if cleanupErr := s.retire(true); cleanupErr != nil {
 			r.orphans = append(r.orphans, s)
-			r.warning(cleanupErr)
+			r.queueWarning(cleanupErr)
 		}
 		r.closeEmpty()
 		return nil, err
@@ -318,7 +335,7 @@ func (r *Registry) Open(c Config) (*Session, error) {
 	if err = r.state.put("sessions", ipv4(c.IPv4), c.binding(), ebpf.UpdateNoExist); err != nil {
 		if cleanupErr := s.retire(true); cleanupErr != nil {
 			r.orphans = append(r.orphans, s)
-			r.warning(cleanupErr)
+			r.queueWarning(cleanupErr)
 		}
 		r.closeEmpty()
 		return nil, err
@@ -341,7 +358,7 @@ func (s *Session) Update(c Config) error {
 	}
 	r := s.registry
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	defer r.unlock()
 	if s.closed || s.stopping {
 		return errors.New("eBPF session is closed or retiring")
 	}
@@ -354,6 +371,12 @@ func (s *Session) Update(c Config) error {
 	}
 	if lease := r.locals[c.Local]; lease != nil && lease.ifindex != index {
 		return errors.New("N3 interface changed while its binding is active")
+	}
+	if s.leases[c.Local] {
+		lease := r.locals[c.Local]
+		if lease == nil || !lease.mapped || !lease.linked {
+			return errors.New("target N3 lease is retained for incomplete cleanup and cannot forward")
+		}
 	}
 	newLease := !s.leases[c.Local]
 	if newLease {
@@ -392,7 +415,7 @@ func (s *Session) Update(c Config) error {
 	s.cfg = c // Single canonical replacement commits both uplink and downlink.
 	r.publishPeers()
 	if err = s.retire(false); err != nil {
-		r.warning(fmt.Errorf("eBPF committed handover retains retired resources: %w", err))
+		r.queueWarning(fmt.Errorf("eBPF committed handover retains retired resources: %w", err))
 	}
 	return nil
 }
@@ -458,7 +481,7 @@ func (r *Registry) closeEmpty() {
 		for index, attachment := range r.links {
 			if attachment.refs == 0 {
 				if err := attachment.attachment.Close(); err != nil {
-					r.warning(err)
+					r.queueWarning(err)
 					return
 				}
 				delete(r.links, index)
@@ -476,7 +499,7 @@ func (r *Registry) closeEmpty() {
 func (s *Session) Close() error {
 	r := s.registry
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	defer r.unlock()
 	if s.closed {
 		return nil
 	}
