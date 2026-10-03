@@ -41,7 +41,7 @@ else
   [[ -c /dev/net/tun ]] || { echo 'real Open5GS job requires /dev/net/tun' >&2; exit 1; }
   "${compose[@]}" up --detach core
 fi
-timeout --signal=TERM --kill-after=15s 180s "${compose[@]}" run --rm --no-deps ran
+timeout --signal=TERM --kill-after=15s 180s "${compose[@]}" run --rm --no-deps --interactive=false --no-TTY ran
 python3 - "$state/result.json" <<'PY'
 import json,sys
 result=json.load(open(sys.argv[1]))
