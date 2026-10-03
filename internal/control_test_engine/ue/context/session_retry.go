@@ -82,9 +82,8 @@ func (ue *UEContext) startPduSessionRequestLocked(session *UEPDUSession, encode 
 	return nil
 }
 
-// Association failure can arrive while the event loop is blocked sending a
-// request. Its out-of-band signal must release the send before UE termination
-// can acquire the lock and close the channel.
+// An association can fail while the UE event loop waits on a full gNB channel.
+// Its out-of-band signal releases the send before Terminate acquires the UE lock.
 func (ue *UEContext) gnbConnectionOpenLocked() bool {
 	if ue.gnbRx == nil {
 		return false
