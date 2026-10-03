@@ -64,11 +64,12 @@ type UEContext struct {
 	amfInfo           Amf
 
 	// TODO: Modify config so you can configure these parameters per PDUSession
-	Dnn           string
-	Snssai        models.Snssai
-	TunnelMode    config.TunnelMode
-	TunnelMTU     int
-	TunnelBackend config.TunnelBackend
+	Dnn            string
+	Snssai         models.Snssai
+	TunnelMode     config.TunnelMode
+	TunnelMTU      int
+	PDUSessionType config.PDUSessionType
+	TunnelBackend  config.TunnelBackend
 
 	// Sync primitive
 	scenarioChan chan scenario.ScenarioMessage
@@ -88,26 +89,31 @@ type Amf struct {
 }
 
 type UEPDUSession struct {
-	owner           *UEContext
-	retryTimer      *time.Timer
-	retryGeneration uint64
-	retryCancel     chan struct{}
-	results         *analytics.Recorder
-	resultsUE       int64
-	Id              uint8
-	GnbPduSession   *context.GnbPDUSession
-	ueIP            string
-	ueGnbIP         netip.Addr
-	tun             netlink.Link
-	rule            *netlink.Rule
-	routeTun        *netlink.Route
-	vrf             *netlink.Vrf
-	tunnelLock      sync.Mutex
-	ueInterface     netlink.Link
-	releaseTunnel   func(bool)
-	updateTunnel    func(*context.GnbPDUSession, netip.Addr) error
-	Wait            chan bool
-	T3580Retries    int
+	owner                *UEContext
+	retryTimer           *time.Timer
+	retryGeneration      uint64
+	retryCancel          chan struct{}
+	results              *analytics.Recorder
+	resultsUE            int64
+	Id                   uint8
+	GnbPduSession        *context.GnbPDUSession
+	ueIP                 string
+	addressLock          sync.RWMutex
+	requestedSessionType uint8
+	selectedSessionType  uint8
+	ipv6InterfaceID      [8]byte
+	ipv6Address          netip.Addr
+	ueGnbIP              netip.Addr
+	tun                  netlink.Link
+	rule                 *netlink.Rule
+	routeTun             *netlink.Route
+	vrf                  *netlink.Vrf
+	tunnelLock           sync.Mutex
+	ueInterface          netlink.Link
+	releaseTunnel        func(bool)
+	updateTunnel         func(*context.GnbPDUSession, netip.Addr) error
+	Wait                 chan bool
+	T3580Retries         int
 
 	// TS 24.501 - 6.1.3.2.1.1 State Machine for Session Management
 	StateSM int
@@ -215,6 +221,7 @@ func (ue *UEContext) CreatePDUSession() (*UEPDUSession, error) {
 
 	pduSession := &UEPDUSession{owner: ue, results: ue.Results, resultsUE: ue.GetPrUeId()}
 	pduSession.Id = uint8(pduSessionIndex + 1)
+	pduSession.requestedSessionType = ue.PDUSessionType.NASValue()
 	pduSession.Wait = make(chan bool)
 
 	ue.PduSession[pduSessionIndex] = pduSession
@@ -374,10 +381,15 @@ func (ue *UEContext) DeletePduSession(pduSessionid uint8) error {
 }
 
 func (pduSession *UEPDUSession) SetIp(ip [12]uint8) {
+	pduSession.addressLock.Lock()
+	defer pduSession.addressLock.Unlock()
 	pduSession.ueIP = fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
+	pduSession.selectedSessionType = nasType.PDUSessType_IPv4
 }
 
 func (pduSession *UEPDUSession) GetIp() string {
+	pduSession.addressLock.RLock()
+	defer pduSession.addressLock.RUnlock()
 	return pduSession.ueIP
 }
 

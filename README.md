@@ -149,3 +149,6 @@ For the current codec APIs and validation commands, see [Dependency migration](d
 
 See [userspace GTP-U tunnels](docs/userspace-tunnels.md) to run user traffic without
 the gtp5g kernel module. The default backend remains `gtp5g`.
+
+For IPv6 and dual-stack PDU negotiation, UPF prefix discovery and routing, see
+[IPv6 PDU sessions](docs/ipv6.md).

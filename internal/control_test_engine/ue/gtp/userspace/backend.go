@@ -21,6 +21,7 @@ type Config struct {
 	QFI                      uint8
 	IPv4                     netip.Addr
 	AllowIPv6                bool
+	IPv6PrefixAllowed        func(netip.Addr) bool
 	IPv6InterfaceID          [8]byte
 }
 
@@ -121,7 +122,7 @@ func (e *endpoint) receive() {
 			continue
 		}
 		addr, ok := netip.AddrFromSlice(dst)
-		if !ok || (addr.Is4() && addr != held.config.IPv4) || (addr.Is6() && (!held.config.AllowIPv6 || (!bytes.Equal(dst[8:], held.config.IPv6InterfaceID[:]) && !(addr.IsMulticast() && len(payload) >= 48 && payload[6] == 58 && payload[40] == 134)))) {
+		if !ok || (addr.Is4() && addr != held.config.IPv4) || (addr.Is6() && (!held.config.AllowIPv6 || (!held.config.allowsIPv6(addr) && !(addr.IsMulticast() && routerAdvertisement(payload))))) {
 			continue
 		}
 		held.session.deliver(payload)
@@ -188,6 +189,20 @@ func (s *Session) Update(c Config) error {
 	s.registry.give(oldE, oldC, s)
 	return nil
 }
+
+// IPv6 NAS allocates only the IID. Global traffic is allowed after a validated
+// RA supplies the prefix, and stops immediately when that allocation expires.
+func (c Config) allowsIPv6(address netip.Addr) bool {
+	bytes16 := address.As16()
+	if !bytes.Equal(bytes16[8:], c.IPv6InterfaceID[:]) {
+		return false
+	}
+	if address.IsLinkLocalUnicast() {
+		return true
+	}
+	return address.IsGlobalUnicast() && c.IPv6PrefixAllowed != nil && c.IPv6PrefixAllowed(address)
+}
+
 func (s *Session) Send(payload []byte) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -199,7 +214,7 @@ func (s *Session) Send(payload []byte) error {
 		return err
 	}
 	addr, ok := netip.AddrFromSlice(src)
-	if !ok || (addr.Is4() && addr != s.config.IPv4) || (addr.Is6() && (!s.config.AllowIPv6 || !bytes.Equal(src[8:], s.config.IPv6InterfaceID[:]))) {
+	if !ok || (addr.Is4() && addr != s.config.IPv4) || (addr.Is6() && (!s.config.AllowIPv6 || !s.config.allowsIPv6(addr))) {
 		return errors.New("packet source does not belong to session")
 	}
 	b, err := Encode(s.config.UplinkTEID, s.config.QFI, payload)
@@ -242,11 +257,12 @@ func (s *Session) downlinkWorker() {
 		case <-s.stop:
 			return
 		case payload := <-s.downlink:
-			if len(payload) >= 48 && payload[0]>>4 == 6 && payload[6] == 58 && payload[40] == 134 {
+			if routerAdvertisement(payload) {
 				select {
 				case s.advertisements <- append([]byte(nil), payload...):
 				default:
 				}
+				continue // Prefix discovery owns RA; prevent host SLAAC/default-route side effects.
 			}
 			_, _ = s.port.Write(payload)
 		}
