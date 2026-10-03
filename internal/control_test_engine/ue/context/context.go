@@ -56,6 +56,7 @@ type UEContext struct {
 	UeSecurity               SECURITY
 	StateMM                  int
 	gnbInboundChannel        chan context.UEMessage
+	gnb                      *context.GNBContext
 	gnbRx                    chan context.UEMessage
 	gnbTx                    chan context.UEMessage
 	gnbConnectionLost        <-chan struct{}
@@ -286,6 +287,22 @@ func (ue *UEContext) GetStateMM() int {
 
 func (ue *UEContext) SetGnbInboundChannel(gnbInboundChannel chan context.UEMessage) {
 	ue.gnbInboundChannel = gnbInboundChannel
+	ue.gnb = nil
+}
+
+// SetGnbContext binds future reconnect/paging admission to the channel owner.
+func (ue *UEContext) SetGnbContext(gnb *context.GNBContext) {
+	ue.gnb = gnb
+	if gnb != nil {
+		ue.gnbInboundChannel = gnb.GetInboundChannel()
+	}
+}
+func (ue *UEContext) GetGnbContext() *context.GNBContext { return ue.gnb }
+func (ue *UEContext) GnbStopped() <-chan struct{} {
+	if ue.gnb != nil {
+		return ue.gnb.Done()
+	}
+	return nil
 }
 
 func (ue *UEContext) SetGnbRx(gnbRx chan context.UEMessage) {

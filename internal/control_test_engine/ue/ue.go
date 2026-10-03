@@ -21,7 +21,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnbInboundChannel chan context2.UEMessage, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
+func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnb *context2.GNBContext, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
 	// new UE instance.
 	ue := &context.UEContext{Results: analytics.Current()}
 	scenarioChan := make(chan scenario.ScenarioMessage)
@@ -45,13 +45,19 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 		conf.Ue.Snssai.Sd,
 		conf.Ue.TunnelMode,
 		scenarioChan,
-		gnbInboundChannel,
+		gnb.GetInboundChannel(),
 		id)
+	ue.SetGnbContext(gnb)
 
 	go func() {
 		// starting communication with GNB and listen.
 		service.InitConn(ue, ue.GetGnbInboundChannel())
-		handleUE(ue, ueMgrChannel)
+		select {
+		case <-ue.GetGnbConnectionLost():
+		case <-ue.GnbStopped():
+		default:
+			handleUE(ue, ueMgrChannel)
+		}
 
 		ue.Terminate()
 		wg.Done()
@@ -86,6 +92,9 @@ func handleUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMess
 				break
 			}
 			gnbMsgHandler(msg, ue)
+		case <-ue.GnbStopped():
+			log.Warn("[UE][", ue.GetMsin(), "] Stopping UE after its gNB terminated")
+			loop = false
 		case <-ue.GetGnbConnectionLost():
 			log.Warn("[UE][", ue.GetMsin(), "] Stopping UE after its gNB association failed")
 			loop = false
@@ -124,6 +133,7 @@ func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 		log.Info("[UE] gNodeB is telling us to use another gNodeB")
 		previousGnbRx := ue.GetGnbRx()
 		ue.SetGnbInboundChannel(msg.GNBInboundChannel)
+		ue.SetGnbContext(msg.GNB)
 		ue.SetGnbRx(msg.GNBRx)
 		ue.SetGnbTx(msg.GNBTx)
 		if previousGnbRx != nil {
@@ -143,21 +153,25 @@ func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 func verifyPaging(ue *context.UEContext) {
 	gnbTx := make(chan context2.UEMessage, 1)
 
+	node := ue.GetGnbContext()
+	if node == nil {
+		return
+	}
+	if err := node.QueueUE(context2.UEMessage{GNBTx: gnbTx, FetchPagedUEs: true}); err != nil {
+		log.Debug("[UE] Cannot send paging request: ", err)
+		return
+	}
 	select {
-	case ue.GetGnbInboundChannel() <- context2.UEMessage{GNBTx: gnbTx, FetchPagedUEs: true}:
-		select {
-		case msg := <-gnbTx:
-			for _, pagedUE := range msg.PagedUEs {
-				if ue.Get5gGuti() != nil && pagedUE.FiveGSTMSI != nil && [4]uint8(pagedUE.FiveGSTMSI.FiveGTMSI.Value) == ue.GetTMSI5G() {
-					ueMgrHandler(procedures.UeTesterMessage{Type: procedures.ServiceRequest}, ue)
-					return
-				}
+	case msg := <-gnbTx:
+		for _, pagedUE := range msg.PagedUEs {
+			if ue.Get5gGuti() != nil && pagedUE.FiveGSTMSI != nil && [4]uint8(pagedUE.FiveGSTMSI.FiveGTMSI.Value) == ue.GetTMSI5G() {
+				ueMgrHandler(procedures.UeTesterMessage{Type: procedures.ServiceRequest}, ue)
+				return
 			}
-		case <-time.After(1 * time.Second):
-			log.Warn("[UE] Timeout waiting for paged UEs response")
 		}
-	default:
-		log.Debug("[UE] Cannot send paging request to gNB, channel full")
+	case <-node.Done():
+	case <-time.After(1 * time.Second):
+		log.Warn("[UE] Timeout waiting for paged UEs response")
 	}
 }
 

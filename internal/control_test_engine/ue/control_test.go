@@ -72,6 +72,7 @@ func TestIdleAndReconnectControlsUseProductionConnectionHandshake(t *testing.T) 
 			amf.SetStateActive()
 			ue := &ueContext.UEContext{}
 			ue.NewRanUeContext("0000000001", &ie.UESecCapability{Length: 2, EA05G: true, IA05G: true}, "", "", "", "", "", "001", "01", sidf.HomeNetworkPublicKey{}, "0000", "internet", 1, "", config.TunnelDisabled, make(chan ueScenario.ScenarioMessage, 16), node.GetInboundChannel(), 1)
+			ue.SetGnbContext(node)
 			ue.StateMM = ueContext.MM5G_REGISTERED
 			rx, tx := make(chan gnb.UEMessage, 10), make(chan gnb.UEMessage, 10)
 			ue.SetGnbRx(rx)
@@ -163,6 +164,7 @@ func TestControlReadinessRequiresEachConfiguredPDUId(t *testing.T) {
 	node.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:3")).SetStateActive()
 	ue := &ueContext.UEContext{}
 	ue.NewRanUeContext("0000000001", &ie.UESecCapability{Length: 2}, "", "", "", "", "", "001", "01", sidf.HomeNetworkPublicKey{}, "0000", "internet", 1, "", config.TunnelDisabled, make(chan ueScenario.ScenarioMessage, 16), node.GetInboundChannel(), 1)
+	ue.SetGnbContext(node)
 	ue.StateMM = ueContext.MM5G_REGISTERED
 	rx, tx := make(chan gnb.UEMessage, 10), make(chan gnb.UEMessage, 10)
 	ue.SetGnbRx(rx)
