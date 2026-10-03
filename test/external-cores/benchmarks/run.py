@@ -78,9 +78,12 @@ def cohort(args):
         record(state/'ue-link.json',link)
         probe.require(link[0]['mtu']==1400,'backend MTU differs from1400')
         if args.backend=='gtp5g':probe.require(link[0].get('linkinfo',{}).get('info_kind')=='gtp5g','route does not select kernel gtp5g')
-        endpoint=json.loads(subprocess.check_output(['ip','-json','addr','show','dev','val0000000120'],text=True))
+        # Shared gtp5g carries UE addresses on the gNB's kernel link; the two
+        # portable backends carry them on their per-session TUN endpoints.
+        endpoint_name=expected if args.backend=='gtp5g' else 'val0000000120'
+        endpoint=json.loads(subprocess.check_output(['ip','-json','addr','show','dev',endpoint_name],text=True))
         record(state/'ue-endpoint.json',endpoint)
-        probe.require(any(addr.get('local')==prepare.UE_IP for addr in endpoint[0]['addr_info']),'stable endpoint does not own UE address')
+        probe.require(any(addr.get('local')==prepare.UE_IP for addr in endpoint[0]['addr_info']),'selected backend endpoint does not own UE address')
         nonce=b'PACKETRUSHER-BENCH-PREFLIGHT-'+os.urandom(24).hex().encode()
         with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
             sock.bind((prepare.UE_IP,0)); sock.settimeout(5)
