@@ -20,6 +20,7 @@ import (
 )
 
 func HandlerAuthenticationReject(ue *context.UEContext, message *nas.Message) {
+	ue.RegistrationFailed()
 
 	log.Info("[UE][NAS] Authentication of UE ", ue.GetUeId(), " failed")
 

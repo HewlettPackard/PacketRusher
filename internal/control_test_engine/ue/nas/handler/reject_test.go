@@ -7,6 +7,7 @@ package handler
 import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/sidf"
+	gnbcontext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 	"testing"
@@ -29,15 +30,6 @@ func newTestUE() *context.UEContext {
 	return ue
 }
 
-// countRetries replaces the retry send for the length of a test.
-func countRetries(t *testing.T) *[]*context.UEPDUSession {
-	var sent []*context.UEPDUSession
-	prev := requestPduSession
-	requestPduSession = func(_ *context.UEContext, s *context.UEPDUSession) { sent = append(sent, s) }
-	t.Cleanup(func() { requestPduSession = prev })
-	return &sent
-}
-
 func reject(id uint8) *nasMessage.PDUSessionEstablishmentReject {
 	r := nasMessage.NewPDUSessionEstablishmentReject(0)
 	r.SetPDUSessionID(id)
@@ -48,7 +40,7 @@ func reject(id uint8) *nasMessage.PDUSessionEstablishmentReject {
 func noHandOff(t *testing.T, ue *context.UEContext, why string) {
 	t.Helper()
 	select {
-	case <-ue.Deferred():
+	case <-ue.PduSessionRetries():
 		t.Fatal(why)
 	case <-time.After(200 * time.Millisecond):
 	}
@@ -80,44 +72,59 @@ func rejectBytes(id, cause uint8, ies ...byte) []byte {
 	return append([]byte{0x2e, id, 0x01, nas.MsgTypePDUSessionEstablishmentReject, cause}, ies...)
 }
 
-// A reject arriving in a DL NAS Transport reaches the retry.
+// A reject arriving in a DL NAS Transport reaches the cancellable retry queue.
 func TestDlNasTransportRejectSchedulesTheRetry(t *testing.T) {
-	countRetries(t)
 	ue := newTestUE()
+	t.Cleanup(ue.Terminate)
 	session, err := ue.CreatePDUSession()
 	require.NoError(t, err)
+	session.SetStateSM_PDU_SESSION_PENDING()
 
 	HandlerDlNasTransportPduaccept(ue, dlReject(session.Id, rejectBytes(session.Id, 26)))
 
-	assert.Equal(t, 1, session.T3580Retries)
+	assert.Zero(t, session.T3580Retries, "a scheduled attempt is not counted until executed")
+	select {
+	case retry := <-ue.PduSessionRetries():
+		assert.Same(t, session, retry.Session())
+	case <-time.After(3 * time.Second):
+		t.Fatal("the DL NAS reject should schedule its session's retry")
+	}
 }
 
-// The retry is counted when scheduled, handed to the UE's goroutine after its 1 s
-// backoff, and sent only when that goroutine runs it.
+// The timer hands a typed token to the UE's goroutine after its 1 s backoff.
+// NAS is encoded, sent and counted only when that goroutine executes the token.
 func TestHandleEstablishmentRejectRetriesOnTheUEGoroutine(t *testing.T) {
-	sent := countRetries(t)
 	ue := newTestUE()
+	t.Cleanup(ue.Terminate)
 	session, err := ue.CreatePDUSession()
 	require.NoError(t, err)
+	session.SetStateSM_PDU_SESSION_PENDING()
+	uplink := make(chan gnbcontext.UEMessage, 1)
+	ue.SetGnbRx(uplink)
 
 	handleEstablishmentReject(ue, reject(session.Id))
-	assert.Equal(t, 1, session.T3580Retries, "counted when scheduled")
+	assert.Zero(t, session.T3580Retries, "not counted when scheduled")
 
 	select {
-	case f := <-ue.Deferred():
-		assert.Empty(t, *sent, "nothing is sent until the UE's goroutine runs it")
-		f()
+	case retry := <-ue.PduSessionRetries():
+		assert.Empty(t, uplink, "the timer must not send NAS")
+		assert.Zero(t, session.T3580Retries, "not counted by the timer")
+		require.NoError(t, ue.StartPduSessionRetry(retry, func() ([]byte, error) {
+			return []byte{0x7e}, nil
+		}))
 	case <-time.After(3 * time.Second):
 		t.Fatal("the retry should be handed to the UE's goroutine after its 1 s backoff")
 	}
-	assert.Equal(t, []*context.UEPDUSession{session}, *sent)
+	assert.Equal(t, 1, session.T3580Retries, "counted when the UE executes the attempt")
+	assert.Equal(t, gnbcontext.UEMessage{IsNas: true, Nas: []byte{0x7e}}, <-uplink)
 }
 
 func TestHandleEstablishmentRejectStopsAfterFiveRetries(t *testing.T) {
-	countRetries(t)
 	ue := newTestUE()
+	t.Cleanup(ue.Terminate)
 	session, err := ue.CreatePDUSession()
 	require.NoError(t, err)
+	session.SetStateSM_PDU_SESSION_PENDING()
 	session.T3580Retries = maxRejectRetries
 
 	handleEstablishmentReject(ue, reject(session.Id))

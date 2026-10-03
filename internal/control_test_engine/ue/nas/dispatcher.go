@@ -187,6 +187,7 @@ func DispatchNas(ue *context.UEContext, message []byte) {
 		handleCause5GMM(&m.ServiceReject.Cause5GMM)
 
 	case nas.MsgTypeRegistrationReject:
+		ue.RegistrationFailed()
 		// handler registration reject
 		log.Error("[UE][NAS] Receive Registration Reject")
 		handleCause5GMM(&m.RegistrationReject.Cause5GMM)

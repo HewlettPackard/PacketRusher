@@ -6,6 +6,7 @@ package ue
 
 import (
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/analytics"
 	context2 "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
@@ -22,7 +23,7 @@ import (
 
 func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnbInboundChannel chan context2.UEMessage, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
 	// new UE instance.
-	ue := &context.UEContext{}
+	ue := &context.UEContext{Results: analytics.Current()}
 	scenarioChan := make(chan scenario.ScenarioMessage)
 
 	// new UE context
@@ -65,9 +66,12 @@ func runUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMessage
 // handleUE runs messages and deferred work serially on the UE's goroutine until
 // the scenario stops it or its gNB association fails.
 func handleUE(ue *context.UEContext, ueMgrChannel <-chan procedures.UeTesterMessage) {
+	retries := ue.PduSessionRetries()
 	loop := true
 	for loop {
 		select {
+		case retry := <-retries:
+			trigger.InitPduSessionRetry(ue, retry)
 		case msg, open := <-ue.GetGnbTx():
 			if !open {
 				log.Debug("[UE][", ue.GetMsin(), "] gNB context released; waiting for a new connection or scenario action")
