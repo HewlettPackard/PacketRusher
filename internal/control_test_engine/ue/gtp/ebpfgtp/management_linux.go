@@ -39,7 +39,9 @@ func newManagementSocket(local netip.Addr, allowed func(netip.AddrPort) bool) (*
 				continue
 			}
 			if response := echoResponse(packet[:n]); response != nil {
-				_, _ = conn.WriteToUDPAddrPort(response, peer)
+				if _, err := conn.WriteToUDPAddrPort(response, peer); err != nil {
+					log.Warnf("[UE][eBPF] Echo response from %s to %s failed: %v", conn.LocalAddr(), peer, err)
+				}
 			}
 		}
 	}()
