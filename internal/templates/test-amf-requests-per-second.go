@@ -1,11 +1,11 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package templates
 
 import (
-	"strconv"
 	"sync"
 
 	"my5G-RANTester/config"
@@ -28,6 +28,10 @@ func TestRqsLoop(numRqs int, interval int) int64 {
 	}
 
 	cfg := config.GetConfig()
+	identity := cfg.GNodeB.PlmnList
+	if _, err := identity.GNBIDAt(max(numRqs, 1) - 1); err != nil {
+		log.Fatalf("[TESTER][GNB] Invalid gNB identity range: %v", err)
+	}
 
 	ranPort := uint16(1000)
 	for y := 1; y <= interval; y++ {
@@ -36,13 +40,12 @@ func TestRqsLoop(numRqs int, interval int) int64 {
 
 		for i := 1; i <= numRqs; i++ {
 
-			cfg.GNodeB.PlmnList.GnbId = gnbIdGenerator(i)
+			cfg.GNodeB.PlmnList.GnbId, _ = identity.GNBIDAt(i - 1)
 
 			cfg.GNodeB.ControlIF = cfg.GNodeB.ControlIF.WithPort(ranPort)
 
-			go gnb.InitGnbForLoadSeconds(cfg, &wg, &monitor)
-
 			wg.Add(1)
+			go gnb.InitGnbForLoadSeconds(cfg, &wg, &monitor)
 
 			ranPort++
 		}
@@ -54,20 +57,4 @@ func TestRqsLoop(numRqs int, interval int) int64 {
 	}
 
 	return monitor.GetRqsGlobal()
-}
-
-func gnbIdGenerator(i int) string {
-
-	var base string
-	switch true {
-	case i < 10:
-		base = "00000"
-	case i < 100:
-		base = "0000"
-	case i >= 100:
-		base = "000"
-	}
-
-	gnbId := base + strconv.Itoa(i)
-	return gnbId
 }

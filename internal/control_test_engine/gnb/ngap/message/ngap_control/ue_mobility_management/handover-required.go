@@ -1,6 +1,6 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
- * © Copyright 2023 Valentin D'Emmanuele
+ * © Copyright 2023-2026 Valentin D'Emmanuele
  */
 package ue_mobility_management
 
@@ -60,7 +60,7 @@ func (builder *HandoverRequiredBuilder) SetTargetGnodeB(targetGnb *context.GNBCo
 	builder.pdu.TargetID = &ngapType.TargetID{Choice: &ngapType.TargetRANNodeID{
 		GlobalRANNodeID: &ngapType.GlobalRANNodeID{Choice: &ngapType.GlobalGNBID{
 			PLMNIdentity: targetGnb.GetPLMNIdentity(),
-			GNBID:        &ngapType.GNBID{Choice: &ngapType.GNBIDForGNBID{Value: aper.BitString{Bytes: targetGnb.GetGnbIdInBytes(), BitLength: 24}}},
+			GNBID:        &ngapType.GNBID{Choice: &ngapType.GNBIDForGNBID{Value: targetGnb.GetGNBIDBitString()}},
 		}},
 		SelectedTAI: &ngapType.TAI{PLMNIdentity: targetGnb.GetPLMNIdentity(), TAC: &ngapType.TAC{Value: targetGnb.GetTacInBytes()}},
 	}}

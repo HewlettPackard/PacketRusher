@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package config
 
@@ -53,10 +54,12 @@ type GNodeB struct {
 }
 
 type PlmnList struct {
-	Mcc   string `yaml:"mcc"`
-	Mnc   string `yaml:"mnc"`
-	Tac   string `yaml:"tac"`
-	GnbId string `yaml:"gnbid"`
+	Mcc         string `yaml:"mcc"`
+	Mnc         string `yaml:"mnc"`
+	Tac         string `yaml:"tac"`
+	GnbId       string `yaml:"gnbid"`
+	GnbIDLength uint8  `yaml:"gnbidlength"`
+	CellID      uint16 `yaml:"cellid"`
 }
 type SliceSupportList struct {
 	Sst string `yaml:"sst"`
@@ -148,6 +151,13 @@ func readConfig(configPath string) Config {
 	if cfg.Ue.TunnelMTU < 0 {
 		log.Fatal("ue.tunnelmtu must be zero (automatic) or a positive IPv4 MTU")
 	}
+	plmn := cfg.GNodeB.PlmnList
+	identity, err := ParseGNBIdentity(plmn.GnbId, plmn.GnbIDLength, plmn.CellID)
+	if err != nil {
+		log.Fatalf("invalid gnodeb.plmnlist: %v", err)
+	}
+	cfg.GNodeB.PlmnList.GnbId = identity.String()
+	cfg.GNodeB.PlmnList.GnbIDLength = identity.BitLength
 
 	sqn, err := strconv.ParseInt(cfg.Ue.Sqn, 16, 64)
 	if err != nil {

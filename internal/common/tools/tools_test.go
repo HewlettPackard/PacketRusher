@@ -1,3 +1,7 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package tools
 
 import (
@@ -35,35 +39,6 @@ func TestUEGnbSelectionAndHandoverSequence(t *testing.T) {
 				}
 				if _, exists := sim.Gnbs[got]; !exists {
 					t.Errorf("selected nonexistent gNB %s", got)
-				}
-			}
-		})
-	}
-}
-
-func TestUEGnbSelectionPreservesConfiguredID(t *testing.T) {
-	// CreateGnbs uses the configured ID verbatim for the first gNB and
-	// gnbIdGenerator's uppercase hexadecimal spelling for subsequent gNBs.
-	for _, configuredID := range []string{"00000a", "00000A"} {
-		t.Run(configuredID, func(t *testing.T) {
-			for ueID := 1; ueID <= 3; ueID++ {
-				sim := UESimulationConfig{
-					UeId: ueID,
-					Gnbs: map[string]*gnbContext.GNBContext{configuredID: nil, "00000B": nil},
-					Cfg:  config.Config{GNodeB: config.GNodeB{PlmnList: config.PlmnList{GnbId: configuredID}}},
-				}
-				for offset := 0; offset < 4; offset++ {
-					want := configuredID
-					if (ueID-1+offset)%2 != 0 {
-						want = "00000B"
-					}
-					got := sim.gnbID(offset)
-					if got != want {
-						t.Errorf("UE %d offset %d: gNB %q, want %q", ueID, offset, got, want)
-					}
-					if _, exists := sim.Gnbs[got]; !exists {
-						t.Errorf("UE %d offset %d: selected nonexistent gNB %q", ueID, offset, got)
-					}
 				}
 			}
 		})
