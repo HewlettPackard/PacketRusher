@@ -57,6 +57,9 @@ class KernelCounterOwnership(unittest.TestCase):
         before={'owner_pid':42,'owner_start_ticks':100,'map_id':17,'values':decode_dump(dump())}
         after=copy.deepcopy(before);after['values']=decode_dump(dump((110,220,1,6,1007)))
         self.assertEqual(delta(before,after),dict(zip(NAMES.values(),(100,200,1,3,1000))))
+        self.assertEqual(delta(before,after)['downlink_delegation_attempts'],3)
+        self.assertEqual(delta(before,after)['oversized_uplink_delegation_attempts'],1000)
+        self.assertNotIn('checksum_reassembly_delegation_attempts',delta(before,after))
         for change in [{'map_id':18},{'owner_start_ticks':200},{'values':decode_dump(dump((0,20,0,3,7)))},{'values':decode_dump(dump((10,20,0,3,0)))}]:
             with self.assertRaises(AssertionError):delta(before,after|change)
 
