@@ -11,6 +11,7 @@ import socket
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from measure import command, measure, preflight_qfis
@@ -52,22 +53,31 @@ def cohort(args):
     for signum in (signal.SIGINT,signal.SIGTERM): signal.signal(signum,cancel)
     log=(state/'packetrusher.log').open('wb'); files.append(log)
     process=None
+    control_directory=None
+    control_path=None
     def control(action,label=None):
-        response=subprocess.run([str(binary),'control','--socket',str(state/'control.sock'),'--ue','1',
+        response=subprocess.run([str(binary),'control','--socket',str(control_path),'--ue','1',
              '--action',action,'--timeout','45s'],check=True,capture_output=True,text=True,timeout=50)
         value=json.loads(response.stdout)
         record(state/f'{label or action}.json',value)
         return value['ues'][0]
     try:
+        # Artifact paths can exceed sockaddr_un's108-byte limit, especially for
+        # the longer userspace cohort name. Own a short private socket directory
+        # independently of the retained artifacts and remove it after UE join.
+        control_directory=tempfile.TemporaryDirectory(prefix='prbench-',dir='/tmp')
+        control_path=Path(control_directory.name)/'control.sock'
+        if len(os.fsencode(control_path))>=108:raise RuntimeError('owned Unix control socket path exceeds108-byte limit')
+        result['control_socket']=str(control_path)
         probe.await_core_count(profile,state,'initial',0,10)
         capture_log=(state/'capture.log').open('wb'); files.append(capture_log)
         capture=native.launch_owned(['tcpdump','-n','-U','--immediate-mode','-i','eth0','-w',str(state/'preflight-n3.pcap'),'udp','port','2152'],stdout=capture_log,stderr=subprocess.STDOUT)
         probe.until(lambda:capture.poll() is None and (state/'preflight-n3.pcap').exists() and (state/'preflight-n3.pcap').stat().st_size>=24,5,'preflight capture')
         process=native.launch_owned([str(binary),'--config',str(state/'config.json'),'--tunnel-backend',args.backend,
              '--report-json',str(state/'report.json'),'multi-ue','-n','1','--numPduSessions','1',
-             '--tunnel','--dedicatedGnb=false','--tunnel-vrf=false','--control-socket',str(state/'control.sock')],stdout=log,stderr=subprocess.STDOUT)
+             '--tunnel','--dedicatedGnb=false','--tunnel-vrf=false','--control-socket',str(control_path)],stdout=log,stderr=subprocess.STDOUT)
         owned.append(process)
-        probe.until(lambda:process.poll() is None and (state/'control.sock').is_socket(),20,'UE control socket')
+        probe.until(lambda:process.poll() is None and control_path.is_socket(),20,'UE control socket')
         ready=control('wait')
         probe.require(ready['ready'] and ready['connected'] and ready['state']=='registered' and ready['active_pdu_sessions']==[1],f'incomplete PDU: {ready}')
         probe.await_core_count(profile,state,'registered',1,5)
@@ -135,7 +145,7 @@ def cohort(args):
     except (Exception,Cancelled) as error:
         result['error']=str(error)
         # Retire a live owned UE on failure before the next cohort can proceed.
-        if not isinstance(error,Cancelled) and process and process.poll() is None and (state/'control.sock').is_socket():
+        if not isinstance(error,Cancelled) and process and process.poll() is None and control_path.is_socket():
             try:
                 control('deregister','failure-deregister')
                 probe.await_core_count(profile,state,'failure-deregistered',0,12)
@@ -144,6 +154,7 @@ def cohort(args):
         with native.defer_cancellation():
             if capture: native.stop_owned(capture,2)
             for child in reversed(owned): native.stop_owned(child,10)
+            if control_directory:control_directory.cleanup()
             for file in files: file.close()
             record(state/'result.json',result)
     return 0 if result['success'] else 1
