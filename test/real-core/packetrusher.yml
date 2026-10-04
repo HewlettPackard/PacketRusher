@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+# © Copyright 2026 Valentin D'Emmanuele
+
+# One gNB and UE for test/real-core/ue.sh: the core is at 172.30.5.20, serves
+# PLMN 208/93 and slice 1/010203, and knows subscriber imsi-208930000000120.
+gnodeb:
+  controlif:
+    ip: "172.30.5.30"
+    port: 9487
+  dataif:
+    ip: "172.30.5.30"
+    port: 2152
+  plmnlist:
+    mcc: "208"
+    mnc: "93"
+    tac: "000001"
+    gnbid: "000008"
+  slicesupportlist:
+    sst: "01"
+    sd: "010203"
+ue:
+  hplmn:
+    mcc: "208"
+    mnc: "93"
+  msin: "0000000120"
+  routingindicator: "0000"
+  protectionScheme: 0
+  key: "00112233445566778899AABBCCDDEEFF"
+  opc: "00112233445566778899AABBCCDDEEFF"
+  amf: "8000"
+  sqn: "00000000"
+  dnn: "internet"
+  snssai:
+    sst: "01"
+    sd: "010203"
+  integrity:
+    nia2: true
+  ciphering:
+    nea0: true
+amfif:
+  - ip: "172.30.5.20"
+    port: 38412
