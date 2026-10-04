@@ -1,3 +1,7 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package main
 
 import (
@@ -7,24 +11,32 @@ import (
 
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"github.com/davecgh/go-spew/spew"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )
 
-const version = "1.0.1"
+// version is the release tag, set with -ldflags "-X main.version=<tag>".
+// Other builds report the module version Go derives from the source commit.
+var version string
 
 func init() {
 
 	spew.Config.Indent = "\t"
 
+	if info, ok := debug.ReadBuildInfo(); ok && version == "" {
+		version = info.Main.Version
+	}
 }
 
 func newApp() *cli.App {
 	beforeResults, afterResults := resultsHooks()
 	app := &cli.App{
-		After: afterResults,
+		Name:    "packetrusher",
+		Version: version,
+		After:   afterResults,
 		Flags: []cli.Flag{
 			&cli.PathFlag{Name: "config", Usage: "Configuration file path. (Default: ./config/config.yml)"},
 			&cli.PathFlag{Name: "report-json", Usage: "Write procedure results to a new JSON file on shutdown"},

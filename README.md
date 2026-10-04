@@ -146,3 +146,11 @@ gNB IDs and N2/N3 addresses.
 For automatic tunnel MTU calculation and the `ue.tunnelmtu` override, see [Tunnel MTU](docs/tunnel-mtu.md).
 
 For the current codec APIs and validation commands, see [Dependency migration](docs/dependency-migration.md).
+
+### Versions and releases
+
+`packetrusher --version` prints the release tag, or the source commit for other builds. Docker builds have no
+Git metadata: pass `--build-arg VERSION=$(git describe --tags --always)` to identify them.
+
+Pushing a `v*` or `YYYYMMDD` tag publishes a GitHub release with Linux amd64/arm64 archives and checksums, and a
+`ghcr.io/hewlettpackard/packetrusher:<tag>` image.
