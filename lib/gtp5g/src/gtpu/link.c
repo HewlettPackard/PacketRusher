@@ -26,6 +26,12 @@ static void gtp5g_link_setup(struct net_device *dev)
 {
     dev->netdev_ops = &gtp5g_netdev_ops;
     dev->needs_free_netdev = true;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
+    /* The core allocates and frees dev->tstats; iptunnel_xmit_stats() only
+     * counts TX (and does not WARN) when the stats type is declared.
+     * */
+    dev->pcpu_stat_type = NETDEV_PCPU_STAT_TSTATS;
+#endif
 
     dev->hard_header_len = 0;
     dev->addr_len = 0;
@@ -39,7 +45,12 @@ static void gtp5g_link_setup(struct net_device *dev)
     dev->flags = IFF_POINTOPOINT | IFF_NOARP | IFF_MULTICAST;
 
     dev->priv_flags |= IFF_NO_QUEUE;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+    /* NETIF_F_LLTX became dev->lltx in 6.12 */
+    dev->lltx = true;
+#else
     dev->features |= NETIF_F_LLTX;
+#endif
     netif_keep_dst(dev);
 
     /* TODO: Modify the headroom size based on
