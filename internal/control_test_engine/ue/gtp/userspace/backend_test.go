@@ -52,10 +52,17 @@ func packetFrom(t *testing.T, c *net.UDPConn) ([]byte, netip.AddrPort) {
 	require.NoError(t, err)
 	return buf[:n], peer
 }
-func downlink(t *testing.T, c *net.UDPConn, local netip.Addr, teid uint32, ip []byte) {
+func downlink(t *testing.T, c *net.UDPConn, local netip.Addr, teid uint32, ip []byte, qfi ...uint8) {
 	t.Helper()
-	p, err := Encode(teid, 9, ip)
+	flow := uint8(9)
+	if len(qfi) != 0 {
+		flow = qfi[0]
+	}
+	p, err := Encode(teid, flow, ip)
 	require.NoError(t, err)
+	if flow != 0 {
+		p[13] = 0
+	}
 	_, err = c.WriteToUDPAddrPort(p, netip.AddrPortFrom(local, 2152))
 	require.NoError(t, err)
 }
@@ -127,7 +134,7 @@ func TestSharedSocketIsolationHandoverAndRelease(t *testing.T) {
 	require.Equal(t, target.Local, source.Addr())
 	require.Equal(t, byte(63), wire[14])
 	payload := ipv4([4]byte{8, 8, 8, 8}, [4]byte{10, 0, 0, 1})
-	downlink(t, peer, target.Local, target.DownlinkTEID, payload)
+	downlink(t, peer, target.Local, target.DownlinkTEID, payload, target.QFI)
 	require.Equal(t, payload, receiveInner(t, a))
 	sa.Close()
 	sa.Close()

@@ -14,8 +14,8 @@ run_namespace() {
     sudo -n ./scripts/run-ebpf-netns.sh "$1" "$2" "${3:-normal}"
   fi
 }
-run_namespace "$scratch/backend.test" '^TestActualVerifierLoadDeclaredCapabilities$|^TestActualKernelPacketBoundsChecksumsAndTupleIsolation$|^TestActualKernelFree5UPFCapturedSequenceHeader$|^TestActualKernelUDPChecksumChunkBoundaries$|^TestActualKernelIPv6PrefixIIDAndHiddenNDAdmission$|^TestActualKernelUplinkRejectsTruncatedIPv4Options$|^TestActualKernelChecksumRelayRequiresCurrentOwner$|^TestNativeChecksumStageOwnershipAndEffectiveFeatures$' restricted
-run_namespace "$scratch/backend.test" '^TestNativeLoopbackRouterAdvertisementAdmission$|^TestNativeKernelChecksumAndReassemblyBeforeFallback$|^TestNativeJumboChecksumTailsAndQFI$' restricted
+run_namespace "$scratch/backend.test" '^TestActualVerifierLoadDeclaredCapabilities$|^TestActualKernelPacketBoundsChecksumsAndTupleIsolation$|^TestActualKernelOptionalHeadersDelegateOnlyCurrentTuple$|^TestActualKernelFree5UPFCapturedSequenceHeader$|^TestActualKernelUDPChecksumChunkBoundaries$|^TestActualKernelIPv6PrefixIIDAndHiddenNDAdmission$|^TestActualKernelUplinkRejectsTruncatedIPv4Options$|^TestActualKernelChecksumRelayRequiresCurrentOwner$|^TestNativeChecksumStageOwnershipAndEffectiveFeatures$' restricted
+run_namespace "$scratch/backend.test" '^TestNativeLoopbackRouterAdvertisementAdmission$|^TestNativeKernelChecksumAndReassemblyBeforeFallback$|^TestNativeJumboChecksumTailsAndQFI$|^TestNativeOptionalHeadersBothBackendsAndRecoveryEcho$' restricted
 run_namespace "$scratch/backend.test" '^TestActualVerifierLoad$|^TestNativeManagementEchoAndJoinedClose$|^TestNativeBidirectionalHandoverAndCleanup$'
 run_namespace "$scratch/backend.test" '^TestNativeRemotePeerHandoverAndCleanup$'
 run_namespace "$scratch/backend.test" '^TestNativeTCPBulkTrafficAndCleanup$'

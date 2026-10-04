@@ -104,10 +104,21 @@ func (e *endpoint) receive() {
 			return
 		}
 		if response := echoResponse(buf[:n]); response != nil {
-			_, _ = e.conn.WriteToUDPAddrPort(response, peer)
+			e.mu.RLock()
+			allowed := false
+			for _, held := range e.sessions {
+				if peer == held.config.Remote {
+					allowed = true
+					break
+				}
+			}
+			e.mu.RUnlock()
+			if allowed {
+				_, _ = e.conn.WriteToUDPAddrPort(response, peer)
+			}
 			continue
 		}
-		teid, payload, err := Decode(buf[:n])
+		teid, err := TPDUTEID(buf[:n])
 		if err != nil {
 			continue
 		}
@@ -115,6 +126,10 @@ func (e *endpoint) receive() {
 		held, ok := e.sessions[teid]
 		e.mu.RUnlock()
 		if !ok || peer != held.config.Remote {
+			continue
+		}
+		_, payload, err := DecodeDownlink(buf[:n], held.config.QFI)
+		if err != nil {
 			continue
 		}
 		_, dst, err := IPAddresses(payload)

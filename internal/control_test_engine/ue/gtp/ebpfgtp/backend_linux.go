@@ -165,7 +165,7 @@ type ingress struct {
 
 // Registry owns only its BPF objects, TCX links and exclusively bound N3 ports.
 // Its socket worker answers Echo and handles Router Advertisements plus the
-// kernel-validated checksum/reassembly fallback; ordinary packets use TCX.
+// kernel-validated checksum/reassembly/optional-header fallback; ordinary packets use TCX.
 type Registry struct {
 	peers           atomic.Pointer[map[peerKey]bool]
 	controls        atomic.Pointer[map[downKey]controlBinding]
