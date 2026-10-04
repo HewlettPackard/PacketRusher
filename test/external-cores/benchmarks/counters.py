@@ -7,7 +7,7 @@ import subprocess
 import time
 from pathlib import Path
 
-NAMES={0:'uplink_encap_attempts',1:'downlink_decap_redirect_attempts',2:'ingress_drops',3:'checksum_reassembly_delegation_attempts',4:'oversized_uplink_delegation_attempts'}
+NAMES={0:'uplink_encap_attempts',1:'downlink_decap_redirect_attempts',2:'ingress_drops',3:'downlink_delegation_attempts',4:'oversized_uplink_delegation_attempts'}
 
 
 def decode_bytes(value, width):
