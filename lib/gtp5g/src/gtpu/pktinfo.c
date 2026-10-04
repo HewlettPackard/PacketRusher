@@ -238,6 +238,12 @@ void gtp5g_fwd_emark_skb_ipv4(struct sk_buff *skb,
         return;
     }
 
+    /* iptunnel_xmit() tracks tunnel recursion in a per-CPU counter and
+     * expects BH to be disabled. This runs from a genetlink handler: a
+     * migration between its inc and dec leaves one CPU dropping every
+     * packet ("Dead loop on virtual device").
+     * */
+    local_bh_disable();
     udp_tunnel_xmit_skb(rt, 
         epkt_info->sk, 
         skb,
@@ -255,6 +261,7 @@ void gtp5g_fwd_emark_skb_ipv4(struct sk_buff *skb,
 #else
         true);
 #endif
+    local_bh_enable();
 }
 
 void gtp5g_xmit_skb_ipv4(struct sk_buff *skb, struct gtp5g_pktinfo *pktinfo)
