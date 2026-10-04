@@ -3,7 +3,7 @@
 PacketRusher supports `gtp5g`, `userspace` and its own [eBPF backend](ebpf-backend.md).
 `gtp5g` remains the default. The
 `userspace` backend uses Linux TUN and UDP and requires no gtp5g module, build,
-DKMS installation, or module access. Both support the existing tunnel options,
+DKMS installation, or module access. All three support the existing tunnel options,
 source routing, per-UE VRFs and handover.
 
 ```yaml
