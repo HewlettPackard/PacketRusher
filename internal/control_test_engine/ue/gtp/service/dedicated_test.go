@@ -139,7 +139,7 @@ func testDedicatedHandover(t *testing.T, mode config.TunnelMode) {
 		mu.Unlock()
 		return nil
 	}
-	ue := &context.UEContext{TunnelMode: mode}
+	ue := &context.UEContext{TunnelMode: mode, TunnelBackend: config.TunnelBackendKernel}
 	ue.UeSecurity.Msin = "7005551000"
 	session := &context.UEPDUSession{Id: 1}
 	session.SetIp([12]uint8{10, 1, 0, 1})
@@ -227,7 +227,7 @@ func testDedicatedHandover(t *testing.T, mode config.TunnelMode) {
 	routeError = errors.New("target route failed")
 	// Failed initial commit does own its reservation and must return it, along
 	// with its newly created policy/VRF and endpoint.
-	freshUE := &context.UEContext{TunnelMode: mode}
+	freshUE := &context.UEContext{TunnelMode: mode, TunnelBackend: config.TunnelBackendKernel}
 	freshUE.UeSecurity.Msin = "7005551001"
 	fresh := &context.UEPDUSession{Id: 1}
 	fresh.SetIp([12]uint8{10, 1, 0, 2})

@@ -44,7 +44,7 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 		if !dedicatedGnb && tunnelMode != config.TunnelShared {
 			log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
 		}
-		if timeBetweenRegistration < 500 && tunnelMode != config.TunnelShared && config.GetConfig().Ue.TunnelBackend != config.TunnelBackendUserspace && config.GetConfig().Ue.TunnelBackend != config.TunnelBackendEBPF {
+		if timeBetweenRegistration < 500 && tunnelMode != config.TunnelShared && config.GetConfig().Ue.TunnelBackend == config.TunnelBackendKernel {
 			log.Fatal("When using the --tunnel option, --timeBetweenRegistration must be equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
 		}
 	}

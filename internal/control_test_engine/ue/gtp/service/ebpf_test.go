@@ -65,6 +65,14 @@ func TestEBPFUpdateFailureReleasesOnlyWhenRollbackFails(t *testing.T) {
 	}
 }
 func TestNativeEBPFServiceRoutingHandoverRollbackAndRelease(t *testing.T) {
+	runNativeEBPFServiceRoutingHandoverRollbackAndRelease(t, config.TunnelBackendEBPF)
+}
+
+func TestNativeAutoUsesEBPFAndKeepsItAcrossHandover(t *testing.T) {
+	runNativeEBPFServiceRoutingHandoverRollbackAndRelease(t, config.TunnelBackendAuto)
+}
+
+func runNativeEBPFServiceRoutingHandoverRollbackAndRelease(t *testing.T, backend config.TunnelBackend) {
 	if os.Getenv("PACKETRUSHER_EBPF_TEST") != "1" {
 		t.Skip("requires private privileged namespace")
 	}
@@ -73,12 +81,15 @@ func TestNativeEBPFServiceRoutingHandoverRollbackAndRelease(t *testing.T) {
 	ebpfRegistry = ebpfgtp.NewRegistry()
 	t.Cleanup(func() { ebpfRegistry = previous })
 	ue, pdu := sharedSetupUE(t, 1)
-	ue.TunnelBackend = config.TunnelBackendEBPF
+	ue.TunnelBackend = backend
 	pdu.SetIp([12]uint8{10, 60, 0, 1})
 	source := ebpfTestMessage(t, "10.88.0.1", 1001, 2001)
 	target := ebpfTestMessage(t, "10.88.0.3", 1002, 2002)
 	SetupGtpInterface(ue, source)
 	require.NotNil(t, pdu.GetTunInterface())
+	selected, cause := pdu.TunnelSelection()
+	require.Equal(t, config.TunnelBackendEBPF, selected)
+	require.Empty(t, cause)
 	require.NotNil(t, pdu.GetTunRoute())
 	require.NotNil(t, pdu.GetTunRule())
 	device := pdu.GetTunInterface()

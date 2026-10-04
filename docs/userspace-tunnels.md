@@ -1,8 +1,10 @@
 # Userspace GTP-U tunnels
 
-PacketRusher supports two tunnel datapaths. `gtp5g` remains the default. The
-`userspace` backend uses Linux TUN and UDP and requires no gtp5g module, build,
-DKMS installation, or module access. Both support the existing tunnel options,
+PacketRusher defaults to `auto`: it prefers its own eBPF backend and uses
+`userspace` when eBPF setup is unavailable and every owned staging resource has
+been released. Select `userspace` explicitly to use Linux TUN and UDP without
+attempting eBPF. No gtp5g module, build, DKMS installation or module access is
+required. `gtp5g` remains an explicit choice. Both portable backends support
 source routing, per-UE VRFs and handover.
 
 ```yaml

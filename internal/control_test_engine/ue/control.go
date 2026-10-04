@@ -31,6 +31,9 @@ func attachment(r *procedures.ControlRequest, ue *context.UEContext) procedures.
 	for id := uint8(1); id <= 15; id++ {
 		if pdu, err := ue.GetPduSession(id); err == nil && pdu.GetStateSM() == context.SM5G_PDU_SESSION_ACTIVE {
 			a.ActivePDUSessions = append(a.ActivePDUSessions, id)
+			if backend, cause := pdu.TunnelSelection(); backend != "" {
+				a.Tunnels = append(a.Tunnels, procedures.TunnelSelection{PDU: id, Backend: string(backend), Fallback: cause})
+			}
 			if int(id) <= r.ExpectedPDUSessions {
 				expectedActive++
 			}

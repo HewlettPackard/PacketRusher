@@ -29,7 +29,7 @@ func newApp() *cli.App {
 		Version: version,
 		After:   afterResults,
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "tunnel-backend", Usage: "Tunnel datapath: gtp5g (default), userspace, or ebpf; overrides ue.tunnelbackend"},
+			&cli.StringFlag{Name: "tunnel-backend", Value: "auto", Usage: "Tunnel datapath: auto (default: eBPF, safe setup fallback to userspace), ebpf (strict), userspace, or gtp5g; overrides ue.tunnelbackend"},
 			&cli.PathFlag{Name: "config", Usage: "Configuration file path. (Default: ./config/config.yml)"},
 			&cli.PathFlag{Name: "report-json", Usage: "Write procedure results to a new JSON file on shutdown"},
 			&cli.PathFlag{Name: "report-csv", Usage: "Write procedure results to a new CSV file on shutdown"},

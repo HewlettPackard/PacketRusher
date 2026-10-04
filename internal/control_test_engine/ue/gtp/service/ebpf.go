@@ -58,22 +58,26 @@ type ebpfTunnel struct {
 	once        sync.Once
 	ipv6Cleanup func() error
 	uplinkDone  chan struct{}
+	releaseErr  error
 }
 
-func (t *ebpfTunnel) release() {
+func (t *ebpfTunnel) release() error {
 	t.once.Do(func() {
+		fail := func(err error) {
+			t.releaseErr = errors.Join(ebpfgtp.ErrCleanupIncomplete, err)
+			t.quarantine(err)
+		}
 		if err := t.stopJumboUplink(); err != nil {
 			var downErr error
 			if t.link != nil {
 				downErr = disableEBPFEndpoint(t.link)
 			}
-			t.quarantine(errors.Join(err, downErr))
+			fail(errors.Join(err, downErr))
 			return
 		}
 		// Join allocation updates before removing their canonical authorization.
-		removed := true
 		if t.ipv6Cleanup != nil {
-			removed = t.ipv6Cleanup() == nil
+			_ = t.ipv6Cleanup() // Retry network deletion after final endpoint retirement.
 		}
 		if t.session != nil {
 			if err := t.session.Close(); err != nil {
@@ -83,7 +87,7 @@ func (t *ebpfTunnel) release() {
 				if t.link != nil {
 					downErr = disableEBPFEndpoint(t.link)
 				}
-				t.quarantine(errors.Join(err, downErr))
+				fail(errors.Join(err, downErr))
 				return
 			}
 		}
@@ -91,33 +95,40 @@ func (t *ebpfTunnel) release() {
 		// retain source policies until that operation has succeeded.
 		if t.port != nil {
 			if err := t.port.Close(); err != nil {
-				t.quarantine(err)
+				fail(err)
 				return
 			}
 		}
 		if t.uplinkDone != nil {
 			<-t.uplinkDone
 		}
+		var cleanupErr error
 		if t.ipv6Cleanup != nil {
-			removed = t.ipv6Cleanup() == nil
+			cleanupErr = t.ipv6Cleanup()
 		}
 		if t.route != nil {
-			removed = routingObjectRemoved(routeDel(t.route)) && removed
-		}
-		if t.rule != nil {
-			removed = routingObjectRemoved(ruleDel(t.rule)) && removed
-		}
-		if t.vrf != nil {
-			removed = routingObjectRemoved(deleteTunnelLink(t.vrf)) && removed
-		}
-		if t.table != nil {
-			if removed {
-				t.table.release()
-			} else {
-				t.table.quarantine()
+			if err := routeDel(t.route); !routingObjectRemoved(err) {
+				cleanupErr = errors.Join(cleanupErr, err)
 			}
 		}
+		if t.rule != nil {
+			if err := ruleDel(t.rule); !routingObjectRemoved(err) {
+				cleanupErr = errors.Join(cleanupErr, err)
+			}
+		}
+		if t.vrf != nil {
+			if err := deleteTunnelLink(t.vrf); !routingObjectRemoved(err) {
+				cleanupErr = errors.Join(cleanupErr, err)
+			}
+		}
+		if cleanupErr == nil {
+			cleanupErr = t.table.releaseChecked()
+		}
+		if cleanupErr != nil {
+			fail(cleanupErr)
+		}
 	})
+	return t.releaseErr
 }
 
 func ebpfSessionConfig(pdu *context.UEPDUSession, gnbPDU *gnbContext.GnbPDUSession, local netip.Addr, endpoint, mtu int) (ebpfgtp.Config, error) {
@@ -177,7 +188,7 @@ func (t *ebpfTunnel) setIPv6(address netip.Addr) error {
 	return nil
 }
 
-func setupEBPFTunnel(ue *context.UEContext, pdu *context.UEPDUSession, gnbPDU *gnbContext.GnbPDUSession, local netip.Addr) error {
+func setupEBPFTunnel(ue *context.UEContext, pdu *context.UEPDUSession, gnbPDU *gnbContext.GnbPDUSession, local netip.Addr) (setupErr error) {
 	if pdu.GetTunInterface() != nil {
 		return pdu.UpdateTunnel(gnbPDU, local)
 	}
@@ -185,7 +196,18 @@ func setupEBPFTunnel(ue *context.UEContext, pdu *context.UEPDUSession, gnbPDU *g
 	committed := false
 	defer func() {
 		if !committed {
-			t.release()
+			if t.session == nil && errors.Is(setupErr, ebpfgtp.ErrCleanupIncomplete) {
+				// Registry.Open retained a helper/socket without publishing a
+				// session. Its constructor still owns this endpoint identity.
+				var downErr error
+				if t.link != nil {
+					downErr = disableEBPFEndpoint(t.link)
+				}
+				setupErr = errors.Join(setupErr, downErr)
+				t.quarantine(setupErr)
+				return
+			}
+			setupErr = errors.Join(setupErr, t.release())
 		}
 	}()
 	var err error
@@ -197,11 +219,11 @@ func setupEBPFTunnel(ue *context.UEContext, pdu *context.UEPDUSession, gnbPDU *g
 	if err = setUserspaceTunnelMTU(t.link, local, ue.TunnelMTU, ipv6); err != nil {
 		return err
 	}
-	if err = ebpfgtp.ConfigureEndpoint(t.link, t.port); err != nil {
-		return err
-	}
 	cfg, err := ebpfSessionConfig(pdu, gnbPDU, local, t.link.Attrs().Index, t.link.Attrs().MTU)
 	if err != nil {
+		return err
+	}
+	if err = ebpfgtp.ConfigureEndpoint(t.link, t.port); err != nil {
 		return err
 	}
 	cfg.Inject, err = ebpfInjector(t.port)
@@ -320,6 +342,7 @@ func setupEBPFTunnel(ue *context.UEContext, pdu *context.UEPDUSession, gnbPDU *g
 		return nil
 	})
 	committed = true
+	pdu.SetTunnelSelection(config.TunnelBackendEBPF, "")
 	log.Infof("[UE][eBPF] TCX GTP-U configured on %s; IPv4 %s, IPv6 %s", t.link.Attrs().Name, pdu.GetIp(), pdu.GetIPv6())
 	return nil
 }

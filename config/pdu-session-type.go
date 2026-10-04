@@ -25,14 +25,18 @@ func (c Config) ValidateTunnel(enabled bool) error {
 	if !enabled {
 		return nil
 	}
-	if c.Ue.TunnelBackend == TunnelBackendEBPF && c.GNodeB.DataIF.Port() != 2152 {
-		return fmt.Errorf("eBPF requires gnodeb.dataif.port: 2152")
+	backend, err := ParseTunnelBackend(string(c.Ue.TunnelBackend))
+	if err != nil {
+		return err
+	}
+	if backend != TunnelBackendKernel && c.GNodeB.DataIF.Port() != 2152 {
+		return fmt.Errorf("%s tunnels require gnodeb.dataif.port: 2152; both eBPF and userspace bind UDP/2152", backend)
 	}
 	if c.Ue.PDUSessionType.NASValue() == ie.PDUSessType_IPv4 {
 		return nil
 	}
-	if c.Ue.TunnelBackend != TunnelBackendUserspace && c.Ue.TunnelBackend != TunnelBackendEBPF {
-		return fmt.Errorf("IPv6/IPv4v6 user traffic requires ue.tunnelbackend: userspace or ebpf")
+	if backend != TunnelBackendUserspace && backend != TunnelBackendEBPF && backend != TunnelBackendAuto {
+		return fmt.Errorf("IPv6/IPv4v6 user traffic requires ue.tunnelbackend: userspace, ebpf, or auto")
 	}
 	if c.Ue.TunnelMTU != 0 && c.Ue.TunnelMTU < 1280 {
 		return fmt.Errorf("IPv6/IPv4v6 requires ue.tunnelmtu of at least 1280, or 0 for automatic selection")

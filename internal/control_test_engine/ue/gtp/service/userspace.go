@@ -207,6 +207,7 @@ func setupUserspaceTunnel(ue *context.UEContext, pdu *context.UEPDUSession, gnbP
 		return nil
 	})
 	committed = true
+	pdu.SetTunnelSelection(config.TunnelBackendUserspace, "")
 	log.Infof("[UE][GTP] Userspace tunnel %s configured; IPv4 %s, IPv6 %s", t.link.Attrs().Name, pdu.GetIp(), pdu.GetIPv6())
 	return nil
 }

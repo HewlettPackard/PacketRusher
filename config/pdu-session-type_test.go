@@ -4,6 +4,7 @@ package config
 import (
 	"github.com/goccy/go-yaml"
 	"github.com/stretchr/testify/require"
+	"net/netip"
 	"testing"
 )
 
@@ -30,6 +31,7 @@ func TestPDUSessionTypeConfig(t *testing.T) {
 
 func TestIPv6TunnelPreflight(t *testing.T) {
 	cfg := Config{Ue: Ue{PDUSessionType: PDUSessionType(2), TunnelBackend: TunnelBackendKernel}}
+	cfg.GNodeB.DataIF.AddrPort = netip.MustParseAddrPort("192.0.2.1:2152")
 	require.NoError(t, cfg.ValidateTunnel(false))
 	require.ErrorContains(t, cfg.ValidateTunnel(true), "userspace")
 	cfg.Ue.TunnelBackend = TunnelBackendUserspace

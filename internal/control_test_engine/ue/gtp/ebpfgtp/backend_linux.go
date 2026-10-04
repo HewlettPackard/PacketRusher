@@ -44,10 +44,10 @@ func ConfigureEndpoint(endpoint netlink.Link, port userspace.PacketPort) error {
 	var ioctlErr error
 	err = raw.Control(func(fd uintptr) { ioctlErr = unix.IoctlSetInt(int(fd), unix.TUNSETOFFLOAD, 0) })
 	if err = errors.Join(err, ioctlErr); err != nil {
-		return fmt.Errorf("disable owned eBPF TUN checksum offload: %w", err)
+		return fmt.Errorf("disable owned eBPF TUN checksum offload: %w", attachmentUnavailable(err))
 	}
 	if err := netlink.LinkSetGSOMaxSegs(endpoint, 1); err != nil {
-		return fmt.Errorf("limit eBPF endpoint TCP segmentation: %w", err)
+		return fmt.Errorf("limit eBPF endpoint TCP segmentation: %w", attachmentUnavailable(err))
 	}
 	return nil
 }
@@ -307,14 +307,23 @@ func discoverN3(c Config) (n3Path, error) {
 	}
 	return path, nil
 }
+
+// Ownership collisions and policy validation are not capability failures.
+// Only an unsupported/denied backend operation is eligible for setup fallback.
+func attachmentUnavailable(err error) error {
+	if errors.Is(err, unix.EPERM) || errors.Is(err, unix.EACCES) || errors.Is(err, unix.ENOSYS) || errors.Is(err, unix.EOPNOTSUPP) || errors.Is(err, unix.EINVAL) {
+		return errors.Join(ErrUnavailable, err)
+	}
+	return err
+}
 func (r *Registry) acquire(local netip.Addr, path n3Path) error {
 	index := path.IfIndex
 	if r.ports[local] != nil {
-		return errors.New("N3 port cleanup is pending")
+		return fmt.Errorf("%w: N3 port cleanup is pending", ErrCleanupIncomplete)
 	}
 	if n := r.locals[local]; n != nil {
 		if !n.mapped || !n.linked {
-			return errors.New("N3 lease cleanup is pending")
+			return fmt.Errorf("%w: N3 lease cleanup is pending", ErrCleanupIncomplete)
 		}
 		if n.ifindex != index {
 			return errors.New("N3 interface changed while the address is in use")
@@ -330,9 +339,10 @@ func (r *Registry) acquire(local netip.Addr, path n3Path) error {
 	if in == nil {
 		attachment, err := r.attach(index)
 		if err != nil {
+			err = attachmentUnavailable(err)
 			if closeErr := socket.Close(); closeErr != nil {
 				r.ports[local] = socket
-				err = errors.Join(err, closeErr)
+				err = errors.Join(err, ErrCleanupIncomplete, closeErr)
 			}
 			return fmt.Errorf("attach eBPF TCX ingress: %w", err)
 		}
@@ -342,14 +352,14 @@ func (r *Registry) acquire(local netip.Addr, path n3Path) error {
 	if err = r.state.put("locals", ipv4(local), ownedN3Index(path), ebpf.UpdateNoExist); err != nil {
 		if in.refs == 0 {
 			if closeErr := in.attachment.Close(); closeErr != nil {
-				err = errors.Join(err, closeErr)
+				err = errors.Join(err, ErrCleanupIncomplete, closeErr)
 			} else {
 				delete(r.links, index)
 			}
 		}
 		if closeErr := socket.Close(); closeErr != nil {
 			r.ports[local] = socket
-			err = errors.Join(err, closeErr)
+			err = errors.Join(err, ErrCleanupIncomplete, closeErr)
 		}
 		return err
 	}
@@ -423,30 +433,29 @@ func (r *Registry) Open(c Config) (*Session, error) {
 		return nil, err
 	}
 	if err = r.load(); err != nil {
-		return nil, err
+		return nil, errors.Join(ErrUnavailable, err)
 	}
 	if err = r.acquire(c.Local, path); err != nil {
 		r.closeEmpty()
 		return nil, err
 	}
 	s := &Session{registry: r, cfg: c, path: path, advertisements: make(chan []byte, 8), keys: make(map[downKey]bool), leases: map[netip.Addr]bool{c.Local: true}}
-	if err = r.state.put("downlinks", c.downKey(), c.identity(), ebpf.UpdateNoExist); err != nil {
+	rollback := func(cause error) (*Session, error) {
 		if cleanupErr := s.retire(true); cleanupErr != nil {
 			r.orphans = append(r.orphans, s)
 			r.queueWarning(cleanupErr)
+			cause = errors.Join(cause, ErrCleanupIncomplete, cleanupErr)
 		}
 		r.closeEmpty()
-		return nil, err
+		return nil, cause
+	}
+	if err = r.state.put("downlinks", c.downKey(), c.identity(), ebpf.UpdateNoExist); err != nil {
+		return rollback(err)
 	}
 	s.keys[c.downKey()] = true
 	s.endpoint, err = r.attachEndpoint(c.EndpointIfIndex)
 	if err != nil {
-		if cleanupErr := s.retire(true); cleanupErr != nil {
-			r.orphans = append(r.orphans, s)
-			r.queueWarning(cleanupErr)
-		}
-		r.closeEmpty()
-		return nil, fmt.Errorf("attach eBPF UE egress: %w", err)
+		return rollback(fmt.Errorf("attach eBPF UE egress: %w", attachmentUnavailable(err)))
 	}
 	if staged, ok := s.endpoint.(interface {
 		TransmitIndex() int
@@ -456,22 +465,12 @@ func (r *Registry) Open(c Config) (*Session, error) {
 		s.cfg = c
 		s.stageKey = uint32(staged.PeerIndex())
 		if err = r.state.put("stages", s.stageKey, c.identity(), ebpf.UpdateNoExist); err != nil {
-			if cleanupErr := s.retire(true); cleanupErr != nil {
-				r.orphans = append(r.orphans, s)
-				r.queueWarning(cleanupErr)
-			}
-			r.closeEmpty()
-			return nil, err
+			return rollback(err)
 		}
 		s.stageMapped = true
 	}
 	if err = r.state.put("sessions", c.identity(), c.binding(path), ebpf.UpdateNoExist); err != nil {
-		if cleanupErr := s.retire(true); cleanupErr != nil {
-			r.orphans = append(r.orphans, s)
-			r.queueWarning(cleanupErr)
-		}
-		r.closeEmpty()
-		return nil, err
+		return rollback(err)
 	}
 	r.sessions[c.identity()] = s
 	r.publishPeers()

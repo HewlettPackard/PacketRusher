@@ -1,7 +1,8 @@
 # PacketRusher eBPF tunnel backend
 
-Select `ue.tunnelbackend: ebpf` or `--tunnel-backend ebpf`. PacketRusher loads its
-own GTP-U programs and installs the negotiated peer, UL/DL TEIDs, QFI and UE
+The default `ue.tunnelbackend: auto` prefers eBPF. Select `ue.tunnelbackend: ebpf`
+or `--tunnel-backend ebpf` to require it strictly. PacketRusher loads its own
+GTP-U programs and installs the negotiated peer, UL/DL TEIDs, QFI and UE
 allocation. It needs neither gtp5g nor an eUPF process. The remote core still
 needs its own real UPF; this is the UE-side tunnel backend.
 
@@ -14,8 +15,21 @@ sudo ./packetrusher --config ./config/config.yml --tunnel-backend ebpf \
 IPv4, IPv6 and IPv4v6 PDU session 1 use the same stable owned TUN, source routing
 or per-UE VRF as `userspace`. Applications can bind its allocated address and
 use `SO_BINDTODEVICE` on the UE TUN, including inside its VRF. Both portable
-backends create the tunnel for PDU session 1; eBPF rejects `--numPduSessions > 1`
-up front. This does not increase either backend's session scope.
+backends create the tunnel for PDU session 1; explicit `ebpf` rejects
+`--numPduSessions > 1` up front. `auto` and `userspace` allow multiple PDU
+negotiations, with user traffic only on PDU 1. This does not increase either
+backend's tunnel scope.
+
+`auto` falls back only during initial setup when loading/attaching eBPF or
+configuring its owned endpoint is unsupported or denied. It first closes every
+owned BPF attachment, socket, endpoint and routing claim. Failed cleanup retains
+and quarantines ownership and prevents fallback. Invalid allocations, occupied
+ports, unsupported N3 routes, policy errors and packet rejection remain errors.
+Both portable backends require the configured N3 port to be 2152; fallback cannot
+repair an unsupported port. Explicit `ebpf` never falls back. Runtime failures
+never switch an existing tunnel's datapath, and handover keeps the committed
+selection. Setup logs report the selected backend and original fallback reason;
+local `control --action inspect` exposes them per PDU in `tunnels`.
 
 N3 uses IPv4 UDP/2152. Assign its configured local address before starting.
 Supported attachment types are loopback and an Ethernet interface without a

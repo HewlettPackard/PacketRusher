@@ -31,7 +31,8 @@ In another terminal, inspect attachments or select a UE and a procedure:
 
 UE IDs start at one and are independent of gNB IDs. Targets must match configured
 gNB IDs reported by `inspect`. Inspect omits subscriber identities, security keys
-and addresses. Example response:
+and addresses. Active tunnel entries include the effective backend and, when
+`auto` used userspace, the original eBPF setup failure. Example response:
 
 ```json
 {
@@ -43,7 +44,8 @@ and addresses. Example response:
     "gnb": "000009",
     "connected": true,
     "ready": true,
-    "active_pdu_sessions": [1]
+    "active_pdu_sessions": [1],
+    "tunnels": [{"pdu": 1, "backend": "ebpf"}]
   }],
   "gnbs": [{"id": "000008", "ready": true}, {"id": "000009", "ready": true}]
 }

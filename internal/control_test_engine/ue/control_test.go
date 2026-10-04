@@ -3,6 +3,7 @@ package ue
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/free5gc/nas/ie"
 	nas "github.com/free5gc/nas/message"
@@ -183,6 +184,11 @@ func TestControlReadinessRequiresEachConfiguredPDUId(t *testing.T) {
 		if id != 2 {
 			pdu.SetStateSM_PDU_SESSION_ACTIVE()
 		}
+		if id == 1 {
+			pdu.SetTunnelSelection(config.TunnelBackendUserspace, "eBPF backend unavailable: permission denied")
+		} else if id == 3 {
+			pdu.SetTunnelSelection(config.TunnelBackendEBPF, "")
+		}
 	}
 	manager, _ := startUELoop(t, ue)
 	r := &procedures.ControlRequest{Context: context.Background(), Action: "inspect", Gnbs: map[string]*gnb.GNBContext{"000008": node}, ExpectedPDUSessions: 2, Generation: 1, Reply: make(chan procedures.ControlResult, 1)}
@@ -191,6 +197,19 @@ func TestControlReadinessRequiresEachConfiguredPDUId(t *testing.T) {
 	case result := <-r.Reply:
 		if result.Err != nil || result.Attachment.Ready || len(result.Attachment.ActivePDUSessions) != 2 {
 			t.Fatalf("active IDs 1 and 3 cannot replace required ID 2: %+v", result)
+		}
+		if len(result.Attachment.Tunnels) != 2 || result.Attachment.Tunnels[0].PDU != 1 || result.Attachment.Tunnels[0].Backend != "userspace" || result.Attachment.Tunnels[0].Fallback == "" || result.Attachment.Tunnels[1].Backend != "ebpf" || result.Attachment.Tunnels[1].Fallback != "" {
+			t.Fatalf("inspection lost committed backend/fallback: %+v", result.Attachment.Tunnels)
+		}
+		wire, err := json.Marshal(result.Attachment)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var decoded struct {
+			Tunnels []procedures.TunnelSelection `json:"tunnels"`
+		}
+		if err := json.Unmarshal(wire, &decoded); err != nil || len(decoded.Tunnels) != 2 || decoded.Tunnels[0].Fallback == "" {
+			t.Fatalf("backend selection missing from inspection JSON %s: %v", wire, err)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("UE loop did not respond")

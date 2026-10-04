@@ -115,6 +115,9 @@ type UEPDUSession struct {
 	ueInterface          netlink.Link
 	releaseTunnel        func(bool)
 	updateTunnel         func(*context.GnbPDUSession, netip.Addr) error
+	tunnelSelectionLock  sync.RWMutex
+	tunnelBackend        config.TunnelBackend
+	tunnelFallback       string
 	Wait                 chan bool
 	T3580Retries         int
 
@@ -473,7 +476,22 @@ func (pduSession *UEPDUSession) ReleaseTunnel() {
 		pduSession.SetTunInterface(nil)
 		pduSession.SetUEInterface(nil)
 		pduSession.SetVrfDevice(nil)
+		pduSession.SetTunnelSelection("", "")
 	}
+}
+
+// TunnelSelection reports the backend actually committed for this PDU session.
+// The configuration's auto selector is a preference, not an effective datapath.
+func (pduSession *UEPDUSession) TunnelSelection() (config.TunnelBackend, string) {
+	pduSession.tunnelSelectionLock.RLock()
+	defer pduSession.tunnelSelectionLock.RUnlock()
+	return pduSession.tunnelBackend, pduSession.tunnelFallback
+}
+
+func (pduSession *UEPDUSession) SetTunnelSelection(backend config.TunnelBackend, fallback string) {
+	pduSession.tunnelSelectionLock.Lock()
+	defer pduSession.tunnelSelectionLock.Unlock()
+	pduSession.tunnelBackend, pduSession.tunnelFallback = backend, fallback
 }
 
 func (pduSession *UEPDUSession) SetUEInterface(link netlink.Link) { pduSession.ueInterface = link }

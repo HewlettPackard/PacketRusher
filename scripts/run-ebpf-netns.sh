@@ -3,11 +3,11 @@
 # Always create our own namespaces, including when invoked directly as root.
 set -eu
 if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-  echo 'usage: run-ebpf-netns.sh TEST_BINARY TEST_PATTERN [restricted]' >&2
+  echo 'usage: run-ebpf-netns.sh TEST_BINARY TEST_PATTERN [normal|restricted|no-bpf]' >&2
   exit 2
 fi
 profile=${3:-normal}
-case "$profile" in normal|restricted) ;; *) echo 'unknown capability profile' >&2; exit 2;; esac
+case "$profile" in normal|restricted|no-bpf) ;; *) echo 'unknown capability profile' >&2; exit 2;; esac
 exec unshare --net --mount sh -eu -c '
   mount --make-rprivate /
   if [ ! -c /dev/net/tun ]; then
@@ -24,6 +24,11 @@ exec unshare --net --mount sh -eu -c '
     # Namespace/device preparation needs SYS_ADMIN, the loaded datapath does not.
     exec setpriv --bounding-set=-sys_admin,-perfmon env \
       PACKETRUSHER_EBPF_TEST=1 PACKETRUSHER_EBPF_RESTRICTED_CAPS=1 \
+      "$1" -test.run "$2" -test.v -test.timeout=40s
+  fi
+  if [ "$3" = no-bpf ]; then
+    exec setpriv --bounding-set=-bpf,-sys_admin,-perfmon env \
+      PACKETRUSHER_FALLBACK_TEST=1 \
       "$1" -test.run "$2" -test.v -test.timeout=40s
   fi
   PACKETRUSHER_EBPF_TEST=1 "$1" -test.run "$2" -test.v -test.timeout=40s

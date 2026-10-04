@@ -19,14 +19,21 @@ var (
 // Attachment contains local identifiers, never subscriber keys or IMSIs. It is
 // read on the UE event loop, alongside the NAS state transitions it describes.
 type Attachment struct {
-	UE                   int     `json:"ue"`
-	Generation           uint64  `json:"generation"`
-	ConnectionGeneration uint64  `json:"connection_generation"`
-	State                string  `json:"state"`
-	GNB                  string  `json:"gnb,omitempty"`
-	Connected            bool    `json:"connected"`
-	Ready                bool    `json:"ready"`
-	ActivePDUSessions    []uint8 `json:"active_pdu_sessions"`
+	UE                   int               `json:"ue"`
+	Generation           uint64            `json:"generation"`
+	ConnectionGeneration uint64            `json:"connection_generation"`
+	State                string            `json:"state"`
+	GNB                  string            `json:"gnb,omitempty"`
+	Connected            bool              `json:"connected"`
+	Ready                bool              `json:"ready"`
+	ActivePDUSessions    []uint8           `json:"active_pdu_sessions"`
+	Tunnels              []TunnelSelection `json:"tunnels,omitempty"`
+}
+
+type TunnelSelection struct {
+	PDU      uint8  `json:"pdu"`
+	Backend  string `json:"backend"`
+	Fallback string `json:"fallback,omitempty"`
 }
 
 // MarshalJSON exposes session identities as numbers. encoding/json otherwise

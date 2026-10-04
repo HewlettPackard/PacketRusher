@@ -87,7 +87,7 @@ func newSharedSetupFixture(t *testing.T) *sharedSetupFixture {
 
 func sharedSetupUE(t *testing.T, number int) (*context.UEContext, *context.UEPDUSession) {
 	t.Helper()
-	ue := &context.UEContext{TunnelMode: config.TunnelShared}
+	ue := &context.UEContext{TunnelMode: config.TunnelShared, TunnelBackend: config.TunnelBackendKernel}
 	ue.UeSecurity.Msin = fmt.Sprintf("700555%04d", number)
 	session := &context.UEPDUSession{Id: 1}
 	session.SetIp([12]uint8{10, 42, byte(number / 256), byte(number % 256)})

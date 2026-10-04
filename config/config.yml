@@ -63,9 +63,9 @@ ue:
   # Set a smaller value, e.g. 1400, to match the UPF or a lower path MTU.
   tunnelmtu: 0
 
-  # gtp5g (default), userspace (TUN + UDP), or ebpf (owned kernel GTP-U).
+  # auto (default: eBPF with safe setup fallback), ebpf (strict), userspace, or gtp5g.
   # See docs/ebpf-backend.md for eBPF requirements and supported profile.
-  tunnelbackend: gtp5g
+  tunnelbackend: auto # Prefer eBPF; userspace fallback only after safe setup rollback.
 
   # UE's SIM credentials
   key: "00112233445566778899AABBCCDDEEFF"

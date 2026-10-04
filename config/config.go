@@ -40,6 +40,8 @@ const (
 type TunnelBackend string
 
 const (
+	// Auto tries eBPF and permits a setup-only userspace fallback after rollback.
+	TunnelBackendAuto      TunnelBackend = "auto"
 	TunnelBackendKernel    TunnelBackend = "gtp5g"
 	TunnelBackendUserspace TunnelBackend = "userspace"
 	TunnelBackendEBPF      TunnelBackend = "ebpf"
@@ -47,14 +49,16 @@ const (
 
 func ParseTunnelBackend(value string) (TunnelBackend, error) {
 	switch value {
-	case "", string(TunnelBackendKernel):
+	case "", string(TunnelBackendAuto):
+		return TunnelBackendAuto, nil
+	case string(TunnelBackendKernel):
 		return TunnelBackendKernel, nil
 	case string(TunnelBackendUserspace):
 		return TunnelBackendUserspace, nil
 	case string(TunnelBackendEBPF):
 		return TunnelBackendEBPF, nil
 	default:
-		return "", fmt.Errorf("tunnel backend %q must be gtp5g, userspace, or ebpf", value)
+		return "", fmt.Errorf("tunnel backend %q must be auto, gtp5g, userspace, or ebpf", value)
 	}
 }
 

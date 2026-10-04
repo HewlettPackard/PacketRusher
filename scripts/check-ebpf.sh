@@ -19,7 +19,8 @@ run_namespace "$scratch/backend.test" '^TestNativeLoopbackRouterAdvertisementAdm
 run_namespace "$scratch/backend.test" '^TestActualVerifierLoad$|^TestNativeManagementEchoAndJoinedClose$|^TestNativeBidirectionalHandoverAndCleanup$'
 run_namespace "$scratch/backend.test" '^TestNativeRemotePeerHandoverAndCleanup$'
 run_namespace "$scratch/backend.test" '^TestNativeTCPBulkTrafficAndCleanup$'
-run_namespace "$scratch/service.test" '^TestNativeEBPFServiceRoutingHandoverRollbackAndRelease$'
+run_namespace "$scratch/service.test" '^TestNativeEBPFServiceRoutingHandoverRollbackAndRelease$|^TestNativeAutoUsesEBPFAndKeepsItAcrossHandover$'
+run_namespace "$scratch/service.test" '^TestNativeDefaultFallbackWithoutBPFCapability$' no-bpf
 run_namespace "$scratch/service.test" '^TestNativeEBPFServiceTCPBulkTrafficAndRelease$'
 run_namespace "$scratch/service.test" '^TestNativeEBPFServiceInitialOpenFailureRetiresStaging$'
 run_namespace "$scratch/service.test" '^TestNativeEBPFRealIPv6DualStackPolicyVRFAndHandover$|^TestUserspaceRealIPv6DualStackPolicyVRFAndHandover$'

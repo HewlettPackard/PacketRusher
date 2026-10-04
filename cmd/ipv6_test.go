@@ -16,7 +16,7 @@ func TestIPv6KernelTunnelRejectedBeforeNetworkOrCapture(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(strings.Replace(string(contents), "pdusessiontype: IPv4", "pdusessiontype: IPv6", 1)), 0600))
 	for _, arguments := range [][]string{{"ue"}, {"multi-ue", "-n", "1", "--tunnel"}} {
 		app := newApp()
-		err := app.Run(append([]string{"packetrusher", "--config", path}, arguments...))
+		err := app.Run(append([]string{"packetrusher", "--config", path, "--tunnel-backend", "gtp5g"}, arguments...))
 		require.ErrorContains(t, err, "requires ue.tunnelbackend: userspace")
 	}
 }

@@ -46,7 +46,9 @@ The following is a quick start guide, for more details on the installation, conf
 - Secure boot disabled (for custom kernel module)
 
 A Linux container workflow is available in [docker/README.md](docker/README.md).
-The host provides SCTP and, for user-plane tunnels, the gtp5g kernel module.
+The host provides SCTP. User-plane tunnels prefer PacketRusher's eBPF backend,
+with a safe setup fallback to userspace; the optional `gtp5g` backend needs its
+kernel module.
 
 ### Dependencies
 ```bash
@@ -147,8 +149,10 @@ For JSON/CSV procedure reports and live Prometheus metrics, see [Load-test resul
 
 For the current codec APIs and validation commands, see [Dependency migration](docs/dependency-migration.md).
 
-See [userspace GTP-U tunnels](docs/userspace-tunnels.md) to run user traffic without
-the gtp5g kernel module. The default backend remains `gtp5g`.
+The default `auto` tunnel backend prefers [PacketRusher eBPF](docs/ebpf-backend.md)
+and falls back to [userspace GTP-U](docs/userspace-tunnels.md) when eBPF is
+unavailable and setup has completely rolled back. Explicit `ebpf` stays strict;
+`userspace` and `gtp5g` remain selectable.
 
 For IPv6 and dual-stack PDU negotiation, UPF prefix discovery and routing, see
 [IPv6 PDU sessions](docs/ipv6.md).

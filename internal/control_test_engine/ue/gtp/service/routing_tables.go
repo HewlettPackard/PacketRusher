@@ -40,6 +40,7 @@ type routingTableReservation struct {
 	session   *context.UEPDUSession
 	allocator *routingTableAllocator
 	claim     *netlink.Route
+	released  bool
 }
 
 func newRoutingTableAllocator(claim, unclaim func(*netlink.Route) error, inUse func(uint32) (bool, error)) *routingTableAllocator {
@@ -92,22 +93,32 @@ func (a *routingTableAllocator) reserve(session *context.UEPDUSession) (*routing
 // release is called only after owned routing objects are gone. The identity
 // check makes an old cleanup harmless if the same session object is reused.
 func (r *routingTableReservation) release() {
+	_ = r.releaseChecked()
+}
+
+// Setup fallback needs proof that even the allocator's kernel claim retired.
+func (r *routingTableReservation) releaseChecked() error {
 	if r == nil {
-		return
+		return nil
 	}
 	a := r.allocator
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.sessions[r.session] != r {
-		return
+		if r.released {
+			return nil
+		}
+		return errors.New("routing table claim is retained after quarantine")
 	}
 	if err := a.unclaim(r.claim); !routingObjectRemoved(err) {
 		delete(a.sessions, r.session)
 		log.Warn("[UE][GTP] Keeping routing table ", r.table, " reservation after claim cleanup failed: ", err)
-		return
+		return err
 	}
 	delete(a.sessions, r.session)
 	a.free = append(a.free, r.table)
+	r.released = true
+	return nil
 }
 
 // Incomplete final cleanup abandons the old binding but leaves its kernel claim

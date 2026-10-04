@@ -29,12 +29,21 @@ func countDeletes(t *testing.T) (rules, routes *int) {
 func TestReleaseTunnelRunsOnce(t *testing.T) {
 	pduSession := &UEPDUSession{}
 	calls := 0
-	pduSession.SetTunnelRelease(func() { calls++ })
+	pduSession.SetTunnelSelection(config.TunnelBackendUserspace, "eBPF unavailable")
+	pduSession.SetTunnelRelease(func() {
+		calls++
+		backend, reason := pduSession.TunnelSelection()
+		require.Equal(t, config.TunnelBackendUserspace, backend, "selection stays published until cleanup joins")
+		require.Equal(t, "eBPF unavailable", reason)
+	})
 
 	pduSession.ReleaseTunnel()
 	pduSession.ReleaseTunnel()
 
 	assert.Equal(t, 1, calls)
+	backend, reason := pduSession.TunnelSelection()
+	require.Empty(t, backend)
+	require.Empty(t, reason)
 }
 
 // A session the network releases is removed from the UE before Terminate runs, so
