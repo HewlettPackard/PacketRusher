@@ -1,4 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 
 package templates
 
@@ -12,6 +15,8 @@ import (
 	gnbcontext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	fixture "my5G-RANTester/test/aio5gc/lib/tools"
+
+	"github.com/stretchr/testify/require"
 )
 
 func startShutdownSimulation(t *testing.T, loop bool, loopCount int) (*tools.UESimulation, gnbcontext.UEMessage, *gnbcontext.GNBContext, *sync.WaitGroup) {
@@ -90,6 +95,18 @@ func TestScenarioShutdownDuringRegistrationLoopDelay(t *testing.T) {
 		t.Fatal("global shutdown restarted the registration loop")
 	default:
 	}
+}
+
+func TestControlIsAnsweredDuringRegistrationLoopDelay(t *testing.T) {
+	simulation, connection, _, _ := startShutdownSimulation(t, true, 0)
+	close(connection.ConnectionLost)
+	close(connection.GNBTx)
+	require.Eventually(t, func() bool {
+		status, err := simulation.Control("inspect", "")
+		return err == nil && status.State == "deregistered"
+	}, time.Second, 10*time.Millisecond, "a UE waiting for its next registration must still be inspected")
+	_, err := simulation.Control("idle", "")
+	require.Error(t, err)
 }
 
 func TestScenarioShutdownAfterNormalIdleRelease(t *testing.T) {

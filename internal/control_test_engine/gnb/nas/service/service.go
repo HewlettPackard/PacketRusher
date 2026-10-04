@@ -1,7 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
- * © Copyright 2023 Valentin D'Emmanuele
+ * © Copyright 2023-2026 Valentin D'Emmanuele
  */
 package service
 
@@ -114,6 +114,9 @@ func processingConn(ue *context.GNBUe, gnb *context.GNBContext) {
 				gnbUeContext, err := gnb.GetGnbUe(ue.GetRanUeId())
 				if err == nil {
 					gnbUeContext.SetStateDown()
+					// A terminated UE reads nothing more: do not let a message for
+					// it hold back the release of its context.
+					gnbUeContext.CloseUEChannel()
 				}
 				return
 			}
