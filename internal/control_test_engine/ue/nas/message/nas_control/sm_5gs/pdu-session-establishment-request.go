@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package sm_5gs
 
@@ -18,11 +19,11 @@ func encodePlain(msg nas.Message) []byte {
 	}
 	return b
 }
-func GetPduSessionEstablishmentRequest(id uint8) []byte {
+func GetPduSessionEstablishmentRequest(id uint8, sessionType uint8) []byte {
 	return encodePlain(&nas.PDUSessEstReq{
 		PDUSessId: id, PTI: 1,
 		IntegrityProtectionMaxDataRate: &ie.IntegrityProtectionMaxDataRate{Uplink: 255, Downlink: 255},
-		PDUSessType:                    &ie.PDUSessType{Value: ie.PDUSessType_IPv4},
+		PDUSessType:                    &ie.PDUSessType{Value: sessionType},
 		ExtendedProtCfgOpts:            &ie.ExtendedProtCfgOpts{FromMs: &ie.ExtCfgOptFromMs{DNSV4Req: true, DNSV6Req: true}},
 	})
 }

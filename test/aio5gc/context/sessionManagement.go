@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package context
 
@@ -123,18 +124,17 @@ func (c *SmContext) SetDefQosQFI(defQosQFI uint8) {
 	c.defQosQFI = defQosQFI
 }
 
-func (smContext *SmContext) PDUAddressToNAS() ([12]byte, uint8) {
-	var addr [12]byte
-	var addrLen uint8
-	switch smContext.sessionType {
-	case ie.PDUSessType_IPv4:
-		copy(addr[:4], smContext.pduAddress.To4())
-		addrLen = 4 + 1
-	case ie.PDUSessType_IPv6:
-	case ie.PDUSessType_IPv4v6:
-		addrLen = 12 + 1
+// PDUAddress is the NAS PDU address of the session's type (TS 24.501 §9.11.4.10).
+// The IPv6 interface identifier is made of the IPv4 address, which every session has.
+func (smContext *SmContext) PDUAddress() *ie.PDUAddr {
+	address := &ie.PDUAddr{}
+	if smContext.sessionType != ie.PDUSessType_IPv6 {
+		address.IPv4 = smContext.pduAddress.To4()
 	}
-	return addr, addrLen
+	if smContext.sessionType != ie.PDUSessType_IPv4 {
+		address.IPv6IfId = append(make([]byte, 4), smContext.pduAddress.To4()...)
+	}
+	return address
 }
 
 func (c *SmContext) GetState() *fsm.State {
