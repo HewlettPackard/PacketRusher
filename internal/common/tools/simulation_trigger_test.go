@@ -75,8 +75,25 @@ func TestRegistrationRestartRepliesToControlRequests(t *testing.T) {
 	expectConnectionClosed(t, first)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	a, err := h.simulation.Inspect(ctx)
-	require.NoError(t, err, "inspection must receive a reply during the restart delay")
+	var a procedures.Attachment
+	var err error
+	for {
+		a, err = h.simulation.Inspect(ctx)
+		if err == nil && a.Generation == 2 && a.State == "starting" {
+			break
+		}
+		// The UE closes its connection before its scenario channel. A request
+		// admitted just before actor exit may receive ErrGeneration; it must
+		// still reply, and subsequent inspection must reach the restart delay.
+		if err != nil {
+			require.ErrorIs(t, err, procedures.ErrGeneration)
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("inspection did not receive a reply during the restart delay")
+		case <-time.After(time.Millisecond):
+		}
+	}
 	require.Equal(t, uint64(2), a.Generation)
 	require.Equal(t, "starting", a.State)
 	require.False(t, a.Connected)
