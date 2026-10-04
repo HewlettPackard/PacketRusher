@@ -124,6 +124,29 @@ func (simulation *UESimulation) Send(message procedures.UeTesterMessage) bool {
 	}
 }
 
+// Control runs a control socket action on the UE and reports the UE's status.
+func (simulation *UESimulation) Control(action, target string) (procedures.UeStatus, error) {
+	request := &procedures.ControlRequest{Action: action, Target: target, Reply: make(chan procedures.ControlReply, 1)}
+	reply := noUe(request, "stopped")
+	if simulation.Send(procedures.UeTesterMessage{Type: procedures.Control, Control: request}) {
+		select {
+		case reply = <-request.Reply:
+		case <-simulation.done:
+		}
+	}
+	return reply.Status, reply.Err
+}
+
+// noUe answers a control request the scenario has no UE to run on: it can still
+// be inspected, in the given state.
+func noUe(request *procedures.ControlRequest, state string) procedures.ControlReply {
+	reply := procedures.ControlReply{Status: procedures.UeStatus{State: state, PduSessions: []int{}}}
+	if request.Action != "inspect" {
+		reply.Err = fmt.Errorf("cannot %s a UE that is %s", request.Action, state)
+	}
+	return reply
+}
+
 func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimulation {
 	ueCfg := simConfig.Cfg
 	ueCfg.Ue.Msin = IncrementMsin(simConfig.UeId, simConfig.Cfg.Ue.Msin)
@@ -139,6 +162,9 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 		scenarioChan := simConfig.ScenarioChan
 		deregistrationTrigger := simConfig.DeregistrationTrigger
 		stopping := false
+		// A control deregistration parks the scenario: its UE stays deregistered
+		// until a control registration, whatever the registration loop says.
+		parked := false
 		for iteration := 1; ; iteration++ {
 			wg.Add(1)
 			ueRx := make(chan procedures.UeTesterMessage)
@@ -170,12 +196,57 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 				}
 				if ueRx != nil {
 					pending = append(pending, message)
+				} else if message.Control != nil {
+					message.Control.Reply <- noUe(message.Control, "deregistering")
 				}
+			}
+			// The UE takes no command after Terminate or Kill, so the scenario
+			// answers the control requests still queued for it.
+			dropPending := func() {
+				for _, message := range pending {
+					if message.Control != nil {
+						message.Control.Reply <- noUe(message.Control, "deregistering")
+					}
+				}
+				pending = nil
 			}
 			endIteration := func() {
 				if ueRx != nil && !stopping {
 					pending = append(pending, procedures.UeTesterMessage{Type: procedures.Terminate})
 				}
+			}
+			// control runs a control socket action on the status its UE just reported.
+			control := func(request *procedures.ControlRequest, status procedures.UeStatus) {
+				var source *gnbCxt.GNBContext
+				for id, gnb := range simConfig.Gnbs {
+					if gnb.GetInboundChannel() == status.GnbInboundChannel {
+						status.GnbId, source = id, gnb
+					}
+				}
+				status.Ready = status.Ready && len(status.PduSessions) >= simConfig.NumPduSessions
+				target := simConfig.Gnbs[request.Target]
+				var err error
+				switch action := request.Action; {
+				case action == "inspect":
+				case ueRx == nil || stopping:
+					err = errors.New("UE is terminating")
+				case action == "deregister" && status.State == "registered":
+					parked = true
+					endIteration()
+				case action == "idle" && status.Ready:
+					pending = append(pending, procedures.UeTesterMessage{Type: procedures.Idle})
+				case action == "reconnect" && status.State == "idle" && !status.Connected:
+					pending = append(pending, procedures.UeTesterMessage{Type: procedures.ServiceRequest})
+				case (action == "xn-handover" || action == "ng-handover") && (target == nil || target == source):
+					err = fmt.Errorf("target gNB %q is unknown or already serves the UE", request.Target)
+				case action == "xn-handover" && status.Ready:
+					trigger.TriggerXnHandover(source, target, int64(simConfig.UeId))
+				case action == "ng-handover" && status.Ready:
+					trigger.TriggerNgapHandover(source, target, int64(simConfig.UeId))
+				default:
+					err = fmt.Errorf("cannot %s a UE that is %s (ready: %t)", action, status.State, status.Ready)
+				}
+				request.Reply <- procedures.ControlReply{Status: status, Err: err}
 			}
 			for alive {
 				// Queue commands instead of blocking on a send: a UE handling the
@@ -196,7 +267,7 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 					pending = pending[1:]
 					if command.Type == procedures.Terminate || command.Type == procedures.Kill {
 						ueRx = nil
-						pending = nil
+						dropPending()
 					}
 				case <-deregistrationChannel:
 					deregistrationChannel = nil
@@ -245,6 +316,10 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 						alive = false
 						continue
 					}
+					if msg.Control != nil {
+						control(msg.Control, msg.Status)
+						continue
+					}
 					log.Info("[UE] Switched from state ", state, " to state ", msg.StateChange)
 					if msg.StateChange == ueCtx.MM5G_REGISTERED && !registered {
 						if ueRx != nil && !stopping {
@@ -257,8 +332,13 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 					state = msg.StateChange
 				}
 			}
-			if stopping || !simConfig.RegistrationLoop || (simConfig.LoopCount != 0 && iteration >= simConfig.LoopCount) {
+			dropPending()
+			if stopping || !parked && (!simConfig.RegistrationLoop || (simConfig.LoopCount != 0 && iteration >= simConfig.LoopCount)) {
 				return
+			}
+			betweenRegistrations := "deregistered"
+			if parked {
+				betweenRegistrations = "parked"
 			}
 			// Global shutdown remains receivable between registration attempts.
 			restart := time.NewTimer(time.Duration(simConfig.TimeBeforeReregistration) * time.Millisecond)
@@ -266,11 +346,18 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 			for waiting {
 				select {
 				case <-restart.C:
-					waiting = false
+					waiting = parked
 				case msg := <-simulation.commands:
 					if msg.Type == procedures.Terminate || msg.Type == procedures.Kill {
 						restart.Stop()
 						return
+					}
+					if request := msg.Control; request != nil {
+						reply := noUe(request, betweenRegistrations)
+						if parked && request.Action == "register" {
+							parked, waiting, reply.Err = false, false, nil
+						}
+						request.Reply <- reply
 					}
 				case msg, open := <-scenarioChan:
 					if !open || msg.Type == procedures.Terminate || msg.Type == procedures.Kill {

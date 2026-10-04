@@ -158,4 +158,27 @@ gnodeb:
     gnbid: "01ABCDE"
     gnbidlength: 25
     cellid: 3
+### Runtime UE controls and JSON scenarios
+
+`multi-ue --control-socket` creates a Unix socket to trigger procedures on the UEs of a running test, and
+`--number-of-gnbs` additional gNBs to hand UEs over to, each with its own N2/N3 IP. From another terminal,
+`control` runs one action, waits for its completion and prints the state of the UE as JSON:
+
+```bash
+./packetrusher multi-ue -n 2 --number-of-gnbs 2 --control-socket /tmp/packetrusher.sock
+./packetrusher control --socket /tmp/packetrusher.sock --ue 1 --action wait --timeout 45s
+./packetrusher control --socket /tmp/packetrusher.sock --ue 1 --action xn-handover --target 000009
+./packetrusher run-scenario --socket /tmp/packetrusher.sock --scenario scenario.json
+```
+
+The actions are `inspect` (the default, of all the UEs without `--ue`), `wait` (until registered with its PDU
+sessions), `idle`, `reconnect`, `xn-handover` and `ng-handover` (to the `--target` gNB ID), `deregister` and
+`register`. `run-scenario` runs them in order from a JSON file, each step once the previous one completed:
+
+```json
+{"steps": [
+  {"ue": 1, "action": "wait", "timeout_ms": 45000},
+  {"ue": 1, "action": "xn-handover", "target": "000009"},
+  {"ue": 1, "action": "deregister"}
+]}
 ```

@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package ue
 
@@ -114,8 +115,10 @@ func gnbMsgHandler(msg context2.UEMessage, ue *context.UEContext) {
 	} else if msg.GNBPduSessions[0] != nil {
 		// Setup PDU Session
 		serviceGtp.SetupGtpInterface(ue, msg)
+		ue.Handover = false
 	} else if msg.GNBRx != nil && msg.GNBTx != nil && msg.GNBInboundChannel != nil {
 		log.Info("[UE] gNodeB is telling us to use another gNodeB")
+		ue.Handover = true
 		previousGnbRx := ue.GetGnbRx()
 		ue.SetGnbInboundChannel(msg.GNBInboundChannel)
 		ue.SetGnbRx(msg.GNBRx)
@@ -206,6 +209,8 @@ func ueMgrHandler(msg procedures.UeTesterMessage, ue *context.UEContext) bool {
 		loop = false
 	case procedures.Kill:
 		loop = false
+	case procedures.Control:
+		ue.ReportStatus(msg.Control)
 	}
 	return loop
 }

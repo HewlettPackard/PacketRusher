@@ -1,12 +1,14 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package templates
 
 import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
+	"my5G-RANTester/internal/control"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"os"
 	"os/signal"
@@ -16,7 +18,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb bool, loop bool, loopCount int, timeBeforeReregistration int, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int) {
+func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb bool, loop bool, loopCount int, timeBeforeReregistration int, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int, numGnbs int, controlSocket string) {
 	if tunnelMode != config.TunnelDisabled {
 		if !dedicatedGnb && tunnelMode != config.TunnelShared {
 			log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
@@ -44,6 +46,9 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	} else {
 		numGnb = 1
 	}
+	if numGnbs > numGnb {
+		numGnb = numGnbs
+	}
 	if numGnb <= 1 && (timeBeforeXnHandover != 0 || timeBeforeNgapHandover != 0) {
 		log.Warn("[TESTER] We are increasing the number of gNodeB to two for handover test cases. Make you sure you fill the requirements for having two gNodeBs.")
 		numGnb++
@@ -53,6 +58,16 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	// Wait for gNB to be connected before registering UEs
 	// TODO: We should wait for NGSetupResponse instead
 	time.Sleep(1 * time.Second)
+
+	var controlServer *control.Server
+	if controlSocket != "" {
+		var err error
+		controlServer, err = control.Listen(controlSocket, gnbs, numUes)
+		if err != nil {
+			log.Fatal("[TESTER] Unable to create the control socket: ", err)
+		}
+		defer controlServer.Close()
+	}
 
 	simulations := make([]*tools.UESimulation, 0, numUes)
 
@@ -78,7 +93,11 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	// If CTRL-C signal has been received,
 	// stop creating new UEs, else we create numUes UEs
 	for ueSimCfg.UeId = 1; stopSignal && ueSimCfg.UeId <= numUes; ueSimCfg.UeId++ {
-		simulations = append(simulations, tools.SimulateSingleUE(ueSimCfg, &wg))
+		simulation := tools.SimulateSingleUE(ueSimCfg, &wg)
+		simulations = append(simulations, simulation)
+		if controlServer != nil {
+			controlServer.AddUe(ueSimCfg.UeId, simulation)
+		}
 
 		// Before creating a new UE, we wait for timeBetweenRegistration ms
 		registrationDelay := time.NewTimer(time.Duration(timeBetweenRegistration) * time.Millisecond)
