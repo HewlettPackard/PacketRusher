@@ -1,12 +1,19 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package main
 
 import (
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/control"
 	"my5G-RANTester/internal/templates"
 	pcap "my5G-RANTester/internal/utils"
 
+	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	log "github.com/sirupsen/logrus"
@@ -106,6 +113,8 @@ func newApp() *cli.App {
 					&cli.BoolFlag{Name: "tunnel", Aliases: []string{"t"}, Usage: "Enable the creation of the GTP-U tunnel interface."},
 					&cli.BoolFlag{Name: "tunnel-vrf", Value: true, Usage: "Enable/disable VRF usage of the GTP-U tunnel interface. Ignored without --dedicatedGnb: UEs sharing a gNB's tunnel device are routed by policy rule."},
 					&cli.BoolFlag{Name: "dedicatedGnb", Aliases: []string{"d"}, Usage: "Enable the creation of a dedicated gNB per UE. Require one IP on N2/N3 per gNB."},
+					&cli.IntFlag{Name: "number-of-gnbs", Usage: "Create at least this number of gNBs, eg: to have handover targets. Require one IP on N2/N3 per gNB."},
+					&cli.PathFlag{Name: "control-socket", Usage: "Unix socket to create for packetrusher control and packetrusher run-scenario, to trigger procedures on the UEs of this test."},
 					&cli.PathFlag{Name: "pcap", Usage: "Capture traffic to given PCAP file when a path is given", Value: "./dump.pcap"},
 				},
 				Action: func(c *cli.Context) error {
@@ -148,9 +157,41 @@ func newApp() *cli.App {
 							tunnelMode = config.TunnelTun
 						}
 					}
-					templates.TestMultiUesInQueue(numUes, tunnelMode, c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("loopCount"), c.Int("timeBeforeReregistration"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("timeBeforeReconnecting"), c.Int("numPduSessions"))
+					templates.TestMultiUesInQueue(numUes, tunnelMode, c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("loopCount"), c.Int("timeBeforeReregistration"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("timeBeforeReconnecting"), c.Int("numPduSessions"), c.Int("number-of-gnbs"), c.Path("control-socket"))
 
 					return nil
+				},
+			},
+			{
+				Name: "control",
+				Usage: "\nInspect or trigger a procedure on a UE of a running multi-ue test, and wait for its completion.\n" +
+					"Example for handing UE 1 over to another gNB: control --socket /tmp/pr.sock --ue 1 --action xn-handover --target 000009\n",
+				Flags: []cli.Flag{
+					&cli.PathFlag{Name: "socket", Required: true, Usage: "The --control-socket of the multi-ue test."},
+					&cli.StringFlag{Name: "action", Value: "inspect", Usage: "One of inspect, wait, register, deregister, idle, reconnect, xn-handover, ng-handover."},
+					&cli.IntFlag{Name: "ue", Usage: "The UE, starting from 1. Only inspect can omit it, to report all the UEs."},
+					&cli.StringFlag{Name: "target", Usage: "The ID of the gNB to hand the UE over to."},
+					&cli.DurationFlag{Name: "timeout", Value: 30 * time.Second, Usage: "The time given to the action to complete."},
+				},
+				Action: func(c *cli.Context) error {
+					response, err := control.Call(c.Path("socket"), control.Request{UeId: c.Int("ue"), Action: c.String("action"), Target: c.String("target"), TimeoutMs: int(c.Duration("timeout").Milliseconds())})
+					if err != nil {
+						return err
+					}
+					encoder := json.NewEncoder(c.App.Writer)
+					encoder.SetIndent("", "  ")
+					return encoder.Encode(response)
+				},
+			},
+			{
+				Name:  "run-scenario",
+				Usage: "Run the steps of a JSON scenario, in order, on the UEs of a running multi-ue test",
+				Flags: []cli.Flag{
+					&cli.PathFlag{Name: "socket", Required: true, Usage: "The --control-socket of the multi-ue test."},
+					&cli.PathFlag{Name: "scenario", Required: true, Usage: "The scenario path in .json"},
+				},
+				Action: func(c *cli.Context) error {
+					return control.RunScenario(c.Path("socket"), c.Path("scenario"))
 				},
 			},
 			{
@@ -262,7 +303,7 @@ func validateArguments(c *cli.Context) error {
 		return fmt.Errorf("--numPduSessions must be between 1 and 15")
 	}
 	for _, flag := range []string{
-		"loopCount", "timeBetweenRegistration", "timeBeforeDeregistration",
+		"number-of-gnbs", "loopCount", "timeBetweenRegistration", "timeBeforeDeregistration",
 		"timeBeforeNgapHandover", "timeBeforeXnHandover", "timeBeforeIdle",
 		"timeBeforeReconnecting", "timeBeforeReregistration",
 	} {

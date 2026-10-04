@@ -1,7 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
- * © Copyright 2025 Valentin D'Emmanuele
+ * © Copyright 2025-2026 Valentin D'Emmanuele
  */
 
 package context
@@ -14,6 +14,7 @@ import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/analytics"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
+	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 	"net/netip"
 	"regexp"
@@ -68,6 +69,10 @@ type UEContext struct {
 	Snssai     models.Snssai
 	TunnelMode config.TunnelMode
 	TunnelMTU  int
+
+	// Handover is set while the UE moves to another gNB, until that gNB has set
+	// up its PDU sessions.
+	Handover bool
 
 	// Sync primitive
 	scenarioChan chan scenario.ScenarioMessage
@@ -278,6 +283,38 @@ func (ue *UEContext) SetStateMM_IDLE() {
 
 func (ue *UEContext) GetStateMM() int {
 	return ue.StateMM
+}
+
+// stateNames are the 5GMM states as the control socket reports them.
+var stateNames = map[int]string{
+	MM5G_NULL:                 "starting",
+	MM5G_DEREGISTERED:         "deregistered",
+	MM5G_REGISTERED_INITIATED: "registering",
+	MM5G_REGISTERED:           "registered",
+	MM5G_SERVICE_REQ_INIT:     "reconnecting",
+	MM5G_DEREGISTERED_INIT:    "deregistering",
+	MM5G_IDLE:                 "idle",
+}
+
+// ReportStatus hands the UE's status to its scenario, which answers the control request.
+func (ue *UEContext) ReportStatus(request *procedures.ControlRequest) {
+	status := procedures.UeStatus{
+		State:             stateNames[ue.StateMM],
+		Connected:         ue.gnbTx != nil,
+		PduSessions:       []int{},
+		GnbInboundChannel: ue.gnbInboundChannel,
+	}
+	status.Ready = ue.StateMM == MM5G_REGISTERED && status.Connected && !ue.Handover
+	for id := uint8(1); id <= 15; id++ {
+		pduSession, err := ue.GetPduSession(id)
+		// With tunnels, a session is usable once its interface exists, and only
+		// the first session of a UE gets one.
+		if err == nil && pduSession.GetStateSM() == SM5G_PDU_SESSION_ACTIVE &&
+			(ue.TunnelMode == config.TunnelDisabled || id != 1 || pduSession.GetTunInterface() != nil) {
+			status.PduSessions = append(status.PduSessions, int(id))
+		}
+	}
+	ue.scenarioChan <- scenario.ScenarioMessage{Control: request, Status: status}
 }
 
 func (ue *UEContext) SetGnbInboundChannel(gnbInboundChannel chan context.UEMessage) {
