@@ -110,11 +110,17 @@ def cohort(args):
         result['preflight_user_plane']=probe.gtpu_proof(state/'preflight-n3.pcap',nonce)
         result['preflight_qfis']=preflight_qfis(state/'preflight-n3.pcap',nonce)
         counter_source=OwnedCounters(process.pid) if args.backend=='ebpf' else None
+        programs=None
+        if args.program_runtime and args.backend=='ebpf':
+            from profiling import OwnedPrograms
+            programs=OwnedPrograms(process.pid)
+            record(state/'program-identities.json',programs.snapshot())
         if counter_source:
             record(state/'kernel-map.json',counter_source.snapshot())
         processes['packetrusher']=process.pid
-        cases=[(direction,'tcp',None) for direction in ('uplink','downlink')]
-        cases += [(direction,'udp',rate) for rate in args.rates for direction in ('uplink','downlink')]
+        cases=[(direction,'tcp',None) for direction in args.directions]
+        if not args.tcp_only:
+            cases += [(direction,'udp',rate) for rate in args.rates for direction in args.directions]
         random.Random(args.seed+args.repetition).shuffle(cases)
         for index,(direction,transport,rate) in enumerate(cases):
             if process.poll() is not None: raise RuntimeError('PacketRusher exited during benchmark')
@@ -124,7 +130,7 @@ def cohort(args):
             for warmup,seconds in ((True,1),(False,args.seconds)):
                 row={'direction':direction,'transport':transport,'offered_bps':rate,'warmup':warmup}
                 try:
-                    row.update(measure(command(direction,transport,seconds,rate),state/(name+('-warmup' if warmup else '')),processes,seconds,counter_source))
+                    row.update(measure(command(direction,transport,seconds,rate),state/(name+('-warmup' if warmup else '')),processes,seconds,counter_source,args.profile,programs))
                 except Cancelled:
                     raise
                 except Exception as error:
@@ -196,11 +202,16 @@ def run(args):
         'module_version':Path('/sys/module/gtp5g/version').read_text().strip(),
         'logging_level':4,'routing':'source policy, no VRF','captures_during_timing':False,
         'pilot':args.pilot,'setup_complete':False,'ue_and_session_ambr':'10 Gbps',
+        'profile':args.profile,'program_runtime':args.program_runtime,
+        'bpf_stats_enabled':Path('/proc/sys/kernel/bpf_stats_enabled').read_text().strip(),
+        'bpf_jit_kallsyms':Path('/proc/sys/net/core/bpf_jit_kallsyms').read_text().strip(),
+        'perf_version':subprocess.check_output(['perf','--version'],text=True).strip() if args.profile=='cpu-clock' else None,
+        'backends':args.backends,'directions':args.directions,'tcp_only':args.tcp_only,
         'urr_period_seconds':3600,'urr_threshold_bytes':1_000_000_000_000,
         'iperf_binary_sha256':hashlib.sha256(Path('/usr/bin/iperf3').read_bytes()).hexdigest(),
         'module_sha256':hashlib.sha256(Path(args.module).read_bytes()).hexdigest(),
         'source_hashes':{str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in
-          [Path(__file__),Path(__file__).with_name('measure.py'),Path(__file__).with_name('counters.py'),*[Path(args.fixture)/name for name in ('prepare.py','native.py','core.py','probe.py','startup.py')]]},
+          [Path(__file__),Path(__file__).with_name('measure.py'),Path(__file__).with_name('counters.py'),Path(__file__).with_name('profiling.py'),*[Path(args.fixture)/name for name in ('prepare.py','native.py','core.py','probe.py','startup.py')]]},
         'cpu_topology':json.loads(subprocess.check_output(['lscpu','--json'],text=True))})
     processes,files=[],[]
     workers=set()
@@ -247,7 +258,7 @@ def run(args):
         schedule=[]
         rng=random.Random(args.seed)
         for repetition in range(args.repetitions):
-            order=['userspace','ebpf','gtp5g'];rng.shuffle(order)
+            order=list(args.backends);rng.shuffle(order)
             schedule.extend((repetition,backend) for backend in order)
         record(state/'schedule.json',schedule)
         for index,(repetition,backend) in enumerate(schedule):
@@ -256,7 +267,10 @@ def run(args):
             log=(folder/'driver.log').open('wb');files.append(log)
             command_ = net+[sys.executable,str(Path(__file__).resolve()),'--fixture',args.fixture,'--packetrusher',str(binary),
                '--state',str(folder),'--cohort','--backend',backend,'--repetition',str(repetition),
-               '--seconds',str(args.seconds),'--seed',str(args.seed),'--processes',json.dumps(nf),'--rates',*map(str,args.rates)]
+               '--seconds',str(args.seconds),'--seed',str(args.seed),'--processes',json.dumps(nf),
+               '--profile',args.profile,'--directions',*args.directions,'--rates',*map(str,args.rates)]
+            if args.tcp_only:command_.append('--tcp-only')
+            if args.program_runtime:command_.append('--program-runtime')
             worker=native.launch_owned(command_,stdout=log,stderr=subprocess.STDOUT);processes.append(worker)
             workers.add(worker.pid)
             status=worker.wait(timeout=(len(args.rates)*2+2)*(args.seconds+20)+90)
@@ -286,6 +300,11 @@ if __name__=='__main__':
     parser.add_argument('--pilot',action='store_true',help='explicit setup pilot; permits fewer than3 repetitions, not a final comparison')
     parser.add_argument('--cohort',action='store_true');parser.add_argument('--backend',choices=['userspace','ebpf','gtp5g'])
     parser.add_argument('--repetition',type=int,default=0);parser.add_argument('--processes',default='{}')
+    parser.add_argument('--backends',nargs='+',choices=['userspace','ebpf','gtp5g'],default=['userspace','ebpf','gtp5g'])
+    parser.add_argument('--directions',nargs='+',choices=['uplink','downlink'],default=['uplink','downlink'])
+    parser.add_argument('--tcp-only',action='store_true')
+    parser.add_argument('--profile',choices=['none','cpu-clock'],default='none',help='instrumented sender samples; not comparable to unprofiled throughput')
+    parser.add_argument('--program-runtime',action='store_true',help='read exact owned BPF runtime statistics; guest must enable them explicitly')
     args=parser.parse_args()
     if not 1<=args.repetitions<=10 or (not args.pilot and args.repetitions<3):parser.error('final comparison requires3–10 repetitions; --pilot permits1–2')
     if not 1<=args.seconds<=60 or not args.rates or any(rate<=0 for rate in args.rates):parser.error('positive rates and1–60seconds required')

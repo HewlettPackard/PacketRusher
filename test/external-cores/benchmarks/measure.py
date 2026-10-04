@@ -103,8 +103,11 @@ def result_metrics(value, transport):
     return {'receiver_bps':fields.pop('bits_per_second'),'sender_bps':sent['bits_per_second'],**fields}
 
 
-def measure(args, output, processes, seconds, counter_source=None):
+def measure(args, output, processes, seconds, counter_source=None, profile='none', programs=None):
     output = Path(output)
+    program_before=programs.snapshot() if programs else None
+    if program_before:
+        output.with_suffix('.program-before.json').write_text(json.dumps(program_before,indent=2)+'\n')
     kernel_before=counter_source.snapshot() if counter_source else None
     if kernel_before:
         output.with_suffix('.kernel-before.json').write_text(json.dumps(kernel_before,indent=2)+'\n')
@@ -113,7 +116,11 @@ def measure(args, output, processes, seconds, counter_source=None):
     start = time.monotonic()
     error = None
     with output.with_suffix('.json').open('wb') as stdout, output.with_suffix('.stderr').open('wb') as stderr:
-        process = subprocess.Popen(args,stdout=stdout,stderr=stderr,start_new_session=True)
+        executed=args
+        if profile=='cpu-clock':
+            from profiling import perf_command
+            executed=perf_command(args,output)
+        process = subprocess.Popen(executed,stdout=stdout,stderr=stderr,start_new_session=True)
         try:
             code = process.wait(timeout=seconds+12)
         except BaseException as error:
@@ -142,7 +149,8 @@ def measure(args, output, processes, seconds, counter_source=None):
             raise
     after = snapshot(processes)
     row = {'command':args,'exit_code':code,'wall_seconds':time.monotonic()-start,
-           'cpu':cpu_delta(before,after),'success':False}
+           'cpu':cpu_delta(before,after),'success':False,'profile':profile,
+           'executed_command':executed}
     try:
         if code: raise AssertionError(f'iperf exit={code}')
         value=json.loads(output.with_suffix('.json').read_text())
@@ -153,6 +161,14 @@ def measure(args, output, processes, seconds, counter_source=None):
             output.with_suffix('.kernel-after.json').write_text(json.dumps(kernel_after,indent=2)+'\n')
             from counters import delta
             row['kernel_counters']=delta(kernel_before,kernel_after)
+        if programs:
+            from profiling import runtime_delta
+            program_after=programs.snapshot()
+            output.with_suffix('.program-after.json').write_text(json.dumps(program_after,indent=2)+'\n')
+            row['program_runtime']=runtime_delta(program_before,program_after)
+        if profile=='cpu-clock':
+            from profiling import retain_report
+            retain_report(output)
         row['success']=True
     except Exception as exc: row['error']=str(exc)
     output.with_suffix('.cpu-before.json').write_text(json.dumps(before,indent=2)+'\n')
