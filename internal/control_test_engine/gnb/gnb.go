@@ -6,6 +6,8 @@
 package gnb
 
 import (
+	stdcontext "context"
+	"fmt"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/gtp"
@@ -22,10 +24,28 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
+// InitGnb starts a gNB once NG Setup has completed with every configured AMF. If that
+// fails after its retries, or ctx is cancelled first, it terminates the gNB and returns
+// the error.
+func InitGnb(ctx stdcontext.Context, conf config.Config, wg *sync.WaitGroup) (*context.GNBContext, error) {
 
 	// instance new gnb.
 	gnb := &context.GNBContext{}
+
+	// new gnb context.
+	gnb.NewRanGnbContext(
+		conf.GNodeB.PlmnList.GnbId,
+		conf.GNodeB.PlmnList.Mcc,
+		conf.GNodeB.PlmnList.Mnc,
+		conf.GNodeB.PlmnList.Tac,
+		conf.GNodeB.SliceSupportList.Sst,
+		conf.GNodeB.SliceSupportList.Sd,
+		conf.GNodeB.ControlIF.AddrPort,
+		conf.GNodeB.DataIF.AddrPort,
+	)
+	if err := gnb.ConfigureIdentity(conf.GNodeB.PlmnList.GnbIDLength, conf.GNodeB.PlmnList.CellID); err != nil {
+		return nil, fmt.Errorf("invalid gNB identity: %w", err)
+	}
 
 	const maxRetries = 5
 	const ngSetupTimeout = 2 * time.Second
@@ -38,8 +58,9 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 	currentN3IP := conf.GNodeB.DataIF
 	for _, amfConfig := range conf.AMFs {
 		connected := false
+		var err error
 
-		for retry := 0; retry < maxRetries && !connected; retry++ {
+		for retry := 0; retry < maxRetries && !connected && ctx.Err() == nil; retry++ {
 			if retry > 0 {
 				// Increment both N2 and N3 IP addressese for retry
 				currentN2IP = currentN2IP.WithNextAddr()
@@ -50,29 +71,14 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 			}
 
 			// Initialize/re-initialize gnb context with current IP
-			gnb.NewRanGnbContext(
-				conf.GNodeB.PlmnList.GnbId,
-				conf.GNodeB.PlmnList.Mcc,
-				conf.GNodeB.PlmnList.Mnc,
-				conf.GNodeB.PlmnList.Tac,
-				conf.GNodeB.SliceSupportList.Sst,
-				conf.GNodeB.SliceSupportList.Sd,
-				currentN2IP.AddrPort,
-				currentN3IP.AddrPort,
-			)
-			if err := gnb.ConfigureIdentity(conf.GNodeB.PlmnList.GnbIDLength, conf.GNodeB.PlmnList.CellID); err != nil {
-				log.Fatalf("[GNB] Invalid identity: %v", err)
-			}
+			gnb.SetGnbIpPort(currentN2IP.AddrPort, currentN3IP.AddrPort)
 
 			// new AMF context.
 			amf := gnb.NewGnBAmf(amfConfig.AddrPort)
 
 			// start communication with AMF(SCTP).
-			if err := ngap.InitConn(amf, gnb); err != nil {
+			if err = ngap.InitConn(amf, gnb); err != nil {
 				log.Warn("[GNB] Failed to connect to AMF (attempt ", retry+1, "/", maxRetries, "): ", err)
-				if retry == maxRetries-1 {
-					log.Fatal("[GNB] Max retries reached, failed to connect to AMF")
-				}
 				continue
 			}
 
@@ -91,7 +97,11 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 		waitLoop:
 			for !setupSuccess {
 				select {
+				case <-ctx.Done():
+					checkInterval.Stop()
+					break waitLoop
 				case <-timeoutChan:
+					err = fmt.Errorf("NG Setup did not complete within %s", ngSetupTimeout)
 					log.Warn("[GNB] NG Setup timeout after ", ngSetupTimeout, " (attempt ", retry+1, "/", maxRetries, "), AMF state: ", amf.GetState())
 					// Abandon this AMF context, then close its association, so its
 					// listener does not re-establish it if a late NG Setup Response
@@ -119,7 +129,12 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 		}
 
 		if !connected {
-			log.Fatal("[GNB] Failed to establish connection after ", maxRetries, " retries")
+			gnb.Terminate()
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, fmt.Errorf("gNB %s failed to establish connection with AMF %s after %d retries: %w",
+				conf.GNodeB.PlmnList.GnbId, amfConfig.AddrPort, maxRetries, err)
 		}
 	}
 
@@ -128,7 +143,8 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 	if conf.Ue.TunnelMode == config.TunnelShared {
 		dev, err := gtp.NewDevice(gnb.GetN3GnbIp(), conf.Ue.TunnelMTU)
 		if err != nil {
-			log.Fatal("[GNB][GTP] Unable to create the shared GTP-U device: ", err)
+			gnb.Terminate()
+			return nil, fmt.Errorf("unable to create the shared GTP-U device: %w", err)
 		}
 		gnb.SetGtpDevice(dev)
 	}
@@ -147,7 +163,7 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 		wg.Done()
 	}()
 
-	return gnb
+	return gnb, nil
 }
 
 func InitGnbForLoadSeconds(conf config.Config, wg *sync.WaitGroup,

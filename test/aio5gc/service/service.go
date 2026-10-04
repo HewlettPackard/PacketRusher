@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package service
 
@@ -45,8 +46,15 @@ func Listen(ServerIpPort netip.AddrPort) (*Listener, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen: %w", err)
 	}
+	// Port 0 binds any free port: keep the one that was bound.
+	addr.Port = ln.Addr().(*sctp.SCTPAddr).Port
 	log.Info("[5GC] Listen on ", ln.Addr())
 	return &Listener{ln: ln, addr: addr}, nil
+}
+
+// Addr is the address the listener is bound to.
+func (l *Listener) Addr() netip.AddrPort {
+	return netip.MustParseAddrPort(l.addr.String())
 }
 
 // Close stops accepting associations. Closing an SCTP listener does not wake an accept

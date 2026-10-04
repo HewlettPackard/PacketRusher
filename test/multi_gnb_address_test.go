@@ -53,7 +53,8 @@ func TestGnbsKeepDistinctAddressesAfterNGSetupRetry(t *testing.T) {
 			t.Cleanup(func() { require.NoError(t, core.Close()) })
 
 			var wg sync.WaitGroup
-			gnbs := tools.CreateGnbs(2, conf, &wg) // GenerateDefaultConf starts at gNB 000008
+			gnbs, err := tools.CreateGnbs(t.Context(), 2, conf, &wg) // GenerateDefaultConf starts at gNB 000008
+			require.NoError(t, err)
 			require.Len(t, gnbs, 2)
 			n2Owner, n3Owner := map[string]string{}, map[netip.Addr]string{}
 			for id, g := range gnbs {

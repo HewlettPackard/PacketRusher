@@ -69,7 +69,8 @@ func startControlTest(t *testing.T, n2, n3, amf string) (string, *context.Aio5gc
 	require.NoError(t, fiveGC.GetAMFContext().Provision(models.Snssai{Sst: int32(conf.Ue.Snssai.Sst), Sd: conf.Ue.Snssai.Sd}, securityContext))
 
 	wg := sync.WaitGroup{}
-	gnbs := tools.CreateGnbs(2, conf, &wg)
+	gnbs, err := tools.CreateGnbs(t.Context(), 2, conf, &wg)
+	require.NoError(t, err)
 	t.Cleanup(func() {
 		for _, gnb := range gnbs {
 			gnb.Terminate()

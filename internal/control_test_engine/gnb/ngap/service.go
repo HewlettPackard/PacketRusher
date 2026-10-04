@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package ngap
 
@@ -92,7 +93,10 @@ func dialAmf(amf *context.GNBAmf, gnb *context.GNBContext) error {
 			"sctp",
 			loc,
 			rem,
-			sctp.InitMsg{NumOstreams: 2, MaxInstreams: 2})
+			// One INIT retransmission, given 1 s: a dial to an AMF that does not answer
+			// fails after ~4 s (the first INIT waits the kernel's 3 s initial RTO),
+			// instead of the minutes the kernel retries for by default.
+			sctp.InitMsg{NumOstreams: 2, MaxInstreams: 2, MaxAttempts: 1, MaxInitTimeout: 1000})
 		dialChan <- dialResult{conn: conn, err: err}
 	}()
 

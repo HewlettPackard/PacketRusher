@@ -1,7 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
- * © Copyright 2023-2024 Valentin D'Emmanuele
+ * © Copyright 2023-2026 Valentin D'Emmanuele
  */
 package ngap
 
@@ -575,7 +575,7 @@ func HandlerNgSetupResponse(amf *context.GNBAmf, gnb *context.GNBContext, messag
 	}
 
 	if err {
-		log.Fatal("[GNB][AMF] AMF is inactive")
+		log.Error("[GNB][AMF] AMF is inactive")
 		amf.SetStateInactive()
 	} else {
 		amf.SetStateActive()
@@ -749,7 +749,9 @@ func HandlerAmfConfigurationUpdate(amf *context.GNBAmf, gnb *context.GNBContext,
 
 			// start communication with AMF(SCTP).
 			if err := InitConn(newAmf, gnb); err != nil {
-				log.Fatal("Error in", err)
+				log.Error("[GNB][AMF] Failed to connect to AMF ", ipv4Port, ": ", err)
+				gnb.RemoveGnbAmf(newAmf)
+				continue
 			} else {
 				log.Info("[GNB] SCTP/NGAP service is running")
 				// wg.Add(1)

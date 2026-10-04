@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2026 Forsway Scandinavia AB
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package test
 
@@ -56,7 +57,9 @@ func TestGnbDoesNotReestablishRemovedAmf(t *testing.T) {
 
 	wg := sync.WaitGroup{}
 	var gnb *gnbContext.GNBContext
-	for _, g := range tools.CreateGnbs(1, conf, &wg) {
+	gnbs, err := tools.CreateGnbs(t.Context(), 1, conf, &wg)
+	require.NoError(t, err)
+	for _, g := range gnbs {
 		gnb = g
 	}
 	var amf *gnbContext.GNBAmf
@@ -149,7 +152,9 @@ func startWithStoppableAmf(t *testing.T, n2, n3 string, amfAddr netip.AddrPort) 
 
 	wg := sync.WaitGroup{}
 	var gnb *gnbContext.GNBContext
-	for _, g := range tools.CreateGnbs(1, conf, &wg) {
+	gnbs, err := tools.CreateGnbs(t.Context(), 1, conf, &wg)
+	require.NoError(t, err)
+	for _, g := range gnbs {
 		gnb = g
 	}
 	var amf *gnbContext.GNBAmf
@@ -195,7 +200,8 @@ func testReassociation(t *testing.T, n2, n3, amfAddr string, dropFirstSetup bool
 	time.Sleep(1 * time.Second)
 
 	wg := sync.WaitGroup{}
-	gnbs := tools.CreateGnbs(1, conf, &wg)
+	gnbs, err := tools.CreateGnbs(t.Context(), 1, conf, &wg)
+	require.NoError(t, err)
 	t.Cleanup(func() {
 		for _, gnb := range gnbs {
 			gnb.Terminate()

@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package context
 
@@ -8,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"my5G-RANTester/config"
+	"net/netip"
 	"strconv"
 	"sync"
 
@@ -24,6 +26,7 @@ type Aio5gc struct {
 	nasHooks    map[nas.MsgType]func(nas.Message, *UEContext, *GNBContext, *Aio5gc) (bool, error)
 	ngapHook    []func(ngapType.Message, *GNBContext, *Aio5gc) (bool, error)
 	conf        config.Config
+	addr        netip.AddrPort
 	lifecycleMu sync.Mutex
 	closing     bool
 	closed      chan struct{}
@@ -37,6 +40,16 @@ func (a *Aio5gc) GetAMFContext() *AMFContext {
 
 func (a *Aio5gc) GetSessionContext() *SessionContext {
 	return &a.session
+}
+
+// Addr is the address the mock AMF listens on. A test that configures port 0 learns
+// here which port it got.
+func (a *Aio5gc) Addr() netip.AddrPort {
+	return a.addr
+}
+
+func (a *Aio5gc) SetAddr(addr netip.AddrPort) {
+	a.addr = addr
 }
 
 func (a *Aio5gc) Init(conf config.Config, id string, name string, ueCallbacks map[fsm.StateType]fsm.Callback, pduCallbacks map[fsm.StateType]fsm.Callback) error {

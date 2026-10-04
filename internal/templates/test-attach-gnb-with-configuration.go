@@ -1,16 +1,20 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package templates
 
 import (
+	"context"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
+	"os"
+	"os/signal"
 	"sync"
 )
 
-func TestAttachGnbWithConfiguration() {
+func TestAttachGnbWithConfiguration() error {
 
 	wg := sync.WaitGroup{}
 
@@ -23,9 +27,16 @@ func TestAttachGnbWithConfiguration() {
 	// cfg.GNodeB.SliceSupportList.St = "10"
 	// cfg.GNodeB.SliceSupportList.Sst = "010239"
 
-	go gnb.InitGnb(cfg, &wg)
+	// Ctrl-C interrupts a gNB that is still starting.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 
 	wg.Add(1)
 
+	if _, err := gnb.InitGnb(ctx, cfg, &wg); err != nil {
+		return err
+	}
+
 	wg.Wait()
+	return nil
 }

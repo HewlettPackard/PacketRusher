@@ -1,16 +1,19 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package templates
 
 import (
+	"context"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue"
 	"my5G-RANTester/internal/script"
 	"os"
+	"os/signal"
 	"sync"
 	"time"
 
@@ -18,14 +21,21 @@ import (
 	"github.com/tetratelabs/wazero"
 )
 
-func TestWithCustomScenario(scenarioPath string) {
+func TestWithCustomScenario(scenarioPath string) error {
 	wg := sync.WaitGroup{}
 
 	cfg := config.GetConfig()
 
 	wg.Add(1)
 
-	gnb := gnb.InitGnb(cfg, &wg)
+	// Ctrl-C interrupts a gNB that is still starting.
+	startCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	gnb, err := gnb.InitGnb(startCtx, cfg, &wg)
+	if err != nil {
+		return err
+	}
 
 	time.Sleep(1 * time.Second)
 
@@ -37,7 +47,7 @@ func TestWithCustomScenario(scenarioPath string) {
 
 	ctx, runtime := script.NewCustomScenario(scenarioPath)
 
-	_, err := runtime.NewHostModuleBuilder("env").
+	_, err = runtime.NewHostModuleBuilder("env").
 		NewFunctionBuilder().
 		WithFunc(func(ueId uint32) {
 			ueChan <- procedures.UeTesterMessage{Type: procedures.Registration}
@@ -94,4 +104,5 @@ func TestWithCustomScenario(scenarioPath string) {
 	log.Info(results)
 
 	wg.Wait()
+	return nil
 }

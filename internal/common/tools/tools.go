@@ -6,6 +6,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb"
@@ -25,7 +26,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gnbCxt.GNBContext {
+// CreateGnbs starts count gNBs. If one of them fails to start, those already created
+// are terminated and the error is returned.
+func CreateGnbs(ctx context.Context, count int, cfg config.Config, wg *sync.WaitGroup) (map[string]*gnbCxt.GNBContext, error) {
 	gnbs := make(map[string]*gnbCxt.GNBContext)
 	// Each gNB have their own IP address on both N2 and N3
 	// TODO: Limitation for now, these IPs must be sequential, eg:
@@ -34,11 +37,17 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 	// ...
 	basePLMN := cfg.GNodeB.PlmnList
 	if _, err := basePLMN.GNBIDAt(count - 1); err != nil {
-		log.Fatalf("[GNB] Invalid identifier range: %v", err)
+		return nil, fmt.Errorf("gNB identifier range: %w", err)
 	}
 	cfg.GNodeB.PlmnList.GnbId, _ = basePLMN.GNBIDAt(0)
 	for i := 1; i <= count; i++ {
-		created := gnb.InitGnb(cfg, wg)
+		created, err := gnb.InitGnb(ctx, cfg, wg)
+		if err != nil {
+			for _, started := range gnbs {
+				started.Terminate()
+			}
+			return nil, err
+		}
 		gnbs[cfg.GNodeB.PlmnList.GnbId] = created
 		wg.Add(1)
 
@@ -52,7 +61,7 @@ func CreateGnbs(count int, cfg config.Config, wg *sync.WaitGroup) map[string]*gn
 		cfg.GNodeB.ControlIF.AddrPort = netip.AddrPortFrom(created.GetGnbIpPort().Addr().Next(), cfg.GNodeB.ControlIF.Port())
 		cfg.GNodeB.DataIF.AddrPort = netip.AddrPortFrom(created.GetN3GnbIp().Next(), cfg.GNodeB.DataIF.Port())
 	}
-	return gnbs
+	return gnbs, nil
 }
 
 func IncrementIP(origIP, cidr string) (string, error) {

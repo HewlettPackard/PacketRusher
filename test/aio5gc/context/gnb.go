@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package context
 
@@ -22,12 +23,10 @@ type GNBContext struct {
 	suportedTAList   []types.Tai
 	defautlPagingDRX ngapType.PagingDRX
 	conn             *sctp.SCTPConn
+	// connMu guards conn: a gNB that re-establishes from the same address gets its
+	// record back, and the accept loop replaces conn while others read it.
+	connMu sync.RWMutex
 }
-
-// connMu guards every GNBContext's conn: a gNB that re-establishes from the same address
-// gets its record back, and the accept loop replaces conn while others read it. It is a
-// package variable, like gnbMutex, because GNBContext is copied by value.
-var connMu sync.RWMutex
 
 func (gnb *GNBContext) SetGlobalRanNodeID(globalRanNodeID models.GlobalRanNodeId) {
 	gnb.globalRanNodeID = globalRanNodeID
@@ -62,14 +61,14 @@ func (gnb *GNBContext) GetDefautlPagingDRX() ngapType.PagingDRX {
 }
 
 func (gnb *GNBContext) SetSCTPConn(conn *sctp.SCTPConn) {
-	connMu.Lock()
-	defer connMu.Unlock()
+	gnb.connMu.Lock()
+	defer gnb.connMu.Unlock()
 	gnb.conn = conn
 }
 
 func (gnb *GNBContext) GetSCTPConn() *sctp.SCTPConn {
-	connMu.RLock()
-	defer connMu.RUnlock()
+	gnb.connMu.RLock()
+	defer gnb.connMu.RUnlock()
 	return gnb.conn
 }
 

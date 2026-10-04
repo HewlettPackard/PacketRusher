@@ -424,6 +424,12 @@ func (gnb *GNBContext) GetGnbIpPort() netip.AddrPort {
 	return gnb.controlInfo.gnbIpPort
 }
 
+// SetGnbIpPort sets the N2 and N3 addresses; InitGnb moves to the next ones on each retry.
+func (gnb *GNBContext) SetGnbIpPort(n2, n3 netip.AddrPort) {
+	gnb.controlInfo.gnbIpPort = n2
+	gnb.dataInfo.gnbIpPort = n3
+}
+
 func (gnb *GNBContext) AddPagedUE(tmsi *ngapType.FiveGSTMSI) {
 	gnb.pagedUELock.Lock()
 	defer gnb.pagedUELock.Unlock()
