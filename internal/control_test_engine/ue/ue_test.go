@@ -22,7 +22,7 @@ func startUELoop(t *testing.T, ue *context.UEContext) (chan procedures.UeTesterM
 	manager := make(chan procedures.UeTesterMessage)
 	done := make(chan struct{})
 	go func() {
-		runUE(ue, manager)
+		handleUE(ue, manager)
 		close(done)
 	}()
 	t.Cleanup(func() {
@@ -140,51 +140,5 @@ func TestHandleUERunsHandedOverWork(t *testing.T) {
 	case <-stopped:
 	case <-time.After(2 * time.Second):
 		t.Fatal("the UE's goroutine should stop when the scenario closes its channel")
-	}
-}
-
-// Production loop dispatch must consume typed retries as well as generic work.
-func TestHandleUERunsSessionRetry(t *testing.T) {
-	capability := &ie.UESecCapability{Length: 2, EA05G: true, IA05G: true}
-	ue := &context.UEContext{}
-	ue.NewRanUeContext("0000000001", capability, "", "", "", "", "", "001", "01", sidf.HomeNetworkPublicKey{},
-		"0000", "internet", 1, "", config.TunnelDisabled, make(chan scenario.ScenarioMessage, 16), nil, 1)
-	uplink := make(chan gnbContext.UEMessage, 1)
-	ue.SetGnbRx(uplink)
-	session, err := ue.CreatePDUSession()
-	if err != nil {
-		t.Fatal(err)
-	}
-	session.SetStateSM_PDU_SESSION_PENDING()
-	if !ue.SchedulePduSessionRetry(session) {
-		t.Fatal("pending session should schedule a retry")
-	}
-
-	mgr := make(chan procedures.UeTesterMessage)
-	stopped := make(chan struct{})
-	go func() { handleUE(ue, mgr); close(stopped) }()
-	t.Cleanup(func() {
-		close(mgr)
-		select {
-		case <-stopped:
-			ue.Terminate()
-		case <-time.After(2 * time.Second):
-			t.Error("the UE's goroutine should stop")
-		}
-	})
-
-	select {
-	case message := <-uplink:
-		if !message.IsNas || len(message.Nas) == 0 {
-			t.Fatal("the UE loop should encode and send the retried NAS request")
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("the UE loop did not execute the scheduled retry")
-	}
-	ue.Lock()
-	retries := session.T3580Retries
-	ue.Unlock()
-	if retries != 1 {
-		t.Fatalf("executed retry count = %d, want 1", retries)
 	}
 }

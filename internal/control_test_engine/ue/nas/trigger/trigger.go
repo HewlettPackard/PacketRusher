@@ -61,25 +61,17 @@ func InitPduSessionRequest(ue *context.UEContext) {
 }
 
 func InitPduSessionRequestInner(ue *context.UEContext, pduSession *context.UEPDUSession) {
-	if err := ue.StartPduSessionRequest(pduSession, func() ([]byte, error) {
-		return mm_5gs.Request_UlNasTransport(pduSession, ue)
-	}); err != nil {
+
+	ulNasTransport, err := mm_5gs.Request_UlNasTransport(pduSession, ue)
+	if err != nil {
 		log.Fatal("[UE][NAS] Error sending ul nas transport and pdu session establishment request: ", err)
 	}
-}
 
-func RetryPduSessionRequest(ue *context.UEContext, pduSession *context.UEPDUSession) {
-	if !ue.SchedulePduSessionRetry(pduSession) {
-		log.Debug("[UE][NAS] Skipping PDU session retry: session ended, retry already pending or retry limit reached")
-	}
-}
+	// change the state of ue(SM).
+	pduSession.SetStateSM_PDU_SESSION_PENDING()
 
-func InitPduSessionRetry(ue *context.UEContext, retry context.PduSessionRetry) {
-	if err := ue.StartPduSessionRetry(retry, func() ([]byte, error) {
-		return mm_5gs.Request_UlNasTransport(retry.Session(), ue)
-	}); err != nil {
-		log.Fatal("[UE][NAS] Error retrying PDU session establishment: ", err)
-	}
+	// sending to GNB
+	sender.SendToGnb(ue, ulNasTransport)
 }
 
 func InitPduSessionRelease(ue *context.UEContext, pduSession *context.UEPDUSession) {

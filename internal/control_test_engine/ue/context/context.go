@@ -81,9 +81,7 @@ type UEContext struct {
 	deferred chan func()
 	done     chan struct{}
 
-	lock              sync.Mutex
-	terminated        bool
-	pduSessionRetries chan PduSessionRetry
+	lock sync.Mutex
 
 	// registrationStart is when the pending registration attempt began, for the results.
 	registrationStart time.Time
@@ -95,17 +93,13 @@ type Amf struct {
 }
 
 type UEPDUSession struct {
-	owner           *UEContext
-	retryTimer      *time.Timer
-	retryGeneration uint64
-	retryCancel     chan struct{}
-	Id              uint8
-	GnbPduSession   *context.GnbPDUSession
-	ueIP            string
-	ueIPv6          netip.Addr
-	Tunnel          Tunnel
-	Wait            chan bool
-	T3580Retries    int
+	Id            uint8
+	GnbPduSession *context.GnbPDUSession
+	ueIP          string
+	ueIPv6        netip.Addr
+	Tunnel        Tunnel
+	Wait          chan bool
+	T3580Retries  int
 
 	// establishmentStart is when the pending establishment attempt began, for the results.
 	establishmentStart time.Time
@@ -197,11 +191,6 @@ func (ue *UEContext) NewRanUeContext(msin string,
 }
 
 func (ue *UEContext) CreatePDUSession() (*UEPDUSession, error) {
-	ue.Lock()
-	defer ue.Unlock()
-	if ue.terminated {
-		return nil, errors.New("cannot create a PDU Session after UE termination")
-	}
 	pduSessionIndex := -1
 	for i, pduSession := range ue.PduSession[:15] {
 		if pduSession == nil {
@@ -214,7 +203,7 @@ func (ue *UEContext) CreatePDUSession() (*UEPDUSession, error) {
 		return nil, errors.New("unable to create an additional PDU Session, we already created the max number of PDU Session")
 	}
 
-	pduSession := &UEPDUSession{owner: ue}
+	pduSession := &UEPDUSession{}
 	pduSession.Id = uint8(pduSessionIndex + 1)
 	pduSession.Wait = make(chan bool)
 
@@ -364,8 +353,6 @@ func (ue *UEContext) Unlock() {
 }
 
 func (ue *UEContext) GetPduSession(pduSessionid uint8) (*UEPDUSession, error) {
-	ue.Lock()
-	defer ue.Unlock()
 	if pduSessionid < 1 || pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil {
 		return nil, fmt.Errorf("unable to find UE PDU session ID %d", pduSessionid)
 	}
@@ -373,8 +360,6 @@ func (ue *UEContext) GetPduSession(pduSessionid uint8) (*UEPDUSession, error) {
 }
 
 func (ue *UEContext) GetPduSessions() [16]*context.GnbPDUSession {
-	ue.Lock()
-	defer ue.Unlock()
 	var pduSessions [16]*context.GnbPDUSession
 
 	for i, pduSession := range ue.PduSession {
@@ -387,13 +372,10 @@ func (ue *UEContext) GetPduSessions() [16]*context.GnbPDUSession {
 }
 
 func (ue *UEContext) DeletePduSession(pduSessionid uint8) error {
-	ue.Lock()
-	defer ue.Unlock()
 	if pduSessionid < 1 || pduSessionid > 15 || ue.PduSession[pduSessionid-1] == nil {
 		return fmt.Errorf("unable to find UE PDU session ID %d", pduSessionid)
 	}
 	pduSession := ue.PduSession[pduSessionid-1]
-	pduSession.cancelRetryLocked()
 	// On a device shared with other UEs, give back what this session holds there now:
 	// once the slot is cleared, Terminate no longer sees the session, and a new one
 	// with the same address could not add it again.
@@ -439,51 +421,20 @@ func (pduSession *UEPDUSession) GetPduSesssionId() uint8 {
 }
 
 func (pdu *UEPDUSession) SetStateSM_PDU_SESSION_INACTIVE() {
-	if pdu.owner != nil {
-		pdu.owner.Lock()
-		defer pdu.owner.Unlock()
-		if !pdu.owner.hasSessionLocked(pdu) {
-			return
-		}
-	}
-	pdu.cancelRetryLocked()
 	pdu.StateSM = SM5G_PDU_SESSION_INACTIVE
 }
 
 func (pdu *UEPDUSession) SetStateSM_PDU_SESSION_ACTIVE() {
-	if pdu.owner != nil {
-		pdu.owner.Lock()
-		defer pdu.owner.Unlock()
-		if !pdu.owner.hasSessionLocked(pdu) {
-			return
-		}
-	}
-	pdu.cancelRetryLocked()
 	analytics.Finish(analytics.SessionEstablishment, &pdu.establishmentStart, true)
 	pdu.StateSM = SM5G_PDU_SESSION_ACTIVE
 }
 
 func (pdu *UEPDUSession) SetStateSM_PDU_SESSION_PENDING() {
-	if pdu.owner != nil {
-		pdu.owner.Lock()
-		defer pdu.owner.Unlock()
-		if !pdu.owner.hasSessionLocked(pdu) {
-			return
-		}
-	}
-	pdu.setPendingLocked()
-}
-
-func (pdu *UEPDUSession) setPendingLocked() {
 	analytics.Start(analytics.SessionEstablishment, &pdu.establishmentStart)
 	pdu.StateSM = SM5G_PDU_SESSION_ACTIVE_PENDING
 }
 
 func (pduSession *UEPDUSession) GetStateSM() int {
-	if pduSession.owner != nil {
-		pduSession.owner.Lock()
-		defer pduSession.owner.Unlock()
-	}
 	return pduSession.StateSM
 }
 
@@ -735,17 +686,6 @@ func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
 }
 
 func (ue *UEContext) Terminate() {
-	ue.Lock()
-	defer ue.Unlock()
-	if ue.terminated {
-		return
-	}
-	ue.terminated = true
-	for _, session := range ue.PduSession {
-		if session != nil {
-			session.cancelRetryLocked()
-		}
-	}
 	ue.SetStateMM_NULL()
 
 	// clean all context of tun interface
@@ -755,6 +695,7 @@ func (ue *UEContext) Terminate() {
 		}
 	}
 
+	ue.Lock()
 	if ue.gnbRx != nil {
 		close(ue.gnbRx)
 		ue.gnbRx = nil
@@ -762,10 +703,9 @@ func (ue *UEContext) Terminate() {
 	if ue.drx != nil {
 		ue.drx.Stop()
 	}
+	ue.Unlock()
 	close(ue.scenarioChan)
-	if ue.done != nil {
-		close(ue.done)
-	}
+	close(ue.done)
 
 	log.Info("[UE] UE Terminated")
 }
@@ -823,13 +763,6 @@ func (ue *UEContext) RegistrationFailed() {
 }
 
 func (pdu *UEPDUSession) EstablishmentFailed() {
-	if pdu.owner != nil {
-		pdu.owner.Lock()
-		defer pdu.owner.Unlock()
-		if !pdu.owner.hasSessionLocked(pdu) {
-			return
-		}
-	}
 	analytics.Finish(analytics.SessionEstablishment, &pdu.establishmentStart, false)
 }
 
