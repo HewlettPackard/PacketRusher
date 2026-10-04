@@ -52,6 +52,7 @@ The first release since the `20250225` snapshot.
 - Races during fast registration and deregistration cycles (#187).
 - Duplicate gNB addresses after NG Setup retries (#138).
 - Uplink GTP-U packets leave from the N3 address of their gNB.
+- An N2 handover no longer loses the packets that the UPF still sends to the source gNB.
 - The bundled gtp5g on recent kernels: a handover could leave a CPU dropping every packet until reboot (Linux
   7.0), and the device was no longer lockless (Linux 6.12 and later), which capped its throughput.
 - The SQN is formatted on 6 bytes, and a PDU Session Resource Setup Request without NAS-PDU is accepted.

@@ -94,6 +94,12 @@ func dialFromUE(t *testing.T, session *context.UEPDUSession, local net.IP, remot
 // must leave the gNB with the uplink TEID and come back on the downlink one.
 func echo(t *testing.T, app net.Conn, upf *net.UDPConn, gnb string, uplink, downlink uint32) {
 	t.Helper()
+	echoThrough(t, app, upf, gnb, uplink, gnb, downlink)
+}
+
+// echoThrough is echo with the answer of the UPF sent to the gNB at the address answerTo.
+func echoThrough(t *testing.T, app net.Conn, upf *net.UDPConn, gnb string, uplink uint32, answerTo string, downlink uint32) {
+	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	require.NoError(t, app.SetDeadline(deadline))
 	require.NoError(t, upf.SetDeadline(deadline))
@@ -120,7 +126,7 @@ func echo(t *testing.T, app net.Conn, upf *net.UDPConn, gnb string, uplink, down
 	copy(inner[ports:], packet[ports+2:ports+4])
 	copy(inner[ports+2:], packet[ports:ports+2])
 	// TS 29.281 §4.4.2 lets the UPF send from another port than 2152.
-	other, err := net.DialUDP("udp4", &net.UDPAddr{IP: upf.LocalAddr().(*net.UDPAddr).IP}, net.UDPAddrFromAddrPort(peer))
+	other, err := net.DialUDP("udp4", &net.UDPAddr{IP: upf.LocalAddr().(*net.UDPAddr).IP}, &net.UDPAddr{IP: net.ParseIP(answerTo), Port: int(peer.Port())})
 	require.NoError(t, err)
 	defer other.Close()
 	_, err = other.Write(userspace.Encode(reply, downlink, 9))
@@ -229,10 +235,13 @@ func TestTunnelEndToEnd(t *testing.T) {
 				SetupGtpInterface(ue, message(t, "127.88.4.3", "127.88.4.8", 90, nil))
 				echo(t, app, upf, "127.88.4.1", 60, 61)
 
-				// Handover: the application keeps its socket.
+				// Handover: the application keeps its socket, and still receives what the
+				// UPF sends to the source gNB until the core has switched the path.
 				SetupGtpInterface(ue, message(t, "127.88.4.2", "127.88.4.8", 70, target))
 				require.NotEqual(t, first, tunnel.link.Attrs().Name)
 				echo(t, app, upf, "127.88.4.2", 70, 71)
+				echoThrough(t, app, upf, "127.88.4.2", 70, "127.88.4.1", 61)
+				tunnel.leave(tunnel.left)
 				if !shared {
 					_, err = netlink.LinkByName(first)
 					require.Error(t, err, "the source gNB's device must be gone")

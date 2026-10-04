@@ -130,7 +130,8 @@ One TCP stream is bound by one core: a single UE with four streams reaches the f
 measures your own setup: see its header.
 
 Each UE has its address on a `val<MSIN>` device and its packets go through `gtp0<MSIN>` or `gtp1<MSIN>`, which
-alternate at each handover: the UE keeps its address and its connections. To send traffic, bind to the address of
+alternate at each handover: the UE keeps its address and its connections, and the device of the previous gNB
+keeps receiving for a second, for what the UPF still sends there. To send traffic, bind to the address of
 the UE (`ping -I <UE IP>`, `iperf3 -B <UE IP>`), not to its `val` device; with `--tunnel-vrf`, run the command in
 the VRF of the UE instead: `sudo ip vrf exec vrf<MSIN> <command>`. With gtp5g and without `--dedicatedGnb`, the
 UEs of a gNB share one device, `valgnb<N3 address in hexadecimal>`, which also holds their addresses.

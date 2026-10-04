@@ -15,11 +15,17 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"net"
 	"net/netip"
+	"os"
 	"syscall"
+	"time"
 
 	"github.com/vishvananda/netlink"
 	log "my5G-RANTester/internal/log"
 )
+
+// pathSwitchDelay is how long the core may take to switch the downlink path to the new
+// gNB once the UE has moved there.
+const pathSwitchDelay = time.Second
 
 // datapath is the backend-specific part of a tunnel: what carries the UE's packets
 // between a device of this host and the UPF. Everything else is common, see tunnel.
@@ -39,6 +45,7 @@ type datapath interface {
 type tunnel struct {
 	gnbIP    netip.Addr       // N3 address of the UE's gNB
 	datapath datapath         // to the UPF, from that address
+	left     *datapath        // of the gNB the UE just left, still receiving
 	link     netlink.Link     // its device: gtp0<MSIN> or gtp1<MSIN>, or the one the gNB shares
 	endpoint netlink.Link     // val<MSIN>, holding the UE's addresses; the shared device does itself
 	vrf      *netlink.Vrf     // vrf<MSIN>, in VRF mode
@@ -81,9 +88,8 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 }
 
 // setupTunnel starts a datapath on the gNB's N3 address and moves the UE's routes to
-// it, then closes the datapath of the previous gNB, if any: the first setup and a
-// handover are the same, but for what the first creates for the whole session. A
-// handover that fails leaves the UE its previous datapath.
+// it: the first setup and a handover are the same, but for what the first creates for
+// the whole session. A handover that fails leaves the UE its previous datapath.
 func setupTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, msg gnbContext.UEMessage) (err error) {
 	pdu, ueIP, msin := pduSession.GnbPduSession, pduSession.GetIp(), ue.GetMsin()
 	t, _ := pduSession.Tunnel.(*tunnel)
@@ -105,6 +111,7 @@ func setupTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, msg gn
 		}
 	}
 
+	t.leave(t.left)
 	// A handover alternates between two names: both devices exist until the routes moved.
 	name := "gtp0" + msin
 	if t.link != nil && t.link.Attrs().Name == name {
@@ -141,6 +148,14 @@ func setupTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, msg gn
 		if err := gtp.SetTunnelMTU(msg.GnbIp, ue.TunnelMTU, pduSession.GetIPv6().IsValid(), link, t.endpoint); err != nil {
 			return fmt.Errorf("tunnel MTU: %w", err)
 		}
+		// With the UE's address and a loose reverse-path filter, the device still
+		// receives once the routes have moved to the next gNB's.
+		_ = os.WriteFile("/proc/sys/net/ipv4/conf/"+name+"/rp_filter", []byte("2"), 0)
+		if v4 := net.ParseIP(ueIP).To4(); v4 != nil {
+			if err := netlink.AddrReplace(link, &netlink.Addr{IPNet: &net.IPNet{IP: v4, Mask: net.CIDRMask(32, 32)}}); err != nil {
+				return fmt.Errorf("UE address on %s: %w", name, err)
+			}
+		}
 	}
 	if t.vrf != nil {
 		if err := netlink.LinkSetMaster(link, t.vrf); err != nil {
@@ -154,12 +169,15 @@ func setupTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, msg gn
 		}
 	}
 
-	previous := t.datapath
+	// After an N2 handover the UPF sends to the previous gNB until the core has switched
+	// the path: its datapath keeps receiving for that long.
+	if previous := t.datapath; previous != nil {
+		left := &previous
+		t.left = left
+		ue.RunOnUEAfter(pathSwitchDelay, func() { t.leave(left) })
+	}
 	t.gnbIP, t.datapath, t.link = msg.GnbIp, d, link
 	pduSession.Tunnel = t
-	if previous != nil {
-		previous.close()
-	}
 
 	if ueIP != "" {
 		logTunnel(ue, name, ueIP)
@@ -268,6 +286,14 @@ func defaultRoute(source net.IP, table int) *netlink.Route {
 	return route
 }
 
+// leave closes the datapath of the gNB the UE left, unless that was done already.
+func (t *tunnel) leave(left *datapath) {
+	if left != nil && t.left == left {
+		(*left).close()
+		t.left = nil
+	}
+}
+
 // Release removes the tunnel from the host: its routes and rules first, so that
 // nothing is routed to a datapath that is going away.
 func (t *tunnel) Release() {
@@ -282,6 +308,7 @@ func (t *tunnel) Release() {
 			log.Warn("[UE][GTP] Unable to remove ", rule, ": ", err)
 		}
 	}
+	t.leave(t.left)
 	if t.datapath != nil {
 		t.datapath.close()
 	}
