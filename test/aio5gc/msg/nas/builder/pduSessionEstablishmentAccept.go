@@ -1,4 +1,7 @@
-/** SPDX-License-Identifier: Apache-2.0 */
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package builder
 
 import (
@@ -36,13 +39,12 @@ func buildSessionEstablishmentAccept(ue *context.UEContext, sm *context.SmContex
 	if err := ambr.Set(rule.AuthSessAmbr.Uplink, rule.AuthSessAmbr.Downlink); err != nil {
 		return nil, err
 	}
-	address, _ := sm.PDUAddressToNAS()
 	snssai := sm.GetSnnsai()
 	msg := &nas.PDUSessEstAccept{
 		PDUSessId: uint8(sm.GetPduSessionId()), PTI: sm.GetPti(),
 		SelectedPDUSessType: &ie.PDUSessType{Value: sm.GetPduSessionType()}, SelectedSSCMode: &ie.SSCMode{Mode: 1},
 		AuthoQosRules: &ie.QosRules{Rules: []ie.QosRule{{RuleId: 1, IsDefaultDQR: true, OpCode: ie.OpCode_CreateNewQosRule, Precedence: 255, QFI: sm.GetDefQosQFI(), PktFilterList: []ie.PacketFilter{{Id: 1, Dir: 3, Contents: ie.PacketFilterContents{MatchAll: true, RemoteAddr: "any", LocalAddr: "any"}}}}}},
-		SessAMBR:      ambr, PDUAddr: &ie.PDUAddr{IPv4: address[:4]}, SNSSAI: &ie.SNSSAI{SST: uint8(snssai.Sst), SD: snssai.Sd},
+		SessAMBR:      ambr, PDUAddr: sm.PDUAddress(), SNSSAI: &ie.SNSSAI{SST: uint8(snssai.Sst), SD: snssai.Sd},
 		AuthoQosFlowDescs: &ie.QosFlowDescs{Descs: []ie.QosFlowDesc{{QFI: sm.GetDefQosQFI(), OpCode: ie.QFD_Create, EBit: 1, FiveQI: uint8(rule.AuthDefQos.Var5qi)}}},
 		DNN:               &ie.DNN{Value: sm.GetDataNetwork().Dnn},
 	}

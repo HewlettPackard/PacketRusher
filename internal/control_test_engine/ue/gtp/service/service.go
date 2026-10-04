@@ -274,7 +274,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		dedicated = &dedicatedTunnel{name: nameInf}
 		switch ue.TunnelBackend { // The only place that depends on the tunnel backend.
 		case config.TunnelBackendUserspace:
-			dedicated.datapath, err = startUserspace(nameInf, gnbPduSession, ueIp, ueGnbIp)
+			dedicated.datapath, err = startUserspace(nameInf, gnbPduSession, pduSession, ueGnbIp)
 		default:
 			dedicated.datapath, err = startGtp5g(nameInf, gnbPduSession, ueIp, ueGnbIp)
 		}
@@ -296,6 +296,9 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 // addRules installs the FARs, PDRs and QER of one UE on a gtp5g device: the gNB's
 // shared one, or the UE's own when sharedFor is nil.
 func addRules(sharedFor sharedGTPDevice, nameInf string, ids gtp.RuleIDs, gnbPduSession *gnbContext.GnbPDUSession, ueIp string, ueGnbIp netip.Addr) error {
+	if ueIp == "" {
+		return errNoIPv6
+	}
 	upfIp := gnbPduSession.GetUpfIp()
 	qfi := gnbPduSession.GetQosId()
 
@@ -427,9 +430,12 @@ func plumbTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, nameIn
 	if dedicated != nil && pduSession.GetUEInterface() != nil {
 		sameAddressLink = true
 	}
-	if err := addTunnelAddress(addressLink, addrTun); err != nil && !(sameAddressLink && errors.Is(err, syscall.EEXIST)) {
-		failed("[UE][DATA] Error adding UE address: ", err)
-		return
+	// An IPv6-only session gets its address, and its rule, from setupIPv6.
+	if ueIp != "" {
+		if err := addTunnelAddress(addressLink, addrTun); err != nil && !(sameAddressLink && errors.Is(err, syscall.EEXIST)) {
+			failed("[UE][DATA] Error adding UE address: ", err)
+			return
+		}
 	}
 	if held != nil {
 		held.keepAddress = sameAddressLink
@@ -457,11 +463,8 @@ func plumbTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, nameIn
 	switch ue.TunnelMode {
 	case config.TunnelTun, config.TunnelShared:
 		rule := previousRule
-		if rule == nil {
-			rule = netlink.NewRule()
-			rule.Priority = 100
-			rule.Table = int(tableId)
-			rule.Src = addrTun.IPNet
+		if rule == nil && ueIp != "" {
+			rule = sourceRule(addrTun.IPNet, int(tableId))
 			if err := addTunnelRule(rule); err != nil {
 				failed("[UE][DATA] Unable to create routing policy: ", err)
 				return
@@ -502,15 +505,7 @@ func plumbTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, nameIn
 	}
 
 	// Insert default route from the UE to the Data Network.
-	route := &netlink.Route{
-		Dst:       &net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)}, // default
-		LinkIndex: link.Attrs().Index,                                      // dev val<MSIN>
-		Scope:     netlink.SCOPE_LINK,                                      // scope link
-		Protocol:  4,                                                       // proto static
-		Priority:  1,                                                       // metric 1
-		Src:       net.ParseIP(ueIp).To4(),
-		Table:     int(tableId), // table <ECI>
-	}
+	route := defaultRoute(link, net.ParseIP(ueIp).To4(), int(tableId))
 	if dedicated != nil {
 		err = replaceRouteWithEndpointMTU(route, addressLink, link.Attrs().MTU, !dedicated.endpointOwned)
 	} else {
@@ -519,6 +514,9 @@ func plumbTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, nameIn
 	if err != nil {
 		failed("[GNB][GTP] Unable to create Kernel Route ", err)
 		return
+	}
+	if pduSession.GetIPv6().IsValid() {
+		setupIPv6(ue, pduSession, dedicated, link, int(tableId))
 	}
 	// Commit after the target route is installed. The previous cleanup runs in
 	// retirement mode, so it cannot remove the policy rule or the replaced route.
@@ -559,6 +557,15 @@ func plumbTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, nameIn
 	}
 	setupDone = true
 
+	if ueIp != "" {
+		logTunnel(ue, nameInf, ueIp)
+	}
+	return
+}
+
+// logTunnel tells how to do traffic from the UE's address ueIp, IPv4 or IPv6.
+func logTunnel(ue *context.UEContext, nameInf, ueIp string) {
+	vrfInf := fmt.Sprintf("vrf%s", ue.GetMsin())
 	log.Info(fmt.Sprintf("[UE][GTP] Interface %s has successfully been configured for UE %s", nameInf, ueIp))
 	switch ue.TunnelMode {
 	case config.TunnelTun, config.TunnelShared:
@@ -568,7 +575,34 @@ func plumbTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, nameIn
 		log.Info(fmt.Sprintf("[UE][GTP] You can do traffic for this UE using VRF %s, eg:", vrfInf))
 		log.Info(fmt.Sprintf("[UE][GTP] sudo ip vrf exec %s iperf3 -c IPERF_SERVER -p PORT -t 9000", vrfInf))
 	}
-	return
+}
+
+// sourceRule sends the packets the UE's applications send from source to its
+// routing table.
+func sourceRule(source *net.IPNet, table int) *netlink.Rule {
+	rule := netlink.NewRule()
+	rule.Priority = 100
+	rule.Table = table
+	rule.Src = source
+	return rule
+}
+
+// defaultRoute leads from the UE's routing table to the Data Network through link,
+// for the IP version of source: IPv6 also when the UE has no IPv6 address yet.
+func defaultRoute(link netlink.Link, source net.IP, table int) *netlink.Route {
+	route := &netlink.Route{
+		Dst:       &net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)}, // default
+		LinkIndex: link.Attrs().Index,                                      // dev val<MSIN>
+		Scope:     netlink.SCOPE_LINK,                                      // scope link
+		Protocol:  4,                                                       // proto static
+		Priority:  1,                                                       // metric 1
+		Src:       source,
+		Table:     table, // table <ECI>
+	}
+	if source.To4() == nil {
+		route.Dst = &net.IPNet{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)}
+	}
+	return route
 }
 
 // A retained UE endpoint still belongs to the source until the new route commits.

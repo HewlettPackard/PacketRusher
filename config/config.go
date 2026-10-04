@@ -45,22 +45,49 @@ const (
 	TunnelBackendUserspace TunnelBackend = "userspace"
 )
 
+// PDUSessionType is the IP version of the UEs' PDU sessions, from ue.pdusessiontype.
+type PDUSessionType string
+
+const (
+	PDUSessionIPv4   PDUSessionType = "IPv4"
+	PDUSessionIPv6   PDUSessionType = "IPv6"
+	PDUSessionIPv4v6 PDUSessionType = "IPv4v6"
+)
+
+// pduSessionTypes gives the NAS value of each type (TS 24.501 §9.11.4.11); IPv4 is
+// the default.
+var pduSessionTypes = map[PDUSessionType]uint8{
+	"": nasType.PDUSessType_IPv4, PDUSessionIPv4: nasType.PDUSessType_IPv4,
+	PDUSessionIPv6: nasType.PDUSessType_IPv6, PDUSessionIPv4v6: nasType.PDUSessType_IPv4v6,
+}
+
+func (t PDUSessionType) NAS() uint8 {
+	return pduSessionTypes[t]
+}
+
 // tunnelBackends lists the backends by order of preference for "auto".
 var tunnelBackends = []struct {
 	name      TunnelBackend
+	ipv6      bool
 	available func() bool
 }{
-	{TunnelBackendGtp5g, func() bool { _, err := os.Stat("/sys/module/gtp5g"); return err == nil }},
-	{TunnelBackendUserspace, func() bool { return true }},
+	{TunnelBackendGtp5g, false, func() bool { _, err := os.Stat("/sys/module/gtp5g"); return err == nil }},
+	{TunnelBackendUserspace, true, func() bool { return true }},
 }
 
 // ResolveTunnelBackend returns the backend that --tunnel-backend designates: with
 // "auto" the first available one, otherwise the named one, which must be available.
-func ResolveTunnelBackend(name string) (TunnelBackend, error) {
+// A backend without IPv6 is not available to IPv6 PDU sessions; it carries the IPv4
+// half of IPv4v6 ones.
+func ResolveTunnelBackend(name string, sessionType PDUSessionType) (TunnelBackend, error) {
 	for _, backend := range tunnelBackends {
-		if (name == "auto" || name == string(backend.name)) && backend.available() {
+		ipv6 := backend.ipv6 || sessionType != PDUSessionIPv6
+		if (name == "auto" || name == string(backend.name)) && ipv6 && backend.available() {
 			log.Info("[TESTER] Using the ", backend.name, " tunnel backend")
 			return backend.name, nil
+		}
+		if name == string(backend.name) && !ipv6 {
+			return "", fmt.Errorf("the %s tunnel backend cannot carry IPv6 PDU sessions: use the userspace one", name)
 		}
 		if name == string(backend.name) {
 			return "", fmt.Errorf("the %s tunnel backend was requested but is not available on this host", name)
@@ -113,6 +140,9 @@ type Ue struct {
 	Ciphering              Ciphering  `yaml:"ciphering"`
 	TunnelMode             TunnelMode `yaml:"-"`
 	TunnelMTU              int        `yaml:"tunnelmtu"`
+
+	// PDUSessionType is IPv4 (the default), IPv6 or IPv4v6.
+	PDUSessionType PDUSessionType `yaml:"pdusessiontype"`
 
 	// TunnelBackend is resolved from --tunnel-backend when a tunnel is requested.
 	TunnelBackend TunnelBackend `yaml:"-"`
@@ -179,6 +209,10 @@ func readConfig(configPath string) Config {
 	err = decoder.Decode(&cfg)
 	if err != nil {
 		log.Fatal("Could not unmarshal yaml config at \"", configPath, "\". ", err.Error())
+	}
+
+	if _, known := pduSessionTypes[cfg.Ue.PDUSessionType]; !known {
+		log.Fatal("ue.pdusessiontype must be IPv4, IPv6 or IPv4v6")
 	}
 
 	if cfg.Ue.TunnelMTU < 0 {

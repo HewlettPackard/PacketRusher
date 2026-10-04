@@ -52,6 +52,9 @@ ue:
   # Ignored ith default Null-Scheme configuration
   homeNetworkPublicKeyID: 1
   
+  # IP version of the PDU sessions: IPv4 (default), IPv6 or IPv4v6.
+  pdusessiontype: IPv4
+
   # Inner IPv4 tunnel MTU. 0 uses the N3 interface MTU minus 44 bytes.
   # Set a smaller value, e.g. 1400, to match the UPF or a lower path MTU.
   tunnelmtu: 0

@@ -38,6 +38,9 @@ type datapath interface {
 	refresh(pdu *gnbContext.GnbPDUSession, ueIP string, ip netip.Addr) error
 	// close removes the device and returns once its N3 address can be bound again.
 	close()
+	// solicit asks the UPF for the UE's IPv6 prefix, from its link-local address,
+	// and returns its global address.
+	solicit(linkLocal netip.Addr) (netip.Addr, error)
 }
 
 type dedicatedTunnel struct {
@@ -48,6 +51,7 @@ type dedicatedTunnel struct {
 	vrf           *netlink.Vrf
 	vrfOwned      bool
 	rule          *netlink.Rule
+	rule6         *netlink.Rule
 	route         *netlink.Route
 	table         *routingTableReservation
 }
@@ -112,6 +116,10 @@ func (t *gtp5gLink) close() {
 	}
 }
 
+func (t *gtp5gLink) solicit(netip.Addr) (netip.Addr, error) {
+	return netip.Addr{}, errNoIPv6
+}
+
 func (t *dedicatedTunnel) release(retiring bool) {
 	routingRemoved := true
 	if !retiring {
@@ -120,6 +128,9 @@ func (t *dedicatedTunnel) release(retiring bool) {
 		}
 		if t.rule != nil {
 			routingRemoved = routingObjectRemoved(ruleDel(t.rule)) && routingRemoved
+		}
+		if t.rule6 != nil {
+			routingRemoved = routingObjectRemoved(ruleDel(t.rule6)) && routingRemoved
 		}
 	}
 	t.datapath.close()
