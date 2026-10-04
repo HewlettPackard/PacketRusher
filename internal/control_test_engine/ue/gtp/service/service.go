@@ -273,6 +273,8 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		}
 		dedicated = &dedicatedTunnel{name: nameInf}
 		switch ue.TunnelBackend { // The only place that depends on the tunnel backend.
+		case config.TunnelBackendEBPF:
+			dedicated.datapath, err = startEBPF(nameInf, gnbPduSession, pduSession, ueGnbIp)
 		case config.TunnelBackendUserspace:
 			dedicated.datapath, err = startUserspace(nameInf, gnbPduSession, pduSession, ueGnbIp)
 		default:

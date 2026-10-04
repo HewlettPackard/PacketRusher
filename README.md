@@ -189,9 +189,11 @@ sessions), `idle`, `reconnect`, `xn-handover` and `ng-handover` (to the `--targe
 
 The global `--tunnel-backend` flag selects what carries the user plane of the UEs:
 
+- `ebpf`: eBPF programs short-cutting the userspace backend in the kernel. It needs Linux 6.6, the rights to
+  load eBPF programs (root); no kernel module is needed.
 - `gtp5g`: the [gtp5g](https://github.com/free5gc/gtp5g) kernel module.
 - `userspace`: PacketRusher itself, with one TUN device per UE; no kernel module is needed.
-- `auto` (default): `gtp5g` when its module is loaded, `userspace` otherwise.
+- `auto` (default): the first of these that is available on the host.
 
 Only `auto` falls back: a backend requested by name that is not available is an error.
 
@@ -204,7 +206,7 @@ The userspace backend is slower than gtp5g and keeps one TUN device, hence one f
 
 `ue.pdusessiontype` in the configuration file is the type of the PDU sessions the UEs request: `IPv4` (default), `IPv6` or `IPv4v6`.
 
-The IPv6 user plane needs the `userspace` tunnel backend: `auto` selects it for `IPv6`, whereas on `gtp5g` an `IPv4v6` session carries IPv4 only.
+The IPv6 user plane needs the `ebpf` or `userspace` tunnel backend: `auto` selects one of them for `IPv6`, whereas on `gtp5g` an `IPv4v6` session carries IPv4 only.
 The SMF only allocates an interface identifier: the UE sends a Router Solicitation through its tunnel, and takes its address in the /64 prefix of the Router Advertisement with which the UPF, or the SMF through it, answers. PacketRusher then logs the address to bind to.
 
 ```bash
