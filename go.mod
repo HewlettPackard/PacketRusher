@@ -21,6 +21,7 @@ require (
 	github.com/tetratelabs/wazero v1.9.0
 	github.com/urfave/cli/v2 v2.27.6
 	github.com/vishvananda/netlink v1.3.0
+	github.com/wmnsk/go-gtp v0.8.12
 )
 
 require (
