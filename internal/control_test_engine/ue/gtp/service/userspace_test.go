@@ -86,6 +86,9 @@ func ipChecksum(b []byte) uint16 {
 		sum += uint32(binary.BigEndian.Uint16(b))
 		b = b[2:]
 	}
+	if len(b) == 1 {
+		sum += uint32(b[0]) << 8
+	}
 	for sum>>16 != 0 {
 		sum = (sum & 65535) + (sum >> 16)
 	}
@@ -114,7 +117,7 @@ func userspaceRoundTrip(t *testing.T, app net.Conn, peer *net.UDPConn, local net
 	copy(reply[ihl+2:ihl+4], ip[ihl:ihl+2])
 	reply[ihl+6], reply[ihl+7] = 0, 0
 	copy(reply[ihl+8:], "pong")
-	wire, err := userspace.Encode(downID, 9, reply)
+	wire, err := downlinkGTP(downID, 9, reply)
 	require.NoError(t, err)
 	_, err = peer.WriteToUDPAddrPort(wire, source)
 	require.NoError(t, err)

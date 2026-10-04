@@ -202,9 +202,12 @@ type ebpfFailureSession struct {
 	closed int
 }
 
-func (s *ebpfFailureSession) Close() error                { s.closed++; return s.err }
-func (s *ebpfFailureSession) Update(ebpfgtp.Config) error { return nil }
-func (s *ebpfFailureSession) ProgramFD() int              { return 1 }
+func (s *ebpfFailureSession) Close() error                  { s.closed++; return s.err }
+func (s *ebpfFailureSession) Update(ebpfgtp.Config) error   { return nil }
+func (s *ebpfFailureSession) SetIPv6(netip.Addr) error      { return s.err }
+func (s *ebpfFailureSession) SendUplink([]byte) error       { return nil }
+func (s *ebpfFailureSession) SendControl([]byte) error      { return nil }
+func (s *ebpfFailureSession) Advertisements() <-chan []byte { return nil }
 
 type ebpfFailurePort struct {
 	err    error
@@ -228,7 +231,11 @@ func TestEBPFCleanupFailureRetainsEndpointAndSourcePolicy(t *testing.T) {
 			allocator := newRoutingTableAllocator(func(*netlink.Route) error { return nil }, func(*netlink.Route) error { return nil }, func(uint32) (bool, error) { return false, nil })
 			table, _, err := allocator.reserve(pdu)
 			require.NoError(t, err)
-			tunnel := &ebpfTunnel{session: session, port: port, table: table, rule: netlink.NewRule(), route: &netlink.Route{}}
+			tunnel := &ebpfTunnel{session: session, port: port, table: table, link: &netlink.Tuntap{LinkAttrs: netlink.LinkAttrs{Index: 99}}, rule: netlink.NewRule(), route: &netlink.Route{}}
+			previousDown := disableEBPFEndpoint
+			disabled := 0
+			disableEBPFEndpoint = func(netlink.Link) error { disabled++; return nil }
+			t.Cleanup(func() { disableEBPFEndpoint = previousDown })
 			prevRule, prevRoute := ruleDel, routeDel
 			deleted := 0
 			ruleDel = func(*netlink.Rule) error { deleted++; return nil }
@@ -242,6 +249,7 @@ func TestEBPFCleanupFailureRetainsEndpointAndSourcePolicy(t *testing.T) {
 			require.True(t, retained, "keep a strong reference to the owned TUN descriptor")
 			require.Empty(t, allocator.free, "quarantined routing table must not be reused")
 			if failure == "BPF" {
+				require.Equal(t, 1, disabled, "failed canonical retirement must disable the owned endpoint")
 				require.Zero(t, port.closed)
 			} else {
 				require.Equal(t, 1, port.closed)
