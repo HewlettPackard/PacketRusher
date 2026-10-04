@@ -61,8 +61,14 @@ Downlink TCX validates local and peer N3 ownership, UDP port, lengths, DL TEID,
 QFI, direction and allocated inner destination. IPv4 options and inner
 fragments retain their normal IP representation. Sequence fields with or
 without the single PDU Session Container, including free5UPF's E+S format, are
-supported. N-PDU flags and extension chains beyond that container are rejected;
-no GTP sequence reordering is performed.
+supported. N-PDU fields and up to32 bounded extension headers use the exclusively
+owned UDP socket after canonical tuple admission. Both runtime backends use the
+same downlink parser: a present PSC must have downlink direction, allocated QFI
+and enough bytes for its flagged metadata; duplicate containers are rejected.
+RQI and spare bits are separate from direction/QFI. Unknown extension bodies are
+skipped after bounds checks, preserving the existing userspace wire behavior;
+this does not implement extension-comprehension negotiation or GTP sequence
+reordering. Field widths follow [TS38.415 5.5.2.1/5.5.3](https://www.etsi.org/deliver/etsi_ts/138400_138499/138415/18.02.00_60/ts_138415v180200p.pdf).
 
 IPv6 uses the core's allocated interface ID and a validated autonomous /64 from
 Router Advertisements. Solicitations, Router Advertisements and lease timers
@@ -75,9 +81,10 @@ fallback barrier. Handover cannot overwrite a newer callback-owned prefix.
 
 ## Bounded fallbacks and cleanup
 
-A joined, exclusively owned UDP socket answers validated Echo Requests and
+A joined, exclusively owned UDP socket answers current-peer Echo Requests,
+including bounded trailing Recovery/body IEs, and
 handles IPv6 control. It also admits outer fragments after kernel reassembly,
-and checksum-uncertain virtual/loopback packets after normal kernel UDP
+optional-header packets and checksum-uncertain virtual/loopback packets after normal kernel UDP
 checksum validation. TC cannot distinguish a legitimate RX PARTIAL checksum
 from corrupt completed bytes by examining the wire sum alone. It delegates
 that narrow case to the socket instead of bypassing checksum admission. Go
@@ -109,7 +116,7 @@ No foreign qdisc, BPF link or bpffs mount is adopted or removed.
 TC ingress drops. Attempts increment before the redirect completes and are not
 delivery counts. The registry's `counters` array has uint32 keys/uint64 values:
 0 final uplink relay attempts; 1 downlink redirect attempts; 2 owned ingress
-drops; 3 UDP checksum/reassembly delegation attempts; 4 oversized uplink
+drops; 3 downlink checksum/reassembly/optional-header delegation attempts; 4 oversized uplink
 fallback attempts. Go rejection, subsequent routing drops and delivered fallback
 packets are separate; these counters cannot prove that all traffic stayed in
 BPF. Benchmark snapshots are taken outside the measured intervals.
@@ -130,7 +137,9 @@ needed. Its checked matrix includes both backends' identical IPv4/IPv6 TCP
 270336-byte exchanges, TUN/VRF/device binding, unchanged virtual N3 offloads,
 IPv6/dual-stack lease/handover behavior, gateway-mark routing, jumbo options and
 QFI zero, real checksum corruption/reassembly, prefix/retirement failure traffic
-blocking, Echo, target refusal, release/reinstall and full resource cleanup.
+blocking, identical optional-chain/N-PDU and Recovery-Echo positives with wrong
+flow/peer/malformed-body negatives, target refusal, release/reinstall and full
+resource cleanup.
 The first stages drop SYS_ADMIN/PERFMON after namespace creation. The workflow
 runs this command and fails if required kernel/module support or a packet proof
 fails. Ordinary unprivileged tests skip explicitly gated native fixtures.

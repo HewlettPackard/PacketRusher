@@ -38,17 +38,43 @@ func Encode(teid uint32, qfi uint8, payload []byte) ([]byte, error) {
 
 // Decode validates optional fields and every extension before exposing a T-PDU.
 func Decode(b []byte) (uint32, []byte, error) {
+	return decode(b, nil)
+}
+
+// DecodeDownlink applies session policy to the same bounded optional-header
+// parser as Decode. Unknown extensions and N-PDU numbers remain supported;
+// every present PDU Session Container must describe the allocated downlink QFI.
+// Bare T-PDUs do not carry a QFI and remain valid, including control-plane RAs.
+func DecodeDownlink(b []byte, qfi uint8) (uint32, []byte, error) {
+	if qfi > 63 {
+		return 0, nil, errors.New("QFI must be 0..63")
+	}
+	return decode(b, &qfi)
+}
+
+// TPDUTEID validates the fixed header for an owner lookup. The caller must
+// still decode optional headers and apply allocation policy before delivery.
+func TPDUTEID(b []byte) (uint32, error) {
 	if len(b) < 8 || b[0]>>5 != 1 || b[0]&0x10 == 0 || b[0]&8 != 0 || b[1] != gPDU {
-		return 0, nil, errors.New("not a GTPv1-U T-PDU")
+		return 0, errors.New("not a GTPv1-U T-PDU")
 	}
 	if int(binary.BigEndian.Uint16(b[2:4])) != len(b)-8 {
-		return 0, nil, errors.New("GTP-U length differs from datagram")
+		return 0, errors.New("GTP-U length differs from datagram")
 	}
 	teid := binary.BigEndian.Uint32(b[4:8])
 	if teid == 0 {
-		return 0, nil, errors.New("zero TEID")
+		return 0, errors.New("zero TEID")
+	}
+	return teid, nil
+}
+
+func decode(b []byte, downlinkQFI *uint8) (uint32, []byte, error) {
+	teid, err := TPDUTEID(b)
+	if err != nil {
+		return 0, nil, err
 	}
 	offset := 8
+	seenContainer := false
 	if b[0]&7 != 0 {
 		if len(b) < 12 {
 			return 0, nil, errors.New("truncated GTP-U optional fields")
@@ -65,6 +91,30 @@ func Decode(b []byte) (uint32, []byte, error) {
 			size := int(b[offset]) * 4
 			if size < 4 || size > len(b)-offset {
 				return 0, nil, errors.New("invalid GTP-U extension size")
+			}
+			if downlinkQFI != nil && next == pduSessionContainer {
+				if seenContainer || b[offset+1]>>4 != 0 || b[offset+2]&63 != *downlinkQFI {
+					return 0, nil, errors.New("duplicate PDU Session Container or direction/QFI differs from downlink allocation")
+				}
+				seenContainer = true
+				// TS 38.415 5.5.2.1: optional PPI, timestamp and sequence
+				// fields must fit before padding and the next-extension octet.
+				body := 2
+				if b[offset+2]&0x80 != 0 {
+					body++
+				}
+				if b[offset+1]&8 != 0 {
+					body += 8
+				}
+				if b[offset+1]&4 != 0 {
+					body += 3
+				}
+				if b[offset+1]&2 != 0 {
+					body += 4
+				}
+				if body > size-2 {
+					return 0, nil, errors.New("truncated downlink PDU Session Container optional fields")
+				}
 			}
 			next = b[offset+size-1]
 			offset += size

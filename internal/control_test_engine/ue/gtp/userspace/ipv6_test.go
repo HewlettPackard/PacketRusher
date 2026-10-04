@@ -28,6 +28,7 @@ func TestIPv6AllocatedIIDPrefixAndRouterAdvertisementIsolation(t *testing.T) {
 	require.NoError(t, err)
 	wire, err := Encode(cfg.DownlinkTEID, 9, ra)
 	require.NoError(t, err)
+	wire[13] = 0
 	_, err = peer.WriteToUDPAddrPort(wire, address)
 	require.NoError(t, err)
 	select {
@@ -48,6 +49,7 @@ func TestIPv6AllocatedIIDPrefixAndRouterAdvertisementIsolation(t *testing.T) {
 	extended = append(extended, ra[40:]...)
 	wire, err = Encode(cfg.DownlinkTEID, 9, extended)
 	require.NoError(t, err)
+	wire[13] = 0
 	_, err = peer.WriteToUDPAddrPort(wire, address)
 	require.NoError(t, err)
 	select {
