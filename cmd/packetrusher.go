@@ -1,3 +1,7 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package main
 
 import (
@@ -27,6 +31,7 @@ func newApp() *cli.App {
 		After: afterResults,
 		Flags: []cli.Flag{
 			&cli.PathFlag{Name: "config", Usage: "Configuration file path. (Default: ./config/config.yml)"},
+			&cli.StringFlag{Name: "tunnel-backend", Value: "auto", Usage: "GTP-U tunnel backend: gtp5g, userspace, or auto (gtp5g if its kernel module is loaded, else userspace)"},
 			&cli.PathFlag{Name: "report-json", Usage: "Write procedure results to a new JSON file on shutdown"},
 			&cli.PathFlag{Name: "report-csv", Usage: "Write procedure results to a new CSV file on shutdown"},
 			&cli.StringFlag{Name: "metrics-addr", Usage: "Serve Prometheus metrics at /metrics on this address, e.g. 127.0.0.1:9090"},
@@ -43,6 +48,10 @@ func newApp() *cli.App {
 					name := "Testing an ue attached with configuration"
 					cfg := setConfig(*c)
 					tunnelEnabled := !c.Bool("disableTunnel")
+					tunnelBackend, err := resolveTunnelBackend(c, tunnelEnabled)
+					if err != nil {
+						return err
+					}
 
 					log.Info("PacketRusher version " + version)
 					log.Info("---------------------------------------")
@@ -60,7 +69,7 @@ func newApp() *cli.App {
 						pcap.CaptureTraffic(c.Path("pcap"))
 					}
 
-					templates.TestAttachUeWithConfiguration(tunnelEnabled)
+					templates.TestAttachUeWithConfiguration(tunnelEnabled, tunnelBackend)
 					return nil
 				},
 			},
@@ -112,6 +121,10 @@ func newApp() *cli.App {
 					var numUes int
 					name := "Testing registration of multiple UEs"
 					cfg := setConfig(*c)
+					tunnelBackend, err := resolveTunnelBackend(c, c.Bool("tunnel"))
+					if err != nil {
+						return err
+					}
 					if c.IsSet("number-of-ues") {
 						numUes = c.Int("number-of-ues")
 					} else {
@@ -148,7 +161,7 @@ func newApp() *cli.App {
 							tunnelMode = config.TunnelTun
 						}
 					}
-					templates.TestMultiUesInQueue(numUes, tunnelMode, c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("loopCount"), c.Int("timeBeforeReregistration"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("timeBeforeReconnecting"), c.Int("numPduSessions"))
+					templates.TestMultiUesInQueue(numUes, tunnelMode, tunnelBackend, c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("loopCount"), c.Int("timeBeforeReregistration"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("timeBeforeReconnecting"), c.Int("numPduSessions"))
 
 					return nil
 				},
@@ -271,6 +284,14 @@ func validateArguments(c *cli.Context) error {
 		}
 	}
 	return nil
+}
+
+// resolveTunnelBackend picks the tunnel backend once, and only if a tunnel is requested.
+func resolveTunnelBackend(c *cli.Context, tunnel bool) (config.TunnelBackend, error) {
+	if !tunnel {
+		return "", nil
+	}
+	return config.ResolveTunnelBackend(c.String("tunnel-backend"))
 }
 
 func main() {

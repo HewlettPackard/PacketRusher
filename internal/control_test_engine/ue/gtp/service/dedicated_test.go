@@ -1,4 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 
 package service
 
@@ -23,9 +26,9 @@ func TestDedicatedReleaseWaitsForSocketWorker(t *testing.T) {
 	deleted := make(chan struct{})
 	deleteDedicatedLink = func(string) error { close(deleted); return nil }
 	t.Cleanup(func() { deleteDedicatedLink = previous })
-	tunnel := &dedicatedTunnel{name: "gtp0123", stop: make(chan bool), done: make(chan struct{})}
+	tunnel := &gtp5gLink{name: "gtp0123", stop: make(chan bool), done: make(chan struct{})}
 	finished := make(chan struct{})
-	go func() { tunnel.release(false); close(finished) }()
+	go func() { tunnel.close(); close(finished) }()
 	<-tunnel.stop
 	select {
 	case <-deleted:
@@ -282,7 +285,7 @@ func TestSameN3UpdateRestoresRulesAfterPartialFailure(t *testing.T) {
 			modifyTunnelFAR = func(args []string) error { return apply("FAR", args) }
 			modifyTunnelPDR = func(args []string) error { return apply("PDR", args) }
 			modifyTunnelQER = func(args []string) error { return apply("QER", args) }
-			tunnel := &dedicatedTunnel{name: "gtp0123", activeRules: previous}
+			tunnel := &gtp5gLink{name: "gtp0123", activeRules: previous}
 			err := tunnel.refresh(build(20, 2), "10.1.0.1", ip)
 			require.Error(t, err)
 			require.False(t, errors.Is(err, errTunnelRollback))
@@ -293,7 +296,7 @@ func TestSameN3UpdateRestoresRulesAfterPartialFailure(t *testing.T) {
 	modifyTunnelFAR = func([]string) error { return errors.New("netlink unavailable") }
 	modifyTunnelPDR = func([]string) error { return nil }
 	modifyTunnelQER = func([]string) error { return nil }
-	tunnel := &dedicatedTunnel{name: "gtp0123", activeRules: previous}
+	tunnel := &gtp5gLink{name: "gtp0123", activeRules: previous}
 	require.ErrorIs(t, tunnel.refresh(build(20, 2), "10.1.0.1", ip), errTunnelRollback)
 	calls := 0
 	modifyTunnelFAR = func([]string) error { calls++; return nil }

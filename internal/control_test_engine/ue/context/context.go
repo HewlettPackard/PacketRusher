@@ -1,7 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
- * © Copyright 2025 Valentin D'Emmanuele
+ * © Copyright 2025-2026 Valentin D'Emmanuele
  */
 
 package context
@@ -64,10 +64,11 @@ type UEContext struct {
 	amfInfo           Amf
 
 	// TODO: Modify config so you can configure these parameters per PDUSession
-	Dnn        string
-	Snssai     models.Snssai
-	TunnelMode config.TunnelMode
-	TunnelMTU  int
+	Dnn           string
+	Snssai        models.Snssai
+	TunnelMode    config.TunnelMode
+	TunnelMTU     int
+	TunnelBackend config.TunnelBackend
 
 	// Sync primitive
 	scenarioChan chan scenario.ScenarioMessage

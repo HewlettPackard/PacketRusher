@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package ue
 
@@ -26,6 +27,7 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 	ue := &context.UEContext{Results: analytics.Current()}
 	scenarioChan := make(chan scenario.ScenarioMessage)
 	ue.TunnelMTU = conf.Ue.TunnelMTU
+	ue.TunnelBackend = conf.Ue.TunnelBackend
 
 	// new UE context
 	ue.NewRanUeContext(
