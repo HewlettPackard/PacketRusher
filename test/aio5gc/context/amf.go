@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package context
 
@@ -16,14 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
-	tmsiGenerator *idgenerator.IDGenerator = nil
-	ueMutex       sync.Mutex
-	scMutex       sync.Mutex
-	gnbMutex      sync.Mutex
-	ueIdMutex     sync.Mutex
-)
-
 type AMFContext struct {
 	amfName             string
 	id                  string
@@ -37,15 +30,16 @@ type AMFContext struct {
 	provisionedData     map[string]provisionedData
 	ueFsm               *fsm.FSM
 	pduFsm              *fsm.FSM
+	tmsiGenerator       *idgenerator.IDGenerator
+	ueMutex             sync.Mutex
+	scMutex             sync.Mutex
+	gnbMutex            sync.Mutex
+	ueIdMutex           sync.Mutex
 }
 
 type NetworkName struct {
 	Full  string
 	Short string
-}
-
-func init() {
-	tmsiGenerator = idgenerator.NewGenerator(1, math.MaxInt32)
 }
 
 func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssai []models.Nrf_NFMgmt_PlmnSnssai, servedGuami []models.Guami, relativeCapacity int64, ueFsm *fsm.FSM, pduFsm *fsm.FSM) {
@@ -64,10 +58,11 @@ func (c *AMFContext) NewAmfContext(amfName string, id string, supportedPlmnSnssa
 	}
 	c.ueFsm = ueFsm
 	c.pduFsm = pduFsm
+	c.tmsiGenerator = idgenerator.NewGenerator(1, math.MaxInt32)
 }
 
 func (c *AMFContext) TmsiAllocate() int32 {
-	tmsi, err := tmsiGenerator.Allocate()
+	tmsi, err := c.tmsiGenerator.Allocate()
 	if err != nil {
 		log.Errorf("[5GC] Allocate TMSI error: %+v", err)
 		return -1
@@ -84,8 +79,8 @@ func (c *AMFContext) GetId() string {
 }
 
 func (c *AMFContext) FindProvisionedData(msin string) (provisionedData, error) {
-	scMutex.Lock()
-	defer scMutex.Unlock()
+	c.scMutex.Lock()
+	defer c.scMutex.Unlock()
 	data, ok := c.provisionedData[msin]
 	if !ok {
 		return provisionedData{}, errors.New("[5GC] UE with msin " + msin + "not found")
@@ -94,8 +89,8 @@ func (c *AMFContext) FindProvisionedData(msin string) (provisionedData, error) {
 }
 
 func (c *AMFContext) FindUEById(id int64) (*UEContext, error) {
-	ueMutex.Lock()
-	defer ueMutex.Unlock()
+	c.ueMutex.Lock()
+	defer c.ueMutex.Unlock()
 	for ue := range c.ues {
 		if c.ues[ue].amfNgapId == id {
 			return c.ues[ue], nil
@@ -105,8 +100,8 @@ func (c *AMFContext) FindUEById(id int64) (*UEContext, error) {
 }
 
 func (c *AMFContext) FindUEByRanId(id int64) (*UEContext, error) {
-	ueMutex.Lock()
-	defer ueMutex.Unlock()
+	c.ueMutex.Lock()
+	defer c.ueMutex.Unlock()
 	for ue := range c.ues {
 		if c.ues[ue].ranNgapId == id {
 			return c.ues[ue], nil
@@ -117,8 +112,8 @@ func (c *AMFContext) FindUEByRanId(id int64) (*UEContext, error) {
 }
 
 func (c *AMFContext) FindRegisteredUEByMsin(msin string) (*UEContext, error) {
-	ueMutex.Lock()
-	defer ueMutex.Unlock()
+	c.ueMutex.Lock()
+	defer c.ueMutex.Unlock()
 	for ue := range c.ues {
 		if c.ues[ue].GetState().Is(Registered) && c.ues[ue].GetSecurityContext() != nil && c.ues[ue].GetSecurityContext().msin == msin {
 			return c.ues[ue], nil
@@ -128,17 +123,17 @@ func (c *AMFContext) FindRegisteredUEByMsin(msin string) (*UEContext, error) {
 }
 
 func (c *AMFContext) ExecuteForAllUe(function func(ue *UEContext)) {
-	ueMutex.Lock()
+	c.ueMutex.Lock()
 	ues := append([]*UEContext(nil), c.ues...)
-	ueMutex.Unlock()
+	c.ueMutex.Unlock()
 	for _, ue := range ues {
 		function(ue)
 	}
 }
 
 func (c *AMFContext) Provision(nssai models.Snssai, securityContext SecurityContext) error {
-	scMutex.Lock()
-	defer scMutex.Unlock()
+	c.scMutex.Lock()
+	defer c.scMutex.Unlock()
 	_, ok := c.provisionedData[securityContext.msin]
 	if ok {
 		return errors.New("[5GC] Cannot create new subscriber: subscriber with msin " + securityContext.msin + " already exist")
@@ -155,9 +150,9 @@ func (c *AMFContext) NewUE(ueRanNgapId int64) *UEContext {
 	newUE.state = fsm.NewState(Deregistered)
 	newUE.ueFsm = c.ueFsm
 	newUE.pduFsm = c.pduFsm
-	ueMutex.Lock()
+	c.ueMutex.Lock()
 	c.ues = append(c.ues, &newUE)
-	ueMutex.Unlock()
+	c.ueMutex.Unlock()
 	ue, _ := c.FindUEById(newUE.amfNgapId)
 	return ue
 }
@@ -187,39 +182,37 @@ func (c *AMFContext) GetRelativeCapacity() int64 {
 }
 
 func (c *AMFContext) GetGnb(Addr string) (*GNBContext, error) {
-	gnbMutex.Lock()
+	c.gnbMutex.Lock()
 	gnb, exist := c.gnbs[Addr]
-	gnbMutex.Unlock()
+	c.gnbMutex.Unlock()
 	if !exist {
 		return gnb, errors.New("GNB with address " + Addr + " not found in AMF")
 	}
 	return gnb, nil
 }
 
-func (c *AMFContext) FindGnbById(globalRanNodeID models.GlobalRanNodeId) (GNBContext, error) {
-	gnbMutex.Lock()
-	defer gnbMutex.Unlock()
+func (c *AMFContext) FindGnbById(globalRanNodeID models.GlobalRanNodeId) (*GNBContext, error) {
+	c.gnbMutex.Lock()
+	defer c.gnbMutex.Unlock()
 	for _, gnb := range c.gnbs {
 		if gnb.globalRanNodeID == globalRanNodeID {
-			connMu.RLock()
-			defer connMu.RUnlock()
-			return *gnb, nil
+			return gnb, nil
 		}
 	}
-	return GNBContext{}, errors.New("GNB with matching global RanNode ID not found in AMF")
+	return nil, errors.New("GNB with matching global RanNode ID not found in AMF")
 
 }
 
 func (c *AMFContext) AddGnb(gnbAddr string, gnb *GNBContext) error {
-	gnbMutex.Lock()
+	c.gnbMutex.Lock()
 	c.gnbs[gnbAddr] = gnb
-	gnbMutex.Unlock()
+	c.gnbMutex.Unlock()
 	return nil
 }
 
 func (c *AMFContext) getAmfUeId() int64 {
-	ueIdMutex.Lock()
-	defer ueIdMutex.Unlock()
+	c.ueIdMutex.Lock()
+	defer c.ueIdMutex.Unlock()
 	id := c.idUeGenerator
 
 	// increment UeId

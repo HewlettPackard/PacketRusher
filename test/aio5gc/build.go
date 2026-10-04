@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package aio5gc
 
@@ -101,6 +102,7 @@ func (f *FiveGCBuilder) Build() (*context.Aio5gc, error) {
 			_ = fgc.Close()
 			return nil, fmt.Errorf("start mock AMF: %w", err)
 		}
+		fgc.SetAddr(listener.Addr())
 		fgc.RegisterCloser(listener.Close)
 		go service.Serve(listener, &fgc)
 	}

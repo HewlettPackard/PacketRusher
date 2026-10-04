@@ -6,6 +6,8 @@
 package templates
 
 import (
+	"context"
+	"fmt"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/common/tools"
 	"my5G-RANTester/internal/control"
@@ -18,7 +20,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend config.TunnelBackend, dedicatedGnb bool, loop bool, loopCount int, timeBeforeReregistration int, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int, numGnbs int, controlSocket string) {
+func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend config.TunnelBackend, dedicatedGnb bool, loop bool, loopCount int, timeBeforeReregistration int, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int, numGnbs int, controlSocket string) error {
 	if tunnelMode != config.TunnelDisabled {
 		if !dedicatedGnb && tunnelMode != config.TunnelShared {
 			log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
@@ -58,7 +60,15 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend
 		log.Warn("[TESTER] We are increasing the number of gNodeB to two for handover test cases. Make you sure you fill the requirements for having two gNodeBs.")
 		numGnb++
 	}
-	gnbs := tools.CreateGnbs(numGnb, cfg, &wg)
+
+	// Ctrl-C interrupts the gNBs while they start, and stops the UEs once they run.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	gnbs, err := tools.CreateGnbs(ctx, numGnb, cfg, &wg)
+	if err != nil {
+		return err
+	}
 
 	// Wait for gNB to be connected before registering UEs
 	// TODO: We should wait for NGSetupResponse instead
@@ -69,16 +79,12 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend
 		var err error
 		controlServer, err = control.Listen(controlSocket, gnbs, numUes)
 		if err != nil {
-			log.Fatal("[TESTER] Unable to create the control socket: ", err)
+			return fmt.Errorf("unable to create the control socket: %w", err)
 		}
 		defer controlServer.Close()
 	}
 
 	simulations := make([]*tools.UESimulation, 0, numUes)
-
-	sigStop := make(chan os.Signal, 1)
-	signal.Notify(sigStop, os.Interrupt)
-	defer signal.Stop(sigStop)
 
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
@@ -107,7 +113,7 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend
 		// Before creating a new UE, we wait for timeBetweenRegistration ms
 		registrationDelay := time.NewTimer(time.Duration(timeBetweenRegistration) * time.Millisecond)
 		select {
-		case <-sigStop:
+		case <-ctx.Done():
 			registrationDelay.Stop()
 			stopSignal = false
 		case <-registrationDelay.C:
@@ -115,7 +121,7 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend
 	}
 
 	if stopSignal {
-		<-sigStop
+		<-ctx.Done()
 	}
 	stopUESimulations(simulations)
 
@@ -124,6 +130,7 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend
 	for _, gnb := range gnbs {
 		gnb.CloseGtpDevice(5*time.Second, 60*time.Second)
 	}
+	return nil
 }
 
 // Completed scenarios no longer have a command receiver. Send checks their

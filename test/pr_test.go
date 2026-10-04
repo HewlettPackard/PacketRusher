@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 
 package test
@@ -84,7 +85,8 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	// Setup gNodeB
 	gnbCount := 1
 	wg := sync.WaitGroup{}
-	gnbs := tools.CreateGnbs(gnbCount, conf, &wg)
+	gnbs, err := tools.CreateGnbs(t.Context(), gnbCount, conf, &wg)
+	require.NoError(t, err)
 	t.Cleanup(func() {
 		for _, gnb := range gnbs {
 			gnb.Terminate()
@@ -225,7 +227,8 @@ func TestUERegistrationLoop(t *testing.T) {
 	// Setup gNodeB
 	gnbCount := 1
 	wg := sync.WaitGroup{}
-	gnbs := tools.CreateGnbs(gnbCount, conf, &wg)
+	gnbs, err := tools.CreateGnbs(t.Context(), gnbCount, conf, &wg)
+	require.NoError(t, err)
 	t.Cleanup(func() {
 		for _, gnb := range gnbs {
 			gnb.Terminate()

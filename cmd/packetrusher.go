@@ -10,7 +10,9 @@ import (
 	"my5G-RANTester/internal/templates"
 	pcap "my5G-RANTester/internal/utils"
 
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -80,8 +82,7 @@ func newApp() *cli.App {
 						pcap.CaptureTraffic(c.Path("pcap"))
 					}
 
-					templates.TestAttachUeWithConfiguration(tunnelEnabled, tunnelBackend)
-					return nil
+					return templates.TestAttachUeWithConfiguration(tunnelEnabled, tunnelBackend)
 				},
 			},
 			{
@@ -101,8 +102,7 @@ func newApp() *cli.App {
 						log.Info("[TESTER][AMF] AMF IP/Port: ", amf.AddrPort)
 					}
 					log.Info("---------------------------------------")
-					templates.TestAttachGnbWithConfiguration()
-					return nil
+					return templates.TestAttachGnbWithConfiguration()
 				},
 			},
 			{
@@ -174,9 +174,7 @@ func newApp() *cli.App {
 							tunnelMode = config.TunnelTun
 						}
 					}
-					templates.TestMultiUesInQueue(numUes, tunnelMode, tunnelBackend, c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("loopCount"), c.Int("timeBeforeReregistration"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("timeBeforeReconnecting"), c.Int("numPduSessions"), c.Int("number-of-gnbs"), c.Path("control-socket"))
-
-					return nil
+					return templates.TestMultiUesInQueue(numUes, tunnelMode, tunnelBackend, c.Bool("dedicatedGnb"), c.Bool("loop"), c.Int("loopCount"), c.Int("timeBeforeReregistration"), c.Int("timeBetweenRegistration"), c.Int("timeBeforeDeregistration"), c.Int("timeBeforeNgapHandover"), c.Int("timeBeforeXnHandover"), c.Int("timeBeforeIdle"), c.Int("timeBeforeReconnecting"), c.Int("numPduSessions"), c.Int("number-of-gnbs"), c.Path("control-socket"))
 				},
 			},
 			{
@@ -229,9 +227,7 @@ func newApp() *cli.App {
 						return nil
 					}
 
-					templates.TestWithCustomScenario(scenarioPath)
-
-					return nil
+					return templates.TestWithCustomScenario(scenarioPath)
 				},
 			},
 			{
@@ -341,7 +337,8 @@ func resolveTunnelBackend(c *cli.Context, cfg config.Config, tunnel bool) (confi
 
 func main() {
 	err := newApp().Run(os.Args)
-	if err != nil {
+	// Ctrl-C while a gNB is still starting is not a failure.
+	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatal(err)
 	}
 }
