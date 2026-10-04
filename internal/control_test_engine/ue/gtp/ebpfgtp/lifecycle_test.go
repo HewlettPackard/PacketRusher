@@ -60,16 +60,17 @@ func isolatedRegistry() (*Registry, *memoryStore, Config) {
 	r := NewRegistry()
 	state := &memoryStore{values: map[string]map[any]any{}}
 	r.state = state
-	r.discover = func(Config) (int, error) { return 10, nil }
+	r.discover = func(Config) (n3Path, error) { return n3Path{IfIndex: 10}, nil }
 	r.listen = func(netip.Addr) (closer, error) { return &fakeCloser{}, nil }
 	r.attach = func(int) (closer, error) { return &fakeCloser{}, nil }
+	r.attachEndpoint = func(int) (closer, error) { return &fakeCloser{}, nil }
 	c := Config{Local: netip.MustParseAddr("10.88.0.1"), Remote: netip.MustParseAddr("10.88.0.2"), IPv4: netip.MustParseAddr("10.60.0.1"), UplinkTEID: 1001, DownlinkTEID: 2001, QFI: 9, EndpointIfIndex: 20, MTU: 1456}
 	return r, state, c
 }
 func TestProfileRejectsUnsupportedOrAmbiguousBinding(t *testing.T) {
 	_, _, c := isolatedRegistry()
 	require.NoError(t, c.Validate())
-	for _, mutate := range []func(*Config){func(c *Config) { c.Local = netip.IPv6Loopback() }, func(c *Config) { c.Remote = c.Local }, func(c *Config) { c.MTU = 1457 }, func(c *Config) { c.QFI = 64 }, func(c *Config) { c.UplinkTEID = 0 }, func(c *Config) { c.EndpointIfIndex = 0 }} {
+	for _, mutate := range []func(*Config){func(c *Config) { c.Local = netip.IPv6Loopback() }, func(c *Config) { c.Remote = c.Local }, func(c *Config) { c.MTU = 65492 }, func(c *Config) { c.QFI = 64 }, func(c *Config) { c.UplinkTEID = 0 }, func(c *Config) { c.EndpointIfIndex = 0 }} {
 		invalid := c
 		mutate(&invalid)
 		require.Error(t, invalid.Validate())
@@ -98,7 +99,7 @@ func TestAtomicHandoverFailurePreservesSourceAndReleasesStaging(t *testing.T) {
 			}
 			require.Error(t, s.Update(next))
 			require.Equal(t, c, s.cfg)
-			require.Equal(t, c.binding(), state.values["sessions"][ipv4(c.IPv4)])
+			require.Equal(t, c.binding(), state.values["sessions"][c.identity()])
 			require.Equal(t, map[downKey]bool{c.downKey(): true}, s.keys)
 			require.Len(t, r.locals, 1)
 			require.Zero(t, sourceSocket.closed)
@@ -153,7 +154,7 @@ func TestCommittedHandoverRetainsCleanupOwnershipAndRetries(t *testing.T) {
 		return nil
 	}
 	require.NoError(t, s.Update(next), "canonical replacement has committed")
-	require.Equal(t, next.binding(), state.values["sessions"][ipv4(c.IPv4)])
+	require.Equal(t, next.binding(), state.values["sessions"][c.identity()])
 	require.Equal(t, next, s.cfg)
 	require.Equal(t, 1, warnings)
 	require.Len(t, r.locals, 2)
@@ -179,7 +180,7 @@ func TestFailedDeactivationCannotRetireEndpointOrPort(t *testing.T) {
 	}
 	require.Error(t, s.Close())
 	require.False(t, s.closed)
-	require.Equal(t, c.binding(), state.values["sessions"][ipv4(c.IPv4)])
+	require.Equal(t, c.binding(), state.values["sessions"][c.identity()])
 	require.Zero(t, socket.closed)
 	require.Len(t, r.links, 1)
 	state.fail = func(op, name string, k, v any) error {
@@ -189,7 +190,7 @@ func TestFailedDeactivationCannotRetireEndpointOrPort(t *testing.T) {
 		return nil
 	}
 	require.Error(t, s.Close())
-	require.Equal(t, binding{}, state.values["sessions"][ipv4(c.IPv4)], "fallback must fail closed")
+	require.Equal(t, binding{}, state.values["sessions"][c.identity()], "fallback must fail closed")
 	require.Zero(t, socket.closed)
 	state.fail = nil
 	require.NoError(t, s.Close())
@@ -238,6 +239,7 @@ func TestFailedAcquireRetainsUnclosedAttachmentAndPortClaims(t *testing.T) {
 	socket.err = nil
 	state.fail = nil
 	r.attach = func(int) (closer, error) { return &fakeCloser{}, nil }
+	r.attachEndpoint = func(int) (closer, error) { return &fakeCloser{}, nil }
 	r.listen = func(netip.Addr) (closer, error) { return &fakeCloser{}, nil }
 	s, err := r.Open(c)
 	require.NoError(t, err)
@@ -345,14 +347,73 @@ func TestPartiallyRetiredStagingLeaseCannotCommitOnRepeatedHandover(t *testing.T
 	require.True(t, s.leases[next.Local])
 	require.False(t, r.locals[next.Local].mapped)
 	require.False(t, r.locals[next.Local].linked)
-	require.Equal(t, c.binding(), state.values["sessions"][ipv4(c.IPv4)])
+	require.Equal(t, c.binding(), state.values["sessions"][c.identity()])
 	state.fail = nil
 	require.ErrorContains(t, s.Update(next), "incomplete cleanup")
 	require.Equal(t, c, s.cfg)
-	require.Equal(t, c.binding(), state.values["sessions"][ipv4(c.IPv4)], "a retired target must never become canonical")
+	require.Equal(t, c.binding(), state.values["sessions"][c.identity()], "a retired target must never become canonical")
 	require.Len(t, r.links, 1, "source ingress remains attached")
 	targetSocket.err = nil
 	require.NoError(t, s.Close())
 	require.Empty(t, r.locals)
 	require.Empty(t, r.links)
+}
+
+type fakeChecksumStage struct {
+	fakeCloser
+	tx, peer int
+}
+
+func (s *fakeChecksumStage) TransmitIndex() int { return s.tx }
+func (s *fakeChecksumStage) PeerIndex() int     { return s.peer }
+
+func TestChecksumStagePublicationAndRetryableRetirement(t *testing.T) {
+	r, state, c := isolatedRegistry()
+	stage := &fakeChecksumStage{tx: 91, peer: 92}
+	r.attachEndpoint = func(int) (closer, error) { return stage, nil }
+	s, err := r.Open(c)
+	require.NoError(t, err)
+	require.Equal(t, c.identity(), state.values["stages"][uint32(92)])
+	require.Equal(t, uint32(91), state.values["sessions"][c.identity()].(binding).StageTX)
+	next := c
+	next.Local = netip.MustParseAddr("10.88.0.3")
+	next.UplinkTEID++
+	next.DownlinkTEID++
+	require.NoError(t, s.Update(next))
+	require.Equal(t, uint32(91), state.values["sessions"][c.identity()].(binding).StageTX)
+	failure := errors.New("stage map retirement failed")
+	state.fail = func(op, name string, k, v any) error {
+		if op == "del" && name == "stages" {
+			return failure
+		}
+		return nil
+	}
+	require.ErrorIs(t, s.Close(), failure)
+	require.Zero(t, stage.closed)
+	require.NotEmpty(t, r.sessions)
+	require.NotEmpty(t, s.leases)
+	state.fail = nil
+	require.NoError(t, s.Close())
+	require.Equal(t, 1, stage.closed)
+	require.Empty(t, state.values["stages"])
+	require.Empty(t, r.locals)
+}
+func TestChecksumStagePublishFailureRetiresOnlyOwnedStaging(t *testing.T) {
+	r, state, c := isolatedRegistry()
+	stage := &fakeChecksumStage{tx: 91, peer: 92}
+	r.attachEndpoint = func(int) (closer, error) { return stage, nil }
+	failure := errors.New("cannot publish stage owner")
+	state.fail = func(op, name string, k, v any) error {
+		if op == "put" && name == "stages" {
+			return failure
+		}
+		return nil
+	}
+	s, err := r.Open(c)
+	require.Nil(t, s)
+	require.ErrorIs(t, err, failure)
+	require.Equal(t, 1, stage.closed)
+	require.Empty(t, r.sessions)
+	require.Empty(t, r.locals)
+	require.Empty(t, r.orphans)
 }

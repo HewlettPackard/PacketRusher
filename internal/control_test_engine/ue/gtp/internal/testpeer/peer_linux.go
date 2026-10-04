@@ -40,8 +40,10 @@ func Run(t *testing.T) {
 	require.NoError(t, netlink.LinkSetUp(peer))
 	// Veth TX partial checksums are not wire checksums. Make the peer produce the
 	// same completed UDP checksums that a physical N3 NIC receives.
-	out, err := exec.Command("ethtool", "-K", "pr-core", "tx", "off", "rx", "off", "gro", "off", "gso", "off", "tso", "off").CombinedOutput()
-	require.NoError(t, err, string(out))
+	if os.Getenv("PACKETRUSHER_PEER_KEEP_OFFLOAD") != "1" {
+		out, err := exec.Command("ethtool", "-K", "pr-core", "tx", "off", "rx", "off", "gro", "off", "gso", "off", "tso", "off").CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
 	steps := strings.Split(os.Getenv("PACKETRUSHER_EBPF_PEER_STEPS"), ",")
 	if steps[0] == "" {
 		steps = []string{"1", "2", "1"}
@@ -50,9 +52,14 @@ func Run(t *testing.T) {
 	require.NoError(t, err)
 	defer socket.Close()
 	var targetPeer *net.UDPConn
-	if strings.Contains(os.Getenv("PACKETRUSHER_EBPF_PEER_STEPS"), "2-remote") {
-		require.NoError(t, netlink.AddrAdd(peer, &netlink.Addr{IPNet: Network("10.88.0.4/24")}))
-		targetPeer, err = net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("10.88.0.4"), Port: 2152})
+	if strings.Contains(os.Getenv("PACKETRUSHER_EBPF_PEER_STEPS"), "-remote") {
+		remote, remoteLink, cidr := "10.88.0.4", peer, "10.88.0.4/24"
+		if override := os.Getenv("PACKETRUSHER_EBPF_REMOTE_ADDR"); override != "" {
+			remote, remoteLink, cidr = override, lo, override+"/32"
+			require.NoError(t, os.WriteFile("/proc/sys/net/ipv4/conf/all/arp_ignore", []byte("1"), 0644))
+		}
+		require.NoError(t, netlink.AddrAdd(remoteLink, &netlink.Addr{IPNet: Network(cidr)}))
+		targetPeer, err = net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP(remote), Port: 2152})
 		require.NoError(t, err)
 		defer targetPeer.Close()
 	}
@@ -70,7 +77,7 @@ func Run(t *testing.T) {
 	require.NoError(t, err)
 	for _, step := range steps {
 		activeSocket := socket
-		if step == "2-remote" {
+		if strings.HasSuffix(step, "-remote") {
 			activeSocket = targetPeer
 		}
 		require.NoError(t, activeSocket.SetReadDeadline(time.Now().Add(10*time.Second)))

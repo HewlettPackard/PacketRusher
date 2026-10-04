@@ -34,9 +34,6 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 		return fmt.Errorf("--number-of-gnbs requires a non-dedicated gNB configuration")
 	}
 	if tunnelMode != config.TunnelDisabled && config.GetConfig().Ue.TunnelBackend == config.TunnelBackendEBPF {
-		if tunnelMode == config.TunnelVrf {
-			return fmt.Errorf("eBPF requires policy routing; VRF is unsupported")
-		}
 		if numPduSessions != 1 {
 			return fmt.Errorf("eBPF tunnels require exactly one PDU session")
 		}

@@ -128,9 +128,6 @@ func newApp() *cli.App {
 						if c.Int("numPduSessions") != 1 {
 							return fmt.Errorf("eBPF tunnels require exactly one PDU session")
 						}
-						if c.Bool("dedicatedGnb") && c.Bool("tunnel-vrf") {
-							return fmt.Errorf("eBPF requires policy routing; set --tunnel-vrf=false")
-						}
 					}
 					if c.IsSet("number-of-ues") {
 						numUes = c.Int("number-of-ues")

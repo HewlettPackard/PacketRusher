@@ -23,7 +23,7 @@ func TestBackendValidationBeforeLoadingConfigOrReports(t *testing.T) {
 }
 
 func TestEBPFUnsupportedProfileRejectedBeforeNetwork(t *testing.T) {
-	for _, args := range [][]string{{"multi-ue", "-n", "1", "--tunnel", "--dedicatedGnb"}, {"multi-ue", "-n", "1", "--tunnel", "--numPduSessions", "2"}} {
+	for _, args := range [][]string{{"multi-ue", "-n", "1", "--tunnel", "--numPduSessions", "2"}} {
 		app := newApp()
 		err := app.Run(append([]string{"packetrusher", "--tunnel-backend", "ebpf", "--config", "../config/config.yml"}, args...))
 		require.ErrorContains(t, err, "eBPF")

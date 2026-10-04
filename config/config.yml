@@ -57,13 +57,13 @@ ue:
   homeNetworkPublicKeyID: 1
   
   # PDU session address family: IPv4 (default), IPv6, or IPv4v6.
-  # IPv6 user traffic requires tunnelbackend: userspace and UPF router advertisements.
+  # IPv6 user traffic requires userspace or ebpf and UPF router advertisements.
   pdusessiontype: IPv4
   # Inner IP tunnel MTU. 0 uses the N3 interface MTU minus 44 bytes.
   # Set a smaller value, e.g. 1400, to match the UPF or a lower path MTU.
   tunnelmtu: 0
 
-  # gtp5g (default), userspace (TUN + UDP), or ebpf (IPv4/Ethernet/policy).
+  # gtp5g (default), userspace (TUN + UDP), or ebpf (owned kernel GTP-U).
   # See docs/ebpf-backend.md for eBPF requirements and supported profile.
   tunnelbackend: gtp5g
 

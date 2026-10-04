@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sys/unix"
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
+	"my5G-RANTester/internal/control_test_engine/ue/gtp/ebpfgtp"
 	"my5G-RANTester/internal/control_test_engine/ue/gtp/userspace"
 )
 
@@ -50,6 +51,7 @@ func userspaceIPv6RoundTrip(t *testing.T, app net.Conn, peer *net.UDPConn, local
 	require.Equal(t, byte(6), packet[0]>>4)
 	require.Equal(t, byte(17), packet[6])
 	require.Equal(t, "ping", string(packet[48:]))
+	require.Zero(t, udp6Checksum(packet), "actual uplink IPv6 UDP checksum must be complete at the UPF")
 	reply := append([]byte(nil), packet...)
 	copy(reply[8:24], packet[24:40])
 	copy(reply[24:40], packet[8:24])
@@ -62,7 +64,7 @@ func userspaceIPv6RoundTrip(t *testing.T, app net.Conn, peer *net.UDPConn, local
 		checksum = 65535
 	}
 	binary.BigEndian.PutUint16(reply[46:48], checksum)
-	wire, err := userspace.Encode(downID, 9, reply)
+	wire, err := downlinkGTP(downID, 9, reply)
 	require.NoError(t, err)
 	_, err = peer.WriteToUDPAddrPort(wire, source)
 	if err != nil {
@@ -85,30 +87,45 @@ func userspaceIPv6RoundTrip(t *testing.T, app net.Conn, peer *net.UDPConn, local
 }
 
 func TestUserspaceRealIPv6DualStackPolicyVRFAndHandover(t *testing.T) {
-	if os.Getenv("PACKETRUSHER_TUN_TEST") != "1" {
-		t.Skip("explicit isolated network namespace and CAP_NET_ADMIN required")
+	if os.Getenv("PACKETRUSHER_TUN_TEST") != "1" && os.Getenv("PACKETRUSHER_EBPF_TEST") != "1" {
+		t.Skip("explicit isolated namespace required")
 	}
+	runRealIPv6DualStackPolicyVRFAndHandover(t, config.TunnelBackendUserspace)
+}
+func TestNativeEBPFRealIPv6DualStackPolicyVRFAndHandover(t *testing.T) {
+	if os.Getenv("PACKETRUSHER_EBPF_TEST") != "1" {
+		t.Skip("explicit isolated namespace required")
+	}
+	previous := ebpfRegistry
+	ebpfRegistry = ebpfgtp.NewRegistry()
+	defer func() { ebpfRegistry = previous }()
+	runRealIPv6DualStackPolicyVRFAndHandover(t, config.TunnelBackendEBPF)
+}
+func runRealIPv6DualStackPolicyVRFAndHandover(t *testing.T, backend config.TunnelBackend) {
 	lo, err := netlink.LinkByName("lo")
 	require.NoError(t, err)
 	for _, address := range []string{"127.88.4.1/32", "127.88.4.2/32", "127.88.4.9/32"} {
 		parsed, err := netlink.ParseAddr(address)
 		require.NoError(t, err)
 		require.NoError(t, netlink.AddrAdd(lo, parsed))
+		t.Cleanup(func() { require.NoError(t, netlink.AddrDel(lo, parsed)) })
 	}
 	small := &netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: "n3small", MTU: 1300}}
 	require.NoError(t, netlink.LinkAdd(small))
+	t.Cleanup(func() { require.NoError(t, netlink.LinkDel(small)) })
 	require.NoError(t, netlink.LinkSetUp(small))
 	smallAddress, err := netlink.ParseAddr("127.88.4.3/32")
 	require.NoError(t, err)
 	require.NoError(t, netlink.AddrAdd(small, smallAddress))
 	hostUnderlay := &netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: "hostunderlay"}}
 	require.NoError(t, netlink.LinkAdd(hostUnderlay))
+	t.Cleanup(func() { require.NoError(t, netlink.LinkDel(hostUnderlay)) })
 	require.NoError(t, netlink.LinkSetUp(hostUnderlay))
 	require.NoError(t, netlink.RouteAdd(&netlink.Route{Family: netlink.FAMILY_V6, Dst: &net.IPNet{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)}, LinkIndex: hostUnderlay.Attrs().Index, Scope: netlink.SCOPE_LINK, Table: unix.RT_TABLE_MAIN, Priority: 100}))
 	for _, family := range []uint8{ie.PDUSessType_IPv6, ie.PDUSessType_IPv4v6} {
 		for _, mode := range []config.TunnelMode{config.TunnelTun, config.TunnelVrf} {
 			t.Run(fmt.Sprintf("family%d-mode%d", family, mode), func(t *testing.T) {
-				ue := &context.UEContext{TunnelMode: mode, TunnelBackend: config.TunnelBackendUserspace, TunnelMTU: 1456, PDUSessionType: config.PDUSessionType(family)}
+				ue := &context.UEContext{TunnelMode: mode, TunnelBackend: backend, TunnelMTU: 1456, PDUSessionType: config.PDUSessionType(family)}
 				ue.UeSecurity.Msin = fmt.Sprintf("700666%02d%02d", family, mode)
 				pdu, err := ue.CreatePDUSession()
 				require.NoError(t, err)
@@ -143,7 +160,7 @@ func TestUserspaceRealIPv6DualStackPolicyVRFAndHandover(t *testing.T) {
 					ra, _ := hex.DecodeString(raWire)
 					invalid := append([]byte(nil), ra...)
 					invalid[7] = 64
-					wire, _ := userspace.Encode(61, 9, invalid)
+					wire, _ := downlinkGTP(61, 9, invalid)
 					_, err = peer.WriteToUDPAddrPort(wire, address)
 					if err != nil {
 						advertised <- err
@@ -154,7 +171,7 @@ func TestUserspaceRealIPv6DualStackPolicyVRFAndHandover(t *testing.T) {
 						advertised <- fmt.Errorf("untrusted RA installed a prefix")
 						return
 					}
-					wire, _ = userspace.Encode(61, 9, ra)
+					wire, _ = downlinkGTP(61, 9, ra)
 					_, err = peer.WriteToUDPAddrPort(wire, address)
 					advertised <- err
 				}()
@@ -188,8 +205,11 @@ func TestUserspaceRealIPv6DualStackPolicyVRFAndHandover(t *testing.T) {
 					require.False(t, route.LinkIndex == link.Attrs().Index && route.Dst == nil, "RA must not create main-table default route")
 				}
 				dial := net.Dialer{LocalAddr: &net.UDPAddr{IP: net.IP(pdu.GetIPv6().AsSlice())}}
+				name := link.Attrs().Name
 				if mode == config.TunnelVrf {
-					name := pdu.GetVrfDevice().Attrs().Name
+					name = pdu.GetVrfDevice().Attrs().Name
+				}
+				{
 					dial.Control = func(_, _ string, connection syscall.RawConn) error {
 						var setError error
 						err := connection.Control(func(fd uintptr) {
@@ -242,7 +262,7 @@ func TestUserspaceRealIPv6DualStackPolicyVRFAndHandover(t *testing.T) {
 				withdrawal[46], withdrawal[47] = 0, 0
 				withdrawal[42], withdrawal[43] = 0, 0
 				binary.BigEndian.PutUint16(withdrawal[42:44], udp6Checksum(withdrawal))
-				wire, err := userspace.Encode(71, 9, withdrawal)
+				wire, err := downlinkGTP(71, 9, withdrawal)
 				require.NoError(t, err)
 				_, err = peer.WriteToUDPAddrPort(wire, netip.AddrPortFrom(target.GnbIp, 2152))
 				if err != nil {
@@ -279,7 +299,7 @@ func TestUserspaceRealIPv6DualStackPolicyVRFAndHandover(t *testing.T) {
 				_, err = netlink.RouteGetWithOptions(net.ParseIP("2001:db8:ffff::9"), options)
 				require.Error(t, err, "IPv6 must not escape through the host underlay without a PDU default router")
 				renewed, _ := hex.DecodeString(raWire)
-				wire, err = userspace.Encode(71, 9, renewed)
+				wire, err = downlinkGTP(71, 9, renewed)
 				require.NoError(t, err)
 				_, err = peer.WriteToUDPAddrPort(wire, netip.AddrPortFrom(target.GnbIp, 2152))
 				require.NoError(t, err)

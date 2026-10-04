@@ -9,11 +9,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"golang.org/x/sys/unix"
+	"my5G-RANTester/internal/control_test_engine/ue/gtp/userspace"
 	"net"
 	"net/netip"
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"syscall"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -23,51 +26,111 @@ import (
 //go:embed gtpu_bpfel.o
 var object []byte
 
-// ConfigureEndpoint limits TCP software GSO before its packets enter the LWT
-// program. Linux routes GSO skbs through LWT before final device segmentation;
-// each GTP-U length must instead describe one complete inner IPv4 packet.
+// ConfigureEndpoint disables checksum offload and limits TCP software GSO before
+// the owned TCX egress hook. A GTP peer receives bytes, not inner skb metadata.
+// Each GTP-U length describes one complete inner IPv4 or IPv6 packet.
 // Call only for the backend's newly owned TUN, before installing its route.
-func ConfigureEndpoint(endpoint netlink.Link) error {
+func ConfigureEndpoint(endpoint netlink.Link, port userspace.PacketPort) error {
+	owned, ok := port.(interface {
+		SyscallConn() (syscall.RawConn, error)
+	})
+	if !ok {
+		return errors.New("eBPF endpoint has no owned TUN descriptor")
+	}
+	raw, err := owned.SyscallConn()
+	if err != nil {
+		return err
+	}
+	var ioctlErr error
+	err = raw.Control(func(fd uintptr) { ioctlErr = unix.IoctlSetInt(int(fd), unix.TUNSETOFFLOAD, 0) })
+	if err = errors.Join(err, ioctlErr); err != nil {
+		return fmt.Errorf("disable owned eBPF TUN checksum offload: %w", err)
+	}
 	if err := netlink.LinkSetGSOMaxSegs(endpoint, 1); err != nil {
 		return fmt.Errorf("limit eBPF endpoint TCP segmentation: %w", err)
 	}
 	return nil
 }
 
-// Config binds one IPv4 PDU session to an owned, stable L3 endpoint.
-// This backend supports Ethernet N3, policy routing and an MTU <= 1500.
+// Config binds a dual-stack PDU session to an owned, stable L3 endpoint.
 type Config struct {
 	Local, Remote, IPv4      netip.Addr
+	AllowIPv6                bool
+	IPv6InterfaceID          [8]byte
+	IPv6                     netip.Addr
+	Inject                   func([]byte) error
 	UplinkTEID, DownlinkTEID uint32
 	QFI                      uint8
 	EndpointIfIndex, MTU     int
+	stageTX                  uint32
 }
 
 func (c Config) Validate() error {
-	for _, a := range []netip.Addr{c.Local, c.Remote, c.IPv4} {
-		if !a.Is4() || a.IsUnspecified() || a.IsMulticast() || a.IsLoopback() {
+	for _, a := range []netip.Addr{c.Local, c.Remote} {
+		if !a.Is4() || a.IsUnspecified() || a.IsMulticast() {
 			return errors.New("eBPF requires unicast IPv4 UE and N3 addresses")
 		}
 	}
 	if c.Local == c.Remote || c.IPv4 == c.Local || c.IPv4 == c.Remote {
 		return errors.New("eBPF UE, local N3 and peer addresses must be distinct")
 	}
-	if c.UplinkTEID == 0 || c.DownlinkTEID == 0 || c.QFI > 63 || c.EndpointIfIndex <= 0 || c.MTU < 68 || c.MTU > 1456 {
-		return errors.New("invalid eBPF TEID, QFI, endpoint or IPv4 MTU (68..1456)")
+	if c.IPv4.IsValid() && (!c.IPv4.Is4() || c.IPv4.IsUnspecified() || c.IPv4.IsMulticast() || c.IPv4.IsLoopback()) {
+		return errors.New("invalid UE IPv4 address")
+	}
+	if !c.IPv4.IsValid() && !c.AllowIPv6 {
+		return errors.New("session has neither IPv4 nor IPv6")
+	}
+	if c.IPv6.IsValid() && (!c.AllowIPv6 || !c.IPv6.Is6() || !c.IPv6.IsGlobalUnicast()) {
+		return errors.New("invalid IPv6 allocation")
+	}
+	if c.IPv6.IsValid() {
+		a := c.IPv6.As16()
+		if !bytes.Equal(a[8:], c.IPv6InterfaceID[:]) {
+			return errors.New("IPv6 allocation must use the NAS IID")
+		}
+	}
+	if c.AllowIPv6 && c.MTU < 1280 {
+		return errors.New("IPv6 endpoint MTU must be at least 1280")
+	}
+	if c.UplinkTEID == 0 || c.DownlinkTEID == 0 || c.QFI > 63 || c.EndpointIfIndex <= 0 || c.MTU < 68 || c.MTU > 65491 {
+		return errors.New("invalid eBPF TEID, QFI, endpoint or IPv4 N3 payload MTU (68..65491)")
 	}
 	return nil
 }
 
 type binding struct {
-	Local, Peer, UE, UplinkTEID, DownlinkTEID, Endpoint, MTU uint32
-	QFI                                                      uint8
-	Padding                                                  [3]byte
+	Local, Peer, UE, UplinkTEID, DownlinkTEID, Endpoint, MTU, NextHop, StageTX uint32
+	QFI, IPv6, PrefixValid, Padding                                            uint8
+	IID, Prefix                                                                [8]byte
 }
 type downKey struct{ Local, Peer, TEID uint32 }
 
-func ipv4(a netip.Addr) uint32 { b := a.As4(); return binary.LittleEndian.Uint32(b[:]) }
-func (c Config) binding() binding {
-	return binding{Local: ipv4(c.Local), Peer: ipv4(c.Remote), UE: ipv4(c.IPv4), UplinkTEID: c.UplinkTEID, DownlinkTEID: c.DownlinkTEID, Endpoint: uint32(c.EndpointIfIndex), MTU: uint32(c.MTU), QFI: c.QFI}
+func ipv4(a netip.Addr) uint32    { b := a.As4(); return binary.LittleEndian.Uint32(b[:]) }
+func (c Config) identity() uint32 { return uint32(c.EndpointIfIndex) }
+
+type n3Path struct {
+	IfIndex  int
+	NextHop  netip.Addr
+	Loopback bool
+}
+
+func (c Config) binding(paths ...n3Path) binding {
+	b := binding{Local: ipv4(c.Local), Peer: ipv4(c.Remote), UplinkTEID: c.UplinkTEID, DownlinkTEID: c.DownlinkTEID, Endpoint: c.identity(), MTU: uint32(c.MTU), QFI: c.QFI, IID: c.IPv6InterfaceID, NextHop: ipv4(c.Remote), StageTX: c.stageTX}
+	if len(paths) > 0 && paths[0].NextHop.IsValid() {
+		b.NextHop = ipv4(paths[0].NextHop)
+	}
+	if c.IPv4.Is4() {
+		b.UE = ipv4(c.IPv4)
+	}
+	if c.AllowIPv6 {
+		b.IPv6 = 1
+	}
+	if c.IPv6.IsValid() {
+		address := c.IPv6.As16()
+		copy(b.Prefix[:], address[:8])
+		b.PrefixValid = 1
+	}
+	return b
 }
 func (c Config) downKey() downKey { return downKey{ipv4(c.Local), ipv4(c.Remote), c.DownlinkTEID} }
 
@@ -101,10 +164,11 @@ type ingress struct {
 }
 
 // Registry owns only its BPF objects, TCX links and exclusively bound N3 ports.
-// Its socket worker answers only owned Echo Requests; user-plane packets are
-// encapsulated and decapsulated entirely by the kernel programs.
+// Its socket worker answers Echo and handles Router Advertisements plus the
+// kernel-validated checksum/reassembly fallback; ordinary packets use TCX.
 type Registry struct {
 	peers           atomic.Pointer[map[peerKey]bool]
+	controls        atomic.Pointer[map[downKey]controlBinding]
 	mu              sync.Mutex
 	collection      *ebpf.Collection
 	state           store
@@ -113,9 +177,10 @@ type Registry struct {
 	ports           map[netip.Addr]closer
 	locals          map[netip.Addr]*n3Lease
 	links           map[int]*ingress
-	discover        func(Config) (int, error)
+	discover        func(Config) (n3Path, error)
 	listen          func(netip.Addr) (closer, error)
 	attach          func(int) (closer, error)
+	attachEndpoint  func(int) (closer, error)
 	warning         func(error)
 	pendingWarnings []error
 }
@@ -126,10 +191,17 @@ func NewRegistry() *Registry {
 		return newManagementSocket(a, func(peer netip.AddrPort) bool {
 			snapshot := r.peers.Load()
 			return peer.Port() == 2152 && snapshot != nil && (*snapshot)[peerKey{a, peer.Addr()}]
-		})
+		}, func(peer netip.AddrPort, packet []byte) { r.receiveControl(a, peer, packet) })
 	}
 	r.attach = func(index int) (closer, error) {
 		return link.AttachTCX(link.TCXOptions{Interface: index, Program: r.collection.Programs["decap"], Attach: ebpf.AttachTCXIngress, Anchor: link.Tail()})
+	}
+	r.attachEndpoint = func(index int) (closer, error) {
+		stage, err := attachChecksumStage(index, r.collection.Programs["encap"], r.collection.Programs["relay"])
+		if stage == nil {
+			return nil, err
+		}
+		return stage, err
 	}
 	return r
 }
@@ -173,51 +245,70 @@ func (r *Registry) load() error {
 		return err
 	}
 	spec.Programs["decap"].AttachType = ebpf.AttachTCXIngress
+	spec.Programs["encap"].AttachType = ebpf.AttachTCXEgress
+	spec.Programs["relay"].AttachType = ebpf.AttachTCXIngress
 	collection, err := ebpf.NewCollection(spec)
 	if err != nil {
-		return fmt.Errorf("load PacketRusher eBPF programs (CAP_BPF/CAP_NET_ADMIN and TCX/LWT support required): %w", err)
+		return fmt.Errorf("load PacketRusher eBPF programs (CAP_BPF/CAP_NET_ADMIN and TCX support required): %w", err)
 	}
 	r.collection = collection
 	r.state = kernelStore{collection.Maps}
 	return nil
 }
-func discoverN3(c Config) (int, error) {
+func discoverN3(c Config) (n3Path, error) {
 	links, err := netlink.LinkList()
 	if err != nil {
-		return 0, err
+		return n3Path{}, err
 	}
-	index := 0
+	path := n3Path{}
 	for _, l := range links {
 		addresses, err := netlink.AddrList(l, netlink.FAMILY_V4)
 		if err != nil {
-			return 0, err
+			return n3Path{}, err
 		}
 		for _, a := range addresses {
-			if a.IP.Equal(net.IP(c.Local.AsSlice())) {
-				if index != 0 {
-					return 0, errors.New("eBPF does not support an N3 address assigned to multiple interfaces")
-				}
-				at := l.Attrs()
-				if (l.Type() != "device" && l.Type() != "veth") || at.EncapType != "ether" || len(at.HardwareAddr) != 6 || at.MasterIndex != 0 || at.Flags&net.FlagUp == 0 || at.MTU > 1500 || c.MTU+44 > at.MTU {
-					return 0, errors.New("eBPF requires an up Ethernet N3 interface without VRF/master, MTU <=1500 and sufficient tunnel headroom")
-				}
-				index = at.Index
+			if !a.IP.Equal(net.IP(c.Local.AsSlice())) {
+				continue
 			}
+			if path.IfIndex != 0 {
+				return n3Path{}, errors.New("N3 address is assigned to multiple interfaces")
+			}
+			at := l.Attrs()
+			loopback := at.Flags&net.FlagLoopback != 0
+			if !loopback && (at.EncapType != "ether" || len(at.HardwareAddr) != 6 || at.MasterIndex != 0) {
+				return n3Path{}, errors.New("N3 requires a loopback or Ethernet interface without a master")
+			}
+			if at.Flags&net.FlagUp == 0 || c.MTU+44 > at.MTU {
+				return n3Path{}, errors.New("N3 interface is down or lacks negotiated tunnel MTU headroom")
+			}
+			path.IfIndex, path.Loopback = at.Index, loopback
 		}
 	}
-	if index == 0 {
-		return 0, fmt.Errorf("eBPF N3 address %s is not assigned", c.Local)
+	if path.IfIndex == 0 {
+		return n3Path{}, fmt.Errorf("N3 address %s is not assigned", c.Local)
 	}
 	routes, err := netlink.RouteGetWithOptions(net.IP(c.Remote.AsSlice()), &netlink.RouteGetOptions{SrcAddr: net.IP(c.Local.AsSlice())})
 	if err != nil {
-		return 0, err
+		return n3Path{}, err
 	}
-	if len(routes) != 1 || routes[0].LinkIndex != index || len(routes[0].MultiPath) != 0 {
-		return 0, errors.New("eBPF requires a single N3 route through the assigned Ethernet interface")
+	if len(routes) != 1 || routes[0].LinkIndex != path.IfIndex || len(routes[0].MultiPath) != 0 {
+		return n3Path{}, errors.New("N3 requires one route through its assigned interface")
 	}
-	return index, nil
+	if routes[0].MTU > 0 && c.MTU+44 > routes[0].MTU {
+		return n3Path{}, errors.New("N3 route MTU is smaller than the negotiated tunnel")
+	}
+	path.NextHop = c.Remote
+	if len(routes[0].Gw) > 0 {
+		addr, ok := netip.AddrFromSlice(routes[0].Gw)
+		if !ok || !addr.Unmap().Is4() {
+			return n3Path{}, errors.New("N3 next hop must be IPv4")
+		}
+		path.NextHop = addr.Unmap()
+	}
+	return path, nil
 }
-func (r *Registry) acquire(local netip.Addr, index int) error {
+func (r *Registry) acquire(local netip.Addr, path n3Path) error {
+	index := path.IfIndex
 	if r.ports[local] != nil {
 		return errors.New("N3 port cleanup is pending")
 	}
@@ -248,7 +339,7 @@ func (r *Registry) acquire(local netip.Addr, index int) error {
 		in = &ingress{attachment: attachment}
 		r.links[index] = in
 	}
-	if err = r.state.put("locals", ipv4(local), uint32(index), ebpf.UpdateNoExist); err != nil {
+	if err = r.state.put("locals", ipv4(local), ownedN3Index(path), ebpf.UpdateNoExist); err != nil {
 		if in.refs == 0 {
 			if closeErr := in.attachment.Close(); closeErr != nil {
 				err = errors.Join(err, closeErr)
@@ -302,14 +393,19 @@ func (r *Registry) release(local netip.Addr) error {
 	return nil
 }
 
-// Session keeps the same endpoint and route program across TEID/N3 handover.
+// Session keeps the same endpoint and owned checksum stage across handover.
 type Session struct {
-	registry *Registry
-	cfg      Config
-	keys     map[downKey]bool
-	leases   map[netip.Addr]bool
-	closed   bool
-	stopping bool
+	registry       *Registry
+	path           n3Path
+	cfg            Config
+	keys           map[downKey]bool
+	leases         map[netip.Addr]bool
+	closed         bool
+	stopping       bool
+	endpoint       closer
+	stageKey       uint32
+	stageMapped    bool
+	advertisements chan []byte
 }
 
 func (r *Registry) Open(c Config) (*Session, error) {
@@ -318,23 +414,23 @@ func (r *Registry) Open(c Config) (*Session, error) {
 	}
 	r.mu.Lock()
 	defer r.unlock()
-	if r.sessions[ipv4(c.IPv4)] != nil {
-		return nil, errors.New("eBPF UE IPv4 address already has a session")
+	if r.sessions[c.identity()] != nil {
+		return nil, errors.New("eBPF endpoint already has a session")
 	}
 	r.reap()
-	index, err := r.discover(c)
+	path, err := r.discover(c)
 	if err != nil {
 		return nil, err
 	}
 	if err = r.load(); err != nil {
 		return nil, err
 	}
-	if err = r.acquire(c.Local, index); err != nil {
+	if err = r.acquire(c.Local, path); err != nil {
 		r.closeEmpty()
 		return nil, err
 	}
-	s := &Session{registry: r, cfg: c, keys: make(map[downKey]bool), leases: map[netip.Addr]bool{c.Local: true}}
-	if err = r.state.put("downlinks", c.downKey(), ipv4(c.IPv4), ebpf.UpdateNoExist); err != nil {
+	s := &Session{registry: r, cfg: c, path: path, advertisements: make(chan []byte, 8), keys: make(map[downKey]bool), leases: map[netip.Addr]bool{c.Local: true}}
+	if err = r.state.put("downlinks", c.downKey(), c.identity(), ebpf.UpdateNoExist); err != nil {
 		if cleanupErr := s.retire(true); cleanupErr != nil {
 			r.orphans = append(r.orphans, s)
 			r.queueWarning(cleanupErr)
@@ -343,7 +439,33 @@ func (r *Registry) Open(c Config) (*Session, error) {
 		return nil, err
 	}
 	s.keys[c.downKey()] = true
-	if err = r.state.put("sessions", ipv4(c.IPv4), c.binding(), ebpf.UpdateNoExist); err != nil {
+	s.endpoint, err = r.attachEndpoint(c.EndpointIfIndex)
+	if err != nil {
+		if cleanupErr := s.retire(true); cleanupErr != nil {
+			r.orphans = append(r.orphans, s)
+			r.queueWarning(cleanupErr)
+		}
+		r.closeEmpty()
+		return nil, fmt.Errorf("attach eBPF UE egress: %w", err)
+	}
+	if staged, ok := s.endpoint.(interface {
+		TransmitIndex() int
+		PeerIndex() int
+	}); ok {
+		c.stageTX = uint32(staged.TransmitIndex())
+		s.cfg = c
+		s.stageKey = uint32(staged.PeerIndex())
+		if err = r.state.put("stages", s.stageKey, c.identity(), ebpf.UpdateNoExist); err != nil {
+			if cleanupErr := s.retire(true); cleanupErr != nil {
+				r.orphans = append(r.orphans, s)
+				r.queueWarning(cleanupErr)
+			}
+			r.closeEmpty()
+			return nil, err
+		}
+		s.stageMapped = true
+	}
+	if err = r.state.put("sessions", c.identity(), c.binding(path), ebpf.UpdateNoExist); err != nil {
 		if cleanupErr := s.retire(true); cleanupErr != nil {
 			r.orphans = append(r.orphans, s)
 			r.queueWarning(cleanupErr)
@@ -351,18 +473,11 @@ func (r *Registry) Open(c Config) (*Session, error) {
 		r.closeEmpty()
 		return nil, err
 	}
-	r.sessions[ipv4(c.IPv4)] = s
+	r.sessions[c.identity()] = s
 	r.publishPeers()
 	return s, nil
 }
-func (s *Session) ProgramFD() int {
-	s.registry.mu.Lock()
-	defer s.registry.mu.Unlock()
-	if s.closed || s.registry.collection == nil {
-		return -1
-	}
-	return s.registry.collection.Programs["encap"].FD()
-}
+
 func (s *Session) Update(c Config) error {
 	if err := c.Validate(); err != nil {
 		return err
@@ -373,10 +488,14 @@ func (s *Session) Update(c Config) error {
 	if s.closed || s.stopping {
 		return errors.New("eBPF session is closed or retiring")
 	}
-	if c.IPv4 != s.cfg.IPv4 || c.EndpointIfIndex != s.cfg.EndpointIfIndex {
+	// Prefix changes are owned by the allocation callback, not a racing handover snapshot.
+	c.IPv6 = s.cfg.IPv6
+	c.stageTX = s.cfg.stageTX
+	if c.IPv4 != s.cfg.IPv4 || c.EndpointIfIndex != s.cfg.EndpointIfIndex || c.AllowIPv6 != s.cfg.AllowIPv6 || c.IPv6InterfaceID != s.cfg.IPv6InterfaceID {
 		return errors.New("eBPF handover cannot change the stable UE address or endpoint")
 	}
-	index, err := r.discover(c)
+	path, err := r.discover(c)
+	index := path.IfIndex
 	if err != nil {
 		return err
 	}
@@ -391,7 +510,7 @@ func (s *Session) Update(c Config) error {
 	}
 	newLease := !s.leases[c.Local]
 	if newLease {
-		if err = r.acquire(c.Local, index); err != nil {
+		if err = r.acquire(c.Local, path); err != nil {
 			return err
 		}
 		s.leases[c.Local] = true
@@ -415,15 +534,15 @@ func (s *Session) Update(c Config) error {
 		return cause
 	}
 	if newKey {
-		if err = r.state.put("downlinks", c.downKey(), ipv4(c.IPv4), ebpf.UpdateNoExist); err != nil {
+		if err = r.state.put("downlinks", c.downKey(), c.identity(), ebpf.UpdateNoExist); err != nil {
 			return rollback(err)
 		}
 		s.keys[c.downKey()] = true
 	}
-	if err = r.state.put("sessions", ipv4(c.IPv4), c.binding(), ebpf.UpdateExist); err != nil {
+	if err = r.state.put("sessions", c.identity(), c.binding(path), ebpf.UpdateExist); err != nil {
 		return rollback(err)
 	}
-	s.cfg = c // Single canonical replacement commits both uplink and downlink.
+	s.cfg, s.path = c, path // Single canonical replacement commits both uplink and downlink.
 	r.publishPeers()
 	if err = s.retire(false); err != nil {
 		r.queueWarning(fmt.Errorf("eBPF committed handover retains retired resources: %w", err))
@@ -433,6 +552,18 @@ func (s *Session) Update(c Config) error {
 func (s *Session) retire(all bool) error {
 	r := s.registry
 	var result error
+	if all && s.stageMapped {
+		if err := r.state.del("stages", s.stageKey); err != nil {
+			return err
+		}
+		s.stageMapped = false
+	}
+	if all && s.endpoint != nil {
+		if err := s.endpoint.Close(); err != nil {
+			return err
+		}
+		s.endpoint = nil
+	}
 	for k := range s.keys {
 		if all || k != s.cfg.downKey() {
 			if err := r.state.del("downlinks", k); err != nil {
@@ -458,12 +589,15 @@ type peerKey struct{ Local, Remote netip.Addr }
 
 func (r *Registry) publishPeers() {
 	peers := make(map[peerKey]bool)
+	controls := make(map[downKey]controlBinding)
 	for _, s := range r.sessions {
 		if !s.stopping && !s.closed {
 			peers[peerKey{s.cfg.Local, s.cfg.Remote}] = true
+			controls[s.cfg.downKey()] = controlBinding{s, s.cfg}
 		}
 	}
 	r.peers.Store(&peers)
+	r.controls.Store(&controls)
 }
 func (r *Registry) reap() {
 	for local, port := range r.ports {
@@ -516,8 +650,8 @@ func (s *Session) Close() error {
 	}
 	s.stopping = true
 	r.publishPeers()
-	key := ipv4(s.cfg.IPv4)
-	if err := r.state.del("sessions", key); err != nil {
+	key := s.cfg.identity()
+	if err := r.state.del("sessions", key); err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
 		tombstoneErr := r.state.put("sessions", key, binding{}, ebpf.UpdateExist)
 		return errors.Join(err, tombstoneErr)
 	}
@@ -532,7 +666,7 @@ func (s *Session) Close() error {
 	return nil
 }
 
-// Stats reports kernel uplink/downlink successes and owned ingress drops.
+// Stats reports kernel uplink/downlink redirect attempts and owned ingress drops.
 // It does not count uplink rejection or packets discarded by later routing.
 func (r *Registry) Stats() (uplink, downlink, ingressDrops uint64, err error) {
 	r.mu.Lock()
