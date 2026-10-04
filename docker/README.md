@@ -21,7 +21,8 @@ docker compose -f docker/docker-compose.yml up --build
 ```
 
 User-plane tunnels (`--tunnel`) need the `NET_ADMIN` capability, with which PacketRusher creates its
-interfaces, routes and rules in the network namespace of the host:
+interfaces, routes and rules in the network namespace of the host. Without the gtp5g module on the host they
+also need the TUN device, `--device /dev/net/tun`:
 
 ```bash
 docker run --rm --network host --cap-add NET_ADMIN \
