@@ -173,7 +173,10 @@ def traffic_route(state, family):
     version=family['version']
     command=['ip','-6' if version==6 else '-4','-json','route','get',family['dn'],'from',family['ue']]
     def selected():
-        route=subprocess.check_output(command,text=True)
+        try:
+            route=subprocess.check_output(command,text=True,stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError as error:
+            raise AssertionError(f"IPv{version} route not installed yet: {error.stderr}") from error
         require(json.loads(route)[0].get('dev')=='val0000000120',f"IPv{version} UE traffic does not select persistent endpoint: {route}")
         return route
     # IPv6 setup needs an actual UPF/SMF RS/RA exchange after NAS acceptance.
@@ -256,7 +259,9 @@ def probe(binary, state):
                 until(lambda:gtpu_proof(state/'n3.pcap',identifier,**options),3,f'IPv{version} three observed uplink/downlink sequences')
                 family_results[str(version)]={'ue':family['ue'],'dn':family['dn'],'probe_nonce':identifier.decode(),'user_plane':gtpu_proof(state/'n3.pcap',identifier,**options)}
                 if version==6:
-                    family_results['6']['router_advertisement']=router_advertisement_proof(state/'n3.pcap',family['ue'])
+                    advertisement=router_advertisement_proof(state/'n3.pcap',family['ue'])
+                    require(advertisement['teid'] in family_results['6']['user_plane']['downlink']['teids'],'RA did not use the accepted PDU downlink TEID')
+                    family_results['6']['router_advertisement']=advertisement
             result['user_plane']=family_results[str(traffic[0]['version'])]['user_plane']
             # Keep the real core and PDU active while removing only our DN
             # application. This proves that echo acceptance depends on that

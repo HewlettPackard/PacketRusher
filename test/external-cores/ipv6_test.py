@@ -3,12 +3,14 @@ import ipaddress
 import json
 import socket
 import struct
+import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from ipv6 import checksum, router_advertisement_proof
 from prepare import CORE_IP, RAN_IP, UE_IP, DN_IP, UE_IPV6, DN_IPV6, generate, profile_options
-from probe import family_nonce, gtpu_proof
+from probe import family_nonce, gtpu_proof, traffic_route
 from probe_test import n3_capture, packet
 
 
@@ -44,6 +46,27 @@ def n3(records):
 
 
 class ActualIPv6Evidence(unittest.TestCase):
+    def test_ipv6_route_command_failure_waits_for_real_prefix_and_owned_address(self):
+        family={'version':6,'ue':UE_IPV6,'dn':DN_IPV6}
+        route=json.dumps([{'dev':'val0000000120'}])
+        endpoint=json.dumps([{'addr_info':[{'local':UE_IPV6,'prefixlen':128}]}])
+        missing=subprocess.CalledProcessError(2,['ip','-6','route','get'],stderr='Network is unreachable')
+        with tempfile.TemporaryDirectory() as directory,patch('probe.subprocess.check_output',side_effect=[missing,route,endpoint,b'[]']) as calls,patch('probe.time.sleep'):
+            state=Path(directory)
+            traffic_route(state,family)
+            self.assertEqual(calls.call_count,4)
+            self.assertEqual(json.loads((state/'ue-route-ipv6.json').read_text())[0]['dev'],'val0000000120')
+            self.assertEqual(json.loads((state/'ue-endpoint-ipv6.json').read_text())[0]['addr_info'][0]['local'],UE_IPV6)
+
+    def test_ipv6_route_command_failure_remains_a_bounded_failure(self):
+        family={'version':6,'ue':UE_IPV6,'dn':DN_IPV6}
+        missing=subprocess.CalledProcessError(2,['ip','-6','route','get'],stderr='Network is unreachable')
+        with tempfile.TemporaryDirectory() as directory,patch('probe.subprocess.check_output',side_effect=missing) as calls,patch('probe.time.sleep'),patch('probe.time.monotonic',side_effect=[0.0,0.0,16.0]):
+            with self.assertRaisesRegex(TimeoutError,'Network is unreachable'):
+                traffic_route(Path(directory),family)
+            self.assertEqual(calls.call_count,1)
+            self.assertFalse((Path(directory)/'ue-route-ipv6.json').exists())
+
     def test_only_explicit_native_open5gs_portable_profiles_allow_ipv6(self):
         for family in ('IPv6','IPv4v6'):
             for backend in ('userspace','ebpf'):
