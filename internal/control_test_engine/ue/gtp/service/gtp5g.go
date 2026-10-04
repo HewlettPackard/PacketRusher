@@ -19,8 +19,8 @@ import (
 
 	gtpLink "github.com/free5gc/go-gtp5gnl/linkcmd"
 	gtpTunnel "github.com/free5gc/go-gtp5gnl/tuncmd"
-	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	log "my5G-RANTester/internal/log"
 )
 
 // gtp5gCommands create, or modify, the rules of a gtp5g device from the arguments

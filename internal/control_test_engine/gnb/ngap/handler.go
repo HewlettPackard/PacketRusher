@@ -20,8 +20,8 @@ import (
 
 	ngapType "github.com/free5gc/ngap/ie"
 	ngapmsg "github.com/free5gc/ngap/message"
-	log "github.com/sirupsen/logrus"
 	_ "github.com/vishvananda/netlink"
+	log "my5G-RANTester/internal/log"
 	ngapConvert "my5G-RANTester/lib/ngap"
 )
 

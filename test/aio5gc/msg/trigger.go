@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package msg
 
@@ -11,7 +12,7 @@ import (
 
 	"github.com/free5gc/ngap/aper"
 
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 func SendNGSetupResponse(gnb *context.GNBContext, amf *context.AMFContext) {

@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
+	log "my5G-RANTester/internal/log"
 )
 
 // version is the release tag, set with -ldflags "-X main.version=<tag>".

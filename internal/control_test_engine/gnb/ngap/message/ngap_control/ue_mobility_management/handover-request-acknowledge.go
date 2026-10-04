@@ -1,6 +1,6 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
- * © Copyright 2023 Valentin D'Emmanuele
+ * © Copyright 2023-2026 Valentin D'Emmanuele
  */
 package ue_mobility_management
 
@@ -9,7 +9,7 @@ import (
 
 	"github.com/free5gc/ngap/aper"
 	ngap "github.com/free5gc/ngap/message"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 
 	ngapType "github.com/free5gc/ngap/ie"
 	ngapConvert "my5G-RANTester/lib/ngap"

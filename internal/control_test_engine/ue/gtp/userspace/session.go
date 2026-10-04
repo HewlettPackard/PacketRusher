@@ -16,8 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	log "my5G-RANTester/internal/log"
 )
 
 // Config is what a session needs from its PDU session.

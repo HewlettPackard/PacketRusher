@@ -8,12 +8,12 @@ package handler
 import (
 	"github.com/free5gc/nas/ie"
 	nas "github.com/free5gc/nas/message"
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
+	log "my5G-RANTester/internal/log"
 	"net/netip"
 )
 

@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package handler
 
@@ -11,7 +12,7 @@ import (
 
 	nas "github.com/free5gc/nas/message"
 	"github.com/free5gc/util/fsm"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 func RegistrationComplete(nasMsg *nas.RegComplete, gnb *context.GNBContext, ue *context.UEContext, amf *context.AMFContext) error {
@@ -28,7 +29,7 @@ func RegistrationComplete(nasMsg *nas.RegComplete, gnb *context.GNBContext, ue *
 func DefaultRegistrationComplete(nasMsg *nas.RegComplete, gnb *context.GNBContext, ue *context.UEContext, amf *context.AMFContext) error {
 
 	nwName := amf.GetNetworkName()
-	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.RegistrationAccept, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.RegistrationAccept, fsm.ArgsType{"ue": ue}, logrus.NewEntry(logrus.StandardLogger()))
 	if err != nil {
 		return err
 	}

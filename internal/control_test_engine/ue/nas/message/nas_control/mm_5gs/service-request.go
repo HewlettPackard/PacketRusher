@@ -7,8 +7,8 @@ package mm_5gs
 import (
 	"github.com/free5gc/nas/ie"
 	nas "github.com/free5gc/nas/message"
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
+	log "my5G-RANTester/internal/log"
 )
 
 func ServiceRequest(ue *context.UEContext) []byte {

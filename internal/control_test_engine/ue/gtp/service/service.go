@@ -17,8 +17,8 @@ import (
 	"net/netip"
 	"syscall"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	log "my5G-RANTester/internal/log"
 )
 
 // datapath is the backend-specific part of a tunnel: what carries the UE's packets

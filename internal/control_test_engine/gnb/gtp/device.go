@@ -20,8 +20,8 @@ import (
 	gtpTunnel "github.com/free5gc/go-gtp5gnl/tuncmd"
 	"github.com/khirono/go-nl"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	log "my5G-RANTester/internal/log"
 )
 
 // A gtp5g device owns the GTP-U socket on the address it is created with, and an

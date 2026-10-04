@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 
 // Package service
@@ -11,7 +12,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 func InitConn(ue *context.UEContext, gnbInboundChannel chan gnbContext.UEMessage) {

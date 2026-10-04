@@ -9,7 +9,7 @@ import (
 	"fmt"
 	nas "github.com/free5gc/nas/message"
 	"github.com/free5gc/ngap/ie"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg/nas/codec"
 	handler "my5G-RANTester/test/aio5gc/msg/nas/handler"

@@ -10,10 +10,10 @@ import (
 	"fmt"
 	"github.com/free5gc/nas/ie"
 	nas "github.com/free5gc/nas/message"
-	log "github.com/sirupsen/logrus"
 	"my5G-RANTester/internal/common/auth"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/handler"
+	log "my5G-RANTester/internal/log"
 )
 
 // DecodeNAS verifies protected NAS before committing negotiated algorithms or counters.

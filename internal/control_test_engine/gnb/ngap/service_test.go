@@ -1,25 +1,27 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2026 Forsway Scandinavia AB
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package ngap
 
 import (
+	log "my5G-RANTester/internal/log"
 	"net/netip"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ishidawataru/sctp"
-	"github.com/sirupsen/logrus"
-	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
-func reestablishedLogs(hook *test.Hook) int {
+func reestablishedLogs(logs *observer.ObservedLogs) int {
 	n := 0
-	for _, e := range hook.AllEntries() {
-		if e.Level == logrus.WarnLevel && strings.Contains(e.Message, "re-established") {
+	for _, e := range logs.All() {
+		if e.Level == zap.WarnLevel && strings.Contains(e.Message, "re-established") {
 			n++
 		}
 	}
@@ -30,10 +32,8 @@ func reestablishedLogs(hook *test.Hook) int {
 // later one sets the AMF up, only it may report the association as re-established; the
 // earlier watcher used to see the AMF Active and report it too.
 func TestAwaitReassociationLeavesALaterAttemptToReport(t *testing.T) {
-	// logrus cannot remove a hook, so swap the set out and restore it afterwards.
-	prev := logrus.StandardLogger().ReplaceHooks(make(logrus.LevelHooks))
-	t.Cleanup(func() { logrus.StandardLogger().ReplaceHooks(prev) })
-	hook := test.NewGlobal()
+	core, hook := observer.New(zap.WarnLevel)
+	t.Cleanup(log.Replace(core))
 
 	gnb := createTestGNBContext()
 	amf := gnb.NewGnBAmf(netip.MustParseAddrPort("127.0.0.1:38499"))

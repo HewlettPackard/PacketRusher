@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package nas_transport
 
@@ -11,7 +12,7 @@ import (
 	ngap "github.com/free5gc/ngap/message"
 
 	"github.com/ishidawataru/sctp"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 func DownlinkNasTransport(connN2 *sctp.SCTPConn, supi string) (ngap.Message, error) {
@@ -55,12 +56,7 @@ func DownlinkNasTransportForConfigurationUpdateCommand(connN2 *sctp.SCTPConn, su
 
 		// worked fine.
 		c2 <- ngapMsg
-		log.WithFields(log.Fields{
-			"protocol":    "ngap",
-			"source":      "AMF",
-			"destination": "gNodeB",
-			"message":     "DownlinkNasTransport",
-		}).Info("Receiving message")
+		log.Info("[GNB][NGAP] Receiving DownlinkNasTransport from AMF")
 	}()
 
 	// monitoring thread

@@ -19,7 +19,7 @@ import (
 
 	nasType "github.com/free5gc/nas/ie"
 	"github.com/goccy/go-yaml"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 // TunnelMode indicates how to create a GTP-U tunnel interface in an UE.
@@ -260,15 +260,7 @@ func getDefautlConfigPath() string {
 }
 
 func setLogLevel(cfg Config) {
-	// Output to stdout instead of the default stderr
-	log.SetOutput(os.Stdout)
-
-	if cfg.Logs.Level == 0 {
-		log.SetLevel(log.InfoLevel)
-	} else {
-		log.SetLevel(log.Level(cfg.Logs.Level))
-	}
-
+	log.SetLevel(cfg.Logs.Level)
 }
 
 func (config *Config) GetUESecurityCapability() *nasType.UESecCapability {

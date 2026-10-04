@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package handler
 
@@ -16,7 +17,7 @@ import (
 	"github.com/free5gc/util/fsm"
 
 	nas "github.com/free5gc/nas/message"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 func RegistrationRequest(nasReq *nas.RegReq, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
@@ -33,7 +34,7 @@ func RegistrationRequest(nasReq *nas.RegReq, amf *context.AMFContext, ue *contex
 
 func DefaultRegistrationRequest(nasReq *nas.RegReq, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
 
-	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.RegistrationRequest, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.RegistrationRequest, fsm.ArgsType{"ue": ue}, logrus.NewEntry(logrus.StandardLogger()))
 	if err != nil {
 		return err
 	}

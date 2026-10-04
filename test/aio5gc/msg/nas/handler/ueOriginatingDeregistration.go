@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package handler
 
@@ -14,7 +15,7 @@ import (
 	nas "github.com/free5gc/nas/message"
 	ngapType "github.com/free5gc/ngap/ie"
 	"github.com/free5gc/util/fsm"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 func UEOriginatingDeregistration(nasReq *nas.DeregReqUEOrig, amf *context.AMFContext, ue *context.UEContext, gnb *context.GNBContext) error {
@@ -37,7 +38,7 @@ func DefaultUEOriginatingDeregistration(nasReq *nas.DeregReqUEOrig, amf *context
 	deregistrationRequest := nasReq
 	context.ForceReleaseAllPDUSession(ue)
 
-	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.DeregistrationRequest, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.DeregistrationRequest, fsm.ArgsType{"ue": ue}, logrus.NewEntry(logrus.StandardLogger()))
 
 	if err != nil {
 		return err

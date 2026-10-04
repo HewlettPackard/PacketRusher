@@ -14,7 +14,8 @@ import (
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/util/fsm"
 	"github.com/mohae/deepcopy"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 type SmContext struct {
@@ -174,7 +175,7 @@ func CreatePDUSession(sessionRequest *nas.PDUSessEstReq,
 		newSmContext.ProtocolConfigurationOptions.IPv4LinkMTURequest = from.IPv4LinkMTUReq
 	}
 
-	err = ue.GetPduFsm().SendEvent(newSmContext.GetState(), EstablishmentAccept, fsm.ArgsType{"ue": ue, "sm": newSmContext}, log.NewEntry(log.StandardLogger()))
+	err = ue.GetPduFsm().SendEvent(newSmContext.GetState(), EstablishmentAccept, fsm.ArgsType{"ue": ue, "sm": newSmContext}, logrus.NewEntry(logrus.StandardLogger()))
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +192,7 @@ func ReleasePDUSession(ue *UEContext, pduSessionID int32) (SmContext, error) {
 	if err != nil {
 		return SmContext{}, err
 	}
-	err = ue.GetPduFsm().SendEvent(sm.state, ReleaseCommand, fsm.ArgsType{"ue": ue, "sm": sm}, log.NewEntry(log.StandardLogger()))
+	err = ue.GetPduFsm().SendEvent(sm.state, ReleaseCommand, fsm.ArgsType{"ue": ue, "sm": sm}, logrus.NewEntry(logrus.StandardLogger()))
 	if err != nil {
 		return SmContext{}, err
 	}
@@ -203,7 +204,7 @@ func ConfirmPDUSessionRelease(ue *UEContext, pduSessionID int32) error {
 	if err != nil {
 		return err
 	}
-	err = ue.GetPduFsm().SendEvent(sm.state, ReleaseComplete, fsm.ArgsType{"ue": ue, "sm": sm}, log.NewEntry(log.StandardLogger()))
+	err = ue.GetPduFsm().SendEvent(sm.state, ReleaseComplete, fsm.ArgsType{"ue": ue, "sm": sm}, logrus.NewEntry(logrus.StandardLogger()))
 	if err != nil {
 		return err
 	}
@@ -213,7 +214,7 @@ func ConfirmPDUSessionRelease(ue *UEContext, pduSessionID int32) error {
 
 func ForceReleaseAllPDUSession(ue *UEContext) {
 	ue.ExecuteForAllSmContexts(func(smCtx *SmContext) {
-		err := ue.GetPduFsm().SendEvent(smCtx.state, ForceRelease, fsm.ArgsType{"ue": ue, "sm": smCtx}, log.NewEntry(log.StandardLogger()))
+		err := ue.GetPduFsm().SendEvent(smCtx.state, ForceRelease, fsm.ArgsType{"ue": ue, "sm": smCtx}, logrus.NewEntry(logrus.StandardLogger()))
 		if err != nil {
 			log.Error("[5GC] Failed to release pdu session " + fmt.Sprint(smCtx.GetPduSessionId()) + " for ue " + ue.securityContext.msin + ": " + err.Error())
 		}

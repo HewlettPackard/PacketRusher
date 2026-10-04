@@ -16,7 +16,7 @@ import (
 	nas "github.com/free5gc/nas/message"
 	ngapType "github.com/free5gc/ngap/message"
 	"github.com/free5gc/util/fsm"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 type FiveGCBuilder struct {

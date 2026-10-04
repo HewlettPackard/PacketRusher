@@ -1,7 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
- * © Copyright 2024 Valentin D'Emmanuele
+ * © Copyright 2024-2026 Valentin D'Emmanuele
  */
 package ue_context_management
 
@@ -12,7 +12,7 @@ import (
 
 	ngapType "github.com/free5gc/ngap/ie"
 	ngap "github.com/free5gc/ngap/message"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 type InitialContextSetupResponseBuilder struct {

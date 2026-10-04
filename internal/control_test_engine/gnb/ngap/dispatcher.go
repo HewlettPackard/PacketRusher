@@ -11,7 +11,7 @@ import (
 	ngapType "github.com/free5gc/ngap/ie"
 	ngapmsg "github.com/free5gc/ngap/message"
 
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 // Dispatch decodes a message read from an AMF's association and handles it. The

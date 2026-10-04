@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package pcap
 
@@ -8,9 +9,9 @@ import (
 	"my5G-RANTester/config"
 	"os"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 	"github.com/vishvananda/netlink"
+	log "my5G-RANTester/internal/log"
 
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
