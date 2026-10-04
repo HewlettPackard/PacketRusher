@@ -1,6 +1,7 @@
 # Userspace GTP-U tunnels
 
-PacketRusher supports two tunnel datapaths. `gtp5g` remains the default. The
+PacketRusher supports `gtp5g`, `userspace` and its own [eBPF backend](ebpf-backend.md).
+`gtp5g` remains the default. The
 `userspace` backend uses Linux TUN and UDP and requires no gtp5g module, build,
 DKMS installation, or module access. Both support the existing tunnel options,
 source routing, per-UE VRFs and handover.
@@ -51,9 +52,10 @@ userspace tunnels.
 The userspace backend carries IPv4, IPv6 and dual-stack PDU traffic over an
 IPv4 N3 underlay. See [IPv6 PDU sessions](ipv6.md) for address-family selection
 and UPF prefix discovery. Performance against a
-real UPF has not been benchmarked; retain gtp5g when evaluating kernel datapath
-performance. Existing metrics describe control-plane procedures, not user-plane
-throughput.
+real UPF can be compared using the [three-backend iperf3 benchmark](../test/external-cores/benchmarks/README.md),
+which matches routing, MTU and CPU settings and records receiver throughput,
+loss and CPU use. Existing metrics describe control-plane procedures, not
+user-plane throughput.
 
 For an isolated live TUN/UDP check, build the userspace and service test binaries
 with `go test -race -c`, enter a fresh `unshare --net` namespace, enable loopback,
