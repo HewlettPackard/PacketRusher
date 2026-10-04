@@ -1,14 +1,19 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2026 Forsway Scandinavia AB
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package context
 
 import (
+	"my5G-RANTester/config"
+	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
+	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/vishvananda/netlink"
 )
 
 func TestPDUSessionIdentifiers(t *testing.T) {
@@ -56,4 +61,22 @@ func TestUeLastPduSessionCanBeFoundAndReleased(t *testing.T) {
 	assert.Equal(t, uint8(15), pduSession.Id)
 	require.NoError(t, ue.DeletePduSession(15))
 	assert.Nil(t, ue.PduSession[14])
+}
+
+// With tunnels, a UE is ready once the interface of its first PDU session exists.
+func TestReportStatusWaitsForTunnel(t *testing.T) {
+	scenarioChan := make(chan scenario.ScenarioMessage, 1)
+	ue := &UEContext{scenarioChan: scenarioChan, StateMM: MM5G_REGISTERED, TunnelMode: config.TunnelShared, gnbTx: make(chan gnbContext.UEMessage)}
+	for id := 1; id <= 2; id++ {
+		pduSession, err := ue.CreatePDUSession()
+		require.NoError(t, err)
+		pduSession.SetStateSM_PDU_SESSION_ACTIVE()
+	}
+	ue.ReportStatus(nil)
+	require.Equal(t, []int{2}, (<-scenarioChan).Status.PduSessions)
+	ue.PduSession[0].SetTunInterface(&netlink.Dummy{})
+	ue.ReportStatus(nil)
+	status := (<-scenarioChan).Status
+	require.Equal(t, []int{1, 2}, status.PduSessions)
+	require.True(t, status.Ready)
 }
