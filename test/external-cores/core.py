@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Own and join a real core's NF processes; never manage host services."""
 import argparse
+from contextlib import ExitStack
 import json
+import selectors
 import signal
 import socket
 import subprocess
@@ -12,22 +14,29 @@ from pathlib import Path
 from prepare import CORE_IP, DN_IP
 from startup import free_registered_and_associated, open_registered_and_associated
 
-def serve_echo(stop, errors, state):
+def serve_echo(stop, errors, state, families=None):
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.bind((DN_IP, 9000))
-            sock.settimeout(.2)
+        with ExitStack() as sockets, selectors.DefaultSelector() as poll:
+            for family in families or [{"version":4,"dn":DN_IP}]:
+                sock = sockets.enter_context(socket.socket(socket.AF_INET6 if family['version']==6 else socket.AF_INET, socket.SOCK_DGRAM))
+                if family['version']==6:
+                    sock.setsockopt(socket.IPPROTO_IPV6,socket.IPV6_V6ONLY,1)
+                sock.bind((family['dn'],9000))
+                sock.setblocking(False)
+                poll.register(sock,selectors.EVENT_READ)
             while not stop.is_set():
                 if (state/'dn-disable').exists():
-                    sock.close()
-                    (state/'dn-disabled').write_text('owned UDP DN peer closed\n')
+                    sockets.close()
+                    (state/'dn-disabled').write_text('all owned family-specific UDP DN peers closed\n')
                     stop.wait()
                     return
-                try:
-                    data, address = sock.recvfrom(4096)
-                    sock.sendto(data, address)
-                except TimeoutError:
-                    pass
+                for key,_ in poll.select(.2):
+                    sock=key.fileobj
+                    try:
+                        data,address=sock.recvfrom(4096)
+                        sock.sendto(data,address)
+                    except BlockingIOError:
+                        pass
     except Exception as error:
         errors.append(error)
         stop.set()
@@ -46,13 +55,16 @@ def start(prefix, state, upf_prefix=None, stop_capture_when_ready=False):
         if profile.get('tunnel_backend') == 'ebpf' and not profile.get('native'):
             subprocess.run(['ethtool','-K','eth0','tx','off','rx','off','tso','off','gso','off','gro','off'],check=True)
         sessions = profile.get('sessions', 1 if profile['core'] == 'open5gs' else 0)
+        families = profile.get('user_plane_families',[{'version':4,'dn':DN_IP}])
         if profile["core"] == "open5gs":
             names = ["nrf", "udr", "udm", "ausf", "bsf", "pcf", "nssf", "upf", "smf", "amf"]
         else:
             names = ["nrf", "udr", "udm", "ausf", "pcf", "nssf"] + (["upf", "smf"] if sessions else []) + ["amf"]
         if sessions and profile.get('upf_implementation','open5gs') == 'open5gs':
             subprocess.run(["ip", "tuntap", "add", "name", "ogstun", "mode", "tun"], check=True)
-            subprocess.run(["ip", "addr", "add", DN_IP + "/16", "dev", "ogstun"], check=True)
+            for family in families:
+                subnet = family['dn'] + ('/48' if family['version']==6 else '/16')
+                subprocess.run(['ip', '-6' if family['version']==6 else '-4', 'addr', 'add', subnet, 'dev', 'ogstun'], check=True)
             subprocess.run(["ip", "link", "set", "ogstun", "up"], check=True)
         elif sessions:
             # The genuine UPF installs the UE subnet route on upfgtp. Give the
@@ -61,7 +73,7 @@ def start(prefix, state, upf_prefix=None, stop_capture_when_ready=False):
             subprocess.run(['ip','addr','add',DN_IP+'/32','dev','dn0'],check=True)
             subprocess.run(['ip','link','set','dn0','up'],check=True)
         if sessions:
-            echo = threading.Thread(target=serve_echo, args=(stop,errors,state))
+            echo = threading.Thread(target=serve_echo, args=(stop,errors,state,families))
             echo.start()
             capture_log = (state / "pfcp-capture.log").open("wb")
             files.append(capture_log)
