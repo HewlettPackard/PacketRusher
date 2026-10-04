@@ -30,8 +30,8 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend
 		}
 	}
 
-	if numPduSessions < 1 || numPduSessions > 15 {
-		log.Fatal("Each UE requires 1 to 15 PDU Sessions (NAS PDU session identities 1 to 15).")
+	if numPduSessions < 0 || numPduSessions > 15 {
+		log.Fatal("Each UE can have 0 to 15 PDU Sessions (NAS PDU session identities 1 to 15).")
 	}
 
 	wg := sync.WaitGroup{}

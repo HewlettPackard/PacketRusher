@@ -1,3 +1,7 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package main
 
 import (
@@ -58,8 +62,8 @@ func TestRejectArgumentsBeforeStartingCommand(t *testing.T) {
 		{"unexpected argument", []string{"gnb", "extra"}, "unexpected positional arguments"},
 		{"zero UEs", []string{"multi-ue", "-n", "0"}, "--number-of-ues must be at least 1"},
 		{"negative UEs", []string{"multi-ue", "-n=-1"}, "--number-of-ues must be at least 1"},
-		{"zero PDU sessions", []string{"multi-ue", "-n", "1", "--numPduSessions=0"}, "--numPduSessions must be between 1 and 15"},
-		{"too many PDU sessions", []string{"multi-ue", "-n", "1", "--numPduSessions=16"}, "--numPduSessions must be between 1 and 15"},
+		{"a tunnel without PDU session", []string{"multi-ue", "-n", "1", "--tunnel", "--numPduSessions=0"}, "at least 1 with --tunnel"},
+		{"too many PDU sessions", []string{"multi-ue", "-n", "1", "--numPduSessions=16"}, "--numPduSessions must be between 0 and 15"},
 		{"negative duration", []string{"multi-ue", "-n", "1", "--timeBetweenRegistration=-1"}, "--timeBetweenRegistration cannot be negative"},
 		{"negative loop count", []string{"multi-ue", "-n", "1", "--loopCount=-1"}, "--loopCount cannot be negative"},
 	}

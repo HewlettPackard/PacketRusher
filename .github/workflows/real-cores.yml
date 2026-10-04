@@ -1,0 +1,104 @@
+name: Real cores
+on:
+  pull_request:
+    paths: ['**.go', '**.c', '**.o', 'go.mod', 'go.sum', 'test/real-core/**', '.github/workflows/real-cores.yml']
+  push:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  real-core:
+    name: ${{ matrix.core }} ${{ matrix.backend }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - core: open5gs
+            backend: userspace
+          - core: open5gs
+            backend: ebpf
+          - core: free5gc
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build PacketRusher
+        run: CGO_ENABLED=0 go build -o packetrusher ./cmd
+
+      # The UE runs in its own network namespace so that its traffic has to cross the UPF.
+      - name: Create the RAN namespace
+        run: |
+          sudo modprobe sctp
+          sudo ip netns add ran
+          sudo ip link add core0 type veth peer name ran0 netns ran
+          sudo ip addr add 172.30.5.20/24 dev core0
+          sudo ip link set core0 up
+          sudo ip -n ran addr add 172.30.5.30/24 dev ran0
+          sudo ip -n ran link set ran0 up
+          sudo ip -n ran link set lo up
+
+      - name: Install MongoDB
+        run: |
+          curl -fsSL https://pgp.mongodb.com/server-8.0.asc | sudo gpg --dearmor -o /usr/share/keyrings/mongodb.gpg
+          echo "deb [signed-by=/usr/share/keyrings/mongodb.gpg] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" |
+            sudo tee /etc/apt/sources.list.d/mongodb.list
+          sudo apt-get update
+          sudo apt-get install -y mongodb-org
+          sudo systemctl start mongod
+          timeout 30 bash -c 'until mongosh --quiet --eval "db.runCommand({ping: 1})" >/dev/null 2>&1; do sleep 1; done'
+          mongosh --quiet ${{ matrix.core }} test/real-core/${{ matrix.core }}-subscriber.js
+
+      - name: Start Open5GS
+        if: matrix.core == 'open5gs'
+        run: |
+          sudo add-apt-repository -y ppa:open5gs/latest
+          sudo apt-get install -y open5gs
+          sudo sed -i 's/mcc: 999/mcc: 208/; s/mnc: 70/mnc: 93/' /etc/open5gs/*.yaml
+          sudo yq -i '.amf.ngap.server[0].address = "172.30.5.20" | .amf.plmn_support[0].s_nssai[0].sd = "010203"' /etc/open5gs/amf.yaml
+          sudo yq -i '.nssf.sbi.client.nsi[0].s_nssai.sd = "010203"' /etc/open5gs/nssf.yaml
+          sudo yq -i '.upf.gtpu.server[0].address = "172.30.5.20"' /etc/open5gs/upf.yaml
+          sudo ip tuntap add name ogstun mode tun 2>/dev/null || true
+          sudo ip addr replace 10.45.0.1/16 dev ogstun
+          sudo ip link set ogstun up
+          # The NRF starts first: it forgets the functions registered before its restart.
+          units=$(systemctl list-unit-files 'open5gs-*.service' --no-legend | awk '{print $1}')
+          restart=$(date '+%Y-%m-%d %H:%M:%S')
+          sudo systemctl stop $units
+          sudo systemctl start open5gs-nrfd
+          sudo systemctl start open5gs-scpd
+          sudo systemctl start $units
+          # A UE registering before the functions know each other is rejected.
+          for ready in amf:'NF registered' ausf:'NF registered' udm:'NF registered' udr:'NF registered' \
+            pcf:'NF registered' nssf:'NF registered' bsf:'NF registered' smf:'PFCP associated'; do
+            timeout 60 bash -c "until journalctl -u open5gs-${ready%%:*}d --since '$restart' | grep -q '${ready#*:}'; do sleep 1; done"
+          done
+
+      # No UPF: free5GC's needs the gtp5g kernel module, so this job only registers.
+      - name: Start free5GC
+        if: matrix.core == 'free5gc'
+        run: |
+          git clone --quiet --recursive --depth 1 --shallow-submodules --branch v4.3.0 https://github.com/free5gc/free5gc
+          cd free5gc
+          make nrf udr udm ausf nssf pcf amf
+          sed -i 's/127.0.0.18/172.30.5.20/' config/amfcfg.yaml
+          for nf in nrf udr udm ausf nssf pcf amf; do
+            ./bin/$nf -c config/${nf}cfg.yaml > $nf.log 2>&1 &
+            sleep 2
+          done
+
+      - name: Register a UE
+        run: |
+          timeout 60 bash -c 'until ss --sctp -ln | grep -q 172.30.5.20:38412; do sleep 1; done'
+          sudo env BACKEND=${{ matrix.backend }} ip netns exec ran test/real-core/ue.sh "$PWD/packetrusher" \
+            test/real-core/packetrusher.yml ${{ matrix.core == 'open5gs' && '10.45.0.1' || '' }}
+
+      - name: Core logs
+        if: failure()
+        run: |
+          sudo journalctl --no-pager -u 'open5gs-*' --since -10min | tail -n 300 || true
+          tail -n 100 free5gc/*.log || true

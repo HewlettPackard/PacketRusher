@@ -221,3 +221,10 @@ Git metadata: pass `--build-arg VERSION=$(git describe --tags --always)` to iden
 
 Pushing a `v*` or `YYYYMMDD` tag publishes a GitHub release with Linux amd64/arm64 archives and checksums, and a
 `ghcr.io/hewlettpackard/packetrusher:<tag>` image.
+
+### Checks against real cores
+
+The `Real cores` workflow registers a UE against Open5GS, with a PDU session and traffic through its UPF on the
+`userspace` and `ebpf` tunnel backends, and against free5GC, registration only as its UPF needs gtp5g.
+`test/real-core/ue.sh <packetrusher> <config.yml> [<address to ping>]` runs the same check against a core
+you started yourself.

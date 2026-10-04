@@ -120,7 +120,7 @@ func newApp() *cli.App {
 					&cli.IntFlag{Name: "timeBeforeXnHandover", Value: 0, Aliases: []string{"xnh"}, Usage: "The time in ms, before triggering a UE handover using Xn Handover. 0 to disable handover. This requires at least two gNodeB, eg: two N2/N3 IPs."},
 					&cli.IntFlag{Name: "timeBeforeIdle", Value: 0, Aliases: []string{"idl"}, Usage: "The time in ms, before switching UE to Idle. 0 to disable Idling."},
 					&cli.IntFlag{Name: "timeBeforeReconnecting", Value: 1000, Aliases: []string{"tbr"}, Usage: "The time in ms, before reconnecting to gNodeB after switching to Idle state. Default is 1000 ms. Only work in conjunction with timeBeforeIdle."},
-					&cli.IntFlag{Name: "numPduSessions", Value: 1, Aliases: []string{"nPdu"}, Usage: "The number of PDU Sessions to create"},
+					&cli.IntFlag{Name: "numPduSessions", Value: 1, Aliases: []string{"nPdu"}, Usage: "The number of PDU Sessions to create, 0 to only register"},
 					&cli.BoolFlag{Name: "loop", Aliases: []string{"l"}, Usage: "Register UEs in a loop."},
 					&cli.IntFlag{Name: "loopCount", Value: 0, Aliases: []string{"lc"}, Usage: "The number of times the loop is executed. 0 to loop infinitely."},
 					&cli.IntFlag{Name: "timeBeforeReregistration", Value: 200, Aliases: []string{"tbrr"}, Usage: "The time in ms before the UE registers again after deregistration if UE is looping."},
@@ -313,8 +313,8 @@ func validateArguments(c *cli.Context) error {
 	if c.Int("number-of-ues") < 1 {
 		return fmt.Errorf("--number-of-ues must be at least 1")
 	}
-	if n := c.Int("numPduSessions"); n < 1 || n > 15 {
-		return fmt.Errorf("--numPduSessions must be between 1 and 15")
+	if n := c.Int("numPduSessions"); n < 0 || n > 15 || n == 0 && c.Bool("tunnel") {
+		return fmt.Errorf("--numPduSessions must be between 0 and 15, and at least 1 with --tunnel")
 	}
 	for _, flag := range []string{
 		"number-of-gnbs", "loopCount", "timeBetweenRegistration", "timeBeforeDeregistration",
