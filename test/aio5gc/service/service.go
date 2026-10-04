@@ -19,16 +19,6 @@ import (
 
 var bufsize = 65535
 
-func RunServer(ServerIpPort netip.AddrPort, fgc *context.Aio5gc) {
-	ln, err := Listen(ServerIpPort)
-	if err != nil {
-		log.Errorf("[5GC] %v", err)
-		return
-	}
-	fgc.RegisterCloser(ln.Close)
-	Serve(ln, fgc)
-}
-
 // Listener is the AMF's SCTP endpoint. A test that needs the AMF to refuse associations
 // for a while closes it and later listens again.
 type Listener struct {

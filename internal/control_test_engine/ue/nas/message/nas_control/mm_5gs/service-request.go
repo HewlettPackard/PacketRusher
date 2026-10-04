@@ -1,6 +1,6 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
- * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2024-2026 Valentin D'Emmanuele
  */
 package mm_5gs
 

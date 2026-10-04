@@ -328,21 +328,6 @@ func (gnb *GNBContext) HasGnbAmf(amfId int64) bool {
 	return ok
 }
 
-func (gnb *GNBContext) selectAmFByCapacity() *GNBAmf {
-	var amfSelect *GNBAmf
-	var maxWeightFactor int64 = -1
-	for amf := range gnb.IterGnbAmf() {
-		if amf.relativeAmfCapacity > 0 {
-			if maxWeightFactor < amf.tnla.tnlaWeightFactor {
-				// select AMF
-				maxWeightFactor = amf.tnla.tnlaWeightFactor
-				amfSelect = amf
-			}
-		}
-	}
-	return amfSelect
-}
-
 func (gnb *GNBContext) selectAmFByActive() *GNBAmf {
 	var amfSelect *GNBAmf
 	var maxWeightFactor int64 = -1
@@ -398,22 +383,6 @@ func (gnb *GNBContext) ReleaseUesOfAmf(amfId int64) int {
 		return true
 	})
 	return released
-}
-
-func (gnb *GNBContext) setGnbId(id string) {
-	gnb.controlInfo.gnbId = id
-}
-
-func (gnb *GNBContext) setTac(tac string) {
-	gnb.controlInfo.tac = tac
-}
-
-func (gnb *GNBContext) setMnc(mnc string) {
-	gnb.controlInfo.mnc = mnc
-}
-
-func (gnb *GNBContext) setMcc(mcc string) {
-	gnb.controlInfo.mcc = mcc
 }
 
 func (gnb *GNBContext) GetGnbId() string {
@@ -478,10 +447,6 @@ func (gnb *GNBContext) GetGNBIDBitString() aper.BitString {
 	return aper.BitString{Bytes: id.Bytes(), BitLength: uint64(id.BitLength)}
 }
 
-func (gnb *GNBContext) getTac() string {
-	return gnb.controlInfo.tac
-}
-
 func (gnb *GNBContext) GetTacInBytes() []byte {
 	// changed for bytes.
 	resu, err := hex.DecodeString(gnb.controlInfo.tac)
@@ -489,10 +454,6 @@ func (gnb *GNBContext) GetTacInBytes() []byte {
 		fmt.Println(err)
 	}
 	return resu
-}
-
-func (gnb *GNBContext) getSlice() (string, string) {
-	return gnb.sliceInfo.sst, gnb.sliceInfo.sd
 }
 
 func (gnb *GNBContext) GetSliceInBytes() ([]byte, []byte) {

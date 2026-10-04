@@ -24,7 +24,6 @@ type SmContext struct {
 	pduAddress                   net.IP
 	dataNetwork                  DataNetwork
 	userLocation                 models.NrLocation
-	plmnID                       models.PlmnId
 	pti                          uint8
 	sessionType                  uint8
 	ProtocolConfigurationOptions *ProtocolConfigurationOptions

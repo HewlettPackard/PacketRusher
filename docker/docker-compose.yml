@@ -7,7 +7,7 @@ services:
     image: packetrusher:local
     network_mode: host
     volumes:
-      - ${PACKETRUSHER_CONFIG:-./config.yml}:/packetrusher/config/config.yml:ro
+      - ${PACKETRUSHER_CONFIG:-../config/config.yml}:/packetrusher/config/config.yml:ro
     command: ["--config", "/packetrusher/config/config.yml", "multi-ue", "-n", "2"]
     stop_signal: SIGINT
     stop_grace_period: 70s

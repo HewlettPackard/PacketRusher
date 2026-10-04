@@ -6,12 +6,12 @@
 package nas
 
 import (
+	"encoding/hex"
 	"net/netip"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
-	"my5G-RANTester/internal/testutil/naswire"
 )
 
 // The PDU address of a PDU Session Establishment Accept is an IPv4 address, an IPv6
@@ -32,8 +32,11 @@ func TestPDUSessionAcceptAddress(t *testing.T) {
 		require.NoError(t, err, name)
 		session.SetStateSM_PDU_SESSION_PENDING()
 		// PDU session 1, its type with SSC mode 1, QoS rules and session AMBR.
-		accept := naswire.Hex("2e0101c2" + tc.sessionType + "000601000320ff01060103e80103e8" + tc.address)
-		DispatchNas(ue, naswire.Protect(naswire.WrapSM(accept), ue.UeSecurity.KnasEnc, ue.UeSecurity.KnasInt, 0x0207, 1, 2))
+		accept, err := hex.DecodeString("2e0101c2" + tc.sessionType + "000601000320ff01060103e80103e8" + tc.address)
+		require.NoError(t, err, name)
+		// The DL NAS Transport carrying it as the N1 SM container of PDU session 1.
+		transport := append([]byte{0x7e, 0, 0x68, 1, byte(len(accept) >> 8), byte(len(accept))}, accept...)
+		DispatchNas(ue, protect(ue, append(transport, 0x12, 1), 0x0207))
 		require.Equal(t, context.SM5G_PDU_SESSION_ACTIVE, session.GetStateSM(), name)
 		require.Equal(t, tc.ipv4, session.GetIp(), name)
 		require.Equal(t, tc.ipv6, session.GetIPv6(), name)

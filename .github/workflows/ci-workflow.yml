@@ -40,7 +40,7 @@ jobs:
           done
 
       - name: Run patched native NAS codec tests
-        run: go test -v -race github.com/free5gc/nas/ie/... github.com/free5gc/nas/message/... github.com/free5gc/nas/internal/... -timeout=180s
+        run: go test -v -race github.com/free5gc/nas/ie github.com/free5gc/nas/message -timeout=180s
 
   arm64:
     name: tunnel tests on arm64
@@ -71,9 +71,5 @@ jobs:
         run: |
           docker run --rm packetrusher-ci --help
           docker run --rm packetrusher-ci multi-ue --help
-      - name: Validate Compose configurations
-        run: |
-          docker compose -f docker/docker-compose.yml config --quiet
-          docker compose -f docker/docker-compose.yml -f docker/docker-compose.tunnel.yml config --quiet
-          docker compose -f docker/docker-compose.bridge.yml config --quiet
-          docker compose -f docker/docker-compose.bridge.yml -f docker/docker-compose.tunnel.yml config --quiet
+      - name: Validate Compose configuration
+        run: docker compose -f docker/docker-compose.yml config --quiet

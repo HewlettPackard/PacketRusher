@@ -3,7 +3,6 @@
 .github
 .idea
 .vscode
-prepared-prs
 packetrusher
 app
 *.log

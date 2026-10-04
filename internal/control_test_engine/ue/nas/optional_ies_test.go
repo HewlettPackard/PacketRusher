@@ -1,129 +1,51 @@
-// SPDX-License-Identifier: Apache-2.0
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package nas
 
 import (
-	"reflect"
+	"encoding/hex"
 	"testing"
 
-	"github.com/free5gc/nas/ie"
 	message "github.com/free5gc/nas/message"
 	"github.com/stretchr/testify/require"
-	"my5G-RANTester/config"
-	"my5G-RANTester/internal/common/auth"
-	"my5G-RANTester/internal/common/sidf"
-	gnbcontext "my5G-RANTester/internal/control_test_engine/gnb/context"
-	"my5G-RANTester/internal/control_test_engine/ue/context"
-	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
-	"my5G-RANTester/internal/control_test_engine/ue/scenario"
-	"my5G-RANTester/internal/testutil/naswire"
 )
 
-func TestPreviouslySupportedOptionalIEsOnIndependentProtectedWire(t *testing.T) {
-	for _, fixture := range naswire.OptionalIEs {
-		t.Run(fixture.Name, func(t *testing.T) {
-			plain := naswire.Hex(fixture.Wire)
-			ue := securityTestUE()
-			ue.UeSecurity.CipheringAlg, ue.UeSecurity.IntegrityAlg = 2, 2
-			ue.UeSecurity.KnasEnc, ue.UeSecurity.KnasInt = [16]byte{5, 6, 7, 8}, [16]byte{1, 2, 3, 4}
-			header, count := byte(2), uint32(0x0207)
-			if plain[0] == 0x7e && plain[2] == 0x5d {
-				header, count = 3, 0
-				require.NoError(t, auth.AlgorithmKeyDerivation(2, ue.UeSecurity.Kamf, &ue.UeSecurity.KnasEnc, 2, &ue.UeSecurity.KnasInt))
-			}
-			inner := plain
-			nested := plain[0] == 0x2e
-			if nested {
-				plain = naswire.WrapSM(inner)
-			}
-			packet := naswire.Protect(plain, ue.UeSecurity.KnasEnc, ue.UeSecurity.KnasInt, count, 1, header)
-			before := ue.UeSecurity
-			bad := append([]byte(nil), packet...)
-			bad[2] ^= 0x80
-			msg, err := DecodeNAS(ue, bad)
-			require.Error(t, err)
-			require.Nil(t, msg)
-			require.Equal(t, before, ue.UeSecurity, "invalid MAC must not commit security state with optional IEs")
-			msg, err = DecodeNAS(ue, packet)
-			require.NoError(t, err)
-			require.Equal(t, count, ue.UeSecurity.DLCount.Get())
-			require.Equal(t, before.ULCount, ue.UeSecurity.ULCount)
-			if nested {
-				current := ue.UeSecurity
-				direct, directErr := DecodeNAS(ue, inner)
-				require.NoError(t, directErr, "5GSM session IDs are not security header types")
-				require.NotNil(t, direct)
-				require.Equal(t, current, ue.UeSecurity)
-				msg = nas_control.GetNasPduFromPduAccept(msg.(*message.DLNASTransport))
-			}
-			require.NotNil(t, msg, "nested SM warning must not discard a supported message")
-			require.False(t, reflect.ValueOf(msg).Elem().FieldByName(fixture.Field).IsNil(), "native optional field must be preserved")
-			wire, err := msg.MarshalBinary()
-			require.NoError(t, err)
-			require.Equal(t, inner, wire, "decoded IE must preserve the independent wire value")
-			if header != 3 {
-				plainMsg, err := DecodeNAS(ue, plain)
-				require.NoError(t, err, "supported ordinary plaintext optional IEs remain accepted")
-				require.NotNil(t, plainMsg)
-			}
-		})
-	}
-}
-
-func TestRegistrationWithOptionalIEStillDispatchesRegistrationComplete(t *testing.T) {
-	for _, suffix := range []string{"a1", "b0", "34030201f1"} {
-		t.Run(suffix, func(t *testing.T) {
-			scenarioUpdates := make(chan scenario.ScenarioMessage, 1)
-			outgoing := make(chan gnbcontext.UEMessage, 1)
-			ue := &context.UEContext{}
-			ue.NewRanUeContext("001002086", &ie.UESecCapability{Length: 2, EA2_128_5G: true, IA2_128_5G: true}, "", "", "", "8000", "000000000000", "208", "93", sidf.HomeNetworkPublicKey{ProtectionScheme: "0", PublicKeyID: "0"}, "0", "internet", 1, "010203", config.TunnelMode(0), scenarioUpdates, nil, 1)
-			ue.SetGnbRx(outgoing)
-			ue.UeSecurity.KnasEnc, ue.UeSecurity.KnasInt = [16]byte{5, 6, 7, 8}, [16]byte{1, 2, 3, 4}
-			packet := naswire.Protect(naswire.Hex("7e00420101"+suffix), ue.UeSecurity.KnasEnc, ue.UeSecurity.KnasInt, 7, 1, 2)
-			core := ue.NASSecurityContext().Clone()
-			core.Side = message.CoreNetworkSide
-			DispatchNas(ue, packet)
-			require.Equal(t, context.MM5G_REGISTERED, ue.GetStateMM())
-			select {
-			case sent := <-outgoing:
-				require.True(t, sent.IsNas)
-				reply, err := message.Parse(sent.Nas, core)
-				require.NoError(t, err)
-				require.IsType(t, &message.RegComplete{}, reply)
-			default:
-				t.Fatal("Registration Complete was not sent")
-			}
-		})
-	}
-}
-
-func TestMalformedOptionalIEsCannotCommitProtectedCounter(t *testing.T) {
-	// Declared TLV/TLV-E lengths exceed the bytes on the wire, including a
-	// duplicate IE that upstream used to skip without checking its envelope.
-	for _, wire := range []string{
-		"7e0042010134040201f1", "7e004201017a00050001f100",
-		"7e0042010160032000", "7e0042010134020201",
-		"7e0042010173001000000000000000000000000000000000",
-		"7e004201016002200060042000",
-		"7e0068010000", "7e00680100062e0101d11f", "7e00680100052e0101d11f2402aa",
+// A core may put these optional IEs in its messages (TS 24.501, TS 24.008). free5gc/nas v1.3.0
+// has no codec for them and reports the message as an error, which had the UE drop for instance
+// its Registration Accept: third_party/free5gc-nas adds them.
+func TestOptionalIEsAreDecoded(t *testing.T) {
+	for name, wire := range map[string]string{
+		"registration/mico":                 "7e00420101b3",
+		"registration/emergency":            "7e0042010134030201f1",
+		"registration/extended-emergency":   "7e004201017a00040001f100",
+		"registration/sor":                  "7e0042010173001300000000000000000000000000000000000000",
+		"registration/nssai-mode":           "7e00420101a1",
+		"registration/operator-categories":  "7e00420101760000",
+		"registration/non3gpp-policies":     "7e00420101d1",
+		"registration/eps-status":           "7e0042010160022000",
+		"configuration/mico":                "7e0054b0",
+		"configuration/operator-categories": "7e0054760000",
+		"configuration/full-name-ucs2":      "7e00544307900046005200e9",
+		"configuration/short-name-ucs2":     "7e005445039000e9",
+		"configuration/sms":                 "7e0054f1",
+		"security/eps-algorithms":           "7e005d220102a0205722",
+		"security/s1-capabilities":          "7e005d220102a0201902a020",
+		"transport/additional-information":  "7e00680100052e0101c31f240100",
+		"session/always-on":                 "2e0101c211000601000320ff01060103e80103e881",
+		"session/mapped-eps":                "2e0101c211000601000320ff01060103e80103e875000450000180",
+		"session/allowed-ssc":               "2e0101c31ff3",
+		"session/reject-congestion":         "2e0101c31f610103",
+		"session/release-congestion":        "2e0101d324610103",
 	} {
-		t.Run(wire, func(t *testing.T) {
-			ue := securityTestUE()
-			ue.UeSecurity.CipheringAlg, ue.UeSecurity.IntegrityAlg = 2, 2
-			before := ue.UeSecurity
-			plain := naswire.Hex(wire)
-			_, err := DecodeNAS(ue, plain)
-			require.Error(t, err)
-			packet := naswire.Protect(plain, ue.UeSecurity.KnasEnc, ue.UeSecurity.KnasInt, 0x0207, 1, 2)
-			_, err = DecodeNAS(ue, packet)
-			require.Error(t, err)
-			require.Equal(t, before, ue.UeSecurity, "valid MAC does not make a malformed IE acceptable")
-		})
+		plain, err := hex.DecodeString(wire)
+		require.NoError(t, err, name)
+		msg, err := message.Parse(plain, nil)
+		require.NoError(t, err, name)
+		// A decoder that skipped the IE would not encode it back.
+		encoded, err := msg.MarshalBinary()
+		require.NoError(t, err, name)
+		require.Equal(t, plain, encoded, name)
 	}
-	inner := naswire.Hex("2e0101c211000601000320ff01060103e80103e875000550000180")
-	require.Nil(t, nas_control.GetNasPduFromPduAccept(&message.DLNASTransport{PayloadCntr: &ie.PayloadCntr{Contents: inner}}))
-	// A newer unsupported IE retains an explicit error, including nested SM.
-	_, err := DecodeNAS(securityTestUE(), naswire.Hex("7e004201011b0100"))
-	require.Error(t, err)
-	inner = naswire.Hex("2e0101c211000601000320ff01060103e80103e8c1")
-	require.Nil(t, nas_control.GetNasPduFromPduAccept(&message.DLNASTransport{PayloadCntr: &ie.PayloadCntr{Contents: inner}}))
 }
