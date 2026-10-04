@@ -158,6 +158,8 @@ gnodeb:
     gnbid: "01ABCDE"
     gnbidlength: 25
     cellid: 3
+```
+
 ### Runtime UE controls and JSON scenarios
 
 `multi-ue --control-socket` creates a Unix socket to trigger procedures on the UEs of a running test, and
@@ -182,6 +184,7 @@ sessions), `idle`, `reconnect`, `xn-handover` and `ng-handover` (to the `--targe
   {"ue": 1, "action": "deregister"}
 ]}
 ```
+
 ### GTP-U tunnel backends
 
 The global `--tunnel-backend` flag selects what carries the user plane of the UEs:
@@ -208,6 +211,7 @@ The SMF only allocates an interface identifier: the UE sends a Router Solicitati
 # config.yml: "pdusessiontype: IPv4v6" under "ue:"
 sudo ./packetrusher --tunnel-backend userspace ue
 ```
+
 ### Versions and releases
 
 `packetrusher --version` prints the release tag, or the source commit for other builds. Docker builds have no

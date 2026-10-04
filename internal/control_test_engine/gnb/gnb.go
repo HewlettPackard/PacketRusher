@@ -33,10 +33,11 @@ func InitGnb(conf config.Config, wg *sync.WaitGroup) *context.GNBContext {
 	log.Info("[GNB] InitGnb called with N2 IP: ", conf.GNodeB.ControlIF.String())
 
 	// start communication with AMF (server SCTP).
+	// Keep retry-consumed endpoints reserved across all AMF associations.
+	currentN2IP := conf.GNodeB.ControlIF
+	currentN3IP := conf.GNodeB.DataIF
 	for _, amfConfig := range conf.AMFs {
 		connected := false
-		currentN2IP := conf.GNodeB.ControlIF
-		currentN3IP := conf.GNodeB.DataIF
 
 		for retry := 0; retry < maxRetries && !connected; retry++ {
 			if retry > 0 {
