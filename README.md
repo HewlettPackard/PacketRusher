@@ -208,3 +208,10 @@ The SMF only allocates an interface identifier: the UE sends a Router Solicitati
 # config.yml: "pdusessiontype: IPv4v6" under "ue:"
 sudo ./packetrusher --tunnel-backend userspace ue
 ```
+### Versions and releases
+
+`packetrusher --version` prints the release tag, or the source commit for other builds. Docker builds have no
+Git metadata: pass `--build-arg VERSION=$(git describe --tags --always)` to identify them.
+
+Pushing a `v*` or `YYYYMMDD` tag publishes a GitHub release with Linux amd64/arm64 archives and checksums, and a
+`ghcr.io/hewlettpackard/packetrusher:<tag>` image.
