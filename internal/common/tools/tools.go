@@ -86,13 +86,7 @@ type UESimulationConfig struct {
 	UeId                     int
 	Gnbs                     map[string]*gnbCxt.GNBContext
 	Cfg                      config.Config
-	ScenarioChan             chan procedures.UeTesterMessage
 	TimeBeforeDeregistration int
-	// DeregistrationTrigger optionally replaces the wall-clock timer. Each value
-	// gracefully ends the current iteration, without stopping registration loops.
-	// Closing it disables explicit triggers; scenario shutdown remains receivable.
-	// A nil channel preserves the normal TimeBeforeDeregistration behavior.
-	DeregistrationTrigger    <-chan struct{}
 	TimeBeforeNgapHandover   int
 	TimeBeforeXnHandover     int
 	TimeBeforeIdle           int
@@ -172,8 +166,6 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 	go func() {
 		defer wg.Done()
 		defer close(simulation.done)
-		scenarioChan := simConfig.ScenarioChan
-		deregistrationTrigger := simConfig.DeregistrationTrigger
 		stopping := false
 		// A control deregistration parks the scenario: its UE stays deregistered
 		// until a control registration, whatever the registration loop says.
@@ -185,16 +177,12 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 			pending := []procedures.UeTesterMessage{{Type: procedures.Registration}}
 
 			after := func(milliseconds int) <-chan time.Time {
-				if milliseconds == 0 {
+				if milliseconds <= 0 {
 					return nil
 				}
 				return time.After(time.Duration(milliseconds) * time.Millisecond)
 			}
-			var deregistrationChannel <-chan time.Time
-			iterationTrigger := deregistrationTrigger
-			if simConfig.DeregistrationTrigger == nil {
-				deregistrationChannel = after(simConfig.TimeBeforeDeregistration)
-			}
+			deregistrationChannel := after(simConfig.TimeBeforeDeregistration)
 			ngapHandoverChannel := after(simConfig.TimeBeforeNgapHandover)
 			xnHandoverChannel := after(simConfig.TimeBeforeXnHandover)
 			idleChannel := after(simConfig.TimeBeforeIdle)
@@ -203,16 +191,6 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 			registered := false
 			state := ueCtx.MM5G_NULL
 			alive := true
-			acceptCommand := func(message procedures.UeTesterMessage) {
-				if message.Type == procedures.Terminate || message.Type == procedures.Kill {
-					stopping = true
-				}
-				if ueRx != nil {
-					pending = append(pending, message)
-				} else if message.Control != nil {
-					message.Control.Reply <- noUe(message.Control, "deregistering")
-				}
-			}
 			// The UE takes no command after Terminate or Kill, so the scenario
 			// answers the control requests still queued for it.
 			dropPending := func() {
@@ -273,9 +251,9 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 				}
 				// Bound command admission while still receiving UE state updates.
 				// One registration can schedule at most 16 PDU session commands.
-				var commands, legacyCommands <-chan procedures.UeTesterMessage
+				var commands <-chan procedures.UeTesterMessage
 				if len(pending) < 32 {
-					commands, legacyCommands = simulation.commands, scenarioChan
+					commands = simulation.commands
 				}
 				select {
 				case commandTx <- command:
@@ -287,14 +265,6 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 				case <-deregistrationChannel:
 					deregistrationChannel = nil
 					endIteration()
-				case _, open := <-iterationTrigger:
-					iterationTrigger = nil // At most one graceful stop per iteration.
-					if open {
-						endIteration()
-					} else {
-						// Do not re-arm a closed channel for subsequent iterations.
-						deregistrationTrigger = nil
-					}
 				case <-ngapHandoverChannel:
 					ngapHandoverChannel = nil
 					if !stopping {
@@ -319,13 +289,14 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 						pending = append(pending, procedures.UeTesterMessage{Type: procedures.ServiceRequest})
 					}
 				case msg := <-commands:
-					acceptCommand(msg)
-				case msg, open := <-legacyCommands:
-					if !open {
-						scenarioChan = nil
-						msg = procedures.UeTesterMessage{Type: procedures.Kill}
+					if msg.Type == procedures.Terminate || msg.Type == procedures.Kill {
+						stopping = true
 					}
-					acceptCommand(msg)
+					if ueRx != nil {
+						pending = append(pending, msg)
+					} else if msg.Control != nil {
+						msg.Control.Reply <- noUe(msg.Control, "deregistering")
+					}
 				case msg, open := <-ueTx:
 					if !open {
 						alive = false
@@ -373,11 +344,6 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 							parked, waiting, reply.Err = false, false, nil
 						}
 						request.Reply <- reply
-					}
-				case msg, open := <-scenarioChan:
-					if !open || msg.Type == procedures.Terminate || msg.Type == procedures.Kill {
-						restart.Stop()
-						return
 					}
 				}
 			}
