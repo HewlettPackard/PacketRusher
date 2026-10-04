@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 // Request is an action on a UE. It is also a step of a JSON scenario.

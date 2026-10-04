@@ -12,7 +12,7 @@ import (
 	"net/netip"
 	"sync/atomic"
 
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 
 	"github.com/ishidawataru/sctp"
 )
@@ -110,7 +110,7 @@ func listenAndServe(conn *sctp.SCTPConn, bufsize int, gnb *context.GNBContext, f
 		n, err := conn.Read(buf)
 		if err != nil {
 			// The association is gone; the gNB may dial a new one, which Accept serves.
-			log.Printf("[5GC] Read failed: %v", err)
+			log.Infof("[5GC] Read failed: %v", err)
 			return err
 		}
 		if n > 0 {

@@ -32,7 +32,7 @@ import (
 	"my5G-RANTester/internal/common/sidf"
 
 	"github.com/free5gc/openapi/models"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 // 5GMM main states in the UE.

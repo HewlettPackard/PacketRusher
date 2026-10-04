@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package context
 
@@ -13,7 +14,7 @@ import (
 	security "github.com/free5gc/nas/message"
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/util/ueauth"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 type SecurityContext struct {
@@ -180,7 +181,7 @@ func (s *SecurityContext) DerivateAlgKey() {
 
 	KamfBytes, err := hex.DecodeString(s.kamf)
 	if err != nil {
-		log.Printf("[5GC] Kamf decode failed: %v", err)
+		log.Infof("[5GC] Kamf decode failed: %v", err)
 		return
 	}
 
@@ -191,7 +192,7 @@ func (s *SecurityContext) DerivateAlgKey() {
 		&s.knasInt)
 
 	if err != nil {
-		log.Printf("[5GC] Algorithm key derivation failed  %v", err)
+		log.Infof("[5GC] Algorithm key derivation failed  %v", err)
 	}
 }
 

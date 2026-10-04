@@ -19,7 +19,7 @@ import (
 
 	nasMessage "github.com/free5gc/nas/ie"
 	nas "github.com/free5gc/nas/message"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 func InitRegistration(ue *context.UEContext) {

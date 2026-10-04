@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package sender
 
@@ -8,7 +9,7 @@ import (
 	context2 "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 func SendToGnb(ue *context.UEContext, message []byte) {

@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
+	log "my5G-RANTester/internal/log"
 )
 
 var errNoIPv6 = errors.New("IPv6 user plane needs the userspace tunnel backend")

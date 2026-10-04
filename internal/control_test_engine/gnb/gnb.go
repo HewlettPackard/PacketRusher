@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 // InitGnb starts a gNB once NG Setup has completed with every configured AMF. If that

@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/tetratelabs/wazero"
+	log "my5G-RANTester/internal/log"
 )
 
 func TestWithCustomScenario(scenarioPath string) error {

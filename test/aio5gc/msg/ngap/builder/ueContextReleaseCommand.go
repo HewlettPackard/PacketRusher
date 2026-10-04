@@ -11,7 +11,7 @@ import (
 	"github.com/free5gc/ngap/ie"
 	"github.com/free5gc/ngap/message"
 	"github.com/free5gc/util/fsm"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"my5G-RANTester/test/aio5gc/context"
 )
 
@@ -24,7 +24,7 @@ func UEContextReleaseCommand(ue *context.UEContext, present int, cause aper.Enum
 	if err != nil {
 		return nil, err
 	}
-	err = ue.GetUeFsm().SendEvent(ue.GetState(), context.Deregistration, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+	err = ue.GetUeFsm().SendEvent(ue.GetState(), context.Deregistration, fsm.ArgsType{"ue": ue}, logrus.NewEntry(logrus.StandardLogger()))
 	return b, err
 }
 func buildUEContextReleaseCommand(ue *context.UEContext, present int, cause aper.Enumerated) (*message.UEContextReleaseCommand, error) {

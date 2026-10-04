@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package context
 
@@ -16,7 +17,7 @@ import (
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/util/fsm"
 	"github.com/free5gc/util/ueauth"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 type UEContext struct {
@@ -193,12 +194,12 @@ func (ue *UEContext) ExecuteForAllSmContexts(function func(ue *SmContext)) {
 func (ue *UEContext) DerivateKamf() {
 	supiRegexp, err := regexp.Compile("(?:imsi|supi)-([0-9]{5,15})")
 	if err != nil {
-		log.Printf("[5GC] Kamf derivation  %v", err)
+		log.Infof("[5GC] Kamf derivation  %v", err)
 		return
 	}
 	groups := supiRegexp.FindStringSubmatch(ue.securityContext.supi)
 	if groups == nil {
-		log.Printf("[5GC] Kamf derivation: supi is not correct")
+		log.Infof("[5GC] Kamf derivation: supi is not correct")
 		return
 	}
 
@@ -209,12 +210,12 @@ func (ue *UEContext) DerivateKamf() {
 
 	KseafDecode, err := hex.DecodeString(ue.securityContext.kseaf)
 	if err != nil {
-		log.Printf("[5GC] Kamf derivation  %v", err)
+		log.Infof("[5GC] Kamf derivation  %v", err)
 		return
 	}
 	KamfBytes, err := ueauth.GetKDFValue(KseafDecode, ueauth.FC_FOR_KAMF_DERIVATION, P0, L0, P1, L1)
 	if err != nil {
-		log.Printf("[5GC] Kamf derivation  %v", err)
+		log.Infof("[5GC] Kamf derivation  %v", err)
 		return
 	}
 	ue.securityContext.kamf = hex.EncodeToString(KamfBytes)

@@ -8,7 +8,7 @@ package ngap
 import (
 	"fmt"
 	"github.com/free5gc/ngap/message"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 	"my5G-RANTester/test/aio5gc/context"
 	"my5G-RANTester/test/aio5gc/msg/ngap/handler"
 )

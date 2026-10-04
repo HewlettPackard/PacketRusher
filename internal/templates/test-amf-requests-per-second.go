@@ -12,7 +12,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/gnb"
 	"my5G-RANTester/internal/monitoring"
 
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 // rajada de mensagens por segundo enviadas

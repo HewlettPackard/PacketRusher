@@ -14,7 +14,7 @@ import (
 	ngapType "github.com/free5gc/ngap/ie"
 	"github.com/free5gc/openapi/models"
 	"github.com/ishidawataru/sctp"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 type GNBContext struct {
@@ -85,7 +85,7 @@ func (gnb *GNBContext) SendMsg(packet []byte) {
 		}
 		_, err := conn.SCTPWrite(packet, info)
 		if err != nil {
-			log.Printf("[5GC] write failed: %v", err)
+			log.Infof("[5GC] write failed: %v", err)
 			return
 		}
 	}

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/free5gc/nas/message"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 // maxRejectRetries is how many times a rejected PDU session is requested again.

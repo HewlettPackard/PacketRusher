@@ -11,7 +11,7 @@ import (
 	"my5G-RANTester/internal/monitoring"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 func TestAvailability(interval int) {

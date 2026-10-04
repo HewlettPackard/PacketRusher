@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package handler
 
@@ -16,7 +17,8 @@ import (
 	nas "github.com/free5gc/nas/message"
 	ngapType "github.com/free5gc/ngap/ie"
 	"github.com/free5gc/util/fsm"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 func AuthenticationResponse(nasMsg *nas.AuthRsp, gnb *context.GNBContext, ue *context.UEContext, amf *context.AMFContext) error {
@@ -46,7 +48,7 @@ func DefaultAuthenticationResponse(nasMsg *nas.AuthRsp, gnb *context.GNBContext,
 
 		oldUe, err := amf.FindRegisteredUEByMsin(ue.GetSecurityContext().GetMsin())
 		if err == nil && oldUe.GetAmfNgapId() != ue.GetAmfNgapId() {
-			err := ue.GetUeFsm().SendEvent(oldUe.GetState(), context.ForceDeregistrationInit, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+			err := ue.GetUeFsm().SendEvent(oldUe.GetState(), context.ForceDeregistrationInit, fsm.ArgsType{"ue": ue}, logrus.NewEntry(logrus.StandardLogger()))
 			if err != nil {
 				log.Error(err)
 			}
@@ -55,7 +57,7 @@ func DefaultAuthenticationResponse(nasMsg *nas.AuthRsp, gnb *context.GNBContext,
 	} else {
 		return errors.New(("5G AKA confirmation failed, expected res* " + xresStar + " but got " + resStar))
 	}
-	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.AuthenticationSuccess, fsm.ArgsType{"ue": ue}, log.NewEntry(log.StandardLogger()))
+	err := ue.GetUeFsm().SendEvent(ue.GetState(), context.AuthenticationSuccess, fsm.ArgsType{"ue": ue}, logrus.NewEntry(logrus.StandardLogger()))
 	if err != nil {
 		return err
 	}

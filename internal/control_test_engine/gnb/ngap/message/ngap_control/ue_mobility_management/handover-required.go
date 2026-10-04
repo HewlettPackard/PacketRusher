@@ -9,7 +9,7 @@ import (
 	ngapConvert "my5G-RANTester/lib/ngap"
 
 	ngap "github.com/free5gc/ngap/message"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 
 	"github.com/free5gc/ngap/aper"
 

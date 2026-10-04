@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/ishidawataru/sctp"
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 // ConnCount offsets the local port of each AMF's association. It is advanced once per

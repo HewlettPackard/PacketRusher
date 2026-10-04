@@ -23,7 +23,7 @@ import (
 
 	"errors"
 
-	log "github.com/sirupsen/logrus"
+	log "my5G-RANTester/internal/log"
 )
 
 // CreateGnbs starts count gNBs. If one of them fails to start, those already created
