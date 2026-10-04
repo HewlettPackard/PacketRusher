@@ -18,12 +18,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb bool, loop bool, loopCount int, timeBeforeReregistration int, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int, numGnbs int, controlSocket string) {
+func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend config.TunnelBackend, dedicatedGnb bool, loop bool, loopCount int, timeBeforeReregistration int, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int, numGnbs int, controlSocket string) {
 	if tunnelMode != config.TunnelDisabled {
 		if !dedicatedGnb && tunnelMode != config.TunnelShared {
 			log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
 		}
-		if timeBetweenRegistration < 500 && tunnelMode != config.TunnelShared {
+		if timeBetweenRegistration < 500 && tunnelMode != config.TunnelShared && tunnelBackend == config.TunnelBackendGtp5g {
 			log.Fatal("When using the --tunnel option, --timeBetweenRegistration must be equal to at least 500 ms, or else gtp5g kernel module may crash if you create tunnels too rapidly.")
 		}
 	}
@@ -39,6 +39,11 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, dedicatedGnb 
 	// Set before the gNBs are created: in shared mode each gNB creates the GTP-U
 	// device its UEs will use.
 	cfg.Ue.TunnelMode = tunnelMode
+	cfg.Ue.TunnelBackend = tunnelBackend
+	if tunnelBackend == config.TunnelBackendUserspace && tunnelMode == config.TunnelShared {
+		// No userspace device is shared: each UE of the gNB gets its own, as with -d.
+		cfg.Ue.TunnelMode = config.TunnelTun
+	}
 
 	var numGnb int
 	if dedicatedGnb {
