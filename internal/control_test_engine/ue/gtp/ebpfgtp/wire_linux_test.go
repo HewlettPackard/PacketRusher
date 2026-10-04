@@ -14,6 +14,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/stretchr/testify/require"
 	"my5G-RANTester/internal/control_test_engine/ue/gtp/internal/testpeer"
+	"my5G-RANTester/internal/control_test_engine/ue/gtp/userspace"
 )
 
 func wirePacket(c Config) []byte {
@@ -58,8 +59,8 @@ func TestActualKernelPacketBoundsChecksumsAndTupleIsolation(t *testing.T) {
 	defer r.collection.Close()
 	_, _, c := isolatedRegistry()
 	require.NoError(t, r.state.put("locals", ipv4(c.Local), uint32(1), ebpf.UpdateNoExist))
-	require.NoError(t, r.state.put("downlinks", c.downKey(), ipv4(c.IPv4), ebpf.UpdateNoExist))
-	require.NoError(t, r.state.put("sessions", ipv4(c.IPv4), c.binding(), ebpf.UpdateNoExist))
+	require.NoError(t, r.state.put("downlinks", c.downKey(), c.identity(), ebpf.UpdateNoExist))
+	require.NoError(t, r.state.put("sessions", c.identity(), c.binding(), ebpf.UpdateNoExist))
 	tests := []struct {
 		name   string
 		change func([]byte) []byte
@@ -90,6 +91,39 @@ func TestActualKernelPacketBoundsChecksumsAndTupleIsolation(t *testing.T) {
 			p[24], p[25] = 0, 0
 			binary.BigEndian.PutUint16(p[24:26], testpeer.Checksum(p[14:38]))
 			return p
+		}, 7},
+		{"innerIPv4Options", func(p []byte) []byte {
+			p = append(append(append([]byte(nil), p[:78]...), 1, 1, 1, 0), p[78:]...)
+			p[58] = 0x46
+			binary.BigEndian.PutUint16(p[60:62], uint16(len(p)-58))
+			p[68], p[69] = 0, 0
+			binary.BigEndian.PutUint16(p[68:70], testpeer.Checksum(p[58:82]))
+			binary.BigEndian.PutUint16(p[16:18], uint16(len(p)-14))
+			binary.BigEndian.PutUint16(p[38:40], uint16(len(p)-34))
+			binary.BigEndian.PutUint16(p[44:46], uint16(len(p)-50))
+			p[24], p[25] = 0, 0
+			binary.BigEndian.PutUint16(p[24:26], testpeer.Checksum(p[14:34]))
+			return p
+		}, 7},
+		{"innerIPv4Fragment", func(p []byte) []byte {
+			binary.BigEndian.PutUint16(p[64:66], 0x2000)
+			p[68], p[69] = 0, 0
+			binary.BigEndian.PutUint16(p[68:70], testpeer.Checksum(p[58:78]))
+			return p
+		}, 7},
+		{"bareGTPWithoutQFI", func(p []byte) []byte {
+			p[42] = 0x30
+			p = append(p[:50], p[58:]...)
+			binary.BigEndian.PutUint16(p[16:18], uint16(len(p)-14))
+			binary.BigEndian.PutUint16(p[38:40], uint16(len(p)-34))
+			binary.BigEndian.PutUint16(p[44:46], uint16(len(p)-50))
+			p[24], p[25] = 0, 0
+			binary.BigEndian.PutUint16(p[24:26], testpeer.Checksum(p[14:34]))
+			return p
+		}, 7},
+		{"outerFragmentToOwnedUDPReassembly", func(p []byte) []byte {
+			binary.BigEndian.PutUint16(p[20:22], 0x2000)
+			return p
 		}, ^uint32(0)},
 		{"unownedN3", func(p []byte) []byte { p[33]++; return p }, ^uint32(0)},
 		{"wrongTEID", func(p []byte) []byte { p[49]++; return p }, 2},
@@ -101,7 +135,7 @@ func TestActualKernelPacketBoundsChecksumsAndTupleIsolation(t *testing.T) {
 			return p
 		}, 2},
 		{"badOuterChecksum", func(p []byte) []byte { p[25] ^= 1; return p }, 2},
-		{"badUDPChecksum", func(p []byte) []byte { p[40] = 0x12; p[41] = 0x34; return p }, 2},
+		{"uncertainUDPChecksumToKernelValidation", func(p []byte) []byte { p[40] = 0x12; p[41] = 0x34; return p }, ^uint32(0)},
 		{"badInnerChecksum", func(p []byte) []byte { p[69] ^= 1; return p }, 2},
 		{"wrongQFI", func(p []byte) []byte { p[56]++; return p }, 2},
 		{"wrongType", func(p []byte) []byte { p[43] = 1; return p }, 2},
@@ -125,7 +159,9 @@ func TestActualKernelPacketBoundsChecksumsAndTupleIsolation(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.result, result)
 			if result == 7 {
-				require.Equal(t, wirePacket(c)[58:], opts.DataOut[14:])
+				_, payload, err := userspace.Decode(p[14+int(p[14]&15)*4+8:])
+				require.NoError(t, err)
+				require.Equal(t, payload, opts.DataOut[14:])
 			}
 		})
 	}
@@ -173,9 +209,11 @@ func TestActualKernelUDPChecksumChunkBoundaries(t *testing.T) {
 	defer r.collection.Close()
 	_, _, c := isolatedRegistry()
 	require.NoError(t, r.state.put("locals", ipv4(c.Local), uint32(1), ebpf.UpdateNoExist))
-	require.NoError(t, r.state.put("downlinks", c.downKey(), ipv4(c.IPv4), ebpf.UpdateNoExist))
-	require.NoError(t, r.state.put("sessions", ipv4(c.IPv4), c.binding(), ebpf.UpdateNoExist))
-	for _, udpLength := range []int{63, 64, 65, 95, 96, 97, 1479, 1480} {
+	require.NoError(t, r.state.put("downlinks", c.downKey(), c.identity(), ebpf.UpdateNoExist))
+	require.NoError(t, r.state.put("sessions", c.identity(), c.binding(), ebpf.UpdateNoExist))
+	c.MTU = 65491
+	require.NoError(t, r.state.put("sessions", c.identity(), c.binding(), ebpf.UpdateExist))
+	for _, udpLength := range []int{63, 64, 65, 95, 96, 97, 1479, 1480, 3007, 3008, 3009} {
 		t.Run(fmt.Sprintf("UDP%d", udpLength), func(t *testing.T) {
 			p := wirePacket(c)
 			innerLength := udpLength - 24
@@ -209,7 +247,7 @@ func TestActualKernelUDPChecksumChunkBoundaries(t *testing.T) {
 			p[len(p)-1] ^= 1
 			result, err = r.collection.Programs["decap"].Run(&ebpf.RunOptions{Data: p, Context: context})
 			require.NoError(t, err)
-			require.Equal(t, uint32(2), result, "last-byte corruption must drop")
+			require.Equal(t, ^uint32(0), result, "wire checksum failure must delegate to kernel UDP validation, never redirect directly")
 		})
 	}
 }
@@ -227,8 +265,8 @@ func TestActualKernelFree5UPFCapturedSequenceHeader(t *testing.T) {
 	_, _, c := isolatedRegistry()
 	c.IPv4, c.DownlinkTEID, c.QFI = netip.MustParseAddr("10.45.0.2"), 1, 1
 	require.NoError(t, r.state.put("locals", ipv4(c.Local), uint32(1), ebpf.UpdateNoExist))
-	require.NoError(t, r.state.put("downlinks", c.downKey(), ipv4(c.IPv4), ebpf.UpdateNoExist))
-	require.NoError(t, r.state.put("sessions", ipv4(c.IPv4), c.binding(), ebpf.UpdateNoExist))
+	require.NoError(t, r.state.put("downlinks", c.downKey(), c.identity(), ebpf.UpdateNoExist))
+	require.NoError(t, r.state.put("sessions", c.identity(), c.binding(), ebpf.UpdateNoExist))
 	gtp, err := hex.DecodeString("36ff007e00000001000000850100010045000076231e4000401102fd0a2d00010a2d00022328df4000629f5f5041434b45545255534845522d45585445524e414c2d6331623864333065326637623033343632316338323234373137313430653162646634383437336239623837653362343437623538353132336265643366326600000000")
 	require.NoError(t, err)
 	p := append(wirePacket(c)[:42], gtp...)

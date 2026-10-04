@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
-	"github.com/vishvananda/netlink/nl"
 	"my5G-RANTester/internal/control_test_engine/ue/gtp/internal/testpeer"
 	"my5G-RANTester/internal/control_test_engine/ue/gtp/userspace"
 )
@@ -51,10 +50,7 @@ func testNativeBidirectionalHandover(t *testing.T, changeRemote bool) {
 	rule.Src = testpeer.Network("10.60.0.1/32")
 	require.NoError(t, netlink.RuleAdd(rule))
 	defer netlink.RuleDel(rule)
-	encap := &netlink.BpfEncap{}
-	require.NoError(t, encap.SetProg(nl.LWT_BPF_XMIT, session.ProgramFD(), "packetrusher_gtpu"))
-	require.NoError(t, encap.SetXmitHeadroom(44))
-	route := &netlink.Route{Dst: testpeer.Network("0.0.0.0/0"), LinkIndex: device.Attrs().Index, Scope: netlink.SCOPE_LINK, Table: 1600, Src: net.ParseIP("10.60.0.1"), Encap: encap}
+	route := &netlink.Route{Dst: testpeer.Network("0.0.0.0/0"), LinkIndex: device.Attrs().Index, Scope: netlink.SCOPE_LINK, Table: 1600, Src: net.ParseIP("10.60.0.1")}
 	require.NoError(t, netlink.RouteAdd(route))
 	defer netlink.RouteDel(route)
 	app, err := net.DialUDP("udp4", &net.UDPAddr{IP: net.ParseIP("10.60.0.1")}, &net.UDPAddr{IP: net.ParseIP("192.0.2.1"), Port: 9000})
@@ -113,10 +109,6 @@ func testNativeBidirectionalHandover(t *testing.T, changeRemote bool) {
 	// Reinstall proves owned ingress links and tuple maps were fully retired.
 	session, err = r.Open(cfg)
 	require.NoError(t, err)
-	encap = &netlink.BpfEncap{}
-	require.NoError(t, encap.SetProg(nl.LWT_BPF_XMIT, session.ProgramFD(), "packetrusher_gtpu"))
-	require.NoError(t, encap.SetXmitHeadroom(44))
-	route.Encap = encap
 	require.NoError(t, netlink.RouteAdd(route))
 	exchange("reinstalled-real-bpf")
 	ul, dl, dropped, err := r.Stats()

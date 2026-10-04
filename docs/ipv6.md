@@ -63,7 +63,7 @@ globally unique per-session prefix permits skipping Duplicate Address Detection,
 in TS 23.501. Existing application connections survive an N3/TEID handover that
 retains the IPv6 prefix.
 
-IPv6 user traffic requires the userspace backend and a TUN MTU of at least 1280.
+IPv6 user traffic requires the userspace or eBPF backend and a TUN MTU of at least 1280.
 The CLI rejects incompatible backend or explicit MTU selections before starting
 telecom sockets. Automatic MTU validation also happens before modifying a live
 TUN, so a small target N3 interface cannot disable IPv6 during failed handover.

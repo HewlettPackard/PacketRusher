@@ -14,10 +14,17 @@ run_namespace() {
     sudo -n ./scripts/run-ebpf-netns.sh "$1" "$2" "${3:-normal}"
   fi
 }
-run_namespace "$scratch/backend.test" '^TestActualVerifierLoadDeclaredCapabilities$|^TestActualKernelPacketBoundsChecksumsAndTupleIsolation$|^TestActualKernelFree5UPFCapturedSequenceHeader$|^TestActualKernelUDPChecksumChunkBoundaries$' restricted
-run_namespace "$scratch/backend.test" '^TestActualVerifierLoad$|^TestActualKernelPacketBoundsChecksumsAndTupleIsolation$|^TestActualKernelFree5UPFCapturedSequenceHeader$|^TestNativeManagementEchoAndJoinedClose$|^TestNativeBidirectionalHandoverAndCleanup$'
+run_namespace "$scratch/backend.test" '^TestActualVerifierLoadDeclaredCapabilities$|^TestActualKernelPacketBoundsChecksumsAndTupleIsolation$|^TestActualKernelFree5UPFCapturedSequenceHeader$|^TestActualKernelUDPChecksumChunkBoundaries$|^TestActualKernelIPv6PrefixIIDAndHiddenNDAdmission$|^TestActualKernelUplinkRejectsTruncatedIPv4Options$|^TestActualKernelChecksumRelayRequiresCurrentOwner$|^TestNativeChecksumStageOwnershipAndEffectiveFeatures$' restricted
+run_namespace "$scratch/backend.test" '^TestNativeLoopbackRouterAdvertisementAdmission$|^TestNativeKernelChecksumAndReassemblyBeforeFallback$|^TestNativeJumboChecksumTailsAndQFI$' restricted
+run_namespace "$scratch/backend.test" '^TestActualVerifierLoad$|^TestNativeManagementEchoAndJoinedClose$|^TestNativeBidirectionalHandoverAndCleanup$'
 run_namespace "$scratch/backend.test" '^TestNativeRemotePeerHandoverAndCleanup$'
 run_namespace "$scratch/backend.test" '^TestNativeTCPBulkTrafficAndCleanup$'
 run_namespace "$scratch/service.test" '^TestNativeEBPFServiceRoutingHandoverRollbackAndRelease$'
 run_namespace "$scratch/service.test" '^TestNativeEBPFServiceTCPBulkTrafficAndRelease$'
 run_namespace "$scratch/service.test" '^TestNativeEBPFServiceInitialOpenFailureRetiresStaging$'
+run_namespace "$scratch/service.test" '^TestNativeEBPFRealIPv6DualStackPolicyVRFAndHandover$|^TestUserspaceRealIPv6DualStackPolicyVRFAndHandover$'
+run_namespace "$scratch/service.test" '^TestNativeEBPFProductionTCPFamiliesPolicyVRFAndDeviceBinding$|^TestNativeUserspaceProductionTCPFamiliesPolicyVRFAndDeviceBinding$'
+run_namespace "$scratch/service.test" '^TestNativeProductionIPv6TCPVirtualOffloadAndDeviceBinding$'
+run_namespace "$scratch/service.test" '^TestNativeEBPFVirtualN3ChecksumFallbackAndGatewayMark$'
+run_namespace "$scratch/service.test" '^TestNativeEBPFJumboOptionsAndZeroQFI$'
+run_namespace "$scratch/service.test" '^TestNativeEBPFFailedAuthorizationDisablesTrafficAndRetainsClaims$'

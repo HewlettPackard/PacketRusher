@@ -41,7 +41,14 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Install native test tools
-        run: sudo apt-get update && sudo apt-get install -y ethtool iproute2 libgsl-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ethtool iproute2 libgsl-dev
+          # VRF is an actual native parity requirement; never skip its cases.
+          if ! sudo modprobe vrf; then
+            sudo apt-get install -y "linux-modules-extra-$(uname -r)"
+            sudo modprobe vrf
+          fi
       - name: Run real verifier and packet proofs in owned namespaces
         run: ./scripts/check-ebpf.sh 2>&1 | tee ebpf-native.log
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

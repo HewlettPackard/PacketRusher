@@ -15,7 +15,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
-	"github.com/vishvananda/netlink/nl"
 	"my5G-RANTester/internal/control_test_engine/ue/gtp/internal/testpeer"
 	"my5G-RANTester/internal/control_test_engine/ue/gtp/userspace"
 )
@@ -36,7 +35,7 @@ func TestNativeTCPBulkTrafficAndCleanup(t *testing.T) {
 	defer endpoint.Close()
 	require.NoError(t, netlink.LinkSetMTU(device, 1456))
 	require.NoError(t, netlink.AddrAdd(device, &netlink.Addr{IPNet: testpeer.Network("10.60.0.1/32")}))
-	require.NoError(t, ConfigureEndpoint(device))
+	require.NoError(t, ConfigureEndpoint(device, endpoint))
 	require.NoError(t, netlink.LinkSetUp(device))
 	r := NewRegistry()
 	cfg := Config{Local: netip.MustParseAddr("10.88.0.1"), Remote: netip.MustParseAddr("10.88.0.2"), IPv4: netip.MustParseAddr("10.60.0.1"), UplinkTEID: 1001, DownlinkTEID: 2001, QFI: 9, EndpointIfIndex: device.Attrs().Index, MTU: 1456}
@@ -47,10 +46,7 @@ func TestNativeTCPBulkTrafficAndCleanup(t *testing.T) {
 	rule.Priority, rule.Table, rule.Src = 100, 1600, testpeer.Network("10.60.0.1/32")
 	require.NoError(t, netlink.RuleAdd(rule))
 	defer netlink.RuleDel(rule)
-	encap := &netlink.BpfEncap{}
-	require.NoError(t, encap.SetProg(nl.LWT_BPF_XMIT, session.ProgramFD(), "packetrusher_gtpu"))
-	require.NoError(t, encap.SetXmitHeadroom(44))
-	route := &netlink.Route{Dst: testpeer.Network("0.0.0.0/0"), LinkIndex: device.Attrs().Index, Scope: netlink.SCOPE_LINK, Table: 1600, Src: net.ParseIP("10.60.0.1"), Encap: encap}
+	route := &netlink.Route{Dst: testpeer.Network("0.0.0.0/0"), LinkIndex: device.Attrs().Index, Scope: netlink.SCOPE_LINK, Table: 1600, Src: net.ParseIP("10.60.0.1")}
 	require.NoError(t, netlink.RouteAdd(route))
 	defer netlink.RouteDel(route)
 	app, err := (&net.Dialer{Timeout: 5 * time.Second, LocalAddr: &net.TCPAddr{IP: net.ParseIP("10.60.0.1")}}).Dial("tcp4", "192.0.2.1:9000")
