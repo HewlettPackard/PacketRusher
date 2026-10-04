@@ -7,7 +7,7 @@ import subprocess
 import time
 from pathlib import Path
 
-NAMES={0:'uplink_encap_attempts',1:'downlink_decap_redirect_attempts',2:'ingress_drops',3:'checksum_reassembly_delegation_attempts'}
+NAMES={0:'uplink_encap_attempts',1:'downlink_decap_redirect_attempts',2:'ingress_drops',3:'checksum_reassembly_delegation_attempts',4:'oversized_uplink_delegation_attempts'}
 
 
 def decode_bytes(value, width):
@@ -54,7 +54,7 @@ class OwnedCounters:
                     raise AssertionError('ambiguous bpftool map metadata')
                 information=information[0]
             if information.get('name')=='counters':
-                if information.get('id')!=map_id or information.get('type')!='array' or information.get('bytes_key')!=4 or information.get('bytes_value')!=8 or information.get('max_entries')!=4:
+                if information.get('id')!=map_id or information.get('type')!='array' or information.get('bytes_key')!=4 or information.get('bytes_value')!=8 or information.get('max_entries')!=5:
                     raise AssertionError('unexpected owned TCX counter-map ABI')
                 candidates.append((map_id,information))
         if len(candidates)!=1:
