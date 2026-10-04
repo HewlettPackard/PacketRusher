@@ -38,16 +38,13 @@ func init() {
 }
 
 func newApp() *cli.App {
-	beforeResults, afterResults := resultsHooks()
 	app := &cli.App{
 		Name:    "packetrusher",
 		Version: version,
-		After:   afterResults,
 		Flags: []cli.Flag{
 			&cli.PathFlag{Name: "config", Usage: "Configuration file path. (Default: ./config/config.yml)"},
 			&cli.StringFlag{Name: "tunnel-backend", Value: "auto", Usage: "GTP-U tunnel backend: ebpf, gtp5g, userspace, or auto (the first of these available on this host)"},
-			&cli.PathFlag{Name: "report-json", Usage: "Write procedure results to a new JSON file on shutdown"},
-			&cli.PathFlag{Name: "report-csv", Usage: "Write procedure results to a new CSV file on shutdown"},
+			&cli.PathFlag{Name: "report-json", Usage: "Write procedure results to this JSON file on shutdown"},
 			&cli.StringFlag{Name: "metrics-addr", Usage: "Serve Prometheus metrics at /metrics on this address, e.g. 127.0.0.1:9090"},
 		},
 		Commands: []*cli.Command{
@@ -295,7 +292,8 @@ func newApp() *cli.App {
 		},
 	}
 	for _, command := range app.Commands {
-		command.Before = resultsBefore(validateArguments, beforeResults)
+		command.Before = validateArguments
+		command.Action = withResults(command.Action)
 	}
 	return app
 }

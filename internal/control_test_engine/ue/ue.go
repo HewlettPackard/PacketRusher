@@ -7,7 +7,6 @@ package ue
 
 import (
 	"my5G-RANTester/config"
-	"my5G-RANTester/internal/analytics"
 	context2 "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/procedures"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
@@ -24,7 +23,7 @@ import (
 
 func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMessage, gnbInboundChannel chan context2.UEMessage, wg *sync.WaitGroup) chan scenario.ScenarioMessage {
 	// new UE instance.
-	ue := &context.UEContext{Results: analytics.Current()}
+	ue := &context.UEContext{}
 	scenarioChan := make(chan scenario.ScenarioMessage)
 	ue.TunnelMTU = conf.Ue.TunnelMTU
 	ue.PDUSessionType = conf.Ue.PDUSessionType

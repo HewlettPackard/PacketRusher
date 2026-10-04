@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 
 // Package trigger
@@ -22,7 +23,7 @@ import (
 )
 
 func InitRegistration(ue *context.UEContext) {
-	ue.BeginRegistrationResults()
+	ue.RegistrationStarted()
 	log.Info("[UE] Initiating Registration")
 
 	// registration procedure started.
