@@ -86,11 +86,14 @@ func attachChecksumStage(endpoint int, encap, relay *ebpf.Program) (result *chec
 	finish := func(e error) (*checksumStage, error) { return s, e }
 	// LinkAdd's internal index lookup can fail silently after a successful
 	// creation. Resolve it explicitly while retaining name/MAC cleanup ownership.
-	s.tx, err = netlink.LinkByName(tx.Attrs().Name)
+	resolved, err := netlink.LinkByName(tx.Attrs().Name)
 	if err != nil {
-		s.tx = tx
 		return finish(err)
 	}
+	if resolved.Type() != "veth" || !bytes.Equal(resolved.Attrs().HardwareAddr, tx.Attrs().HardwareAddr) {
+		return finish(errors.New("created checksum veth identity changed during setup"))
+	}
+	s.tx = resolved
 	s.txIndex = s.tx.Attrs().Index
 	if s.txIndex <= 0 {
 		return finish(errors.New("created checksum veth has no interface index"))
