@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package service
 
@@ -166,7 +167,6 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		return
 	}
 	previousLink := pduSession.GetTunInterface()
-	previousRule := pduSession.GetTunRule()
 	previousGnbIP := pduSession.GetGnbIp()
 	previousGNBPDU := pduSession.GnbPduSession
 	committed := false
@@ -215,18 +215,14 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	pduSession.SetGnbIp(msg.GnbIp)
 
 	ueGnbIp := pduSession.GetGnbIp()
-	upfIp := pduSession.GnbPduSession.GetUpfIp()
-	qfi := pduSession.GnbPduSession.GetQosId()
 	ueIp := pduSession.GetIp()
 	msin := ue.GetMsin()
-	vrfInf := fmt.Sprintf("vrf%s", msin)
 
 	// In shared mode every UE of this gNB rides the gNB's device and contributes its
 	// own rules, so the identifiers have to be allocated rather than assumed.
 	var (
 		nameInf   string
 		ids       gtp.RuleIDs
-		sharedFor sharedGTPDevice
 		held      *sharedTunnel
 		setupDone bool
 		dedicated *dedicatedTunnel
@@ -235,7 +231,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	// Failed staging returns only the newly acquired resources. The previous
 	// tunnel remains usable, and one UE's failure does not stop the load test.
 	failed := func(args ...any) {
-		if sharedFor != nil {
+		if held != nil {
 			log.Error(append(args, "; no tunnel for UE ", ueIp)...)
 		} else {
 			log.Error(args...)
@@ -257,7 +253,6 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		}
 
 		nameInf = dev.Name()
-		sharedFor = dev
 		held = &sharedTunnel{dev: dev, ueIP: ueIp, ids: ids, keepAddress: true}
 
 		defer func() {
@@ -265,6 +260,10 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 				held.release(nil)
 			}
 		}()
+		if err := addRules(dev, nameInf, ids, gnbPduSession, ueIp, ueGnbIp); err != nil {
+			failed("[UE][GTP] Unable to create GTP rules: ", err)
+			return
+		}
 	} else {
 		// val<MSIN> owns the UE address for the whole PDU session. The socket-bound
 		// GTP backends alternate so the target can be installed before retiring source.
@@ -272,10 +271,15 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		if previousLink != nil && previousLink.Attrs().Name == nameInf {
 			nameInf = fmt.Sprintf("gtp1%s", msin)
 		}
-		ids = gtp.DedicatedRuleIDs()
-		dedicated, err = startDedicatedTunnel(nameInf, ueGnbIp)
+		dedicated = &dedicatedTunnel{name: nameInf}
+		switch ue.TunnelBackend { // The only place that depends on the tunnel backend.
+		case config.TunnelBackendUserspace:
+			dedicated.datapath, err = startUserspace(nameInf, gnbPduSession, ueIp, ueGnbIp)
+		default:
+			dedicated.datapath, err = startGtp5g(nameInf, gnbPduSession, ueIp, ueGnbIp)
+		}
 		if err != nil {
-			failed("[GNB][GTP] Unable to create Kernel GTP interface: ", err)
+			failed("[UE][GTP] Unable to create GTP interface: ", err)
 			return
 		}
 		defer func() {
@@ -285,6 +289,16 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		}()
 	}
 
+	setupDone = plumbTunnel(ue, pduSession, nameInf, held, dedicated, failed)
+	committed = setupDone
+}
+
+// addRules installs the FARs, PDRs and QER of one UE on a gtp5g device: the gNB's
+// shared one, or the UE's own when sharedFor is nil.
+func addRules(sharedFor sharedGTPDevice, nameInf string, ids gtp.RuleIDs, gnbPduSession *gnbContext.GnbPDUSession, ueIp string, ueGnbIp netip.Addr) error {
+	upfIp := gnbPduSession.GetUpfIp()
+	qfi := gnbPduSession.GetQosId()
+
 	// Create FAR for downlink: forward decapsulated packets towards the UE.
 	cmdAddFar := []string{nameInf,
 		strconv.FormatUint(uint64(ids.FARDown), 10), // FAR ID
@@ -292,8 +306,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	}
 	log.Debug("[UE][GTP] Setting up GTP Forwarding Action Rule for ", strings.Join(cmdAddFar, " "))
 	if err := addFAR(sharedFor, cmdAddFar); err != nil {
-		failed("[GNB][GTP] Unable to create FAR: ", err)
-		return
+		return fmt.Errorf("downlink FAR: %w", err)
 	}
 
 	// Create FAR for uplink: encapsulate towards the UPF.
@@ -304,8 +317,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	}
 	log.Debug("[UE][GTP] Setting up GTP Forwarding Action Rule for ", strings.Join(cmdAddFar, " "))
 	if err := addFAR(sharedFor, cmdAddFar); err != nil {
-		failed("[UE][GTP] Unable to create FAR ", err)
-		return
+		return fmt.Errorf("uplink FAR: %w", err)
 	}
 
 	// Create PDR for downlink: GTP-U from the UPF on this gNB's F-TEID.
@@ -314,14 +326,13 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		"--pcd", "1", // Precedence = 1
 		"--hdr-rm", "0", // Outer Header Removal = GTP-U/UDP/IPv4
 		"--ue-ipv4", ueIp, // UE IP Address
-		"--f-teid", strconv.FormatUint(uint64(gnbPduSession.GetTeidDownlink()), 10), msg.GnbIp.String(), // F-TEID
+		"--f-teid", strconv.FormatUint(uint64(gnbPduSession.GetTeidDownlink()), 10), ueGnbIp.String(), // F-TEID
 		"--far-id", strconv.FormatUint(uint64(ids.FARDown), 10), // FAR ID
 		"--src-intf", "1", // Source Interface = Core
 	}
 	log.Debug("[UE][GTP] Setting up GTP Packet Detection Rule for ", strings.Join(cmdAddPdr, " "))
 	if err := addPDRVerified(sharedFor, ids.PDRDown, cmdAddPdr, "downlink"); err != nil {
-		failed("[GNB][GTP] Unable to create downlink PDR: ", err)
-		return
+		return fmt.Errorf("downlink PDR: %w", err)
 	}
 
 	// Create PDR for uplink: packets from the UE's address.
@@ -356,8 +367,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		} else {
 			log.Debug("[UE][GTP] Setting Up QFI", strings.Join(cmdAddQer(qerID), " "))
 			if err := addTunnelQER(cmdAddQer(qerID)); err != nil {
-				failed("[UE][GTP] Unable to create QER:", err)
-				return
+				return fmt.Errorf("QER: %w", err)
 			}
 		}
 
@@ -370,9 +380,21 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 
 	log.Debug("[UE][GTP] Setting Up GTP Packet Detection Rule for ", strings.Join(cmdAddPdr, " "))
 	if err := addPDRVerified(sharedFor, ids.PDRUp, cmdAddPdr, "uplink"); err != nil {
-		failed("[UE][GTP] Unable to create uplink PDR: ", err)
-		return
+		return fmt.Errorf("uplink PDR: %w", err)
 	}
+	return nil
+}
+
+// plumbTunnel gives the UE its address, routing table, policy rule or VRF and
+// default route on the device nameInf, whatever backend created it, and commits
+// the tunnel to the PDU session.
+func plumbTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, nameInf string, held *sharedTunnel, dedicated *dedicatedTunnel, failed func(...any)) (setupDone bool) {
+	previousLink := pduSession.GetTunInterface()
+	previousRule := pduSession.GetTunRule()
+	ueGnbIp := pduSession.GetGnbIp()
+	ueIp := pduSession.GetIp()
+	msin := ue.GetMsin()
+	vrfInf := fmt.Sprintf("vrf%s", msin)
 
 	// The shared device stays gNB-owned; dedicated mode keeps its UE-facing
 	// address on a stable dummy while the GTP socket/backend changes.
@@ -530,12 +552,12 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		pduSession.SetTunRule(dedicated.rule)
 		pduSession.SetUEInterface(addressLink)
 		pduSession.SetVrfDevice(dedicated.vrf)
-		dedicated.activeRules = dedicatedRuleSet(nameInf, gnbPduSession, ueIp, msg.GnbIp)
 		pduSession.ReplaceTunnelCleanup(dedicated.release)
-		pduSession.SetTunnelUpdate(func(pdu *gnbContext.GnbPDUSession, ip netip.Addr) error { return dedicated.refresh(pdu, ueIp, ip) })
+		pduSession.SetTunnelUpdate(func(pdu *gnbContext.GnbPDUSession, ip netip.Addr) error {
+			return dedicated.datapath.refresh(pdu, ueIp, ip)
+		})
 	}
 	setupDone = true
-	committed = true
 
 	log.Info(fmt.Sprintf("[UE][GTP] Interface %s has successfully been configured for UE %s", nameInf, ueIp))
 	switch ue.TunnelMode {
@@ -546,6 +568,7 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		log.Info(fmt.Sprintf("[UE][GTP] You can do traffic for this UE using VRF %s, eg:", vrfInf))
 		log.Info(fmt.Sprintf("[UE][GTP] sudo ip vrf exec %s iperf3 -c IPERF_SERVER -p PORT -t 9000", vrfInf))
 	}
+	return
 }
 
 // A retained UE endpoint still belongs to the source until the new route commits.

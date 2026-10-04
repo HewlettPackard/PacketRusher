@@ -1,4 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 
 package service
 
@@ -7,6 +10,7 @@ import (
 	"fmt"
 	gtpTunnel "github.com/free5gc/go-gtp5gnl/tuncmd"
 	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
+	"my5G-RANTester/internal/control_test_engine/gnb/gtp"
 	"net/netip"
 	"strconv"
 	"sync"
@@ -27,11 +31,18 @@ var (
 	deleteTunnelLink    = netlink.LinkDel
 )
 
+// datapath is the backend-specific part of a UE's own tunnel: the device carrying
+// its packets to and from the UPF. Everything else is common, see plumbTunnel.
+type datapath interface {
+	// refresh applies the PDU session's current TEIDs and UPF to the device.
+	refresh(pdu *gnbContext.GnbPDUSession, ueIP string, ip netip.Addr) error
+	// close removes the device and returns once its N3 address can be bound again.
+	close()
+}
+
 type dedicatedTunnel struct {
 	name          string
-	stop          chan bool
-	done          chan struct{}
-	stopOnce      sync.Once
+	datapath      datapath
 	endpoint      netlink.Link
 	endpointOwned bool
 	vrf           *netlink.Vrf
@@ -39,18 +50,26 @@ type dedicatedTunnel struct {
 	rule          *netlink.Rule
 	route         *netlink.Route
 	table         *routingTableReservation
-	activeRules   dedicatedRules
+}
+
+// gtp5gLink is the gtp5g datapath: a kernel GTP-U device and the rules it runs.
+type gtp5gLink struct {
+	name        string
+	stop        chan bool
+	done        chan struct{}
+	stopOnce    sync.Once
+	activeRules dedicatedRules
 }
 
 // The goroutine owns a duplicate of the UDP socket even after LinkDel. Waiting
 // for it to return is necessary before another session can bind the N3 address.
-func startDedicatedTunnel(name string, ip netip.Addr) (*dedicatedTunnel, error) {
+func startGtp5g(name string, pdu *gnbContext.GnbPDUSession, ueIP string, ip netip.Addr) (datapath, error) {
 	if _, err := findTunnelLink(name); err == nil {
 		if err := deleteDedicatedLink(name); err != nil {
 			return nil, err
 		}
 	}
-	tunnel := &dedicatedTunnel{name: name, stop: make(chan bool), done: make(chan struct{})}
+	tunnel := &gtp5gLink{name: name, stop: make(chan bool), done: make(chan struct{})}
 	ended := make(chan error, 1)
 	go func() {
 		defer close(tunnel.done)
@@ -66,16 +85,30 @@ func startDedicatedTunnel(name string, ip netip.Addr) (*dedicatedTunnel, error) 
 			if err == nil {
 				err = fmt.Errorf("GTP socket worker ended before %s was ready", name)
 			}
-			tunnel.release(false)
+			tunnel.close()
 			return nil, err
 		case <-deadline.C:
-			tunnel.release(false)
+			tunnel.close()
 			return nil, fmt.Errorf("GTP device %s did not appear within 5s", name)
 		case <-tick.C:
-			if _, err := findTunnelLink(name); err == nil {
-				return tunnel, nil
+			if _, err := findTunnelLink(name); err != nil {
+				continue
 			}
+			if err := addRules(nil, name, gtp.DedicatedRuleIDs(), pdu, ueIP, ip); err != nil {
+				tunnel.close()
+				return nil, err
+			}
+			tunnel.activeRules = dedicatedRuleSet(name, pdu, ueIP, ip)
+			return tunnel, nil
 		}
+	}
+}
+
+func (t *gtp5gLink) close() {
+	t.stopOnce.Do(func() { close(t.stop) })
+	<-t.done // No new netlink sockets until the worker's mux has finished closing.
+	if err := deleteDedicatedLink(t.name); err != nil {
+		log.Warn("[UE][GTP] Unable to remove GTP backend ", t.name, ": ", err)
 	}
 }
 
@@ -89,11 +122,7 @@ func (t *dedicatedTunnel) release(retiring bool) {
 			routingRemoved = routingObjectRemoved(ruleDel(t.rule)) && routingRemoved
 		}
 	}
-	t.stopOnce.Do(func() { close(t.stop) })
-	<-t.done // No new netlink sockets until the worker's mux has finished closing.
-	if err := deleteDedicatedLink(t.name); err != nil {
-		log.Warn("[UE][GTP] Unable to remove GTP backend ", t.name, ": ", err)
-	}
+	t.datapath.close()
 	if !retiring {
 		if t.endpointOwned && t.endpoint != nil {
 			_ = deleteTunnelLink(t.endpoint)
@@ -170,7 +199,7 @@ func (r dedicatedRules) operations() []struct {
 
 // Same-N3 updates retain the socket and host network objects. Failed updates
 // replay every previous rule because an error can follow a partially applied call.
-func (t *dedicatedTunnel) refresh(pdu *gnbContext.GnbPDUSession, ueIP string, ip netip.Addr) error {
+func (t *gtp5gLink) refresh(pdu *gnbContext.GnbPDUSession, ueIP string, ip netip.Addr) error {
 	next := dedicatedRuleSet(t.name, pdu, ueIP, ip)
 	previous := t.activeRules
 	if (next.qer == nil) != (previous.qer == nil) {
