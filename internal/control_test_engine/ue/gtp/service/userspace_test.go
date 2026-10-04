@@ -6,6 +6,8 @@
 package service
 
 import (
+	"encoding/hex"
+	"fmt"
 	"net"
 	"net/netip"
 	"os"
@@ -13,9 +15,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/free5gc/nas/ie"
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
 	"my5G-RANTester/config"
+	"my5G-RANTester/internal/common/sidf"
 	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/gtp/userspace"
@@ -100,6 +104,9 @@ func echo(t *testing.T, app net.Conn, upf *net.UDPConn, gnb string, uplink, down
 
 	// Swapping the addresses and the ports keeps every checksum valid.
 	addresses, ports, size := 12, 20, 4
+	if packet[0]>>4 == 6 {
+		addresses, ports, size = 8, 40, 16
+	}
 	reply := append(make([]byte, userspace.Headroom), packet...)
 	inner := reply[userspace.Headroom:]
 	copy(inner[addresses:], packet[addresses+size:addresses+2*size])
@@ -115,6 +122,20 @@ func echo(t *testing.T, app net.Conn, upf *net.UDPConn, gnb string, uplink, down
 	n, err = app.Read(buf)
 	require.NoError(t, err)
 	require.Equal(t, "ping", string(buf[:n]))
+}
+
+// released releases the tunnel of the session and checks that nothing is left of it.
+func released(t *testing.T, ue *context.UEContext, session *context.UEPDUSession) {
+	t.Helper()
+	table := session.GetTunRoute().Table
+	session.ReleaseTunnel()
+	for _, name := range []string{"gtp0", "gtp1", "val", "vrf"} {
+		_, err := netlink.LinkByName(name + ue.GetMsin())
+		require.Error(t, err, name)
+	}
+	used, err := routingTableInUse(uint32(table))
+	require.NoError(t, err)
+	require.False(t, used, "a route or a rule of the UE's routing table is left")
 }
 
 func TestUserspaceTunnelEndToEnd(t *testing.T) {
@@ -141,16 +162,66 @@ func TestUserspaceTunnelEndToEnd(t *testing.T) {
 			require.Equal(t, "gtp1"+ue.GetMsin(), session.GetTunInterface().Attrs().Name)
 			echo(t, app, otherUPF, "127.88.4.2", 80, 81)
 
-			table := session.GetTunRoute().Table
-			session.ReleaseTunnel()
-			for _, name := range []string{"gtp1", "val", "vrf"} {
-				_, err := netlink.LinkByName(name + ue.GetMsin())
-				require.Error(t, err, name)
-			}
-			routes, err := netlink.RouteListFiltered(netlink.FAMILY_ALL, &netlink.Route{Table: table}, netlink.RT_FILTER_TABLE)
-			require.NoError(t, err)
-			require.Empty(t, routes)
+			released(t, ue, session)
 			fakeUPF(t, "127.88.4.2").Close() // The N3 socket is released with its last UE.
+		})
+	}
+}
+
+// The UPF answers the UE's Router Solicitation with fe80::1 advertising the prefix
+// 2001:db8:1:2::/64, in which the UE then has its address. A handover keeps it.
+func TestUserspaceTunnelIPv6(t *testing.T) {
+	privilegedNetwork(t, "127.88.6.1", "127.88.6.2")
+	advertisement, _ := hex.DecodeString("6000000000303aff" + "fe800000000000000000000000000001" +
+		"ff020000000000000000000000000001" + "8600c386400007080000000000000000" +
+		"030440c0ffffffffffffffff00000000" + "20010db8000100020000000000000000")
+	for number, mode := range []config.TunnelMode{config.TunnelTun, config.TunnelVrf} {
+		t.Run([]string{"IPv4v6 policy", "IPv6 VRF"}[number], func(t *testing.T) {
+			upf := fakeUPF(t, "127.88.6.8")
+			// A whole UE context, as the UE's goroutine is handed the advertised prefix.
+			ue := &context.UEContext{TunnelBackend: config.TunnelBackendUserspace, TunnelMTU: 1400}
+			ue.NewRanUeContext(fmt.Sprintf("700666000%d", number), &ie.UESecCapability{}, "", "", "", "", "", "001", "01",
+				sidf.HomeNetworkPublicKey{}, "0000", "internet", 1, "", mode, nil, nil, 1)
+			session := &context.UEPDUSession{Id: 1}
+			ue.PduSession[0] = session
+			t.Cleanup(session.ReleaseTunnel)
+			if mode == config.TunnelTun {
+				session.SetIp([12]uint8{10, 42, 6, 1})
+			}
+			session.SetIPv6(netip.MustParseAddr("fe80::7"))
+			SetupGtpInterface(ue, userspaceMessage(t, "127.88.6.1", "127.88.6.8", 60))
+			require.NotNil(t, session.GetTunInterface())
+
+			buf := make([]byte, 1500)
+			require.NoError(t, upf.SetReadDeadline(time.Now().Add(3*time.Second)))
+			n, gnb, err := upf.ReadFromUDPAddrPort(buf)
+			require.NoError(t, err)
+			teid, solicitation, err := userspace.Decode(buf[:n])
+			require.NoError(t, err)
+			require.Equal(t, uint32(60), teid)
+			require.Equal(t, byte(133), solicitation[40])
+			require.Equal(t, session.GetIPv6().AsSlice(), solicitation[8:24])
+			_, err = upf.WriteToUDPAddrPort(userspace.Encode(append(make([]byte, userspace.Headroom), advertisement...), 61, 9), gnb)
+			require.NoError(t, err)
+			select {
+			case plumb := <-ue.Deferred():
+				plumb() // This test stands for the UE's goroutine.
+			case <-time.After(3 * time.Second):
+				t.Fatal("the advertised prefix was not handed to the UE")
+			}
+			address := netip.MustParseAddr("2001:db8:1:2::7")
+			require.Equal(t, address, session.GetIPv6())
+			app := dialFromUE(t, session, address.AsSlice(), "[2001:db8:ffff::9]:8888")
+			echo(t, app, upf, "127.88.6.1", 60, 61)
+
+			// Handover: the address follows to the new device, without a new solicitation.
+			SetupGtpInterface(ue, userspaceMessage(t, "127.88.6.2", "127.88.6.8", 70))
+			require.Equal(t, "gtp1"+ue.GetMsin(), session.GetTunInterface().Attrs().Name)
+			echo(t, app, upf, "127.88.6.2", 70, 71)
+			if session.GetIp() != "" {
+				echo(t, dialFromUE(t, session, net.ParseIP(session.GetIp()), "203.0.113.9:8888"), upf, "127.88.6.2", 70, 71)
+			}
+			released(t, ue, session)
 		})
 	}
 }

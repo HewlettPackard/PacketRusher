@@ -51,7 +51,7 @@ func newApp() *cli.App {
 					name := "Testing an ue attached with configuration"
 					cfg := setConfig(*c)
 					tunnelEnabled := !c.Bool("disableTunnel")
-					tunnelBackend, err := resolveTunnelBackend(c, tunnelEnabled)
+					tunnelBackend, err := resolveTunnelBackend(c, cfg, tunnelEnabled)
 					if err != nil {
 						return err
 					}
@@ -126,7 +126,7 @@ func newApp() *cli.App {
 					var numUes int
 					name := "Testing registration of multiple UEs"
 					cfg := setConfig(*c)
-					tunnelBackend, err := resolveTunnelBackend(c, c.Bool("tunnel"))
+					tunnelBackend, err := resolveTunnelBackend(c, cfg, c.Bool("tunnel"))
 					if err != nil {
 						return err
 					}
@@ -324,11 +324,11 @@ func validateArguments(c *cli.Context) error {
 }
 
 // resolveTunnelBackend picks the tunnel backend once, and only if a tunnel is requested.
-func resolveTunnelBackend(c *cli.Context, tunnel bool) (config.TunnelBackend, error) {
+func resolveTunnelBackend(c *cli.Context, cfg config.Config, tunnel bool) (config.TunnelBackend, error) {
 	if !tunnel {
 		return "", nil
 	}
-	return config.ResolveTunnelBackend(c.String("tunnel-backend"))
+	return config.ResolveTunnelBackend(c.String("tunnel-backend"), cfg.Ue.PDUSessionType)
 }
 
 func main() {

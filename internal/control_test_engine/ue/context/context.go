@@ -65,11 +65,12 @@ type UEContext struct {
 	amfInfo           Amf
 
 	// TODO: Modify config so you can configure these parameters per PDUSession
-	Dnn           string
-	Snssai        models.Snssai
-	TunnelMode    config.TunnelMode
-	TunnelMTU     int
-	TunnelBackend config.TunnelBackend
+	Dnn            string
+	Snssai         models.Snssai
+	PDUSessionType config.PDUSessionType
+	TunnelMode     config.TunnelMode
+	TunnelMTU      int
+	TunnelBackend  config.TunnelBackend
 
 	// Handover is set while the UE moves to another gNB, until that gNB has set
 	// up its PDU sessions.
@@ -102,6 +103,7 @@ type UEPDUSession struct {
 	Id              uint8
 	GnbPduSession   *context.GnbPDUSession
 	ueIP            string
+	ueIPv6          netip.Addr
 	ueGnbIP         netip.Addr
 	tun             netlink.Link
 	rule            *netlink.Rule
@@ -416,6 +418,17 @@ func (pduSession *UEPDUSession) SetIp(ip [12]uint8) {
 
 func (pduSession *UEPDUSession) GetIp() string {
 	return pduSession.ueIP
+}
+
+// SetIPv6 records the UE's IPv6 address: the link-local one made of the interface
+// identifier the SMF allocates, then the global one in the /64 prefix that the UPF
+// advertises on the user plane (TS 23.501 §5.8.2.2.3).
+func (pduSession *UEPDUSession) SetIPv6(ip netip.Addr) {
+	pduSession.ueIPv6 = ip
+}
+
+func (pduSession *UEPDUSession) GetIPv6() netip.Addr {
+	return pduSession.ueIPv6
 }
 
 func (pduSession *UEPDUSession) SetGnbIp(ip netip.Addr) {
