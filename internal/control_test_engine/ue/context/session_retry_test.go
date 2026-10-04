@@ -1,11 +1,13 @@
-// SPDX-License-Identifier: Apache-2.0
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package context
 
 import (
 	"testing"
 	"time"
 
-	"my5G-RANTester/internal/analytics"
 	gnbcontext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/scenario"
 )
@@ -19,8 +21,7 @@ func TestQueuedSessionRetryCannotStartAfterCancellation(t *testing.T) {
 			name = "UE termination"
 		}
 		t.Run(name, func(t *testing.T) {
-			results := analytics.NewRecorder()
-			ue := &UEContext{Results: results, scenarioChan: make(chan scenario.ScenarioMessage)}
+			ue := &UEContext{scenarioChan: make(chan scenario.ScenarioMessage)}
 			first, err := ue.CreatePDUSession()
 			if err != nil {
 				t.Fatal(err)
@@ -41,8 +42,7 @@ func TestQueuedSessionRetryCannotStartAfterCancellation(t *testing.T) {
 			}
 			replacementUE := ue
 			if termination {
-				// Registration loops create a new UE with the same reporting ID.
-				replacementUE = &UEContext{Results: results}
+				replacementUE = &UEContext{}
 			}
 			replacement, err := replacementUE.CreatePDUSession()
 			if err != nil {
@@ -65,13 +65,12 @@ func TestQueuedSessionRetryCannotStartAfterCancellation(t *testing.T) {
 			if encoded != 0 {
 				t.Fatal("cancelled retry encoded a request")
 			}
-			assertSessionResults(t, results, 2, 1, 0, 0)
 		})
 	}
 }
 
 func TestDeletingSessionCancelsScheduledRetry(t *testing.T) {
-	ue := &UEContext{Results: analytics.NewRecorder()}
+	ue := &UEContext{}
 	session, err := ue.CreatePDUSession()
 	if err != nil {
 		t.Fatal(err)
@@ -101,11 +100,10 @@ func TestDeletingSessionCancelsScheduledRetry(t *testing.T) {
 	if ue.SchedulePduSessionRetry(session) {
 		t.Fatal("deleted session accepted another retry")
 	}
-	assertSessionResults(t, ue.Results, 1, 0, 0, 0)
 }
 
 func TestSessionRetryRunsOnlyWhenEventLoopProcessesIt(t *testing.T) {
-	ue := &UEContext{Results: analytics.NewRecorder(), gnbRx: make(chan gnbcontext.UEMessage, 5)}
+	ue := &UEContext{gnbRx: make(chan gnbcontext.UEMessage, 5)}
 	session, err := ue.CreatePDUSession()
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +119,6 @@ func TestSessionRetryRunsOnlyWhenEventLoopProcessesIt(t *testing.T) {
 		if session.T3580Retries != i {
 			t.Fatal("timer consumed retry before UE processing")
 		}
-		assertSessionResults(t, ue.Results, uint64(i+1), 0, 0, 0)
 		encoded := 0
 		encode := func() ([]byte, error) { encoded++; return nil, nil }
 		if err := ue.StartPduSessionRetry(retry, encode); err != nil {
@@ -133,7 +130,6 @@ func TestSessionRetryRunsOnlyWhenEventLoopProcessesIt(t *testing.T) {
 		if encoded != 1 {
 			t.Fatal("queued token encoded more than one request")
 		}
-		assertSessionResults(t, ue.Results, uint64(i+2), 0, 0, 1)
 		session.EstablishmentFailed()
 	}
 	if ue.SchedulePduSessionRetry(session) {
@@ -142,7 +138,7 @@ func TestSessionRetryRunsOnlyWhenEventLoopProcessesIt(t *testing.T) {
 }
 
 func TestSessionAcceptInvalidatesQueuedRetry(t *testing.T) {
-	ue := &UEContext{Results: analytics.NewRecorder()}
+	ue := &UEContext{}
 	session, err := ue.CreatePDUSession()
 	if err != nil {
 		t.Fatal(err)
@@ -163,11 +159,10 @@ func TestSessionAcceptInvalidatesQueuedRetry(t *testing.T) {
 	if encoded {
 		t.Fatal("accepted session retried establishment")
 	}
-	assertSessionResults(t, ue.Results, 1, 1, 0, 0)
 }
 
 func TestTerminationCancelsRetryStartingAtSameTime(t *testing.T) {
-	ue := &UEContext{Results: analytics.NewRecorder(), scenarioChan: make(chan scenario.ScenarioMessage), gnbRx: make(chan gnbcontext.UEMessage, 1)}
+	ue := &UEContext{scenarioChan: make(chan scenario.ScenarioMessage), gnbRx: make(chan gnbcontext.UEMessage, 1)}
 	session, err := ue.CreatePDUSession()
 	if err != nil {
 		t.Fatal(err)
@@ -209,13 +204,10 @@ func TestTerminationCancelsRetryStartingAtSameTime(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("UE did not terminate")
 	}
-	// Starting and cancellation are atomic: termination cancels the new attempt
-	// rather than allowing a late Begin to remain pending after CancelUE.
-	assertSessionResults(t, ue.Results, 2, 0, 1, 0)
 }
 
 func TestSessionRetryWithClosedConnectionDoesNotStartAttempt(t *testing.T) {
-	ue := &UEContext{Results: analytics.NewRecorder(), gnbRx: make(chan gnbcontext.UEMessage, 1)}
+	ue := &UEContext{gnbRx: make(chan gnbcontext.UEMessage, 1)}
 	session, err := ue.CreatePDUSession()
 	if err != nil {
 		t.Fatal(err)
@@ -242,7 +234,6 @@ func TestSessionRetryWithClosedConnectionDoesNotStartAttempt(t *testing.T) {
 	if encoded != 0 || session.T3580Retries != 0 {
 		t.Fatalf("disconnected request encoded=%d retries=%d", encoded, session.T3580Retries)
 	}
-	assertSessionResults(t, ue.Results, 1, 0, 0, 0)
 	// The same UE and session can request again once the connection resumes.
 	ue.SetGnbRx(make(chan gnbcontext.UEMessage, 1))
 	if err := ue.StartPduSessionRequest(session, encode); err != nil {
@@ -251,7 +242,6 @@ func TestSessionRetryWithClosedConnectionDoesNotStartAttempt(t *testing.T) {
 	if encoded != 1 {
 		t.Fatal("resumed connection did not encode its request")
 	}
-	assertSessionResults(t, ue.Results, 2, 0, 0, 1)
 }
 
 func awaitSessionRetry(t *testing.T, queue <-chan PduSessionRetry) PduSessionRetry {

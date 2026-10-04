@@ -26,9 +26,7 @@ import (
 )
 
 func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
-	results := analytics.NewRecorder()
-	analytics.SetCurrent(results)
-	t.Cleanup(func() { analytics.SetCurrent(nil) })
+	before := analytics.Results()
 
 	controlIFConfig := netip.MustParseAddrPort("127.0.0.1:9489")
 	dataIFConfig := netip.MustParseAddrPort("127.0.0.1:2154")
@@ -138,12 +136,7 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	// rather than assuming registration completes before a short wall-clock
 	// timer. Keep the original success and deregistration assertions below.
 	require.Eventually(t, func() bool {
-		for _, procedure := range results.Snapshot().Procedures {
-			if procedure.Procedure == analytics.SessionEstablishment {
-				return procedure.Success == uint64(ueCount)
-			}
-		}
-		return false
+		return analytics.Results()[analytics.SessionEstablishment].Success-before[analytics.SessionEstablishment].Success == uint64(ueCount)
 	}, 30*time.Second, 10*time.Millisecond, "all clients must accept a PDU session")
 	for _, simulation := range simulations {
 		require.True(t, simulation.Send(procedures.UeTesterMessage{Type: procedures.Terminate}))
@@ -174,19 +167,17 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 				})
 		})
 	assert.Equalf(t, ueCount, i, "Expected %v ue to created in 5GC state but was %v", ueCount, i)
-	for _, procedure := range results.Snapshot().Procedures {
-		assert.Equal(t, uint64(ueCount), procedure.Started)
-		assert.Equal(t, uint64(ueCount), procedure.Success)
-		assert.Zero(t, procedure.Failure)
-		assert.Zero(t, procedure.Pending)
+	for i, procedure := range analytics.Results() {
+		assert.Equal(t, uint64(ueCount), procedure.Started-before[i].Started, procedure.Procedure)
+		assert.Equal(t, uint64(ueCount), procedure.Success-before[i].Success, procedure.Procedure)
+		assert.Equal(t, before[i].Failure, procedure.Failure, procedure.Procedure)
+		assert.Equal(t, before[i].Pending, procedure.Pending, procedure.Procedure)
 	}
 
 }
 
 func TestUERegistrationLoop(t *testing.T) {
-	results := analytics.NewRecorder()
-	analytics.SetCurrent(results)
-	t.Cleanup(func() { analytics.SetCurrent(nil) })
+	before := analytics.Results()
 
 	controlIFConfig := netip.MustParseAddrPort("127.0.0.1:9490")
 	dataIFConfig := netip.MustParseAddrPort("127.0.0.1:2155")
@@ -277,15 +268,12 @@ func TestUERegistrationLoop(t *testing.T) {
 	deadline := time.Now().Add(45 * time.Second)
 	for iteration := 1; iteration <= ueSimCfg.LoopCount; iteration++ {
 		require.Eventually(t, func() bool {
-			completed := 0
-			for _, procedure := range results.Snapshot().Procedures {
-				if procedure.Procedure == analytics.Registration || procedure.Procedure == analytics.SessionEstablishment {
-					if procedure.Success == uint64(iteration) {
-						completed++
-					}
+			for i, procedure := range analytics.Results() {
+				if procedure.Success-before[i].Success != uint64(iteration) {
+					return false
 				}
 			}
-			return completed == 2
+			return true
 		}, time.Until(deadline), 10*time.Millisecond, "iteration %d must complete both client procedures", iteration)
 		timer := time.NewTimer(time.Until(deadline))
 		select {
@@ -321,12 +309,11 @@ func TestUERegistrationLoop(t *testing.T) {
 			assert.Equal(t, 5, check.authCounter, "each loop must authenticate once")
 		})
 	assert.Equal(t, ueSimCfg.LoopCount, ueCount, "each loop must create a core UE context")
-	for _, procedure := range results.Snapshot().Procedures {
-		assert.Equal(t, uint64(ueSimCfg.LoopCount), procedure.Started)
-		assert.Equal(t, uint64(ueSimCfg.LoopCount), procedure.Success)
-		assert.Zero(t, procedure.Failure)
-		assert.Zero(t, procedure.Cancelled)
-		assert.Zero(t, procedure.Pending)
+	for i, procedure := range analytics.Results() {
+		assert.Equal(t, uint64(ueSimCfg.LoopCount), procedure.Started-before[i].Started, procedure.Procedure)
+		assert.Equal(t, uint64(ueSimCfg.LoopCount), procedure.Success-before[i].Success, procedure.Procedure)
+		assert.Equal(t, before[i].Failure, procedure.Failure, procedure.Procedure)
+		assert.Equal(t, before[i].Pending, procedure.Pending, procedure.Procedure)
 	}
 }
 

@@ -50,7 +50,6 @@ const SM5G_PDU_SESSION_ACTIVE_PENDING = 0x01
 const SM5G_PDU_SESSION_ACTIVE = 0x02
 
 type UEContext struct {
-	Results           *analytics.Recorder
 	id                uint8
 	prUeId            int64
 	UeSecurity        SECURITY
@@ -85,6 +84,9 @@ type UEContext struct {
 	lock              sync.Mutex
 	terminated        bool
 	pduSessionRetries chan PduSessionRetry
+
+	// registrationStart is when the pending registration attempt began, for the results.
+	registrationStart time.Time
 }
 
 type Amf struct {
@@ -97,8 +99,6 @@ type UEPDUSession struct {
 	retryTimer      *time.Timer
 	retryGeneration uint64
 	retryCancel     chan struct{}
-	results         *analytics.Recorder
-	resultsUE       int64
 	Id              uint8
 	GnbPduSession   *context.GnbPDUSession
 	ueIP            string
@@ -106,6 +106,9 @@ type UEPDUSession struct {
 	Tunnel          Tunnel
 	Wait            chan bool
 	T3580Retries    int
+
+	// establishmentStart is when the pending establishment attempt began, for the results.
+	establishmentStart time.Time
 
 	// TS 24.501 - 6.1.3.2.1.1 State Machine for Session Management
 	StateSM int
@@ -211,7 +214,7 @@ func (ue *UEContext) CreatePDUSession() (*UEPDUSession, error) {
 		return nil, errors.New("unable to create an additional PDU Session, we already created the max number of PDU Session")
 	}
 
-	pduSession := &UEPDUSession{owner: ue, results: ue.Results, resultsUE: ue.GetPrUeId()}
+	pduSession := &UEPDUSession{owner: ue}
 	pduSession.Id = uint8(pduSessionIndex + 1)
 	pduSession.Wait = make(chan bool)
 
@@ -256,7 +259,7 @@ func (ue *UEContext) SetStateMM_REGISTERED_INITIATED() {
 }
 
 func (ue *UEContext) SetStateMM_REGISTERED() {
-	ue.Results.Finish(ue.GetPrUeId(), 0, analytics.Registration, analytics.Success)
+	analytics.Finish(analytics.Registration, &ue.registrationStart, true)
 	ue.StateMM = MM5G_REGISTERED
 	ue.scenarioChan <- scenario.ScenarioMessage{StateChange: ue.StateMM}
 }
@@ -391,9 +394,6 @@ func (ue *UEContext) DeletePduSession(pduSessionid uint8) error {
 	}
 	pduSession := ue.PduSession[pduSessionid-1]
 	pduSession.cancelRetryLocked()
-	// Deleting a pending session ends its attempt. Release the analytics key
-	// before this ID can be reused so the next establishment starts independently.
-	pduSession.results.Finish(pduSession.resultsUE, pduSession.Id, analytics.SessionEstablishment, analytics.Cancelled)
 	// On a device shared with other UEs, give back what this session holds there now:
 	// once the slot is cleared, Terminate no longer sees the session, and a new one
 	// with the same address could not add it again.
@@ -459,7 +459,7 @@ func (pdu *UEPDUSession) SetStateSM_PDU_SESSION_ACTIVE() {
 		}
 	}
 	pdu.cancelRetryLocked()
-	pdu.results.Finish(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment, analytics.Success)
+	analytics.Finish(analytics.SessionEstablishment, &pdu.establishmentStart, true)
 	pdu.StateSM = SM5G_PDU_SESSION_ACTIVE
 }
 
@@ -475,7 +475,7 @@ func (pdu *UEPDUSession) SetStateSM_PDU_SESSION_PENDING() {
 }
 
 func (pdu *UEPDUSession) setPendingLocked() {
-	pdu.results.Begin(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment)
+	analytics.Start(analytics.SessionEstablishment, &pdu.establishmentStart)
 	pdu.StateSM = SM5G_PDU_SESSION_ACTIVE_PENDING
 }
 
@@ -746,7 +746,6 @@ func (ue *UEContext) Terminate() {
 			session.cancelRetryLocked()
 		}
 	}
-	ue.Results.CancelUE(ue.GetPrUeId())
 	ue.SetStateMM_NULL()
 
 	// clean all context of tun interface
@@ -815,13 +814,12 @@ func reverse(s string) string {
 func (ue *UEContext) SetGnbConnectionLost(lost <-chan struct{}) { ue.gnbConnectionLost = lost }
 func (ue *UEContext) GetGnbConnectionLost() <-chan struct{}     { return ue.gnbConnectionLost }
 
-// BeginRegistrationResults records a new attempt, without counting retransmits twice.
-func (ue *UEContext) BeginRegistrationResults() {
-	ue.Results.Begin(ue.GetPrUeId(), 0, analytics.Registration)
+func (ue *UEContext) RegistrationStarted() {
+	analytics.Start(analytics.Registration, &ue.registrationStart)
 }
 
 func (ue *UEContext) RegistrationFailed() {
-	ue.Results.Finish(ue.GetPrUeId(), 0, analytics.Registration, analytics.Failure)
+	analytics.Finish(analytics.Registration, &ue.registrationStart, false)
 }
 
 func (pdu *UEPDUSession) EstablishmentFailed() {
@@ -832,22 +830,7 @@ func (pdu *UEPDUSession) EstablishmentFailed() {
 			return
 		}
 	}
-	pdu.results.Finish(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment, analytics.Failure)
-}
-
-// EstablishmentTransportFailed accounts for an explicitly refused uplink request,
-// not a session-state transition or a new retry policy. Establishment requests
-// currently use PTI 1; verify that transaction and the current pending lifetime.
-func (pdu *UEPDUSession) EstablishmentTransportFailed(pti uint8) {
-	if pdu.owner == nil {
-		return
-	}
-	pdu.owner.Lock()
-	defer pdu.owner.Unlock()
-	if pti != 1 || !pdu.owner.hasSessionLocked(pdu) || pdu.StateSM != SM5G_PDU_SESSION_ACTIVE_PENDING {
-		return
-	}
-	pdu.results.Finish(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment, analytics.Failure)
+	analytics.Finish(analytics.SessionEstablishment, &pdu.establishmentStart, false)
 }
 
 // NASSecurityContext exposes upstream security operations while sharing the UE counters.

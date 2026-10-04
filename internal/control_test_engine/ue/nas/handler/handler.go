@@ -98,18 +98,11 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, msg *nas.DLNASTranspo
 	}
 	switch m := payload.(type) {
 	case *nas.PDUSessEstReq:
-		// An AMF can refuse to forward the uplink N1 SM request and return it
-		// with a 5GMM cause, rather than returning a 5GSM establishment reject.
-		// Count only a matching current pending establishment; do not infer a
-		// refusal from an echoed request alone or schedule a new retry policy.
-		if msg.Cause5GMM == nil || msg.PDUSessID.Value != m.PDUSessId {
-			return
+		// An AMF that cannot forward the establishment request returns it with a
+		// 5GMM cause, instead of a 5GSM reject: the attempt failed, and is not retried.
+		if session, err := ue.GetPduSession(m.PDUSessId); err == nil && msg.Cause5GMM != nil {
+			session.EstablishmentFailed()
 		}
-		session, err := ue.GetPduSession(m.PDUSessId)
-		if err != nil {
-			return
-		}
-		session.EstablishmentTransportFailed(m.PTI)
 	case *nas.PDUSessEstAccept:
 		// TS 24.501 §9.11.4.10: an IPv4 address, an IPv6 interface identifier, or both.
 		if m.PDUAddr == nil || (len(m.PDUAddr.IPv4) != 4 && len(m.PDUAddr.IPv6IfId) != 8) {

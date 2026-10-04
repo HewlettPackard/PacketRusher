@@ -1,8 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package context
 
 import (
-	"my5G-RANTester/internal/analytics"
 	gnbcontext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"time"
 
@@ -76,7 +78,6 @@ func (ue *UEContext) startPduSessionRequestLocked(session *UEPDUSession, encode 
 	select {
 	case ue.gnbRx <- gnbcontext.UEMessage{IsNas: true, Nas: payload}:
 	case <-ue.gnbConnectionLost:
-		session.results.Finish(session.resultsUE, session.Id, analytics.SessionEstablishment, analytics.Cancelled)
 		log.Warn("[UE] Cancelled a PDU session request after the gNB association failed")
 	}
 	return nil

@@ -90,8 +90,6 @@ For more details on the installation, configuration or usage, you may refer to t
 
 ## Usage
 
-For JSON/CSV procedure reports and live Prometheus metrics, see [Load-test results](docs/load-test-results.md).
-
 ### Boolean flags and UE distribution
 
 Boolean flags take no separate value: `--tunnel` or `--tunnel=true` enables one and `--tunnel-vrf=false` disables
@@ -179,6 +177,20 @@ The SMF only allocates an interface identifier: the UE sends a Router Solicitati
 # config.yml: "pdusessiontype: IPv4v6" under "ue:"
 sudo ./packetrusher --tunnel-backend userspace ue
 ```
+
+### Procedure results
+
+`--report-json <file>` writes the results of the registrations and PDU session establishments when PacketRusher
+stops, replacing the file. `--metrics-addr <ip:port>` serves them live at `/metrics` for Prometheus. Both are global flags:
+
+```bash
+./packetrusher --config config/config.yml --report-json results.json --metrics-addr 127.0.0.1:9090 multi-ue -n 100
+```
+
+Each of the report's `procedures` (`registration`, `pdu_session_establishment`) has `started`, `success`, `failure`, `pending`
+and, for the successes, `latency_count` and `latency_seconds_sum`, `_min`, `_max` and `_mean`. The metrics, labelled by `procedure`, are
+`packetrusher_procedure_started_total`, `packetrusher_procedure_completed_total` (by `outcome`), `packetrusher_procedure_pending`
+and the histogram `packetrusher_procedure_duration_seconds`.
 
 ### Versions and releases
 
