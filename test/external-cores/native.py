@@ -47,13 +47,13 @@ def defer_cancellation():
             signal.signal(signum,handler)
 
 
-def run(core, prefix, binary, state, sessions=None, backend="userspace", upf=None, upf_prefix=None):
+def run(core, prefix, binary, state, sessions=None, backend="userspace", upf=None, upf_prefix=None, pdu_type="IPv4"):
     if os.geteuid() != 0 or os.stat('/proc/self/ns/net').st_ino == os.stat('/proc/1/ns/net').st_ino:
         raise RuntimeError("native runner requires root in a new network namespace; use native.sh")
     if (core == "open5gs" or sessions) and not Path('/dev/net/tun').is_char_device():
         raise RuntimeError("isolated /dev/net/tun missing; use native.sh")
     state = Path(state).resolve()
-    generate(core, state, native=True, prefix=prefix, sessions=sessions, backend=backend, upf=upf)
+    generate(core, state, native=True, prefix=prefix, sessions=sessions, backend=backend, upf=upf, pdu_type=pdu_type)
     profile = json.loads((state/'profile.json').read_text())
     if (profile['upf_implementation'] == 'free5gc' or backend == 'gtp5g') and not Path('/sys/module/gtp5g').is_dir():
         raise RuntimeError('the genuine free5GC UPF or selected kernel backend requires gtp5g in the disposable guest; PacketRusher eBPF does not replace the UPF')
@@ -139,5 +139,6 @@ if __name__ == '__main__':
     parser.add_argument('--backend',choices=['userspace','ebpf','gtp5g'],default='userspace')
     parser.add_argument('--upf',choices=['free5gc','open5gs'])
     parser.add_argument('--upf-prefix')
+    parser.add_argument('--pdu-session-type',choices=['IPv4','IPv6','IPv4v6'],default='IPv4',help='native Open5GS userspace/eBPF only; ordinary profiles remain IPv4')
     args=parser.parse_args()
-    run(args.core,args.prefix,args.packetrusher,args.state,args.sessions,args.backend,args.upf,args.upf_prefix)
+    run(args.core,args.prefix,args.packetrusher,args.state,args.sessions,args.backend,args.upf,args.upf_prefix,args.pdu_session_type)

@@ -17,6 +17,7 @@ from pathlib import Path
 from prepare import CORE_IP, RAN_IP, UE_IP, DN_IP, IMSI
 from startup import free_registered
 from diagnostics import inspect
+from ipv6 import checksum, router_advertisement_proof
 
 # All HTTP targets are private fixtures, regardless of the invoking shell's proxies.
 HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -79,7 +80,8 @@ def validate_report(report, sessions):
         require(row["started"] == count and row["success"] == count, f"{name} expected {count} actual successes: {row}")
         require(all(row[field] == 0 for field in ["failure", "cancelled", "pending"]), f"{name} has unfinished/failed attempts: {row}")
 
-def gtpu_proof(path, nonce, expected_sequences=(0,1,2), bidirectional=True):
+def gtpu_proof(path, nonce, expected_sequences=(0,1,2), bidirectional=True, family=4, ue_ip=UE_IP, dn_ip=DN_IP):
+    require(family in {4,6},'unsupported expected inner IP family')
     packets = {"uplink": [], "downlink": []}
     sequences = {"uplink": set(), "downlink": set()}
     with Path(path).open("rb") as file:
@@ -125,15 +127,22 @@ def gtpu_proof(path, nonce, expected_sequences=(0,1,2), bidirectional=True):
                         extension, offset = gtp[offset+size-1], offset+size
                     require(not extension, "GTP-U extension chain too long")
                 inner = gtp[offset:]
-                if len(inner) >= 20 and inner[0]>>4 == 4 and inner[9] != 17:
+                if (len(inner)>=20 and inner[0]>>4==4 and inner[9]!=17) or (len(inner)>=40 and inner[0]>>4==6 and inner[6]!=17):
                     # A closed DN UDP port may return ICMP quoting the nonce;
                     # it is not a UDP echo or evidence of a working DN peer.
                     continue
-                require(len(inner) >= 28 and inner[0]>>4 == 4, "DN payload is not IPv4 UDP")
-                length, ihl = struct.unpack("!H",inner[2:4])[0], (inner[0]&15)*4
-                require(length == len(inner) and ihl >= 20 and inner[9] == 17, "invalid inner IPv4/UDP packet")
-                peers = (socket.inet_ntoa(inner[12:16]),socket.inet_ntoa(inner[16:20]))
-                require(peers == ((UE_IP,DN_IP) if direction == "uplink" else (DN_IP,UE_IP)), "DN payload has wrong allocated UE/DN addresses")
+                require(len(inner)>=28 and inner[0]>>4==family,f"DN payload is not expected IPv{family} UDP")
+                if family==4:
+                    length,ihl=struct.unpack('!H',inner[2:4])[0],(inner[0]&15)*4
+                    require(length==len(inner) and ihl>=20 and inner[9]==17,'invalid inner IPv4/UDP packet')
+                    peers=(socket.inet_ntoa(inner[12:16]),socket.inet_ntoa(inner[16:20]))
+                else:
+                    require(len(inner)>=48 and len(inner)==40+struct.unpack('!H',inner[4:6])[0] and inner[6]==17,'invalid inner IPv6/UDP packet')
+                    ihl=40
+                    peers=(socket.inet_ntop(socket.AF_INET6,inner[8:24]),socket.inet_ntop(socket.AF_INET6,inner[24:40]))
+                    require(inner[46:48]!=b'\0\0','IPv6 UDP checksum absent')
+                    require(checksum(inner[8:40]+struct.pack('!I3xB',len(inner)-40,17)+inner[40:])==0,'invalid IPv6 UDP checksum')
+                require(peers==((ue_ip,dn_ip) if direction=='uplink' else (dn_ip,ue_ip)),'DN payload has wrong allocated UE/DN addresses')
                 require(len(inner) >= ihl+8 and struct.unpack("!H",inner[ihl+4:ihl+6])[0] == len(inner)-ihl, "invalid inner UDP length")
                 payload = inner[ihl+8:]
                 require(payload.startswith(nonce) and len(payload) == len(nonce)+4, "unique payload missing from inner UDP")
@@ -150,12 +159,64 @@ def gtpu_proof(path, nonce, expected_sequences=(0,1,2), bidirectional=True):
         require(not packets['downlink'], 'missing-DN negative control received a UDP echo')
     return {direction: {"packets": len(teids), "teids": sorted(set(teids))} for direction, teids in packets.items()}
 
+
+def families(profile):
+    return profile.get('user_plane_families',[{'version':4,'ue':UE_IP,'dn':DN_IP}])
+
+
+def family_nonce(nonce, version):
+    # Neither family's identifier is a substring of the other's in dual-stack.
+    return f'IPv{version}/'.encode()+nonce
+
+
+def traffic_route(state, family):
+    version=family['version']
+    command=['ip','-6' if version==6 else '-4','-json','route','get',family['dn'],'from',family['ue']]
+    def selected():
+        route=subprocess.check_output(command,text=True)
+        require(json.loads(route)[0].get('dev')=='val0000000120',f"IPv{version} UE traffic does not select persistent endpoint: {route}")
+        return route
+    # IPv6 setup needs an actual UPF/SMF RS/RA exchange after NAS acceptance.
+    route=until(selected,15,'actual IPv6 prefix/route') if version==6 else selected()
+    suffix='-ipv6' if version==6 else ''
+    (state/f'ue-route{suffix}.json').write_text(route)
+    if version==6:
+        endpoint=json.loads(subprocess.check_output(['ip','-6','-json','addr','show','dev','val0000000120'],text=True))
+        require(any(addr.get('local')==family['ue'] and addr.get('prefixlen')==128 for addr in endpoint[0]['addr_info']),'learned IPv6 address is not owned /128')
+        (state/'ue-endpoint-ipv6.json').write_text(json.dumps(endpoint,indent=2)+'\n')
+        (state/'ue-rule-ipv6.json').write_bytes(subprocess.check_output(['ip','-6','-json','rule','show']))
+
+
+def echo_probe(family, nonce, sequences, expect_reply=True):
+    version=family['version']
+    with socket.socket(socket.AF_INET6 if version==6 else socket.AF_INET,socket.SOCK_DGRAM) as sock:
+        if version==6:
+            sock.setsockopt(socket.IPPROTO_IPV6,socket.IPV6_V6ONLY,1)
+        sock.bind((family['ue'],0))
+        sock.settimeout(5 if expect_reply else 3)
+        for sequence in sequences:
+            payload=nonce+struct.pack('!I',sequence)
+            sock.sendto(payload,(family['dn'],9000))
+            if expect_reply:
+                data,peer=sock.recvfrom(4096)
+                require(data==payload and peer[:2]==(family['dn'],9000),f'IPv{version} DN response payload/peer mismatch')
+            else:
+                try:
+                    sock.recvfrom(4096)
+                except (TimeoutError,ConnectionRefusedError):
+                    pass
+                else:
+                    raise AssertionError(f'IPv{version} missing-DN received a UDP response')
+
 def probe(binary, state):
     state = Path(state).resolve()
     profile = json.loads((state / "profile.json").read_text())
     sessions = profile.get('sessions',0 if profile["core"] == "free5gc" else 1)
     backend = profile.get('tunnel_backend','userspace')
     result, process, capture = {"core": profile["core"], "sessions":sessions, "tunnel_backend":backend if sessions else None, "upf_implementation":profile.get('upf_implementation'), "success": False}, None, None
+    traffic=families(profile)
+    if profile.get('pdu_session_type'):
+        result['pdu_session_type']=profile['pdu_session_type']
     nonce = b"PACKETRUSHER-EXTERNAL-" + os.urandom(32).hex().encode()
     log = (state / "packetrusher.log").open("wb")
     capture_log = (state / "capture.log").open("wb")
@@ -185,46 +246,56 @@ def probe(binary, state):
         require(ready["ready"] and ready["connected"] and ready["state"] == "registered" and ready["active_pdu_sessions"] == ([1] if sessions else []), f"incomplete real NAS readiness: {ready}")
         await_core_count(profile,state,"registered",1,5)
         if sessions:
-            route = subprocess.check_output(["ip", "-json", "route", "get", DN_IP, "from", UE_IP], text=True)
-            (state/"ue-route.json").write_text(route)
-            require(json.loads(route)[0].get("dev") == "val0000000120", f"UE traffic does not select persistent endpoint: {route}")
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-                sock.bind((UE_IP, 0))
-                sock.settimeout(5)
-                for sequence in range(3):
-                    payload = nonce + struct.pack("!I",sequence)
-                    sock.sendto(payload, (DN_IP, 9000))
-                    data, peer = sock.recvfrom(4096)
-                    require(data == payload and peer == (DN_IP,9000), "DN response payload/peer mismatch")
-            until(lambda: gtpu_proof(state/"n3.pcap",nonce),3,"three observed uplink/downlink capture sequences")
-            result['user_plane'] = gtpu_proof(state/'n3.pcap',nonce)
+            family_results={}
+            for family in traffic:
+                traffic_route(state,family)
+                version=family['version']
+                identifier=family_nonce(nonce,version)
+                echo_probe(family,identifier,range(3))
+                options={'family':version,'ue_ip':family['ue'],'dn_ip':family['dn']}
+                until(lambda:gtpu_proof(state/'n3.pcap',identifier,**options),3,f'IPv{version} three observed uplink/downlink sequences')
+                family_results[str(version)]={'ue':family['ue'],'dn':family['dn'],'probe_nonce':identifier.decode(),'user_plane':gtpu_proof(state/'n3.pcap',identifier,**options)}
+                if version==6:
+                    family_results['6']['router_advertisement']=router_advertisement_proof(state/'n3.pcap',family['ue'])
+            result['user_plane']=family_results[str(traffic[0]['version'])]['user_plane']
             # Keep the real core and PDU active while removing only our DN
             # application. This proves that echo acceptance depends on that
             # downstream peer, not control-plane readiness or a local shortcut.
             (state/'dn-disable').write_text('negative control: close only owned DN UDP peer\n')
             until(lambda: (state/'dn-disabled').exists(),3,'owned DN peer closure')
             negative_nonce = b'PACKETRUSHER-MISSING-DN-'+os.urandom(32).hex().encode()
-            with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
-                sock.bind((UE_IP,0))
-                sock.settimeout(3)
-                sock.sendto(negative_nonce+struct.pack('!I',3),(DN_IP,9000))
-                try:
-                    sock.recvfrom(4096)
-                except (TimeoutError,ConnectionRefusedError):
-                    pass
-                else:
-                    raise AssertionError('missing-DN negative control unexpectedly received a UDP response')
+            for family in traffic:
+                version=family['version']
+                identifier=family_nonce(negative_nonce,version)
+                echo_probe(family,identifier,(3,),False)
+                options={'family':version,'ue_ip':family['ue'],'dn_ip':family['dn']}
+                until(lambda:gtpu_proof(state/'n3.pcap',identifier,(3,),False,**options),3,f'IPv{version} missing-DN uplink with no UDP echo')
+                family_results[str(version)]['missing_dn_nonce']=identifier.decode()
+                family_results[str(version)]['missing_dn']=gtpu_proof(state/'n3.pcap',identifier,(3,),False,**options)
             still_ready = control('wait','wait-dn-disabled')
-            require(still_ready['ready'] and still_ready['active_pdu_sessions'] == [1], 'DN closure changed PDU readiness')
+            require(still_ready['ready'] and still_ready['connected'] and still_ready['state']=='registered' and still_ready['active_pdu_sessions'] == [1], 'DN closure changed PDU readiness')
             await_core_count(profile,state,'dn-disabled',1,5)
-            until(lambda: gtpu_proof(state/'n3.pcap',negative_nonce,(3,),False),3,'missing-DN uplink with no UDP echo')
             capture.send_signal(signal.SIGINT)
             require(capture.wait(timeout=5) == 0, "N3 capture failed")
             capture = None
-            result["user_plane"] = gtpu_proof(state/"n3.pcap", nonce)
-            result['missing_dn'] = gtpu_proof(state/'n3.pcap',negative_nonce,(3,),False)
+            for family in traffic:
+                version=family['version']
+                options={'family':version,'ue_ip':family['ue'],'dn_ip':family['dn']}
+                family_results[str(version)]['user_plane']=gtpu_proof(state/'n3.pcap',family_nonce(nonce,version),**options)
+                family_results[str(version)]['missing_dn']=gtpu_proof(state/'n3.pcap',family_nonce(negative_nonce,version),(3,),False,**options)
+            result['user_plane']=family_results[str(traffic[0]['version'])]['user_plane']
+            result['missing_dn']=family_results[str(traffic[0]['version'])]['missing_dn']
+            if profile.get('pdu_session_type'):
+                result['families']=family_results
             retired = control('deregister')
             require(retired['state'] == 'parked' and not retired['ready'] and not retired['connected'] and retired['active_pdu_sessions'] == [], 'manual deregistration did not retire the active PDU and connection')
+            if profile.get('pdu_session_type'):
+                remaining=json.loads(subprocess.check_output(['ip','-6','-json','addr','show'],text=True))
+                require(not any(addr.get('local')==family['ue'] for link in remaining for addr in link['addr_info'] for family in traffic if family['version']==6),'retired PDU retained its global IPv6 address')
+                (state/'retired-ipv6-endpoints.json').write_text(json.dumps(remaining,indent=2)+'\n')
+                rules=json.loads(subprocess.check_output(['ip','-6','-json','rule','show'],text=True))
+                require(not any(rule.get('src','').split('/')[0]==family['ue'] for rule in rules for family in traffic if family['version']==6),'retired PDU retained IPv6 source policy')
+                (state/'retired-ipv6-rules.json').write_text(json.dumps(rules,indent=2)+'\n')
         # Free5GC automatic termination must take the positive readiness path,
         # well before the legacy30s unresolved-readiness cleanup fallback.
         await_core_count(profile,state,"deregistered",0,12)
