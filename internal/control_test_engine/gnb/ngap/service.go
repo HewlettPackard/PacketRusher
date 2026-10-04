@@ -6,7 +6,6 @@
 package ngap
 
 import (
-	stdcontext "context"
 	"errors"
 	"fmt"
 	"my5G-RANTester/internal/control_test_engine/gnb/context"
@@ -15,7 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	ngapmsg "github.com/free5gc/ngap/message"
 	"github.com/ishidawataru/sctp"
 	log "github.com/sirupsen/logrus"
 )
@@ -33,7 +31,6 @@ const (
 	reassociateInitialBackoff = time.Second
 	reassociateMaxBackoff     = 30 * time.Second
 	reassociateSetupTimeout   = 5 * time.Second
-	processingQueueTimeout    = 5 * time.Second
 )
 
 // errAssociationUnwanted is returned by dialAmf when the gNB was terminated, or stopped
@@ -182,6 +179,7 @@ func GnbListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 		} else if lostAt.IsZero() {
 			// Never set up: not ours to re-establish.
 			log.Warn("[GNB][SCTP] Association with AMF ", amf.GetAmfIpPort(), " closed before NG Setup completed: ", err)
+			_ = conn.Close()
 			return
 		} else {
 			// A re-establishment attempt that did not complete NG Setup.
@@ -216,22 +214,17 @@ func GnbListen(amf *context.GNBAmf, gnb *context.GNBContext) {
 	}
 }
 
-// readAssociation dispatches NGAP messages from conn until reading it fails.
+// readAssociation dispatches NGAP messages from conn until reading it fails. Its UEs
+// are then told that the association is lost, which also gives up the messages still
+// waiting to be delivered to them.
 func readAssociation(amf *context.GNBAmf, gnb *context.GNBContext, conn *sctp.SCTPConn, buf []byte) error {
-	dispatcher := newOrderedDispatcher(4096)
 	defer func() {
-		_ = conn.Close() // Also interrupt uplink writes holding a UE processing lock.
-		// A lost association releases all of its UEs. Cancel blocked delivery before
-		// waiting for workers; otherwise a full UE channel could prevent reassociation.
 		gnb.GetUePool().Range(func(_, value any) bool {
-			ue := value.(*context.GNBUe)
-			if ue.GetAmfId() == amf.GetAmfId() {
+			if ue := value.(*context.GNBUe); ue.GetAmfId() == amf.GetAmfId() {
 				ue.FailUEChannel()
 			}
 			return true
 		})
-		dispatcher.stop()
-		dispatcher.wait()
 	}()
 	for {
 		n, info, err := conn.SCTPRead(buf[:])
@@ -244,22 +237,8 @@ func readAssociation(amf *context.GNBAmf, gnb *context.GNBContext, conn *sctp.SC
 		forwardData := make([]byte, n)
 		copy(forwardData, buf[:n])
 
-		// Decode before enqueueing: launching a goroutine per packet can reorder
-		// a NAS PDU and the following UE Context Release Command.
-		message, err := ngapmsg.Parse(forwardData)
-		if err != nil || message == nil {
-			log.Error("[GNB][NGAP] Cannot decode received message: ", err)
-			continue
-		}
-		key := dispatcher.messageKey(gnb, message)
-		queueContext, cancelQueue := stdcontext.WithTimeout(stdcontext.Background(), processingQueueTimeout)
-		accepted := dispatcher.enqueueContext(queueContext, key, func() {
-			dispatchUEMessage(amf, gnb, message)
-		})
-		cancelQueue()
-		if !accepted {
-			return fmt.Errorf("NGAP processing queue stalled for %s", processingQueueTimeout)
-		}
+		// handling NGAP message.
+		Dispatch(amf, gnb, forwardData)
 	}
 }
 

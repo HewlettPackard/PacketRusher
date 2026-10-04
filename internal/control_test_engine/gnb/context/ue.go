@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package context
 
@@ -33,17 +34,20 @@ type GNBUe struct {
 	tmsi           *nasType.MobileId5GS
 	context        Context
 	// contextMu protects session membership and the payload copied during Xn
-	// handover. It is independent of the processing and release-request locks.
+	// handover. It is independent of the release-request lock.
 	contextMu        sync.RWMutex
 	lock             sync.Mutex
-	processingLock   sync.Mutex
 	txLock           sync.Mutex
 	delivery         *ueDelivery
-	pendingDelivery  *[]ueMessageDelivery // Scoped to the current downlink handler, guarded by txLock.
 	connectionLost   chan struct{}
 	connectionFailed bool
 	newGnb           atomic.Pointer[GNBContext]
 	releaseRequested bool // Set when UE Context Release Request is sent to AMF
+
+	// queue holds the NGAP messages of the UE still to handle, the one being
+	// handled included.
+	queueLock sync.Mutex
+	queue     []func()
 }
 
 type Context struct {
@@ -292,8 +296,7 @@ func (ue *GNBUe) SetGnbTx(gnbTx chan UEMessage) {
 		close(previous.done)
 	}
 	ue.txLock.Unlock()
-	// The swap prevents later batches from enrolling in the old generation.
-	// Already enrolled sends need cancellation before its channel can close.
+	// The sends still waiting on the previous channel are cancelled before it is closed.
 	if previous != nil {
 		previous.senders.Wait()
 		close(previous.channel)
@@ -421,37 +424,29 @@ func (ue *GNBUe) GetReleaseRequested() bool {
 	return ue.releaseRequested
 }
 
-// LockProcessing serializes uplink NAS and downlink NGAP changes to this UE.
-func (ue *GNBUe) LockProcessing()   { ue.processingLock.Lock() }
-func (ue *GNBUe) UnlockProcessing() { ue.processingLock.Unlock() }
-
-// ProcessDownlink serializes context changes, then delivers the handler's messages
-// outside the processing lock. The ordered NGAP worker waits for delivery before
-// running the next handler, so a release cannot overtake a preceding NAS message.
-// Meanwhile uplink processing can drain RX even when the UE's TX buffer is full.
-func (ue *GNBUe) ProcessDownlink(process func()) {
-	var pending []ueMessageDelivery
-	func() {
-		ue.LockProcessing()
-		ue.txLock.Lock()
-		ue.pendingDelivery = &pending
-		ue.txLock.Unlock()
-		defer func() {
-			ue.txLock.Lock()
-			ue.pendingDelivery = nil
-			ue.txLock.Unlock()
-			ue.UnlockProcessing()
-		}()
-		process()
-	}()
-	for _, message := range pending {
-		ue.deliver(message)
+// Enqueue runs handle once the NGAP messages received before it for this UE are
+// handled. One goroutine, which lasts while the queue has messages, handles those of a
+// UE in the order the AMF sent them, whatever happens to the other UEs.
+func (ue *GNBUe) Enqueue(handle func()) {
+	ue.queueLock.Lock()
+	defer ue.queueLock.Unlock()
+	ue.queue = append(ue.queue, handle)
+	if len(ue.queue) == 1 {
+		go ue.handleQueue()
 	}
 }
 
-type ueMessageDelivery struct {
-	delivery *ueDelivery
-	message  UEMessage
+func (ue *GNBUe) handleQueue() {
+	ue.queueLock.Lock()
+	for len(ue.queue) != 0 {
+		handle := ue.queue[0]
+		ue.queueLock.Unlock()
+		handle()
+		ue.queueLock.Lock()
+		ue.queue = ue.queue[1:]
+	}
+	ue.queue = nil
+	ue.queueLock.Unlock()
 }
 
 type ueDelivery struct {
@@ -469,33 +464,11 @@ func (ue *GNBUe) DeliverToUE(message UEMessage) bool {
 		ue.txLock.Unlock()
 		return false
 	}
-	if ue.pendingDelivery != nil {
-		*ue.pendingDelivery = append(*ue.pendingDelivery, ueMessageDelivery{delivery, message})
-		ue.txLock.Unlock()
-		return true
-	}
-	ue.txLock.Unlock()
-	return ue.deliver(ueMessageDelivery{delivery, message})
-}
-
-func (ue *GNBUe) deliver(message ueMessageDelivery) bool {
-	ue.txLock.Lock()
-	delivery := message.delivery
-	// A released or replaced connection must never receive an old batch.
-	if delivery != ue.delivery {
-		ue.txLock.Unlock()
-		return false
-	}
 	delivery.senders.Add(1)
 	ue.txLock.Unlock()
 	defer delivery.senders.Done()
 	select {
-	case <-delivery.done:
-		return false
-	default:
-	}
-	select {
-	case delivery.channel <- message.message:
+	case delivery.channel <- message:
 		return true
 	case <-delivery.done:
 		return false
