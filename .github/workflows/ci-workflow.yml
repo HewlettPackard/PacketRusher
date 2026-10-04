@@ -22,6 +22,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libgsl-dev
       - name: Install Go Deps
         run: go mod download
+      - name: Check that the eBPF object matches its source
+        run: |
+          sudo apt-get install -y clang llvm libbpf-dev
+          make ebpf
+          git diff --exit-code
       - name: Build CLI
         run: go build -o packetrusher ./cmd
       - name: Run race suite
@@ -36,6 +41,23 @@ jobs:
 
       - name: Run patched native NAS codec tests
         run: go test -v -race github.com/free5gc/nas/ie/... github.com/free5gc/nas/message/... github.com/free5gc/nas/internal/... -timeout=180s
+
+  arm64:
+    name: tunnel tests on arm64
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run the tunnel tests that need root
+        run: |
+          sudo modprobe vrf || sudo apt-get install -y "linux-modules-extra-$(uname -r)"
+          go test -c -o tunnel-tests/ ./internal/control_test_engine/ue/gtp/...
+          for test in tunnel-tests/*.test; do
+            sudo unshare --net sh -c "ip link set lo up && PACKETRUSHER_TUN_TEST=1 $test -test.v"
+          done
 
   docker-smoke:
     name: Docker build and CLI smoke

@@ -42,8 +42,8 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend
 	// device its UEs will use.
 	cfg.Ue.TunnelMode = tunnelMode
 	cfg.Ue.TunnelBackend = tunnelBackend
-	if tunnelBackend == config.TunnelBackendUserspace && tunnelMode == config.TunnelShared {
-		// No userspace device is shared: each UE of the gNB gets its own, as with -d.
+	if tunnelBackend != config.TunnelBackendGtp5g && tunnelMode == config.TunnelShared {
+		// Only gtp5g shares a device: with the others each UE of the gNB gets its own, as with -d.
 		cfg.Ue.TunnelMode = config.TunnelTun
 	}
 

@@ -7,6 +7,7 @@ package main
 import (
 	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control"
+	"my5G-RANTester/internal/control_test_engine/ue/gtp/ebpfgtp"
 	"my5G-RANTester/internal/templates"
 	pcap "my5G-RANTester/internal/utils"
 
@@ -44,7 +45,7 @@ func newApp() *cli.App {
 		After:   afterResults,
 		Flags: []cli.Flag{
 			&cli.PathFlag{Name: "config", Usage: "Configuration file path. (Default: ./config/config.yml)"},
-			&cli.StringFlag{Name: "tunnel-backend", Value: "auto", Usage: "GTP-U tunnel backend: gtp5g, userspace, or auto (gtp5g if its kernel module is loaded, else userspace)"},
+			&cli.StringFlag{Name: "tunnel-backend", Value: "auto", Usage: "GTP-U tunnel backend: ebpf, gtp5g, userspace, or auto (the first of these available on this host)"},
 			&cli.PathFlag{Name: "report-json", Usage: "Write procedure results to a new JSON file on shutdown"},
 			&cli.PathFlag{Name: "report-csv", Usage: "Write procedure results to a new CSV file on shutdown"},
 			&cli.StringFlag{Name: "metrics-addr", Usage: "Serve Prometheus metrics at /metrics on this address, e.g. 127.0.0.1:9090"},
@@ -337,6 +338,7 @@ func resolveTunnelBackend(c *cli.Context, cfg config.Config, tunnel bool) (confi
 
 func main() {
 	err := newApp().Run(os.Args)
+	ebpfgtp.Close()
 	// Ctrl-C while a gNB is still starting is not a failure.
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatal(err)

@@ -8,8 +8,10 @@ package config
 import (
 	"crypto/ecdh"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"my5G-RANTester/internal/common/sidf"
+	"my5G-RANTester/internal/control_test_engine/ue/gtp/ebpfgtp"
 	"os"
 	"path"
 	"path/filepath"
@@ -41,6 +43,7 @@ const (
 type TunnelBackend string
 
 const (
+	TunnelBackendEBPF      TunnelBackend = "ebpf"
 	TunnelBackendGtp5g     TunnelBackend = "gtp5g"
 	TunnelBackendUserspace TunnelBackend = "userspace"
 )
@@ -65,14 +68,16 @@ func (t PDUSessionType) NAS() uint8 {
 	return pduSessionTypes[t]
 }
 
-// tunnelBackends lists the backends by order of preference for "auto".
+// tunnelBackends lists the backends by order of preference for "auto", each with
+// the reason it cannot be used on this host, if any.
 var tunnelBackends = []struct {
-	name      TunnelBackend
-	ipv6      bool
-	available func() bool
+	name        TunnelBackend
+	ipv6        bool
+	unavailable func() error
 }{
-	{TunnelBackendGtp5g, false, func() bool { _, err := os.Stat("/sys/module/gtp5g"); return err == nil }},
-	{TunnelBackendUserspace, true, func() bool { _, err := os.Stat("/dev/net/tun"); return err == nil }},
+	{TunnelBackendEBPF, true, ebpfgtp.Load},
+	{TunnelBackendGtp5g, false, func() error { _, err := os.Stat("/sys/module/gtp5g"); return err }},
+	{TunnelBackendUserspace, true, func() error { _, err := os.Stat("/dev/net/tun"); return err }},
 }
 
 // ResolveTunnelBackend returns the backend that --tunnel-backend designates: with
@@ -81,19 +86,23 @@ var tunnelBackends = []struct {
 // half of IPv4v6 ones.
 func ResolveTunnelBackend(name string, sessionType PDUSessionType) (TunnelBackend, error) {
 	for _, backend := range tunnelBackends {
-		ipv6 := backend.ipv6 || sessionType != PDUSessionIPv6
-		if (name == "auto" || name == string(backend.name)) && ipv6 && backend.available() {
+		if name != "auto" && name != string(backend.name) {
+			continue
+		}
+		err := errors.New("it cannot carry IPv6 PDU sessions")
+		if backend.ipv6 || sessionType != PDUSessionIPv6 {
+			err = backend.unavailable()
+		}
+		if err == nil {
 			log.Info("[TESTER] Using the ", backend.name, " tunnel backend")
 			return backend.name, nil
 		}
-		if name == string(backend.name) && !ipv6 {
-			return "", fmt.Errorf("the %s tunnel backend cannot carry IPv6 PDU sessions: use the userspace one", name)
+		if name != "auto" {
+			return "", fmt.Errorf("the %s tunnel backend was requested but is not available: %w", name, err)
 		}
-		if name == string(backend.name) {
-			return "", fmt.Errorf("the %s tunnel backend was requested but is not available on this host", name)
-		}
+		log.Info("[TESTER] The ", backend.name, " tunnel backend is not available: ", err)
 	}
-	return "", fmt.Errorf("unknown tunnel backend %q: use auto, gtp5g or userspace", name)
+	return "", fmt.Errorf("unknown tunnel backend %q: use auto, ebpf, gtp5g or userspace", name)
 }
 
 var config *Config

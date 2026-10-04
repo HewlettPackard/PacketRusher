@@ -6,33 +6,45 @@
 package config
 
 import (
+	"errors"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestResolveTunnelBackend(t *testing.T) {
-	gtp5g := tunnelBackends[0].available
-	t.Cleanup(func() { tunnelBackends[0].available = gtp5g })
+	saved := slices.Clone(tunnelBackends)
+	t.Cleanup(func() { copy(tunnelBackends, saved) })
+	reason := func(available bool) func() error {
+		return func() error {
+			if available {
+				return nil
+			}
+			return errors.New("missing")
+		}
+	}
 	for _, tc := range []struct {
-		name    string
-		session PDUSessionType
-		loaded  bool
-		want    TunnelBackend
-		err     string
+		name        string
+		session     PDUSessionType
+		ebpf, gtp5g bool
+		want        TunnelBackend
+		err         string
 	}{
-		{"auto", "", true, TunnelBackendGtp5g, ""},
-		{"auto", "", false, TunnelBackendUserspace, ""},
-		{"gtp5g", PDUSessionIPv4v6, true, TunnelBackendGtp5g, ""},
-		{"gtp5g", "", false, "", "not available"},
-		{"userspace", "", true, TunnelBackendUserspace, ""},
-		{"kernel", "", true, "", "unknown tunnel backend"},
-		{"auto", PDUSessionIPv6, true, TunnelBackendUserspace, ""},
-		{"gtp5g", PDUSessionIPv6, true, "", "cannot carry IPv6"},
+		{"auto", "", true, true, TunnelBackendEBPF, ""},
+		{"auto", "", false, true, TunnelBackendGtp5g, ""},
+		{"auto", "", false, false, TunnelBackendUserspace, ""},
+		{"auto", PDUSessionIPv6, false, true, TunnelBackendUserspace, ""},
+		{"ebpf", "", false, true, "", "not available: missing"},
+		{"gtp5g", "", true, false, "", "not available: missing"},
+		{"gtp5g", PDUSessionIPv4v6, true, true, TunnelBackendGtp5g, ""},
+		{"gtp5g", PDUSessionIPv6, true, true, "", "cannot carry IPv6"},
+		{"userspace", "", true, true, TunnelBackendUserspace, ""},
+		{"kernel", "", true, true, "", "unknown tunnel backend"},
 	} {
-		tunnelBackends[0].available = func() bool { return tc.loaded }
+		tunnelBackends[0].unavailable, tunnelBackends[1].unavailable = reason(tc.ebpf), reason(tc.gtp5g)
 		backend, err := ResolveTunnelBackend(tc.name, tc.session)
-		require.Equal(t, tc.want, backend, "%s, %s, gtp5g loaded: %v", tc.name, tc.session, tc.loaded)
+		require.Equal(t, tc.want, backend, "%+v", tc)
 		if tc.err == "" {
 			require.NoError(t, err)
 		} else {
