@@ -14,6 +14,7 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -24,7 +25,8 @@ type Config struct {
 	UPF                      netip.Addr
 	UplinkTEID, DownlinkTEID uint32
 	QFI                      uint8
-	UE                       netip.Addr // packets from or to another address are dropped
+	UE                       netip.Addr   // IPv4 address; packets from or to another
+	Prefix                   netip.Prefix // address, or outside this IPv6 /64, are dropped
 }
 
 // Session carries the packets of one UE between its TUN device and the UPF.
@@ -35,6 +37,7 @@ type Session struct {
 	config   atomic.Pointer[Config]
 	done     chan struct{}
 	warned   sync.Once
+	prefixes chan netip.Prefix // from the UPF's Router Advertisements
 }
 
 // endpoint is the socket of one N3 address, shared by the UEs of that gNB.
@@ -60,7 +63,7 @@ func Open(name string, local netip.Addr, c Config) (*Session, error) {
 	if err := netlink.LinkAdd(tun); err != nil {
 		return nil, err
 	}
-	s := &Session{name: name, tun: tun.Fds[0], done: make(chan struct{})}
+	s := &Session{name: name, tun: tun.Fds[0], done: make(chan struct{}), prefixes: make(chan netip.Prefix, 1)}
 	s.config.Store(&c)
 	if err := netlink.LinkSetUp(tun); err != nil {
 		s.tun.Close()
@@ -123,7 +126,7 @@ func (s *Session) uplink() {
 			return
 		}
 		c := s.config.Load()
-		if !belongs(buf[Headroom:Headroom+n], 12, c.UE) {
+		if !c.belongs(buf[Headroom:Headroom+n], 12, 8) {
 			continue
 		}
 		datagram := Encode(buf[:Headroom+n], c.UplinkTEID, c.QFI)
@@ -161,7 +164,22 @@ func (e *endpoint) receive() {
 			continue
 		}
 		// The UPF may send from any UDP port (TS 29.281 §4.4.2): compare its address only.
-		if c := s.config.Load(); peer.Addr() != c.UPF || !belongs(packet, 16, c.UE) {
+		c := s.config.Load()
+		if peer.Addr() != c.UPF {
+			continue
+		}
+		// A Router Advertisement is for Solicit, not for the kernel, which would
+		// autoconfigure the device outside of the UE's routing table.
+		if prefix, advertisement := advertisedPrefix(packet); advertisement {
+			if prefix.IsValid() {
+				select {
+				case s.prefixes <- prefix:
+				default:
+				}
+			}
+			continue
+		}
+		if !c.belongs(packet, 16, 24) {
 			continue
 		}
 		if _, err := s.tun.Write(packet); err != nil {
@@ -170,10 +188,35 @@ func (e *endpoint) receive() {
 	}
 }
 
-// belongs reports whether the IPv4 packet has the UE's address at offset: 12 for
-// its source, 16 for its destination.
-func belongs(packet []byte, offset int, ue netip.Addr) bool {
-	return len(packet) >= 20 && packet[0]>>4 == 4 && netip.AddrFrom4([4]byte(packet[offset:offset+4])) == ue
+// belongs reports whether the packet has an address of the UE at the offset for
+// its IP version: 12 and 8 for its source, 16 and 24 for its destination.
+func (c *Config) belongs(packet []byte, ipv4, ipv6 int) bool {
+	if len(packet) >= 40 && packet[0]>>4 == 6 {
+		return c.Prefix.Contains(netip.AddrFrom16([16]byte(packet[ipv6 : ipv6+16])))
+	}
+	return len(packet) >= 20 && packet[0]>>4 == 4 && netip.AddrFrom4([4]byte(packet[ipv4:ipv4+4])) == c.UE
+}
+
+// Solicit asks the UPF, from the UE's link-local address, for the /64 prefix of its
+// PDU session (TS 23.501 §5.8.2.2.3) and returns the UE's address in that prefix.
+func (s *Session) Solicit(linkLocal netip.Addr) (netip.Addr, error) {
+	for range 3 { // RFC 4861 §10: MAX_RTR_SOLICITATIONS, RTR_SOLICITATION_INTERVAL
+		c := s.config.Load()
+		datagram := Encode(routerSolicitation(linkLocal), c.UplinkTEID, c.QFI)
+		if _, err := s.endpoint.conn.WriteToUDPAddrPort(datagram, netip.AddrPortFrom(c.UPF, 2152)); err != nil {
+			return netip.Addr{}, err
+		}
+		select {
+		case prefix := <-s.prefixes:
+			address, identifier := prefix.Addr().As16(), linkLocal.As16()
+			copy(address[8:], identifier[8:])
+			return netip.AddrFrom16(address), nil
+		case <-s.done:
+			return netip.Addr{}, net.ErrClosed
+		case <-time.After(4 * time.Second):
+		}
+	}
+	return netip.Addr{}, errors.New("the UPF advertised no IPv6 /64 prefix")
 }
 
 // warn logs the first datapath error of a session that is not being closed.

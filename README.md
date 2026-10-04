@@ -196,3 +196,15 @@ Only `auto` falls back: a backend requested by name that is not available is an 
 sudo ./packetrusher --tunnel-backend userspace multi-ue -n 10 --tunnel
 ```
 The userspace backend is slower than gtp5g and keeps one TUN device, hence one file descriptor, open per UE.
+
+### IPv6 and dual-stack PDU sessions
+
+`ue.pdusessiontype` in the configuration file is the type of the PDU sessions the UEs request: `IPv4` (default), `IPv6` or `IPv4v6`.
+
+The IPv6 user plane needs the `userspace` tunnel backend: `auto` selects it for `IPv6`, whereas on `gtp5g` an `IPv4v6` session carries IPv4 only.
+The SMF only allocates an interface identifier: the UE sends a Router Solicitation through its tunnel, and takes its address in the /64 prefix of the Router Advertisement with which the UPF, or the SMF through it, answers. PacketRusher then logs the address to bind to.
+
+```bash
+# config.yml: "pdusessiontype: IPv4v6" under "ue:"
+sudo ./packetrusher --tunnel-backend userspace ue
+```

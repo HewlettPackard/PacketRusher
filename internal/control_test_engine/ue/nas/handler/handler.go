@@ -1,4 +1,7 @@
-/** SPDX-License-Identifier: Apache-2.0 */
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package handler
 
 import (
@@ -11,6 +14,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/trigger"
+	"net/netip"
 )
 
 func HandlerAuthenticationReject(ue *context.UEContext, msg *nas.AuthRej) {
@@ -107,8 +111,9 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, msg *nas.DLNASTranspo
 		}
 		session.EstablishmentTransportFailed(m.PTI)
 	case *nas.PDUSessEstAccept:
-		if m.SelectedPDUSessType == nil || m.SelectedPDUSessType.Value != ie.PDUSessType_IPv4 || m.PDUAddr == nil || len(m.PDUAddr.IPv4) != 4 {
-			log.Error("[UE][NAS] PDU session requires an IPv4 address")
+		// TS 24.501 §9.11.4.10: an IPv4 address, an IPv6 interface identifier, or both.
+		if m.PDUAddr == nil || (len(m.PDUAddr.IPv4) != 4 && len(m.PDUAddr.IPv6IfId) != 8) {
+			log.Error("[UE][NAS] PDU session requires an IPv4 address or an IPv6 interface identifier")
 			return
 		}
 		session, err := ue.GetPduSession(m.PDUSessId)
@@ -116,11 +121,19 @@ func HandlerDlNasTransportPduaccept(ue *context.UEContext, msg *nas.DLNASTranspo
 			log.Errorf("[UE][NAS] Unknown PDU session %d: %v", m.PDUSessId, err)
 			return
 		}
-		var ip [12]uint8
-		copy(ip[:], m.PDUAddr.IPv4)
-		session.SetIp(ip)
+		if len(m.PDUAddr.IPv4) == 4 {
+			var ip [12]uint8
+			copy(ip[:], m.PDUAddr.IPv4)
+			session.SetIp(ip)
+			log.Infof("[UE][NAS] PDU session %d address: %s", m.PDUSessId, session.GetIp())
+		}
+		if len(m.PDUAddr.IPv6IfId) == 8 {
+			linkLocal := [16]byte{0xfe, 0x80}
+			copy(linkLocal[8:], m.PDUAddr.IPv6IfId)
+			session.SetIPv6(netip.AddrFrom16(linkLocal))
+			log.Infof("[UE][NAS] PDU session %d IPv6 link-local address: %s", m.PDUSessId, session.GetIPv6())
+		}
 		session.SetStateSM_PDU_SESSION_ACTIVE()
-		log.Infof("[UE][NAS] PDU session %d address: %s", m.PDUSessId, session.GetIp())
 		if m.DNN != nil {
 			log.Infof("[UE][NAS] PDU session DNN: %s", m.DNN.Value)
 		}
