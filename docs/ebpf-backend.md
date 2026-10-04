@@ -40,10 +40,11 @@ payload, including odd tails.
 
 Uplink first checks the original TUN's canonical allocation, inner length and
 MTU, then adds IPv4/UDP/GTP-U. QFI zero emits the eight-byte base GTP header;
-other QFIs emit the uplink PDU Session Container. An owned, unaddressed veth hop
-completes the inner kernel checksum before its relay redirects to N3. Only that
-staging device has checksum/GSO features disabled. Underlay offload settings are
-unchanged. The relay rechecks the current canonical owner, outer tuple, UL TEID,
+other QFIs emit the uplink PDU Session Container. An owned veth hop with no configured application addresses
+completes the inner kernel checksum before its relay redirects to N3. The owned UE TUN disables checksum offload and limits GSO; both staging
+veth endpoints disable checksum/GSO features. Underlay offload settings are
+unchanged. Kernel IPv6 link-local startup on the staging devices is not a UE
+allocation. The relay rechecks the current canonical owner, outer tuple, UL TEID,
 QFI and inner source before forwarding. An explicit validated gateway avoids
 inheriting the application's inner VRF or packet mark; local N3 uses a fresh
 outer IPv4 route.
@@ -122,7 +123,8 @@ sudo modprobe vrf
 ./scripts/check-ebpf.sh
 ```
 
-The runner builds the actual embedded object and production service tests,
+The runner builds Go test binaries containing the checked-in embedded object
+and production service tests,
 then creates private network/mount namespaces and a private TUN node when
 needed. Its checked matrix includes both backends' identical IPv4/IPv6 TCP
 270336-byte exchanges, TUN/VRF/device binding, unchanged virtual N3 offloads,
