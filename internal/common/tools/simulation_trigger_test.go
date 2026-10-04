@@ -2,12 +2,14 @@
 package tools
 
 import (
+	"context"
 	"net/netip"
 	"sync"
 	"testing"
 	"time"
 
 	nas "github.com/free5gc/nas/message"
+	"github.com/stretchr/testify/require"
 	"my5G-RANTester/config"
 	gnbcontext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/procedures"
@@ -23,6 +25,10 @@ type simulationHarness struct {
 // harness owns only the gNB greeting and NAS frames needed by these lifecycle
 // checks; complete authentication/PDU establishment remains covered by ./test.
 func newSimulationHarness(t *testing.T, trigger <-chan struct{}, interval, loops int) *simulationHarness {
+	return newSimulationHarnessWithRestartDelay(t, trigger, interval, loops, 0)
+}
+
+func newSimulationHarnessWithRestartDelay(t *testing.T, trigger <-chan struct{}, interval, loops, restartDelay int) *simulationHarness {
 	t.Helper()
 	gnb := &gnbcontext.GNBContext{}
 	gnb.NewRanGnbContext("000008", "001", "01", "000001", "01", "", netip.MustParseAddrPort("127.0.0.1:9487"), netip.MustParseAddrPort("127.0.0.1:2152"))
@@ -44,6 +50,7 @@ func newSimulationHarness(t *testing.T, trigger <-chan struct{}, interval, loops
 		UeId: 1, Gnbs: map[string]*gnbcontext.GNBContext{"000008": gnb}, Cfg: cfg,
 		TimeBeforeDeregistration: interval, DeregistrationTrigger: trigger,
 		RegistrationLoop: true, LoopCount: loops,
+		TimeBeforeReregistration: restartDelay,
 	}, wg)
 	t.Cleanup(func() {
 		finished := make(chan struct{})
@@ -59,6 +66,41 @@ func newSimulationHarness(t *testing.T, trigger <-chan struct{}, interval, loops
 		}
 	})
 	return h
+}
+
+func TestRegistrationRestartRepliesToControlRequests(t *testing.T) {
+	h := newSimulationHarnessWithRestartDelay(t, nil, 0, 2, 60_000)
+	first := h.nextUE(t)
+	close(first.ConnectionLost)
+	expectConnectionClosed(t, first)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	a, err := h.simulation.Inspect(ctx)
+	require.NoError(t, err, "inspection must receive a reply during the restart delay")
+	require.Equal(t, uint64(2), a.Generation)
+	require.Equal(t, "starting", a.State)
+	require.False(t, a.Connected)
+	require.False(t, a.Ready)
+	require.Empty(t, a.ActivePDUSessions)
+	_, err = h.simulation.request(ctx, "terminate-after-timeout", "", 1, 0)
+	require.ErrorIs(t, err, procedures.ErrGeneration)
+	_, err = h.simulation.request(ctx, "idle", "", 2, 0)
+	require.ErrorIs(t, err, procedures.ErrNotReady)
+	_, err = h.simulation.request(ctx, "inspect", "", 2, 1)
+	require.ErrorIs(t, err, procedures.ErrGeneration)
+	cancelled, stop := context.WithCancel(ctx)
+	stop()
+	reply := make(chan procedures.ControlResult, 1)
+	require.True(t, h.simulation.Send(procedures.UeTesterMessage{Type: procedures.Control,
+		Control: &procedures.ControlRequest{Context: cancelled, Action: "inspect", Reply: reply}}))
+	select {
+	case result := <-reply:
+		require.ErrorIs(t, result.Err, context.Canceled)
+	case <-ctx.Done():
+		t.Fatal("cancelled request was consumed without a reply")
+	}
+	h.send(t, procedures.UeTesterMessage{Type: procedures.Kill})
+	waitSimulationDone(t, h.simulation)
 }
 
 func (h *simulationHarness) nextUE(t *testing.T) gnbcontext.UEMessage {

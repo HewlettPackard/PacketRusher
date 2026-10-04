@@ -383,6 +383,24 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 				return
 			}
 			// Global shutdown remains receivable between registration attempts.
+			// Inspection must also keep receiving replies after the old UE has
+			// exited. No connection exists until the next actor is created.
+			starting := procedures.Attachment{UE: simConfig.UeId, Generation: uint64(iteration + 1), State: "starting", ActivePDUSessions: []uint8{}}
+			replyDuringRestart := func(msg procedures.UeTesterMessage) {
+				if r := msg.Control; r != nil {
+					var err error
+					switch {
+					case r.Context.Err() != nil:
+						err = r.Context.Err()
+					case r.ExpectedGeneration != 0 && r.ExpectedGeneration != starting.Generation,
+						r.ExpectedConnection != 0:
+						err = procedures.ErrGeneration
+					case r.Action != "inspect":
+						err = procedures.ErrNotReady
+					}
+					r.Respond(starting, err)
+				}
+			}
 			restart := time.NewTimer(time.Duration(simConfig.TimeBeforeReregistration) * time.Millisecond)
 			waiting := true
 			for waiting {
@@ -397,11 +415,13 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 						restart.Stop()
 						return
 					}
+					replyDuringRestart(msg)
 				case msg, open := <-scenarioChan:
 					if !open || msg.Type == procedures.Terminate || msg.Type == procedures.Kill {
 						restart.Stop()
 						return
 					}
+					replyDuringRestart(msg)
 				}
 			}
 		}
