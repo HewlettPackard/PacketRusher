@@ -1,0 +1,46 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+      - '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+permissions:
+  contents: read
+jobs:
+  release:
+    name: archives and image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build archives
+        run: |
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=$GITHUB_REF_NAME" -o packetrusher ./cmd
+            tar -czf "packetrusher-$GITHUB_REF_NAME-linux-$arch.tar.gz" packetrusher LICENSE README.md config/config.yml
+          done
+          sha256sum packetrusher-*.tar.gz > SHA256SUMS
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes packetrusher-*.tar.gz SHA256SUMS
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/hewlettpackard/packetrusher:${{ github.ref_name }}
+          build-args: VERSION=${{ github.ref_name }}
