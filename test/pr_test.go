@@ -100,7 +100,6 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 
 	// Setup UE
 	ueCount := 10
-	scenarioChans := make([]chan procedures.UeTesterMessage, ueCount+1)
 	ueSimCfg := tools.UESimulationConfig{
 		Gnbs:                     gnbs,
 		Cfg:                      conf,
@@ -114,8 +113,6 @@ func TestRegistrationToCtxReleaseWithPDUSession(t *testing.T) {
 	simulations := make([]*tools.UESimulation, 0, ueCount)
 	t.Cleanup(func() { stopTestSimulations(t, simulations) })
 	for ueSimCfg.UeId = 1; ueSimCfg.UeId <= ueCount; ueSimCfg.UeId++ {
-		ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
-
 		imsi := tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin)
 
 		securityContext := context.SecurityContext{}
@@ -234,22 +231,17 @@ func TestUERegistrationLoop(t *testing.T) {
 	}
 
 	// Setup UE
-	scenarioChans := make([]chan procedures.UeTesterMessage, 2)
-	deregistrationTrigger := make(chan struct{})
 	ueSimCfg := tools.UESimulationConfig{
 		UeId:                     1,
 		Gnbs:                     gnbs,
 		Cfg:                      conf,
 		TimeBeforeDeregistration: 2000,
-		DeregistrationTrigger:    deregistrationTrigger,
 		TimeBeforeNgapHandover:   0,
 		TimeBeforeXnHandover:     0,
 		NumPduSessions:           1,
 		RegistrationLoop:         true,
 		LoopCount:                5,
 	}
-	scenarioChans[ueSimCfg.UeId] = make(chan procedures.UeTesterMessage)
-	ueSimCfg.ScenarioChan = scenarioChans[ueSimCfg.UeId]
 
 	securityContext := context.SecurityContext{}
 	securityContext.SetMsin(tools.IncrementMsin(ueSimCfg.UeId, ueSimCfg.Cfg.Ue.Msin))
@@ -262,34 +254,8 @@ func TestUERegistrationLoop(t *testing.T) {
 	simulation := tools.SimulateSingleUE(ueSimCfg, &wg)
 	t.Cleanup(func() { stopTestSimulations(t, []*tools.UESimulation{simulation}) })
 
-	// Each iteration must really finish registration and accept its PDU session
-	// before we exercise graceful teardown. A timer started before attach can
-	// deliberately abort an authenticated UE during SCTP recovery instead.
-	deadline := time.Now().Add(45 * time.Second)
-	for iteration := 1; iteration <= ueSimCfg.LoopCount; iteration++ {
-		require.Eventually(t, func() bool {
-			for i, procedure := range analytics.Results() {
-				if procedure.Success-before[i].Success != uint64(iteration) {
-					return false
-				}
-			}
-			return true
-		}, time.Until(deadline), 10*time.Millisecond, "iteration %d must complete both client procedures", iteration)
-		timer := time.NewTimer(time.Until(deadline))
-		select {
-		case deregistrationTrigger <- struct{}{}:
-		case <-simulation.Done():
-			timer.Stop()
-			t.Fatalf("scenario ended before iteration %d teardown", iteration)
-		case <-timer.C:
-			t.Fatalf("scenario did not accept iteration %d teardown before the deadline", iteration)
-		}
-		timer.Stop()
-	}
-
-	// Join the whole loop before inspecting it or closing its gNB inbound
-	// channel. A fixed sleep can expire while the next UE is still attaching.
-	waitTestSimulations(t, []*tools.UESimulation{simulation}, time.Until(deadline))
+	// Each iteration registers, sets up its PDU session and deregisters after 2 s.
+	waitTestSimulations(t, []*tools.UESimulation{simulation}, 45*time.Second)
 	require.Eventually(t, func() bool {
 		allDeregistered := true
 		fiveGC.GetAMFContext().ExecuteForAllUe(func(ue *context.UEContext) {

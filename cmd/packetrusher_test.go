@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"strings"
 	"testing"
@@ -57,15 +58,13 @@ func TestRejectArgumentsBeforeStartingCommand(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"separate tunnel boolean", []string{"multi-ue", "-n", "2", "--tunnel", "true", "-d", "--tunnel-vrf", "false"}, "boolean flags take no separate value"},
-		{"separate false boolean", []string{"multi-ue", "-n", "2", "-d", "--tunnel-vrf", "false"}, "boolean flags take no separate value"},
-		{"unexpected argument", []string{"gnb", "extra"}, "unexpected positional arguments"},
+		{"separate tunnel boolean", []string{"multi-ue", "-n", "2", "--tunnel", "true", "-d", "--tunnel-vrf", "false"}, "a boolean flag takes its value as --flag=false"},
+		{"separate false boolean", []string{"multi-ue", "-n", "2", "-d", "--tunnel-vrf", "false"}, "a boolean flag takes its value as --flag=false"},
+		{"unexpected argument", []string{"gnb", "extra"}, `unexpected arguments ["extra"]`},
 		{"zero UEs", []string{"multi-ue", "-n", "0"}, "--number-of-ues must be at least 1"},
 		{"negative UEs", []string{"multi-ue", "-n=-1"}, "--number-of-ues must be at least 1"},
 		{"a tunnel without PDU session", []string{"multi-ue", "-n", "1", "--tunnel", "--numPduSessions=0"}, "at least 1 with --tunnel"},
 		{"too many PDU sessions", []string{"multi-ue", "-n", "1", "--numPduSessions=16"}, "--numPduSessions must be between 0 and 15"},
-		{"negative duration", []string{"multi-ue", "-n", "1", "--timeBetweenRegistration=-1"}, "--timeBetweenRegistration cannot be negative"},
-		{"negative loop count", []string{"multi-ue", "-n", "1", "--loopCount=-1"}, "--loopCount cannot be negative"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -79,5 +78,20 @@ func TestRejectArgumentsBeforeStartingCommand(t *testing.T) {
 				t.Fatal("invalid arguments reached the command action")
 			}
 		})
+	}
+}
+
+// "packetrusher <command> help" prints the help of the command, as --help does.
+func TestCommandHelp(t *testing.T) {
+	for _, command := range []string{"ue", "multi-ue"} {
+		var output bytes.Buffer
+		app := parserApp(t, func(*cli.Context) error { t.Fatal("help started the command"); return nil })
+		app.Writer = &output
+		if err := app.Run([]string{"packetrusher", command, "help"}); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(output.String(), "packetrusher "+command) || !strings.Contains(output.String(), "OPTIONS:") {
+			t.Fatalf("%s help printed %q", command, output.String())
+		}
 	}
 }

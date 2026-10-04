@@ -298,12 +298,13 @@ func newApp() *cli.App {
 	return app
 }
 
-// validateArguments runs before configuration loading or network setup. Boolean
-// flags consume no following argument, so a separate "true" or "false" would
-// otherwise silently prevent urfave/cli v2 from parsing the remaining flags.
+// validateArguments runs before configuration loading or network setup. No command
+// takes arguments other than "help": urfave/cli v2 stops parsing flags at the first
+// one, such as the "true" of a boolean flag given as a separate word, and would
+// silently ignore the flags after it.
 func validateArguments(c *cli.Context) error {
-	if c.Args().Len() != 0 {
-		return fmt.Errorf("unexpected positional arguments %q: boolean flags take no separate value; use --tunnel, --tunnel=true, or --tunnel-vrf=false", c.Args().Slice())
+	if args := c.Args(); args.Present() && args.First() != "help" {
+		return fmt.Errorf("unexpected arguments %q: commands take only flags, and a boolean flag takes its value as --flag=false", args.Slice())
 	}
 	if c.Command.Name != "multi-ue-pdu" {
 		return nil
@@ -313,15 +314,6 @@ func validateArguments(c *cli.Context) error {
 	}
 	if n := c.Int("numPduSessions"); n < 0 || n > 15 || n == 0 && c.Bool("tunnel") {
 		return fmt.Errorf("--numPduSessions must be between 0 and 15, and at least 1 with --tunnel")
-	}
-	for _, flag := range []string{
-		"number-of-gnbs", "loopCount", "timeBetweenRegistration", "timeBeforeDeregistration",
-		"timeBeforeNgapHandover", "timeBeforeXnHandover", "timeBeforeIdle",
-		"timeBeforeReconnecting", "timeBeforeReregistration",
-	} {
-		if c.Int(flag) < 0 {
-			return fmt.Errorf("--%s cannot be negative", flag)
-		}
 	}
 	return nil
 }
