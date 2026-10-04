@@ -33,7 +33,6 @@ import (
 
 	"github.com/free5gc/openapi/models"
 	log "github.com/sirupsen/logrus"
-	"github.com/vishvananda/netlink"
 )
 
 // 5GMM main states in the UE.
@@ -104,15 +103,7 @@ type UEPDUSession struct {
 	GnbPduSession   *context.GnbPDUSession
 	ueIP            string
 	ueIPv6          netip.Addr
-	ueGnbIP         netip.Addr
-	tun             netlink.Link
-	rule            *netlink.Rule
-	routeTun        *netlink.Route
-	vrf             *netlink.Vrf
-	tunnelLock      sync.Mutex
-	ueInterface     netlink.Link
-	releaseTunnel   func(bool)
-	updateTunnel    func(*context.GnbPDUSession, netip.Addr) error
+	Tunnel          Tunnel
 	Wait            chan bool
 	T3580Retries    int
 
@@ -313,7 +304,7 @@ func (ue *UEContext) ReportStatus(request *procedures.ControlRequest) {
 		// With tunnels, a session is usable once its interface exists, and only
 		// the first session of a UE gets one.
 		if err == nil && pduSession.GetStateSM() == SM5G_PDU_SESSION_ACTIVE &&
-			(ue.TunnelMode == config.TunnelDisabled || id != 1 || pduSession.GetTunInterface() != nil) {
+			(ue.TunnelMode == config.TunnelDisabled || id != 1 || pduSession.Tunnel != nil) {
 			status.PduSessions = append(status.PduSessions, int(id))
 		}
 	}
@@ -431,90 +422,20 @@ func (pduSession *UEPDUSession) GetIPv6() netip.Addr {
 	return pduSession.ueIPv6
 }
 
-func (pduSession *UEPDUSession) SetGnbIp(ip netip.Addr) {
-	pduSession.ueGnbIP = ip
-}
+// Tunnel is the user plane of a PDU session on this host, which ue/gtp/service sets
+// up and the session keeps until its release.
+type Tunnel interface{ Release() }
 
-func (pduSession *UEPDUSession) GetGnbIp() netip.Addr {
-	return pduSession.ueGnbIP
-}
-
-// SetTunnelRelease records a session-owned cleanup operation.
-func (pduSession *UEPDUSession) SetTunnelRelease(release func()) {
-	pduSession.SetTunnelCleanup(func(bool) { release() })
-}
-
-// ReplaceTunnelCleanup publishes the new tunnel, then retires the old backend
-// while keeping the UE address, routing policy and VRF alive across handover.
-func (pduSession *UEPDUSession) ReplaceTunnelCleanup(release func(bool)) {
-	pduSession.tunnelLock.Lock()
-	defer pduSession.tunnelLock.Unlock()
-	previous := pduSession.releaseTunnel
-	pduSession.releaseTunnel = release
-	if previous != nil {
-		previous(true)
-	}
-}
-
-func (pduSession *UEPDUSession) SetTunnelCleanup(release func(bool)) {
-	pduSession.tunnelLock.Lock()
-	defer pduSession.tunnelLock.Unlock()
-	pduSession.releaseTunnel = release
-}
-
-// ReleaseTunnel waits for cleanup, including the socket worker, exactly once.
+// ReleaseTunnel removes the tunnel of the session, if it has one.
 func (pduSession *UEPDUSession) ReleaseTunnel() {
-	pduSession.tunnelLock.Lock()
-	defer pduSession.tunnelLock.Unlock()
-	if release := pduSession.releaseTunnel; release != nil {
-		pduSession.releaseTunnel = nil
-		pduSession.updateTunnel = nil
-		release(false)
-		pduSession.SetTunRoute(nil)
-		pduSession.SetTunRule(nil)
-		pduSession.SetTunInterface(nil)
-		pduSession.SetUEInterface(nil)
-		pduSession.SetVrfDevice(nil)
+	if pduSession.Tunnel != nil {
+		pduSession.Tunnel.Release()
+		pduSession.Tunnel = nil
 	}
 }
-
-func (pduSession *UEPDUSession) SetUEInterface(link netlink.Link) { pduSession.ueInterface = link }
-func (pduSession *UEPDUSession) GetUEInterface() netlink.Link     { return pduSession.ueInterface }
 
 func (pduSession *UEPDUSession) GetPduSesssionId() uint8 {
 	return pduSession.Id
-}
-
-func (pduSession *UEPDUSession) SetTunInterface(tun netlink.Link) {
-	pduSession.tun = tun
-}
-
-func (pduSession *UEPDUSession) GetTunInterface() netlink.Link {
-	return pduSession.tun
-}
-
-func (pduSession *UEPDUSession) SetTunRule(rule *netlink.Rule) {
-	pduSession.rule = rule
-}
-
-func (pduSession *UEPDUSession) GetTunRule() *netlink.Rule {
-	return pduSession.rule
-}
-
-func (pduSession *UEPDUSession) SetTunRoute(route *netlink.Route) {
-	pduSession.routeTun = route
-}
-
-func (pduSession *UEPDUSession) GetTunRoute() *netlink.Route {
-	return pduSession.routeTun
-}
-
-func (pduSession *UEPDUSession) SetVrfDevice(vrf *netlink.Vrf) {
-	pduSession.vrf = vrf
-}
-
-func (pduSession *UEPDUSession) GetVrfDevice() *netlink.Vrf {
-	return pduSession.vrf
 }
 
 func (pdu *UEPDUSession) SetStateSM_PDU_SESSION_INACTIVE() {
@@ -813,12 +734,6 @@ func (ue *UEContext) SetAuthSubscription(k, opc, op, amf, sqn string) {
 
 }
 
-// Seams for the tests: removing a policy rule or route needs privileges they lack.
-var (
-	ruleDel  = netlink.RuleDel
-	routeDel = netlink.RouteDel
-)
-
 func (ue *UEContext) Terminate() {
 	ue.Lock()
 	defer ue.Unlock()
@@ -837,37 +752,7 @@ func (ue *UEContext) Terminate() {
 	// clean all context of tun interface
 	for _, pduSession := range ue.PduSession {
 		if pduSession != nil {
-			// In shared mode the "UE tunnel interface" is the gNB's single GTP-U
-			// device, which every other UE on that gNB is also using. Deleting it
-			// here would tear down all of their tunnels because one UE went away.
-			// Only what this UE was lent comes off: its route, policy rule and
-			// address, and its rules and their identifiers so a later UE can reuse
-			// them. That also clears the session's hold on them, so nothing below
-			// removes them a second time. The device is the gNB's to remove.
 			pduSession.ReleaseTunnel()
-
-			ueTun := pduSession.GetTunInterface()
-			ueRule := pduSession.GetTunRule()
-			ueRoute := pduSession.GetTunRoute()
-			ueVrf := pduSession.GetVrfDevice()
-
-			if ueTun != nil && ue.TunnelMode != config.TunnelShared {
-				_ = netlink.LinkSetDown(ueTun)
-				_ = netlink.LinkDel(ueTun)
-			}
-
-			if ueRule != nil {
-				_ = ruleDel(ueRule)
-			}
-
-			if ueRoute != nil {
-				_ = routeDel(ueRoute)
-			}
-
-			if ueVrf != nil {
-				_ = netlink.LinkSetDown(ueVrf)
-				_ = netlink.LinkDel(ueVrf)
-			}
 		}
 	}
 
@@ -963,22 +848,6 @@ func (pdu *UEPDUSession) EstablishmentTransportFailed(pti uint8) {
 		return
 	}
 	pdu.results.Finish(pdu.resultsUE, pdu.Id, analytics.SessionEstablishment, analytics.Failure)
-}
-
-// The backend keeps an immutable snapshot of its last completed rules so an
-// in-place update can roll back independently of mutable gNB session context.
-func (pduSession *UEPDUSession) SetTunnelUpdate(update func(*context.GnbPDUSession, netip.Addr) error) {
-	pduSession.tunnelLock.Lock()
-	defer pduSession.tunnelLock.Unlock()
-	pduSession.updateTunnel = update
-}
-func (pduSession *UEPDUSession) UpdateTunnel(pdu *context.GnbPDUSession, ip netip.Addr) error {
-	pduSession.tunnelLock.Lock()
-	defer pduSession.tunnelLock.Unlock()
-	if pduSession.updateTunnel == nil {
-		return errors.New("existing tunnel has no update operation")
-	}
-	return pduSession.updateTunnel(pdu, ip)
 }
 
 // NASSecurityContext exposes upstream security operations while sharing the UE counters.

@@ -1,4 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package gtp
 
 import (
@@ -8,84 +11,51 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-// Uplink packets include IPv4 (20), UDP (8), the base GTP-U header (8),
-// optional GTP fields (4), and the PDU Session Container carrying QFI (4).
-// Reserve the full overhead even when a session has no QFI.
-const IPv4GTPOverhead = 44
+// overhead is what GTP-U adds to a packet on N3: IPv4 (20), UDP (8), the GTP-U header
+// (8), its optional fields (4) and the PDU Session Container carrying the QFI (4).
+const overhead = 44
 
-func payloadMTU(underlay, configured int) (int, error) {
-	if underlay > 65535 {
-		underlay = 65535 // IPv4's total-length field is 16 bits.
+// tunnelMTU returns the MTU of the tunnels of an N3 interface whose MTU is n3: what
+// the overhead leaves, or ue.tunnelmtu if configured, to match the UPF or a path
+// that carries less.
+func tunnelMTU(n3, configured int, ipv6 bool) (int, error) {
+	highest := min(n3, 65535) - overhead // Loopback's MTU exceeds the largest IPv4 packet.
+	lowest := 68
+	if ipv6 {
+		lowest = 1280
 	}
-	maximum := underlay - IPv4GTPOverhead
-	if maximum < 68 {
-		return 0, fmt.Errorf("N3 MTU %d cannot carry an IPv4 tunnel with %d bytes of overhead", underlay, IPv4GTPOverhead)
+	mtu := highest
+	if configured != 0 {
+		mtu = configured
 	}
-	if configured == 0 {
-		return maximum, nil
+	if mtu < lowest || mtu > highest {
+		return 0, fmt.Errorf("tunnel MTU %d is not between %d and the %d that the N3 MTU %d leaves", mtu, lowest, highest, n3)
 	}
-	if configured < 68 || configured > maximum {
-		return 0, fmt.Errorf("ue.tunnelmtu %d must be between 68 and %d for N3 MTU %d", configured, maximum, underlay)
-	}
-	return configured, nil
+	return mtu, nil
 }
 
-type mtuOperations struct {
-	links     func() ([]netlink.Link, error)
-	addresses func(netlink.Link, int) ([]netlink.Addr, error)
-	set       func(netlink.Link, int) error
-}
-
-// SetTunnelMTU overrides gtp5g's default, which subtracts only 36 bytes.
-// Use the interface holding the configured N3 source address, including aliases.
-// A smaller explicit value accommodates a lower path MTU or matches the UPF.
-func SetTunnelMTU(tunnel netlink.Link, source netip.Addr, configured int) error {
-	return setTunnelMTU(tunnel, source, configured, mtuOperations{
-		links: netlink.LinkList, addresses: netlink.AddrList, set: netlink.LinkSetMTU,
-	})
-}
-
-func setTunnelMTU(tunnel netlink.Link, source netip.Addr, configured int, ops mtuOperations) error {
-	if tunnel == nil || tunnel.Attrs() == nil {
-		return fmt.Errorf("tunnel interface is missing")
-	}
-	source = source.Unmap()
-	if !source.Is4() {
-		return fmt.Errorf("N3 source %s must be IPv4", source)
-	}
-	links, err := ops.links()
-	if err != nil {
-		return fmt.Errorf("list N3 interfaces: %w", err)
-	}
-	underlay := 0
-	for _, link := range links {
-		if link.Attrs() == nil || link.Attrs().Index == tunnel.Attrs().Index {
-			continue
-		}
-		addresses, err := ops.addresses(link, netlink.FAMILY_V4)
-		if err != nil {
-			return fmt.Errorf("list addresses on %s: %w", link.Attrs().Name, err)
-		}
-		for _, address := range addresses {
-			if address.IPNet == nil {
-				continue
-			}
-			ip, ok := netip.AddrFromSlice(address.IP)
-			if ok && ip.Unmap() == source && (underlay == 0 || link.Attrs().MTU < underlay) {
-				underlay = link.Attrs().MTU
-			}
-		}
-	}
-	if underlay == 0 {
-		return fmt.Errorf("N3 source %s is not assigned to an interface with a usable MTU", source)
-	}
-	mtu, err := payloadMTU(underlay, configured)
+// SetTunnelMTU sets that MTU on the devices of a tunnel, from the interface holding
+// its N3 address source: gtp5g's own default only leaves room for 36 bytes.
+func SetTunnelMTU(source netip.Addr, configured int, ipv6 bool, devices ...netlink.Link) error {
+	addresses, err := netlink.AddrList(nil, netlink.FAMILY_V4)
 	if err != nil {
 		return err
 	}
-	if err := ops.set(tunnel, mtu); err != nil {
-		return fmt.Errorf("set MTU %d on %s: %w", mtu, tunnel.Attrs().Name, err)
+	for _, address := range addresses {
+		if !address.IP.Equal(source.AsSlice()) {
+			continue
+		}
+		n3, err := netlink.LinkByIndex(address.LinkIndex)
+		if err != nil {
+			return err
+		}
+		mtu, err := tunnelMTU(n3.Attrs().MTU, configured, ipv6)
+		for _, device := range devices {
+			if err == nil {
+				err = netlink.LinkSetMTU(device, mtu)
+			}
+		}
+		return err
 	}
-	tunnel.Attrs().MTU = mtu
-	return nil
+	return fmt.Errorf("no interface has the N3 address %s", source)
 }

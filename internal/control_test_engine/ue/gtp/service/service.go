@@ -6,159 +6,49 @@
 package service
 
 import (
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"my5G-RANTester/config"
 	gnbContext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/gnb/gtp"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
-
-	gtpTunnel "github.com/free5gc/go-gtp5gnl/tuncmd"
+	"net"
+	"net/netip"
+	"syscall"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
-
-	"errors"
-	"net"
-	"net/netip"
-	"strconv"
-	"strings"
-	"syscall"
 )
 
-// addPDR and addFAR prefer the shared device's long-lived netlink client and fall
-// back to the per-call wrapper when a UE owns its device outright.
-func addPDR(link sharedGTPDevice, args []string) error {
-	if link != nil {
-		return link.AddPDR(args)
-	}
-
-	return addTunnelPDR(args)
+// datapath is the backend-specific part of a tunnel: what carries the UE's packets
+// between a device of this host and the UPF. Everything else is common, see tunnel.
+type datapath interface {
+	// refresh applies the PDU session's current TEIDs and UPF, on the same N3 address.
+	refresh(pdu *gnbContext.GnbPDUSession, ueIP string, ip netip.Addr) error
+	// close removes it and returns once its N3 address can be bound again.
+	close()
+	// solicit asks the UPF for the UE's IPv6 prefix, from its link-local address,
+	// and returns its global address.
+	solicit(linkLocal netip.Addr) (netip.Addr, error)
 }
 
-func addFAR(link sharedGTPDevice, args []string) error {
-	if link != nil {
-		return link.AddFAR(args)
-	}
-
-	return addTunnelFAR(args)
+// tunnel is the user plane of a PDU session on this host. The first setup of the
+// session creates it and it lasts as long as the session: a handover only gives it
+// another datapath, so the UE keeps its addresses, its routing and its connections.
+type tunnel struct {
+	gnbIP    netip.Addr       // N3 address of the UE's gNB
+	datapath datapath         // to the UPF, from that address
+	link     netlink.Link     // its device: gtp0<MSIN> or gtp1<MSIN>, or the one the gNB shares
+	endpoint netlink.Link     // val<MSIN>, holding the UE's addresses; the shared device does itself
+	vrf      *netlink.Vrf     // vrf<MSIN>, in VRF mode
+	table    int              // the UE's routing table
+	rules    []*netlink.Rule  // to it, from the UE's addresses, unless the VRF leads there
+	routes   []*netlink.Route // its default routes, through link
 }
 
-// addPDRVerified installs a PDR and, when PR_VERIFY_RULES=1, confirms it reached the
-// datapath, retrying once. A silent install failure is indistinguishable from success at
-// setup time -- the UE keeps its address, rule and route and simply never passes traffic
-// -- so the only way to catch it is to read the rule back. It returns an error when the
-// PDR is not known to be installed, so the caller treats it as a failed create.
-func addPDRVerified(link sharedGTPDevice, id uint32, args []string, label string) error {
-	err := addPDR(link, args)
-	if link == nil || !verifyRules() {
-		return err
-	}
-
-	installed, checked := link.PDRInstalled(id)
-	if !checked {
-		// Nothing to read the rule back with: the create's own result is all there is.
-		return err
-	}
-	if installed {
-		return nil
-	}
-
-	log.Warn("[UE][GTP] ", label, " PDR ", id, " did not reach the datapath (", err, "), retrying")
-
-	if err := addPDR(link, args); err != nil {
-		return fmt.Errorf("retry of %s PDR %d: %w", label, id, err)
-	}
-
-	if installed, checked := link.PDRInstalled(id); checked && !installed {
-		return fmt.Errorf("%s PDR %d still absent after retry; this UE will not pass traffic", label, id)
-	}
-
-	return nil
-}
-
-// sharedDevice is what a UE uses of the gNB's shared device to give back its tunnel.
-type sharedDevice interface {
-	RemoveAddress(ueIP string)
-	Release(ids gtp.RuleIDs)
-}
-
-type sharedGTPDevice interface {
-	sharedDevice
-	Name() string
-	Take() (gtp.RuleIDs, error)
-	AddPDR([]string) error
-	AddFAR([]string) error
-	AddQER([]string) error
-	EnsureQER(int64, func(uint32) error) (uint32, bool)
-	PDRInstalled(uint32) (bool, bool)
-}
-
-// Seams for the tests: removing a policy rule or route needs privileges they lack.
-var (
-	ruleDel            = netlink.RuleDel
-	routeDel           = netlink.RouteDel
-	addTunnelPDR       = gtpTunnel.CmdAddPDR
-	addTunnelFAR       = gtpTunnel.CmdAddFAR
-	addTunnelQER       = gtpTunnel.CmdAddQER
-	addTunnelAddress   = netlink.AddrAdd
-	addTunnelRule      = netlink.RuleAdd
-	addTunnelVRF       = netlink.LinkAdd
-	setTunnelMaster    = netlink.LinkSetMaster
-	setTunnelUp        = netlink.LinkSetUp
-	replaceTunnelRoute = netlink.RouteReplace
-	setTunnelMTU       = gtp.SetTunnelMTU
-	setUEEndpointMTU   = netlink.LinkSetMTU
-	makeUEEndpoint     = createUEEndpoint
-	sharedDeviceFor    = func(msg gnbContext.UEMessage) sharedGTPDevice {
-		if msg.GtpDevice == nil {
-			return nil
-		}
-		return msg.GtpDevice
-	}
-)
-
-// sharedTunnel is what one UE's session holds on a device it shares with the other
-// UEs of its gNB, recorded as setup installs it so that releasing the session
-// removes exactly these and nothing of the device's or of another UE's.
-type sharedTunnel struct {
-	dev         sharedDevice
-	ueIP        string
-	ids         gtp.RuleIDs
-	rule        *netlink.Rule
-	route       *netlink.Route
-	keepAddress bool
-	table       *routingTableReservation
-}
-
-// release removes the UE's route first, so nothing is routed to rules that are going
-// away, then its policy rule, address and GTP-U rules, and clears the session's hold on
-// them so nothing else removes them again.
-func (t *sharedTunnel) release(pduSession *context.UEPDUSession) {
-	routingRemoved := true
-	if t.route != nil {
-		routingRemoved = routingObjectRemoved(routeDel(t.route))
-	}
-	if t.rule != nil {
-		routingRemoved = routingObjectRemoved(ruleDel(t.rule)) && routingRemoved
-	}
-	if !t.keepAddress {
-		t.dev.RemoveAddress(t.ueIP)
-	}
-	t.dev.Release(t.ids)
-	if routingRemoved {
-		t.table.release()
-	} else {
-		t.table.quarantine()
-		log.Warn("[UE][GTP] Keeping routing table reservation after incomplete cleanup for ", t.ueIP)
-	}
-
-	if pduSession != nil {
-		pduSession.SetTunRoute(nil)
-		pduSession.SetTunRule(nil)
-		pduSession.SetTunInterface(nil)
-	}
-}
-
+// SetupGtpInterface sets up the tunnel of the UE's PDU session, or updates it after
+// a handover or a change of its TEIDs. A UE that gets no tunnel keeps running.
 func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 	gnbPduSession := msg.GNBPduSessions[0]
 	pduSession, err := ue.GetPduSession(uint8(gnbPduSession.GetPduSessionId()))
@@ -166,20 +56,9 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		log.Error("[GNB][GTP] Aborting the setup of PDU Session ", gnbPduSession.GetPduSessionId(), ", this PDU session was not succesfully configured on the UE's side.")
 		return
 	}
-	previousLink := pduSession.GetTunInterface()
-	previousGnbIP := pduSession.GetGnbIp()
-	previousGNBPDU := pduSession.GnbPduSession
-	committed := false
-	defer func() {
-		if !committed {
-			pduSession.GnbPduSession = previousGNBPDU
-			pduSession.SetGnbIp(previousGnbIP)
-		}
-	}()
 	pduSession.GnbPduSession = gnbPduSession
 
 	if ue.TunnelMode == config.TunnelDisabled {
-		committed = true
 		log.Info(fmt.Sprintf("[UE][GTP] Interface for UE %s has not been created. Tunnel has been disabled.", ue.GetMsin()))
 		return
 	}
@@ -196,373 +75,231 @@ func SetupGtpInterface(ue *context.UEContext, msg gnbContext.UEMessage) {
 		return
 	}
 
-	// A repeated setup on the same N3 endpoint updates its existing rules. A
-	// second socket cannot bind the same address while the first remains active.
-	if previousLink != nil && ue.TunnelMode != config.TunnelShared && pduSession.GetGnbIp() == msg.GnbIp {
-		if err := pduSession.UpdateTunnel(gnbPduSession, msg.GnbIp); err != nil {
-			log.Error("[UE][GTP] Unable to update existing tunnel: ", err)
-			if errors.Is(err, errTunnelRollback) {
-				pduSession.ReleaseTunnel()
-				log.Error("[UE][GTP] Released tunnel after unsuccessful rule rollback")
-			}
-		} else {
-			committed = true
-		}
-		return
+	if err := setupTunnel(ue, pduSession, msg); err != nil {
+		log.Error("[UE][GTP] Unable to set up the tunnel of UE ", ue.GetMsin(), ": ", err)
 	}
-
-	// get UE GNB IP.
-	pduSession.SetGnbIp(msg.GnbIp)
-
-	ueGnbIp := pduSession.GetGnbIp()
-	ueIp := pduSession.GetIp()
-	msin := ue.GetMsin()
-
-	// In shared mode every UE of this gNB rides the gNB's device and contributes its
-	// own rules, so the identifiers have to be allocated rather than assumed.
-	var (
-		nameInf   string
-		ids       gtp.RuleIDs
-		held      *sharedTunnel
-		setupDone bool
-		dedicated *dedicatedTunnel
-	)
-
-	// Failed staging returns only the newly acquired resources. The previous
-	// tunnel remains usable, and one UE's failure does not stop the load test.
-	failed := func(args ...any) {
-		if held != nil {
-			log.Error(append(args, "; no tunnel for UE ", ueIp)...)
-		} else {
-			log.Error(args...)
-		}
-	}
-
-	if ue.TunnelMode == config.TunnelShared {
-
-		dev := sharedDeviceFor(msg)
-		if dev == nil {
-			log.Error("[GNB][GTP] gNB has no shared GTP-U device; no tunnel for UE ", msin)
-			return
-		}
-
-		ids, err = dev.Take()
-		if err != nil {
-			log.Error("[GNB][GTP] No tunnel for UE ", msin, " on ", dev.Name(), ": ", err)
-			return
-		}
-
-		nameInf = dev.Name()
-		held = &sharedTunnel{dev: dev, ueIP: ueIp, ids: ids, keepAddress: true}
-
-		defer func() {
-			if !setupDone {
-				held.release(nil)
-			}
-		}()
-		if err := addRules(dev, nameInf, ids, gnbPduSession, ueIp, ueGnbIp); err != nil {
-			failed("[UE][GTP] Unable to create GTP rules: ", err)
-			return
-		}
-	} else {
-		// val<MSIN> owns the UE address for the whole PDU session. The socket-bound
-		// GTP backends alternate so the target can be installed before retiring source.
-		nameInf = fmt.Sprintf("gtp0%s", msin)
-		if previousLink != nil && previousLink.Attrs().Name == nameInf {
-			nameInf = fmt.Sprintf("gtp1%s", msin)
-		}
-		dedicated = &dedicatedTunnel{name: nameInf}
-		switch ue.TunnelBackend { // The only place that depends on the tunnel backend.
-		case config.TunnelBackendEBPF:
-			dedicated.datapath, err = startEBPF(nameInf, gnbPduSession, pduSession, ueGnbIp)
-		case config.TunnelBackendUserspace:
-			dedicated.datapath, err = startUserspace(nameInf, gnbPduSession, pduSession, ueGnbIp)
-		default:
-			dedicated.datapath, err = startGtp5g(nameInf, gnbPduSession, ueIp, ueGnbIp)
-		}
-		if err != nil {
-			failed("[UE][GTP] Unable to create GTP interface: ", err)
-			return
-		}
-		defer func() {
-			if !setupDone {
-				dedicated.release(false)
-			}
-		}()
-	}
-
-	setupDone = plumbTunnel(ue, pduSession, nameInf, held, dedicated, failed)
-	committed = setupDone
 }
 
-// addRules installs the FARs, PDRs and QER of one UE on a gtp5g device: the gNB's
-// shared one, or the UE's own when sharedFor is nil.
-func addRules(sharedFor sharedGTPDevice, nameInf string, ids gtp.RuleIDs, gnbPduSession *gnbContext.GnbPDUSession, ueIp string, ueGnbIp netip.Addr) error {
-	if ueIp == "" {
-		return errNoIPv6
-	}
-	upfIp := gnbPduSession.GetUpfIp()
-	qfi := gnbPduSession.GetQosId()
+// setupTunnel starts a datapath on the gNB's N3 address and moves the UE's routes to
+// it, then closes the datapath of the previous gNB, if any: the first setup and a
+// handover are the same, but for what the first creates for the whole session. A
+// handover that fails leaves the UE its previous datapath.
+func setupTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, msg gnbContext.UEMessage) (err error) {
+	pdu, ueIP, msin := pduSession.GnbPduSession, pduSession.GetIp(), ue.GetMsin()
+	t, _ := pduSession.Tunnel.(*tunnel)
 
-	// Create FAR for downlink: forward decapsulated packets towards the UE.
-	cmdAddFar := []string{nameInf,
-		strconv.FormatUint(uint64(ids.FARDown), 10), // FAR ID
-		"--action", "2", // Apply Action = FORW
-	}
-	log.Debug("[UE][GTP] Setting up GTP Forwarding Action Rule for ", strings.Join(cmdAddFar, " "))
-	if err := addFAR(sharedFor, cmdAddFar); err != nil {
-		return fmt.Errorf("downlink FAR: %w", err)
+	// The datapath is bound to this N3 address already: only its TEIDs or UPF change.
+	if t != nil && t.gnbIP == msg.GnbIp {
+		return t.datapath.refresh(pdu, ueIP, msg.GnbIp)
 	}
 
-	// Create FAR for uplink: encapsulate towards the UPF.
-	cmdAddFar = []string{nameInf,
-		strconv.FormatUint(uint64(ids.FARUp), 10), // FAR ID
-		"--action", "2", // Apply Action = FORW
-		"--hdr-creation", "0", strconv.FormatUint(uint64(gnbPduSession.GetTeidUplink()), 10), upfIp, "2152", // Outer Header Creation
-	}
-	log.Debug("[UE][GTP] Setting up GTP Forwarding Action Rule for ", strings.Join(cmdAddFar, " "))
-	if err := addFAR(sharedFor, cmdAddFar); err != nil {
-		return fmt.Errorf("uplink FAR: %w", err)
-	}
-
-	// Create PDR for downlink: GTP-U from the UPF on this gNB's F-TEID.
-	cmdAddPdr := []string{nameInf,
-		strconv.FormatUint(uint64(ids.PDRDown), 10), // PDR ID
-		"--pcd", "1", // Precedence = 1
-		"--hdr-rm", "0", // Outer Header Removal = GTP-U/UDP/IPv4
-		"--ue-ipv4", ueIp, // UE IP Address
-		"--f-teid", strconv.FormatUint(uint64(gnbPduSession.GetTeidDownlink()), 10), ueGnbIp.String(), // F-TEID
-		"--far-id", strconv.FormatUint(uint64(ids.FARDown), 10), // FAR ID
-		"--src-intf", "1", // Source Interface = Core
-	}
-	log.Debug("[UE][GTP] Setting up GTP Packet Detection Rule for ", strings.Join(cmdAddPdr, " "))
-	if err := addPDRVerified(sharedFor, ids.PDRDown, cmdAddPdr, "downlink"); err != nil {
-		return fmt.Errorf("downlink PDR: %w", err)
-	}
-
-	// Create PDR for uplink: packets from the UE's address.
-	cmdAddPdr = []string{nameInf,
-		strconv.FormatUint(uint64(ids.PDRUp), 10), // PDR ID
-		"--pcd", "2", // Precedence = 2
-		"--ue-ipv4", ueIp, // UE IP Address
-		"--far-id", strconv.FormatUint(uint64(ids.FARUp), 10), // FAR ID
-		"--src-intf", "0", // Source Interface = Access
-		"--gtpu-src-ip", ueGnbIp.String(), // GTP-U source IP address (not part of PFCP spec)
-	}
-	if qfi > 0 {
-		cmdAddQer := func(id uint32) []string {
-			return []string{nameInf,
-				strconv.FormatUint(uint64(id), 10),  // QER ID
-				"--qfi", strconv.FormatInt(qfi, 10), // QFI
+	if t == nil {
+		t = &tunnel{}
+		defer func() {
+			if err != nil {
+				t.Release()
 			}
-		}
-
-		// On a shared device QERs belong to the device, one per QFI, not to the UE:
-		// gtp5g refuses a QER that already exists, so creating it per UE failed for
-		// every UE after the first -- and because that error used to abandon the
-		// setup, those UEs silently got no address, no rule and no route while still
-		// reporting a session. Keying by QFI keeps a UE given another QFI from being
-		// marked with the first UE's.
-		qerID, qerUsable := uint32(gtp.DedicatedQERID), true
-		if sharedFor != nil {
-			qerID, qerUsable = sharedFor.EnsureQER(qfi, func(id uint32) error {
-				log.Debug("[UE][GTP] Setting Up QFI ", strings.Join(cmdAddQer(id), " "))
-				return sharedFor.AddQER(cmdAddQer(id))
-			})
-		} else {
-			log.Debug("[UE][GTP] Setting Up QFI", strings.Join(cmdAddQer(qerID), " "))
-			if err := addTunnelQER(cmdAddQer(qerID)); err != nil {
-				return fmt.Errorf("QER: %w", err)
-			}
-		}
-
-		if qerUsable {
-			cmdAddPdr = append(cmdAddPdr,
-				"--qer-id", strconv.FormatUint(uint64(qerID), 10), // QER ID
-			)
+		}()
+		if err := t.create(ue, pduSession); err != nil {
+			return err
 		}
 	}
 
-	log.Debug("[UE][GTP] Setting Up GTP Packet Detection Rule for ", strings.Join(cmdAddPdr, " "))
-	if err := addPDRVerified(sharedFor, ids.PDRUp, cmdAddPdr, "uplink"); err != nil {
-		return fmt.Errorf("uplink PDR: %w", err)
+	// A handover alternates between two names: both devices exist until the routes moved.
+	name := "gtp0" + msin
+	if t.link != nil && t.link.Attrs().Name == name {
+		name = "gtp1" + msin
+	}
+	var d datapath
+	switch { // The only place that depends on the tunnel backend.
+	case ue.TunnelMode == config.TunnelShared:
+		if d, err = startShared(msg.GtpDevice, pdu, ueIP, msg.GnbIp); err == nil {
+			name = msg.GtpDevice.Name()
+		}
+	case ue.TunnelBackend == config.TunnelBackendEBPF:
+		d, err = startEBPF(name, pdu, pduSession, msg.GnbIp)
+	case ue.TunnelBackend == config.TunnelBackendUserspace:
+		d, err = startUserspace(name, pdu, pduSession, msg.GnbIp)
+	default:
+		d, err = startGtp5g(name, pdu, ueIP, msg.GnbIp)
+	}
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			d.close()
+		}
+	}()
+
+	link, err := netlink.LinkByName(name)
+	if err != nil {
+		return err
+	}
+	if t.endpoint != nil { // The gNB sets the MTU of the device its UEs share.
+		// On val<MSIN> for "ip link" only: packets take the MTU of the route's device.
+		if err := gtp.SetTunnelMTU(msg.GnbIp, ue.TunnelMTU, pduSession.GetIPv6().IsValid(), link, t.endpoint); err != nil {
+			return fmt.Errorf("tunnel MTU: %w", err)
+		}
+	}
+	if t.vrf != nil {
+		if err := netlink.LinkSetMaster(link, t.vrf); err != nil {
+			return fmt.Errorf("attaching %s to its VRF: %w", name, err)
+		}
+	}
+	for _, route := range t.routes {
+		route.LinkIndex = link.Attrs().Index
+		if err := netlink.RouteReplace(route); err != nil {
+			return fmt.Errorf("route %s: %w", route, err)
+		}
+	}
+
+	previous := t.datapath
+	t.gnbIP, t.datapath, t.link = msg.GnbIp, d, link
+	pduSession.Tunnel = t
+	if previous != nil {
+		previous.close()
+	}
+
+	if ueIP != "" {
+		logTunnel(ue, name, ueIP)
+	}
+	// The address of the prefix the UPF advertised follows the UE, as its IPv4 one.
+	if ipv6 := pduSession.GetIPv6(); ipv6.IsValid() && !ipv6.IsGlobalUnicast() {
+		t.solicitIPv6(ue, pduSession)
 	}
 	return nil
 }
 
-// plumbTunnel gives the UE its address, routing table, policy rule or VRF and
-// default route on the device nameInf, whatever backend created it, and commits
-// the tunnel to the PDU session.
-func plumbTunnel(ue *context.UEContext, pduSession *context.UEPDUSession, nameInf string, held *sharedTunnel, dedicated *dedicatedTunnel, failed func(...any)) (setupDone bool) {
-	previousLink := pduSession.GetTunInterface()
-	previousRule := pduSession.GetTunRule()
-	ueGnbIp := pduSession.GetGnbIp()
-	ueIp := pduSession.GetIp()
+// create gives the UE what it keeps for the whole PDU session: its routing table and,
+// leading there, either its VRF or the rule for its address, which val<MSIN> holds.
+func (t *tunnel) create(ue *context.UEContext, pduSession *context.UEPDUSession) error {
 	msin := ue.GetMsin()
-	vrfInf := fmt.Sprintf("vrf%s", msin)
-
-	// The shared device stays gNB-owned; dedicated mode keeps its UE-facing
-	// address on a stable dummy while the GTP socket/backend changes.
-	link, err := findTunnelLink(nameInf)
-	if err != nil {
-		failed("[UE][GTP] Tunnel link unavailable: ", err)
-		return
-	}
-	addressLink := link
-	if dedicated != nil {
-		addressLink = pduSession.GetUEInterface()
-		if addressLink == nil {
-			addressLink, err = makeUEEndpoint(fmt.Sprintf("val%s", msin))
-			if err != nil {
-				failed("[UE][GTP] UE endpoint unavailable: ", err)
-				return
-			}
-			dedicated.endpoint = addressLink
-			dedicated.endpointOwned = true
+	ueIP := net.ParseIP(pduSession.GetIp()).To4() // nil for an IPv6 PDU session
+	if ue.TunnelMode == config.TunnelShared {
+		if ueIP == nil {
+			return errNoIPv6
 		}
-	}
-	if dedicated != nil {
-		if err := setTunnelMTU(link, ueGnbIp, ue.TunnelMTU); err != nil {
-			failed("[UE][GTP] Unable to configure tunnel MTU: ", err)
-			return
-		}
-	}
-	addrTun := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(ueIp).To4(), Mask: net.CIDRMask(32, 32)}}
-	sameAddressLink := previousLink != nil && previousLink.Attrs().Index == addressLink.Attrs().Index
-	if dedicated != nil && pduSession.GetUEInterface() != nil {
-		sameAddressLink = true
-	}
-	// An IPv6-only session gets its address, and its rule, from setupIPv6.
-	if ueIp != "" {
-		if err := addTunnelAddress(addressLink, addrTun); err != nil && !(sameAddressLink && errors.Is(err, syscall.EEXIST)) {
-			failed("[UE][DATA] Error adding UE address: ", err)
-			return
-		}
-	}
-	if held != nil {
-		held.keepAddress = sameAddressLink
-	}
-	if dedicated != nil {
-		dedicated.endpoint = addressLink
-	}
-
-	// The session keeps its table across handover, even if the old UPF TEID is
-	// recycled for another UE. Staging owns only a newly acquired reservation.
-	table, tableOwned, err := sessionRoutingTables.reserve(pduSession)
-	if err != nil {
-		failed("[UE][DATA] Unable to reserve routing table: ", err)
-		return
-	}
-	tableId := table.table
-	if tableOwned {
-		if held != nil {
-			held.table = table
-		} else {
-			dedicated.table = table
-		}
-	}
-	// Configure routing policy or VRF for the UE.
-	switch ue.TunnelMode {
-	case config.TunnelTun, config.TunnelShared:
-		rule := previousRule
-		if rule == nil && ueIp != "" {
-			rule = sourceRule(addrTun.IPNet, int(tableId))
-			if err := addTunnelRule(rule); err != nil {
-				failed("[UE][DATA] Unable to create routing policy: ", err)
-				return
-			}
-		}
-		if held != nil && previousRule == nil {
-			held.rule = rule
-		}
-		if dedicated != nil && previousRule == nil {
-			dedicated.rule = rule
-		}
-
-	case config.TunnelVrf:
-		vrfDevice := pduSession.GetVrfDevice()
-		if vrfDevice == nil {
-			vrfDevice = &netlink.Vrf{LinkAttrs: netlink.LinkAttrs{Name: vrfInf}, Table: tableId}
-			if err := addTunnelVRF(vrfDevice); err != nil {
-				failed("[UE][DATA] Unable to create VRF: ", err)
-				return
-			}
-			dedicated.vrf = vrfDevice
-			dedicated.vrfOwned = true
-		}
-		if err := setTunnelMaster(link, vrfDevice); err != nil {
-			failed("[UE][DATA] Unable to attach GTP backend to VRF: ", err)
-			return
-		}
-		if err := setTunnelMaster(addressLink, vrfDevice); err != nil {
-			failed("[UE][DATA] Unable to attach UE address to VRF: ", err)
-			return
-		}
-		if err := setTunnelUp(vrfDevice); err != nil {
-			failed("[UE][DATA] Unable to enable VRF: ", err)
-			return
-		}
-		dedicated.vrf = vrfDevice
-
-	}
-
-	// Insert default route from the UE to the Data Network.
-	route := defaultRoute(link, net.ParseIP(ueIp).To4(), int(tableId))
-	if dedicated != nil {
-		err = replaceRouteWithEndpointMTU(route, addressLink, link.Attrs().MTU, !dedicated.endpointOwned)
 	} else {
-		err = replaceTunnelRoute(route)
-	}
-	if err != nil {
-		failed("[GNB][GTP] Unable to create Kernel Route ", err)
-		return
-	}
-	if pduSession.GetIPv6().IsValid() {
-		setupIPv6(ue, pduSession, dedicated, link, int(tableId))
-	}
-	// Commit after the target route is installed. The previous cleanup runs in
-	// retirement mode, so it cannot remove the policy rule or the replaced route.
-	pduSession.SetTunInterface(link)
-	pduSession.SetTunRoute(route)
-	if previousRule != nil {
-		pduSession.SetTunRule(previousRule)
-	}
-	if held != nil {
-		held.table = table
-		held.route = route
-		if held.rule == nil {
-			held.rule = previousRule
+		// A run that was killed left its devices behind: they would refuse the new ones.
+		for _, device := range []string{"gtp0", "gtp1", "val", "vrf"} {
+			removeLink(device + msin)
 		}
-		pduSession.SetTunRule(held.rule)
-		held.keepAddress = false // This completed binding now owns the address.
-		pduSession.ReplaceTunnelCleanup(func(retiring bool) {
-			if retiring {
-				held.retireOn(link, pduSession.GetTunInterface())
+		endpoint := &netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: "val" + msin}}
+		if err := netlink.LinkAdd(endpoint); err != nil {
+			return fmt.Errorf("creating %s: %w", endpoint.Name, err)
+		}
+		t.endpoint = endpoint
+		if err := netlink.LinkSetUp(endpoint); err != nil {
+			return err
+		}
+		if ueIP != nil {
+			if err := netlink.AddrAdd(endpoint, &netlink.Addr{IPNet: &net.IPNet{IP: ueIP, Mask: net.CIDRMask(32, 32)}}); err != nil {
+				return fmt.Errorf("UE address: %w", err)
 			}
-			held.release(nil)
-		})
-	} else {
-		dedicated.table = table
-		dedicated.route = route
-		dedicated.endpointOwned = true
-		dedicated.vrfOwned = dedicated.vrf != nil
-		if dedicated.rule == nil {
-			dedicated.rule = previousRule
 		}
-		pduSession.SetTunRule(dedicated.rule)
-		pduSession.SetUEInterface(addressLink)
-		pduSession.SetVrfDevice(dedicated.vrf)
-		pduSession.ReplaceTunnelCleanup(dedicated.release)
-		pduSession.SetTunnelUpdate(func(pdu *gnbContext.GnbPDUSession, ip netip.Addr) error {
-			return dedicated.datapath.refresh(pdu, ueIp, ip)
-		})
 	}
-	setupDone = true
 
-	if ueIp != "" {
-		logTunnel(ue, nameInf, ueIp)
+	t.table = routingTable(ueIP, t.endpoint)
+	if ue.TunnelMode == config.TunnelVrf {
+		vrf := &netlink.Vrf{LinkAttrs: netlink.LinkAttrs{Name: "vrf" + msin}, Table: uint32(t.table)}
+		if err := netlink.LinkAdd(vrf); err != nil {
+			return fmt.Errorf("creating %s: %w", vrf.Name, err)
+		}
+		t.vrf = vrf
+		if err := netlink.LinkSetMaster(t.endpoint, vrf); err != nil {
+			return fmt.Errorf("attaching %s to its VRF: %w", t.endpoint.Attrs().Name, err)
+		}
+		if err := netlink.LinkSetUp(vrf); err != nil {
+			return err
+		}
 	}
-	return
+	if ueIP != nil {
+		t.routes = append(t.routes, defaultRoute(ueIP, t.table))
+		return t.addRule(&net.IPNet{IP: ueIP, Mask: net.CIDRMask(32, 32)})
+	}
+	return nil
+}
+
+// routingTable returns the routing table of a UE, which needs no bookkeeping: from
+// 0.128.0.0, the index of its val<MSIN>, unique on the host even when another
+// process has a UE with the same address. A UE on a shared device has no val<MSIN>:
+// its IPv4 address read as a number, from 1.0.0.0. Both are far above the tables of
+// the kernel (0, 253 to 255) and those administrators number.
+func routingTable(ueIP net.IP, endpoint netlink.Link) int {
+	if endpoint != nil {
+		return 1<<23 + endpoint.Attrs().Index
+	}
+	return int(binary.BigEndian.Uint32(ueIP))
+}
+
+// addRule sends what the UE's applications send from source to its routing table,
+// unless its VRF does. A killed run may have left such a rule, to another table.
+func (t *tunnel) addRule(source *net.IPNet) error {
+	rule := netlink.NewRule()
+	rule.Priority, rule.Src = 100, source
+	for netlink.RuleDel(rule) == nil {
+	}
+	if t.vrf != nil {
+		return nil
+	}
+	rule.Table = t.table
+	if err := netlink.RuleAdd(rule); err != nil {
+		return fmt.Errorf("routing policy: %w", err)
+	}
+	t.rules = append(t.rules, rule)
+	return nil
+}
+
+// defaultRoute leads from the UE's routing table to the Data Network, for the IP
+// version of source, through the device that setupTunnel gives it.
+func defaultRoute(source net.IP, table int) *netlink.Route {
+	route := &netlink.Route{
+		Dst:      &net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)}, // default
+		Scope:    netlink.SCOPE_LINK,                                      // scope link
+		Protocol: 4,                                                       // proto static
+		Priority: 1,                                                       // metric 1
+		Src:      source,
+		Table:    table,
+	}
+	if source.To4() == nil {
+		route.Dst = &net.IPNet{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)}
+	}
+	return route
+}
+
+// Release removes the tunnel from the host: its routes and rules first, so that
+// nothing is routed to a datapath that is going away.
+func (t *tunnel) Release() {
+	for _, route := range t.routes {
+		// ESRCH: it was never installed, or went with its device.
+		if err := netlink.RouteDel(route); err != nil && !errors.Is(err, syscall.ESRCH) {
+			log.Warn("[UE][GTP] Unable to remove route ", route, ": ", err)
+		}
+	}
+	for _, rule := range t.rules {
+		if err := netlink.RuleDel(rule); err != nil {
+			log.Warn("[UE][GTP] Unable to remove ", rule, ": ", err)
+		}
+	}
+	if t.datapath != nil {
+		t.datapath.close()
+	}
+	if t.endpoint != nil {
+		removeLink(t.endpoint.Attrs().Name)
+	}
+	if t.vrf != nil {
+		removeLink(t.vrf.Name)
+	}
+}
+
+// removeLink removes the device name, if there is one.
+func removeLink(name string) {
+	if link, err := netlink.LinkByName(name); err == nil {
+		if err := netlink.LinkDel(link); err != nil {
+			log.Warn("[UE][GTP] Unable to remove ", name, ": ", err)
+		}
+	}
 }
 
 // logTunnel tells how to do traffic from the UE's address ueIp, IPv4 or IPv6.
@@ -577,59 +314,4 @@ func logTunnel(ue *context.UEContext, nameInf, ueIp string) {
 		log.Info(fmt.Sprintf("[UE][GTP] You can do traffic for this UE using VRF %s, eg:", vrfInf))
 		log.Info(fmt.Sprintf("[UE][GTP] sudo ip vrf exec %s iperf3 -c IPERF_SERVER -p PORT -t 9000", vrfInf))
 	}
-}
-
-// sourceRule sends the packets the UE's applications send from source to its
-// routing table.
-func sourceRule(source *net.IPNet, table int) *netlink.Rule {
-	rule := netlink.NewRule()
-	rule.Priority = 100
-	rule.Table = table
-	rule.Src = source
-	return rule
-}
-
-// defaultRoute leads from the UE's routing table to the Data Network through link,
-// for the IP version of source: IPv6 also when the UE has no IPv6 address yet.
-func defaultRoute(link netlink.Link, source net.IP, table int) *netlink.Route {
-	route := &netlink.Route{
-		Dst:       &net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)}, // default
-		LinkIndex: link.Attrs().Index,                                      // dev val<MSIN>
-		Scope:     netlink.SCOPE_LINK,                                      // scope link
-		Protocol:  4,                                                       // proto static
-		Priority:  1,                                                       // metric 1
-		Src:       source,
-		Table:     table, // table <ECI>
-	}
-	if source.To4() == nil {
-		route.Dst = &net.IPNet{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)}
-	}
-	return route
-}
-
-// A retained UE endpoint still belongs to the source until the new route commits.
-// Match the target backend's already validated MTU, and restore the source MTU
-// if either the endpoint update or route replacement fails.
-func replaceRouteWithEndpointMTU(route *netlink.Route, endpoint netlink.Link, mtu int, preserve bool) error {
-	previous := endpoint.Attrs().MTU
-	err := setUEEndpointMTU(endpoint, mtu)
-	if err == nil {
-		endpoint.Attrs().MTU = mtu
-		err = replaceTunnelRoute(route)
-	}
-	if err != nil && preserve {
-		if restoreErr := setUEEndpointMTU(endpoint, previous); restoreErr != nil {
-			return errors.Join(err, fmt.Errorf("source endpoint MTU rollback failed: %w", restoreErr))
-		}
-		endpoint.Attrs().MTU = previous
-	}
-	return err
-}
-
-// A replaced route and its policy rule belong to the new binding. On the same
-// device, so does the address; on another gNB, remove only the source's copy.
-func (t *sharedTunnel) retireOn(source, target netlink.Link) {
-	t.route, t.rule = nil, nil
-	t.table = nil
-	t.keepAddress = target != nil && source.Attrs().Index == target.Attrs().Index
 }

@@ -29,7 +29,7 @@ PacketRusher borrows libraries and data structures from the [free5gc project](ht
 * Implements high-performant N3 (GTP-U) interface
   * Three tunnel backends, chosen automatically: eBPF, the gtp5g kernel module, or plain userspace
   * IPv4, IPv6 and dual-stack PDU sessions
-  * Generic tunnel supporting all kind of traffic (TCP, UDP, Video…) — see [tunnel ownership and handover](docs/TunnelLifecycle.md).
+  * Generic tunnel supporting all kind of traffic (TCP, UDP, Video…)
     * We tested iperf3 traffic, and Youtube traffic through PacketRusher
     * We roughly reach 5 GB/s per UE, which is more than what a real UE can achieve.
 * Runtime control of the UEs (idle, handover, deregistration…) through a local socket, and JSON scenarios
@@ -91,8 +91,6 @@ For more details on the installation, configuration or usage, you may refer to t
 ## Usage
 
 For JSON/CSV procedure reports and live Prometheus metrics, see [Load-test results](docs/load-test-results.md).
-
-For automatic tunnel MTU calculation and the `ue.tunnelmtu` override, see [Tunnel MTU](docs/tunnel-mtu.md).
 
 ### Boolean flags and UE distribution
 
@@ -157,6 +155,18 @@ Only `auto` falls back: a backend requested by name that is not available is an 
 sudo ./packetrusher --tunnel-backend userspace multi-ue -n 10 --tunnel
 ```
 The userspace backend is slower than gtp5g and keeps one TUN device, hence one file descriptor, open per UE.
+
+Each UE has its address on a `val<MSIN>` device and its packets go through `gtp0<MSIN>` or `gtp1<MSIN>`, which
+alternate at each handover: the UE keeps its address and its connections. To send traffic, bind to the address of
+the UE (`ping -I <UE IP>`, `iperf3 -B <UE IP>`), not to its `val` device; with `--tunnel-vrf`, run the command in
+the VRF of the UE instead: `sudo ip vrf exec vrf<MSIN> <command>`. With gtp5g and without `--dedicatedGnb`, the
+UEs of a gNB share one device, `valgnb<N3 address in hexadecimal>`, which also holds their addresses.
+
+The MTU of a tunnel is the MTU of the N3 interface minus the 44 bytes of the GTP-U encapsulation, 1456 on
+Ethernet. Set `ue.tunnelmtu` in the configuration for a smaller one, that of the UPF for instance.
+
+A UE whose tunnel cannot be set up logs the error and keeps running without it. What a killed run left on the
+host, devices and routing rules, is removed by the next run of the same UEs.
 
 ### IPv6 and dual-stack PDU sessions
 

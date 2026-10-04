@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2026 Forsway Scandinavia AB
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package gtp
 
@@ -59,10 +60,7 @@ type Device struct {
 
 	// One netlink client per device, held for the run, rather than the fresh
 	// conn/mux/client the tuncmd.Cmd* wrappers build for every single call. It installs
-	// every UE's rules and, when PR_VERIFY_RULES=1, reads PDRs back: a rule can fail to
-	// install without the kernel or the library saying so, and a UE with no rules still
-	// looks configured -- it has an address, a policy rule and a route, and its packets
-	// leave userspace without error. They are simply dropped.
+	// and removes every UE's rules.
 	clientMu sync.Mutex
 	link     *gtp5gnl.Link
 	conn     *nl.Conn
@@ -104,7 +102,7 @@ func NewDevice(gnbIP netip.Addr, mtu int) (*Device, error) {
 
 	link, err := netlink.LinkByName(name)
 	if err == nil {
-		err = SetTunnelMTU(link, gnbIP, mtu)
+		err = SetTunnelMTU(gnbIP, mtu, false, link) // gtp5g carries IPv4 only.
 	}
 	if err != nil {
 		d.Close()
@@ -195,22 +193,6 @@ func (d *Device) openClient() {
 	d.conn = conn
 	d.client = client
 	d.link = link
-}
-
-// PDRInstalled reports whether the rule really reached the datapath. Without a client
-// there is nothing to read it back with, and checked is false: the caller then has only
-// the create's own result to go on.
-func (d *Device) PDRInstalled(id uint32) (installed, checked bool) {
-	d.clientMu.Lock()
-	defer d.clientMu.Unlock()
-
-	if d.client == nil || d.link == nil {
-		return false, false
-	}
-
-	_, err := gtp5gnl.GetPDR(d.client, d.link, int(id))
-
-	return err == nil, true
 }
 
 // serveMux runs mux's Serve and returns a channel closed once Serve has returned.

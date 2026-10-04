@@ -13,8 +13,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/vishvananda/netlink"
 )
+
+type testTunnel struct{}
+
+func (testTunnel) Release() {}
 
 func TestPDUSessionIdentifiers(t *testing.T) {
 	ue := &UEContext{}
@@ -74,7 +77,7 @@ func TestReportStatusWaitsForTunnel(t *testing.T) {
 	}
 	ue.ReportStatus(nil)
 	require.Equal(t, []int{2}, (<-scenarioChan).Status.PduSessions)
-	ue.PduSession[0].SetTunInterface(&netlink.Dummy{})
+	ue.PduSession[0].Tunnel = testTunnel{}
 	ue.ReportStatus(nil)
 	status := (<-scenarioChan).Status
 	require.Equal(t, []int{1, 2}, status.PduSessions)

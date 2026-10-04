@@ -10,78 +10,75 @@ import (
 	"net"
 	"net/netip"
 	"syscall"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
-	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 )
 
 var errNoIPv6 = errors.New("IPv6 user plane needs the userspace tunnel backend")
 
-// setupIPv6 adds IPv6 to the tunnel that plumbTunnel is about to commit on link.
-// The SMF only allocates an interface identifier: the UE has to ask the UPF for
-// its /64 prefix (TS 23.501 §5.8.2.2.3). The answer is awaited in a goroutine, so
-// that it neither blocks the UE nor costs it the IPv4 half of the tunnel; it ends
-// with the tunnel or the UE at the latest. After a handover the address is known
-// and moves to the new device at once.
-func setupIPv6(ue *context.UEContext, pduSession *context.UEPDUSession, dedicated *dedicatedTunnel, link netlink.Link, table int) {
-	address, msin := pduSession.GetIPv6(), ue.GetMsin()
-	if dedicated == nil {
-		log.Warn("[UE][GTP] No IPv6 for UE ", msin, ": ", errNoIPv6)
-		return
-	}
-	plumb := func(global netip.Addr) {
-		if err := dedicated.plumbIPv6(ue.TunnelMode, link, table, global); err != nil {
-			log.Warn("[UE][GTP] Unable to configure IPv6 for UE ", msin, ": ", err)
-			return
-		}
-		logTunnel(ue, link.Attrs().Name, global.String())
-	}
-	if address.IsGlobalUnicast() {
-		plumb(address)
-		return
-	}
+// solicitIPv6 adds IPv6 to the tunnel. The SMF only allocates an interface
+// identifier: the UE has to ask the UPF for its /64 prefix (TS 23.501 §5.8.2.2.3).
+// The answer is awaited in a goroutine, so that it neither blocks the UE nor costs
+// it the IPv4 half of the tunnel; it ends with the datapath at the latest.
+func (t *tunnel) solicitIPv6(ue *context.UEContext, pduSession *context.UEPDUSession) {
+	d, linkLocal, msin := t.datapath, pduSession.GetIPv6(), ue.GetMsin()
 	go func() {
-		global, err := dedicated.datapath.solicit(address)
+		global, err := d.solicit(linkLocal)
 		if err != nil {
-			if !errors.Is(err, net.ErrClosed) { // Otherwise released meanwhile.
+			if !errors.Is(err, net.ErrClosed) { // Otherwise released or handed over meanwhile.
 				log.Warn("[UE][GTP] No IPv6 for UE ", msin, ": ", err)
 			}
 			return
 		}
 		ue.RunOnUE(func() {
-			if pduSession.GetTunInterface() != link {
-				return // Released or handed over meanwhile: the new tunnel solicits.
+			if pduSession.Tunnel != t || t.datapath != d {
+				return // Released or handed over meanwhile: the new datapath solicits.
 			}
 			pduSession.SetIPv6(global)
-			// The same tunnel, which from now on carries the packets of the prefix.
-			if err := pduSession.UpdateTunnel(pduSession.GnbPduSession, pduSession.GetGnbIp()); err != nil {
+			// The same datapath, which from now on carries the packets of the prefix.
+			err := d.refresh(pduSession.GnbPduSession, pduSession.GetIp(), t.gnbIP)
+			if err == nil {
+				err = t.plumbIPv6(global)
+			}
+			if err != nil {
 				log.Warn("[UE][GTP] Unable to configure IPv6 for UE ", msin, ": ", err)
 				return
 			}
-			plumb(global)
+			logTunnel(ue, t.link.Attrs().Name, global.String())
 		})
 	}()
 }
 
-// plumbIPv6 does for the UE's IPv6 address what plumbTunnel does for its IPv4 one:
-// the address on the UE's endpoint, the rule sending its /64 to the UE's routing
-// table unless a VRF does, and the default route through link. A handover repeats
-// this for its new device: the address and the rule are then already there.
-func (t *dedicatedTunnel) plumbIPv6(mode config.TunnelMode, link netlink.Link, table int, address netip.Addr) error {
+// plumbIPv6 does for the UE's IPv6 address what create does for its IPv4 one: the
+// address on val<MSIN>, the rule sending its /64 to the UE's routing table, and
+// the default route, which then follows the UE as the IPv4 one does.
+func (t *tunnel) plumbIPv6(address netip.Addr) error {
 	// No duplicate address detection: the prefix belongs to this UE alone.
 	ip := &netlink.Addr{IPNet: &net.IPNet{IP: address.AsSlice(), Mask: net.CIDRMask(128, 128)}, Flags: syscall.IFA_F_NODAD}
-	if err := addTunnelAddress(t.endpoint, ip); err != nil && !errors.Is(err, syscall.EEXIST) {
+	if err := netlink.AddrAdd(t.endpoint, ip); err != nil {
 		return err
 	}
-	if mode != config.TunnelVrf {
-		prefix := netip.PrefixFrom(address, 64).Masked().Addr()
-		rule := sourceRule(&net.IPNet{IP: prefix.AsSlice(), Mask: net.CIDRMask(64, 128)}, table)
-		if err := addTunnelRule(rule); err != nil && !errors.Is(err, syscall.EEXIST) {
-			return err
+	// The kernel only delivers to the address a moment later, once a work queue has
+	// routed it, and drops what the UE receives until then.
+	for range 1000 {
+		routes, _ := netlink.RouteGetWithOptions(ip.IP, &netlink.RouteGetOptions{Iif: t.link.Attrs().Name})
+		if len(routes) > 0 && routes[0].Type == syscall.RTN_LOCAL {
+			break
 		}
-		t.rule6 = rule
+		time.Sleep(time.Millisecond)
 	}
-	return replaceTunnelRoute(defaultRoute(link, address.AsSlice(), table))
+	prefix := netip.PrefixFrom(address, 64).Masked().Addr()
+	if err := t.addRule(&net.IPNet{IP: prefix.AsSlice(), Mask: net.CIDRMask(64, 128)}); err != nil {
+		return err
+	}
+	route := defaultRoute(address.AsSlice(), t.table)
+	route.LinkIndex = t.link.Attrs().Index
+	if err := netlink.RouteReplace(route); err != nil {
+		return err
+	}
+	t.routes = append(t.routes, route)
+	return nil
 }
