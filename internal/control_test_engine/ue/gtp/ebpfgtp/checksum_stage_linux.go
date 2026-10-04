@@ -84,6 +84,17 @@ func attachChecksumStage(endpoint int, encap, relay *ebpf.Program) (result *chec
 	}()
 	// Return s even on a partial failure; callers must retain it if cleanup fails.
 	finish := func(e error) (*checksumStage, error) { return s, e }
+	// LinkAdd's internal index lookup can fail silently after a successful
+	// creation. Resolve it explicitly while retaining name/MAC cleanup ownership.
+	s.tx, err = netlink.LinkByName(tx.Attrs().Name)
+	if err != nil {
+		s.tx = tx
+		return finish(err)
+	}
+	s.txIndex = s.tx.Attrs().Index
+	if s.txIndex <= 0 {
+		return finish(errors.New("created checksum veth has no interface index"))
+	}
 	s.peer, err = netlink.LinkByName(tx.PeerName)
 	if err != nil {
 		return finish(err)
@@ -114,7 +125,13 @@ func attachChecksumStage(endpoint int, encap, relay *ebpf.Program) (result *chec
 }
 
 func deleteChecksumLink(owned netlink.Link) error {
-	actual, err := netlink.LinkByIndex(owned.Attrs().Index)
+	var actual netlink.Link
+	var err error
+	if owned.Attrs().Index > 0 {
+		actual, err = netlink.LinkByIndex(owned.Attrs().Index)
+	} else {
+		actual, err = netlink.LinkByName(owned.Attrs().Name)
+	}
 	var absent netlink.LinkNotFoundError
 	if errors.As(err, &absent) || errors.Is(err, unix.ENODEV) {
 		return nil

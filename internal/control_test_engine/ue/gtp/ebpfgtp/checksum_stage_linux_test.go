@@ -82,6 +82,9 @@ func TestNativeChecksumStageOwnershipAndEffectiveFeatures(t *testing.T) {
 		require.Empty(t, addresses)
 		t.Logf("owned checksum stage %s index=%d MTU=%d verified checksum/segmentation disabled", device.Attrs().Name, index, device.Attrs().MTU)
 	}
+	// Simulate LinkAdd's silently failed index resolution: owned name+MAC must
+	// still retire the real pair instead of mistaking index zero for absence.
+	s.tx.Attrs().Index = 0
 	require.NoError(t, s.Close())
 	for _, index := range []int{tx, peer} {
 		_, e := netlink.LinkByIndex(index)
