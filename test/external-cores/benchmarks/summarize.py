@@ -38,6 +38,9 @@ def summarize(state):
                         group[name]=distribution([row['cpu'][name] for row in passed])
                     for name in ('packetrusher','upf','iperf_server'):
                         group[name+'_cpu']=distribution([row['cpu']['processes'][name]['percent_one_cpu'] for row in passed])
+                    if backend=='ebpf':
+                        from counters import NAMES
+                        group['kernel_counters']={name:distribution([row['kernel_counters'][name] for row in passed if 'kernel_counters' in row]) for name in NAMES.values()}
                     summary['groups'].append(group)
     (state/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
     return summary

@@ -14,6 +14,7 @@ import sys
 import time
 from pathlib import Path
 from measure import command, measure, preflight_qfis
+from counters import OwnedCounters
 
 
 class Cancelled(BaseException):
@@ -98,6 +99,9 @@ def cohort(args):
         capture=None
         result['preflight_user_plane']=probe.gtpu_proof(state/'preflight-n3.pcap',nonce)
         result['preflight_qfis']=preflight_qfis(state/'preflight-n3.pcap',nonce)
+        counter_source=OwnedCounters(process.pid) if args.backend=='ebpf' else None
+        if counter_source:
+            record(state/'kernel-map.json',counter_source.snapshot())
         processes['packetrusher']=process.pid
         cases=[(direction,'tcp',None) for direction in ('uplink','downlink')]
         cases += [(direction,'udp',rate) for rate in args.rates for direction in ('uplink','downlink')]
@@ -110,7 +114,7 @@ def cohort(args):
             for warmup,seconds in ((True,1),(False,args.seconds)):
                 row={'direction':direction,'transport':transport,'offered_bps':rate,'warmup':warmup}
                 try:
-                    row.update(measure(command(direction,transport,seconds,rate),state/(name+('-warmup' if warmup else '')),processes,seconds))
+                    row.update(measure(command(direction,transport,seconds,rate),state/(name+('-warmup' if warmup else '')),processes,seconds,counter_source))
                 except Cancelled:
                     raise
                 except Exception as error:
@@ -173,6 +177,7 @@ def run(args):
     binary=Path(args.packetrusher).resolve()
     record(state/'environment.json',{'kernel':subprocess.check_output(['uname','-a'],text=True).strip(),
         'iperf':subprocess.check_output(['iperf3','--version'],text=True).strip(),
+        'bpftool':subprocess.check_output(['bpftool','version'],text=True).strip(),
         'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),
         'binary_version':json.loads(subprocess.check_output([str(binary),'version','--json'],text=True)),
         'affinity':sorted(os.sched_getaffinity(0)),'GOMAXPROCS':2,'mtu':1400,'tcp_mss':1200,'udp_payload':1200,
@@ -184,7 +189,7 @@ def run(args):
         'iperf_binary_sha256':hashlib.sha256(Path('/usr/bin/iperf3').read_bytes()).hexdigest(),
         'module_sha256':hashlib.sha256(Path(args.module).read_bytes()).hexdigest(),
         'source_hashes':{str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in
-          [Path(__file__),Path(__file__).with_name('measure.py'),*[Path(args.fixture)/name for name in ('prepare.py','native.py','core.py','probe.py','startup.py')]]},
+          [Path(__file__),Path(__file__).with_name('measure.py'),Path(__file__).with_name('counters.py'),*[Path(args.fixture)/name for name in ('prepare.py','native.py','core.py','probe.py','startup.py')]]},
         'cpu_topology':json.loads(subprocess.check_output(['lscpu','--json'],text=True))})
     processes,files=[],[]
     workers=set()

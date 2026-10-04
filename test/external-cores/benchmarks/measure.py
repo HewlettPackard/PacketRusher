@@ -103,8 +103,11 @@ def result_metrics(value, transport):
     return {'receiver_bps':fields.pop('bits_per_second'),'sender_bps':sent['bits_per_second'],**fields}
 
 
-def measure(args, output, processes, seconds):
+def measure(args, output, processes, seconds, counter_source=None):
     output = Path(output)
+    kernel_before=counter_source.snapshot() if counter_source else None
+    if kernel_before:
+        output.with_suffix('.kernel-before.json').write_text(json.dumps(kernel_before,indent=2)+'\n')
     before = snapshot(processes)
     output.with_suffix('.cpu-before.json').write_text(json.dumps(before,indent=2)+'\n')
     start = time.monotonic()
@@ -128,6 +131,13 @@ def measure(args, output, processes, seconds):
                 output.with_suffix('.cpu-after.json').write_text(json.dumps(after,indent=2)+'\n')
                 failure['cpu']=cpu_delta(before,after)
             except Exception as cpu_error:failure['cpu_error']=str(cpu_error)
+            if counter_source:
+                try:
+                    kernel_after=counter_source.snapshot()
+                    output.with_suffix('.kernel-after.json').write_text(json.dumps(kernel_after,indent=2)+'\n')
+                    from counters import delta
+                    failure['kernel_counters']=delta(kernel_before,kernel_after)
+                except Exception as counter_error:failure['kernel_counter_error']=str(counter_error)
             output.with_suffix('.measurement.json').write_text(json.dumps(failure,indent=2)+'\n')
             raise
     after = snapshot(processes)
@@ -137,8 +147,14 @@ def measure(args, output, processes, seconds):
         if code: raise AssertionError(f'iperf exit={code}')
         value=json.loads(output.with_suffix('.json').read_text())
         row['metrics']=result_metrics(value,'udp' if '-u' in args else 'tcp')
+        if counter_source:
+            # Both dumps bracket CPU sampling, outside the timed iperf process.
+            kernel_after=counter_source.snapshot()
+            output.with_suffix('.kernel-after.json').write_text(json.dumps(kernel_after,indent=2)+'\n')
+            from counters import delta
+            row['kernel_counters']=delta(kernel_before,kernel_after)
         row['success']=True
-    except (ValueError,KeyError,AssertionError) as exc: row['error']=str(exc)
+    except Exception as exc: row['error']=str(exc)
     output.with_suffix('.cpu-before.json').write_text(json.dumps(before,indent=2)+'\n')
     output.with_suffix('.cpu-after.json').write_text(json.dumps(after,indent=2)+'\n')
     output.with_suffix('.measurement.json').write_text(json.dumps(row,indent=2)+'\n')
