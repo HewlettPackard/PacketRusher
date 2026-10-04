@@ -79,8 +79,9 @@ func TestActualKernelPacketBoundsChecksumsAndTupleIsolation(t *testing.T) {
 			binary.BigEndian.PutUint16(p[24:26], testpeer.Checksum(p[14:34]))
 			return p
 		}, 7},
-		{"unsupportedNPDUFlag", func(p []byte) []byte { p[42] = 0x37; return p }, 2},
-		{"invalidSequenceContainerLength", func(p []byte) []byte { p[42], p[54] = 0x36, 2; return p }, 2},
+		{"NPDUToOwnedUDP", func(p []byte) []byte { p[42], p[52] = 0x37, 7; return p }, ^uint32(0)},
+		{"genericContainerLengthToBoundedParser", func(p []byte) []byte { p[42], p[54] = 0x36, 2; return p }, ^uint32(0)},
+		{"reflectiveQoSIndicator", func(p []byte) []byte { p[56] |= 0x40; return p }, 7},
 		{"sequenceWrongQFI", func(p []byte) []byte { p[42] = 0x36; p[56]++; return p }, 2},
 		{"sequenceWrongTEID", func(p []byte) []byte { p[42] = 0x36; p[49]++; return p }, 2},
 		{"unrelatedUDP", func(p []byte) []byte { binary.BigEndian.PutUint16(p[36:38], 9999); return p }, ^uint32(0)},
@@ -184,6 +185,15 @@ func TestActualKernelPacketBoundsChecksumsAndTupleIsolation(t *testing.T) {
 	eresult, eerr := r.collection.Programs["decap"].Run(&ebpf.RunOptions{Data: echo, Context: ectx})
 	require.NoError(t, eerr)
 	require.Equal(t, ^uint32(0), eresult, "validated Echo must reach management socket")
+	echo = append(echo, 14, 7) // Recovery IE does not alter the sequence-only header.
+	binary.BigEndian.PutUint16(echo[44:46], uint16(len(echo)-50))
+	binary.BigEndian.PutUint16(echo[16:18], uint16(len(echo)-14))
+	binary.BigEndian.PutUint16(echo[38:40], uint16(len(echo)-34))
+	echo[24], echo[25] = 0, 0
+	binary.BigEndian.PutUint16(echo[24:26], testpeer.Checksum(echo[14:34]))
+	eresult, eerr = r.collection.Programs["decap"].Run(&ebpf.RunOptions{Data: echo, Context: ectx})
+	require.NoError(t, eerr)
+	require.Equal(t, ^uint32(0), eresult, "Echo with Recovery IE must reach management socket")
 	// A complete nonzero checksum is checked before the tuple/inner parser.
 	p := wirePacket(c)
 	pseudo := append([]byte(nil), p[26:34]...)
@@ -195,6 +205,56 @@ func TestActualKernelPacketBoundsChecksumsAndTupleIsolation(t *testing.T) {
 	result, err := r.collection.Programs["decap"].Run(&ebpf.RunOptions{Data: p, Context: ctx})
 	require.NoError(t, err)
 	require.Equal(t, uint32(7), result)
+}
+
+func TestActualKernelOptionalHeadersDelegateOnlyCurrentTuple(t *testing.T) {
+	if os.Getenv("PACKETRUSHER_EBPF_TEST") != "1" {
+		t.Skip("requires disposable namespace")
+	}
+	r := NewRegistry()
+	require.NoError(t, r.load())
+	defer r.collection.Close()
+	_, _, c := isolatedRegistry()
+	require.NoError(t, r.state.put("locals", ipv4(c.Local), uint32(1), ebpf.UpdateNoExist))
+	require.NoError(t, r.state.put("downlinks", c.downKey(), c.identity(), ebpf.UpdateNoExist))
+	require.NoError(t, r.state.put("sessions", c.identity(), c.binding(), ebpf.UpdateNoExist))
+	for _, kind := range []string{"chain", "NPDU", "metadata"} {
+		base := wirePacket(c)
+		packet := append([]byte(nil), base[:50]...)
+		switch kind {
+		case "chain":
+			packet = append(packet, 0, 0, 0, 0x40, 1, 8, 0x68, 0x85, 1, 0, c.QFI, 0)
+		case "NPDU":
+			packet[42] = 0x37
+			packet = append(packet, 0x12, 0x34, 7, 0x85, 1, 0, c.QFI, 0)
+		case "metadata":
+			packet = append(packet, 0, 0, 0, 0x85, 2, 0, 0x80|c.QFI, 0xe0, 0, 0, 0, 0)
+		}
+		packet = append(packet, base[58:]...)
+		binary.BigEndian.PutUint16(packet[16:18], uint16(len(packet)-14))
+		binary.BigEndian.PutUint16(packet[38:40], uint16(len(packet)-34))
+		binary.BigEndian.PutUint16(packet[44:46], uint16(len(packet)-50))
+		for _, mutation := range []string{"current", "oldTEID", "wrongPeer"} {
+			p := append([]byte(nil), packet...)
+			if mutation == "oldTEID" {
+				p[49]++
+			}
+			if mutation == "wrongPeer" {
+				p[29]++
+			}
+			p[24], p[25] = 0, 0
+			binary.BigEndian.PutUint16(p[24:26], testpeer.Checksum(p[14:34]))
+			ctx := [48]uint32{}
+			ctx[9] = 1
+			result, err := r.collection.Programs["decap"].Run(&ebpf.RunOptions{Data: p, Context: ctx})
+			require.NoError(t, err)
+			if mutation == "current" {
+				require.Equal(t, ^uint32(0), result, kind)
+			} else {
+				require.Equal(t, uint32(2), result, kind+mutation)
+			}
+		}
+	}
 }
 
 // Nonzero UDP checksums include every byte of the GTP/inner payload, including

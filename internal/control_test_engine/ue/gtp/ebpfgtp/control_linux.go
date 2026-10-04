@@ -5,7 +5,6 @@ package ebpfgtp
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"net"
 	"net/netip"
@@ -49,7 +48,7 @@ func (r *Registry) receiveControl(local netip.Addr, peer netip.AddrPort, packet 
 	if peer.Port() != 2152 {
 		return
 	}
-	teid, payload, err := userspace.Decode(packet)
+	teid, err := userspace.TPDUTEID(packet)
 	if err != nil {
 		return
 	}
@@ -58,22 +57,13 @@ func (r *Registry) receiveControl(local netip.Addr, peer netip.AddrPort, packet 
 		return
 	}
 	held, ok := (*snapshot)[downKey{ipv4(local), ipv4(peer.Addr()), teid}]
-	if !ok || len(payload) > held.config.MTU {
+	if !ok {
 		return
 	}
-	// Reassembled datagrams still require the same strict optional container
-	// and QFI as kernel-forwarded traffic. Never bypass that boundary in Go.
-	switch packet[0] {
-	case 0x30:
-	case 0x32:
-		if len(packet) < 12 || packet[10] != 0 || packet[11] != 0 {
-			return
-		}
-	case 0x34, 0x36:
-		if len(packet) < 16 || (packet[0] == 0x34 && binary.BigEndian.Uint16(packet[8:10]) != 0) || packet[10] != 0 || packet[11] != 0x85 || packet[12] != 1 || packet[13] != 0 || packet[14] != held.config.QFI || packet[15] != 0 {
-			return
-		}
-	default:
+	// Both backends use the same bounded optional/extension parser and require
+	// every present PSC to match this current peer/TEID's downlink allocation.
+	_, payload, err := userspace.DecodeDownlink(packet, held.config.QFI)
+	if err != nil || len(payload) > held.config.MTU {
 		return
 	}
 	if ipv6.RouterAdvertisement(payload) {

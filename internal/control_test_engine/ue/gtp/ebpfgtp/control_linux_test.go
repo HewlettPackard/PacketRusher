@@ -130,6 +130,52 @@ type fallbackSender struct {
 	peers   []netip.AddrPort
 }
 
+func TestOptionalDownlinkDispatchChecksCurrentOwnerFlowAndAllocation(t *testing.T) {
+	r, _, c := isolatedRegistry()
+	var injected [][]byte
+	c.Inject = func(p []byte) error { injected = append(injected, append([]byte(nil), p...)); return nil }
+	s, err := r.Open(c)
+	require.NoError(t, err)
+	defer s.Close()
+	inner := wirePacket(c)[58:]
+	packet := append([]byte{0x37, 255, 0, 0, 0, 0, 0, 0, 0x12, 0x34, 7, 0x40, 1, 8, 0x68, 0x85, 1, 0, c.QFI, 0}, inner...)
+	binary.BigEndian.PutUint16(packet[2:4], uint16(len(packet)-8))
+	binary.BigEndian.PutUint32(packet[4:8], c.DownlinkTEID)
+	peer := netip.AddrPortFrom(c.Remote, 2152)
+	r.receiveControl(c.Local, peer, packet)
+	require.Equal(t, [][]byte{inner}, injected)
+	injected = nil
+	for _, mutate := range []func([]byte){
+		func(p []byte) { p[18]++ },        // wrong PSC flow hidden behind unknown extension
+		func(p []byte) { p[17] = 0x10 },   // uplink PSC direction
+		func(p []byte) { p[7]++ },         // old/wrong TEID
+		func(p []byte) { p[12] = 0 },      // extension size zero
+		func(p []byte) { p[len(p)-13]++ }, // unallocated destination
+	} {
+		bad := append([]byte(nil), packet...)
+		mutate(bad)
+		r.receiveControl(c.Local, peer, bad)
+		require.Empty(t, injected)
+	}
+	r.receiveControl(c.Local, netip.MustParseAddrPort("10.88.0.99:2152"), packet)
+	r.receiveControl(c.Local, netip.AddrPortFrom(c.Remote, 2153), packet)
+	r.receiveControl(netip.MustParseAddr("10.88.0.99"), peer, packet)
+	require.Empty(t, injected)
+	next := c
+	next.Remote = netip.MustParseAddr("10.88.0.4")
+	next.DownlinkTEID++
+	require.NoError(t, s.Update(next))
+	r.receiveControl(c.Local, peer, packet)
+	require.Empty(t, injected, "old peer/TEID snapshot cannot dispatch after handover")
+	binary.BigEndian.PutUint32(packet[4:8], next.DownlinkTEID)
+	r.receiveControl(next.Local, netip.AddrPortFrom(next.Remote, 2152), packet)
+	require.Equal(t, [][]byte{inner}, injected)
+	require.NoError(t, s.Close())
+	injected = nil
+	r.receiveControl(next.Local, netip.AddrPortFrom(next.Remote, 2152), packet)
+	require.Empty(t, injected, "retired owner cannot accept delegated packets")
+}
+
 func (s *fallbackSender) Send(packet []byte, peer netip.AddrPort) error {
 	s.packets = append(s.packets, append([]byte(nil), packet...))
 	s.peers = append(s.peers, peer)

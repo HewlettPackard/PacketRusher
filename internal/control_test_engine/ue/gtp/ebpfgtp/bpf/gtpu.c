@@ -288,7 +288,7 @@ int decap(struct __sk_buff *skb) {
     struct gtp_header gtp = {};
     if (load_bytes(skb, gtp_offset, &gtp, 8) || ntohs(gtp.length) + 8 != length - 8) goto drop;
     if (gtp.type == 1) {
-        if (length != 20 || gtp.flags != 0x32 || gtp.teid ||
+        if (length < 20 || gtp.flags != 0x32 || gtp.teid ||
             load_bytes(skb, gtp_offset + 8, &gtp.sequence, 4) || gtp.npdu || gtp.next) goto drop;
         return NEXT;
     }
@@ -296,20 +296,28 @@ int decap(struct __sk_buff *skb) {
     struct down_key key = {local, outer.saddr, ntohl(gtp.teid)};
     __u32 *endpoint = lookup(&downlinks, &key);
     if (!endpoint) goto drop;
-    struct binding *value = lookup(&sessions, endpoint);
+    // A full-width scalar slot prevents LLVM from partially overwriting a
+    // spilled map pointer when the optional-header branches extend lifetimes.
+    volatile __u64 endpoint_key = *endpoint;
+    struct binding *value = lookup(&sessions, (void *)&endpoint_key);
     if (!value) goto drop;
     struct binding cfg = *value;
-    if (cfg.endpoint != *endpoint || cfg.local != key.local || cfg.peer != key.peer || cfg.downlink_teid != key.teid) goto drop;
+    if (cfg.endpoint != endpoint_key || cfg.local != key.local || cfg.peer != key.peer || cfg.downlink_teid != key.teid) goto drop;
+    if ((gtp.flags & 0xf8) != 0x30) goto drop;
     __u32 gtplen = 8;
     if (gtp.flags == 0x34 || gtp.flags == 0x36) {
-        if (length < 24 || load_bytes(skb, gtp_offset + 8, &gtp.sequence, 8) ||
-            (gtp.flags == 0x34 && gtp.sequence) || gtp.npdu || gtp.next != 0x85 ||
-            gtp.extension_length != 1 || gtp.pdu_type != 0 || gtp.qfi != cfg.qfi || gtp.end) goto drop;
+        if (length < 24 || load_bytes(skb, gtp_offset + 8, &gtp.sequence, 8)) goto drop;
+        // Generic chains and optional N-PDU fields use the exclusively owned
+        // UDP socket's shared bounded parser, after canonical tuple admission.
+        if ((gtp.flags == 0x34 && gtp.sequence) || gtp.npdu || gtp.next != 0x85 ||
+            gtp.extension_length != 1 || gtp.end || (gtp.pdu_type & 0x0f) || (gtp.qfi & 0x80)) { count(3); return NEXT; }
+        if (gtp.pdu_type >> 4 != 0 || (gtp.qfi & 0x3f) != cfg.qfi) goto drop;
         gtplen = 16;
     } else if (gtp.flags == 0x32) {
-        if (load_bytes(skb, gtp_offset + 8, &gtp.sequence, 4) || gtp.npdu || gtp.next) goto drop;
+        if (load_bytes(skb, gtp_offset + 8, &gtp.sequence, 4) || gtp.next) goto drop;
+        if (gtp.npdu) { count(3); return NEXT; }
         gtplen = 12;
-    } else if (gtp.flags != 0x30) goto drop;
+    } else if (gtp.flags != 0x30) { count(3); return NEXT; }
     __u32 inner_length = length - 8 - gtplen, inner_offset = gtp_offset + gtplen;
     if (inner_length > cfg.mtu) goto drop;
     unsigned char version = 0;

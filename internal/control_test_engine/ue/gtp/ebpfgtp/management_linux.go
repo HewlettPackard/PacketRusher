@@ -14,7 +14,7 @@ import (
 )
 
 // managementSocket owns a joined Echo/control worker. Kernel-completed traffic
-// stays in TCX; checksum-uncertain or reassembled datagrams reach this socket
+// stays in TCX; checksum-uncertain, reassembled or optional-header datagrams reach this socket
 // only after normal UDP checksum validation, then strict session admission.
 type managementSocket struct {
 	conn    *net.UDPConn
@@ -71,7 +71,7 @@ func (s *managementSocket) Close() error {
 	return nil
 }
 func echoResponse(packet []byte) []byte {
-	if len(packet) != 12 || packet[0] != 0x32 || packet[1] != 1 || binary.BigEndian.Uint16(packet[2:4]) != 4 || binary.BigEndian.Uint32(packet[4:8]) != 0 || packet[10] != 0 || packet[11] != 0 {
+	if len(packet) < 12 || packet[0] != 0x32 || packet[1] != 1 || int(binary.BigEndian.Uint16(packet[2:4])) != len(packet)-8 || binary.BigEndian.Uint32(packet[4:8]) != 0 || packet[10] != 0 || packet[11] != 0 {
 		return nil
 	}
 	// Recovery IE: this process has not restarted within its registry lifetime.
