@@ -28,7 +28,9 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes packetrusher-*.tar.gz SHA256SUMS
+        run: |
+          awk -v tag="$GITHUB_REF_NAME" '/^## / { found = $2 == tag; next } found' CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" --verify-tag --notes-file notes.md --generate-notes packetrusher-*.tar.gz SHA256SUMS
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
