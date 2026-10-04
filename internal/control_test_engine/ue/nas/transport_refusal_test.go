@@ -1,4 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package nas
 
 import (
@@ -13,7 +16,6 @@ import (
 	gnbcontext "my5G-RANTester/internal/control_test_engine/gnb/context"
 	"my5G-RANTester/internal/control_test_engine/ue/context"
 	"my5G-RANTester/internal/control_test_engine/ue/scenario"
-	"my5G-RANTester/internal/testutil/naswire"
 )
 
 func transportRefusalUE(t *testing.T) (*context.UEContext, *context.UEPDUSession) {
@@ -74,7 +76,7 @@ func TestTransportRefusalAccountsForInitialAndRetriedEstablishment(t *testing.T)
 				for i := 0; i < 2; i++ {
 					packet := plain
 					if protected {
-						packet = naswire.Protect(plain, ue.UeSecurity.KnasEnc, ue.UeSecurity.KnasInt, uint32(7+i), 1, 2)
+						packet = protect(ue, plain, uint32(7+i))
 					}
 					DispatchNas(ue, packet)
 				}

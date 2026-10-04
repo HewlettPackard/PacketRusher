@@ -1,11 +1,11 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2023 Hewlett Packard Enterprise Development LP
  * © Copyright 2026 Valentin D'Emmanuele
  */
 package handler
 
 import (
-	"fmt"
 	"github.com/free5gc/nas/ie"
 	nas "github.com/free5gc/nas/message"
 	log "github.com/sirupsen/logrus"
@@ -167,4 +167,3 @@ func HandlerIdentityRequest(ue *context.UEContext, msg *nas.IdReq) {
 func HandlerConfigurationUpdateCommand(ue *context.UEContext, msg *nas.CfgUpdateCmd) {
 	trigger.InitConfigurationUpdateComplete(ue)
 }
-func cause5GSMToString(value uint8) string { return fmt.Sprint(&ie.Cause5GSM{Value: value}) }

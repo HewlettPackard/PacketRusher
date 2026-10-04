@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package context
 
@@ -50,10 +51,9 @@ type TNLAssociation struct {
 }
 
 type SliceSupported struct {
-	sst    string
-	sd     string
-	status string
-	next   *SliceSupported
+	sst  string
+	sd   string
+	next *SliceSupported
 }
 
 type PlmnSupported struct {

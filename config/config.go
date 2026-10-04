@@ -334,11 +334,3 @@ func (config *Config) GetHomeNetworkPublicKey() sidf.HomeNetworkPublicKey {
 		PublicKeyID:      "0",
 	}
 }
-
-func boolToUint8(boolean bool) uint8 {
-	if boolean {
-		return 1
-	} else {
-		return 0
-	}
-}

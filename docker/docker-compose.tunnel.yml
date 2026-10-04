@@ -1,6 +1,0 @@
-# Combine with either the host or bridge Compose file to create GTP-U tunnels.
-services:
-  packetrusher:
-    cap_add:
-      - NET_ADMIN
-    command: ["--config", "/packetrusher/config/config.yml", "multi-ue", "-n", "2", "--tunnel"]

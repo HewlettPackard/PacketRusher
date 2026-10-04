@@ -17,7 +17,7 @@ RUN apt-get update \
 
 WORKDIR /packetrusher
 COPY --from=builder /out/packetrusher /packetrusher/packetrusher
-COPY docker/config.yml /packetrusher/config/config.yml
+COPY config/config.yml /packetrusher/config/config.yml
 
 STOPSIGNAL SIGINT
 ENTRYPOINT ["/packetrusher/packetrusher"]

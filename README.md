@@ -27,9 +27,13 @@ PacketRusher borrows libraries and data structures from the [free5gc project](ht
   * GUTI Re-registration
   * Supports 5G roaming: Tested with new https://github.com/open5gs/open5gs/issues/2194 Roaming feature
 * Implements high-performant N3 (GTP-U) interface
+  * Three tunnel backends, chosen automatically: eBPF, the gtp5g kernel module, or plain userspace
+  * IPv4, IPv6 and dual-stack PDU sessions
   * Generic tunnel supporting all kind of traffic (TCP, UDP, Video…) — see [tunnel ownership and handover](docs/TunnelLifecycle.md).
     * We tested iperf3 traffic, and Youtube traffic through PacketRusher
     * We roughly reach 5 GB/s per UE, which is more than what a real UE can achieve.
+* Runtime control of the UEs (idle, handover, deregistration…) through a local socket, and JSON scenarios
+* Procedure results as a JSON report and Prometheus metrics
 * Integrated all-in-one mocked 5GC/AMF for PacketRusher's integration testing
 
 ## Installation
@@ -43,10 +47,10 @@ The following is a quick start guide, for more details on the installation, conf
 - Windows is not supported (Windows does not support SCTP)
 - Go 1.26.2 or more recent
 - Root privilege
-- Secure boot disabled (for custom kernel module)
+- Secure boot disabled, only to install the optional gtp5g kernel module
 
 A Linux container workflow is available in [docker/README.md](docker/README.md).
-The host provides SCTP and, for user-plane tunnels, the gtp5g kernel module.
+The host provides SCTP.
 
 ### Dependencies
 ```bash
@@ -64,7 +68,8 @@ $ cd PacketRusher && echo "export PACKETRUSHER=$PWD" >> $HOME/.profile
 $ source $HOME/.profile
 ```
 
-### Build free5gc's gtp5g kernel module
+### Build free5gc's gtp5g kernel module (optional)
+User-plane tunnels work without it, with the `ebpf` and `userspace` backends: see [GTP-U tunnel backends](#gtp-u-tunnel-backends).
 ```bash
 $ cd $PACKETRUSHER/lib/gtp5g
 $ make clean && make && sudo make install
@@ -83,69 +88,20 @@ You can edit the configuration in $PACKETRUSHER/config/config.yml as specified [
 More complex scenarios are possible using `sudo ./packetrusher multi-ue`, see `./packetrusher multi-ue --help` for more details.   
 For more details on the installation, configuration or usage, you may refer to the [wiki](https://github.com/HewlettPackard/PacketRusher/wiki).
 
-## Contributing
-We're thrilled that you'd like to contribute to this project. Your help is essential for keeping it great!   
-You can review our [contributing guide](CONTRIBUTING.md).
-
-### Developer's Certificate of Origin
-All contributions must include acceptance of the [DCO](DCO.md).
-
-#### Sign your work
-To accept the DCO, simply add this line to each commit message with your name and email address (*git commit -s* will do this for you):
-
-    Signed-off-by: Jane Example <jane@example.com>
-
-For legal reasons, no anonymous or pseudonymous contributions are accepted.
-
-## Citation
-If you use this software, you may cite it as below:
-```latex
-@software{PacketRusher,
-  author = {D'Emmanuele, Valentin and Raguideau, Akiya},
-  doi = {10.5281/zenodo.10446651},
-  month = nov,
-  title = {{PacketRusher: High performance 5G UE/gNB Simulator and CP/UP load tester}},
-  url = {https://github.com/HewlettPackard/PacketRusher},
-  version = {1.0.0},
-  year = {2023}
-}
-```
-
-## License
-© Copyright 2023 Hewlett Packard Enterprise Development LP
-
-© Copyright 2024-2025 Valentin D'Emmanuele
-
-This project is under the [Apache 2.0 License](LICENSE) license.
-
-By contributing here, [you agree](DCO.md) to license your contribution under the terms of the Apache 2.0 License. All files are released with the Apache License 2.0.
-
-PacketRusher borrows libraries and data structures from the [free5gc project](https://github.com/free5gc/free5gc), and is originally based upon [my5G-RANTester](https://github.com/my5G/my5G-RANTester).
+## Usage
 
 For JSON/CSV procedure reports and live Prometheus metrics, see [Load-test results](docs/load-test-results.md).
 
-### Boolean flags and UE distribution
-
-Boolean flags take no separate value. Enable a flag with `--tunnel` or
-`--tunnel=true`, and disable a flag with `--tunnel-vrf=false`. For example:
-
-```bash
-./packetrusher --config config/config.yml multi-ue -n 2 --tunnel -d --tunnel-vrf=false
-```
-
-Flags may appear in either order. Do not write `--tunnel true` or
-`--tunnel-vrf false`; those values are positional arguments and are rejected
-before configuration loading or network setup.
-
-UE IDs start at 1. The first UE uses the configured gNB ID and N2/N3 addresses;
-the next UE uses the next gNB when multiple gNBs are present. Selection wraps
-back to the first gNB after the last one, and handovers advance through that
-same sequence. With `--dedicatedGnb`, ascending MSINs therefore use ascending
-gNB IDs and N2/N3 addresses.
-
 For automatic tunnel MTU calculation and the `ue.tunnelmtu` override, see [Tunnel MTU](docs/tunnel-mtu.md).
 
-For the current codec APIs and validation commands, see [Dependency migration](docs/dependency-migration.md).
+### Boolean flags and UE distribution
+
+Boolean flags take no separate value: `--tunnel` or `--tunnel=true` enables one and `--tunnel-vrf=false` disables
+one, whereas `--tunnel-vrf false` is rejected, `false` being a positional argument.
+
+The first UE uses the configured gNB ID and N2/N3 addresses, and each following UE the next gNB, back to the first
+one after the last. Handovers advance through the same sequence. With `--dedicatedGnb`, ascending MSINs therefore
+use ascending gNB IDs and N2/N3 addresses.
 
 ### gNB and NR cell identities
 
@@ -228,3 +184,42 @@ The `Real cores` workflow registers a UE against Open5GS, with a PDU session and
 `userspace` and `ebpf` tunnel backends, and against free5GC, registration only as its UPF needs gtp5g.
 `test/real-core/ue.sh <packetrusher> <config.yml> [<address to ping>]` runs the same check against a core
 you started yourself.
+
+## Contributing
+We're thrilled that you'd like to contribute to this project. Your help is essential for keeping it great!   
+You can review our [contributing guide](CONTRIBUTING.md).
+
+### Developer's Certificate of Origin
+All contributions must include acceptance of the [DCO](DCO.md).
+
+#### Sign your work
+To accept the DCO, simply add this line to each commit message with your name and email address (*git commit -s* will do this for you):
+
+    Signed-off-by: Jane Example <jane@example.com>
+
+For legal reasons, no anonymous or pseudonymous contributions are accepted.
+
+## Citation
+If you use this software, you may cite it as below:
+```latex
+@software{PacketRusher,
+  author = {D'Emmanuele, Valentin and Raguideau, Akiya},
+  doi = {10.5281/zenodo.10446651},
+  month = nov,
+  title = {{PacketRusher: High performance 5G UE/gNB Simulator and CP/UP load tester}},
+  url = {https://github.com/HewlettPackard/PacketRusher},
+  version = {1.0.0},
+  year = {2023}
+}
+```
+
+## License
+© Copyright 2023 Hewlett Packard Enterprise Development LP
+
+© Copyright 2024-2025 Valentin D'Emmanuele
+
+This project is under the [Apache 2.0 License](LICENSE) license.
+
+By contributing here, [you agree](DCO.md) to license your contribution under the terms of the Apache 2.0 License. All files are released with the Apache License 2.0.
+
+PacketRusher borrows libraries and data structures from the [free5gc project](https://github.com/free5gc/free5gc), and is originally based upon [my5G-RANTester](https://github.com/my5G/my5G-RANTester).

@@ -1,10 +1,17 @@
-// SPDX-License-Identifier: Apache-2.0
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package nas
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	"encoding/binary"
 	"testing"
 
+	"github.com/aead/cmac"
 	"github.com/free5gc/nas/ie"
 	message "github.com/free5gc/nas/message"
 	"github.com/stretchr/testify/require"
@@ -122,4 +129,22 @@ func protectedSecurityModeCommand(t *testing.T, ue *context.UEContext, integrity
 	packet, err := message.Marshal(msg, core, message.SecHdrTypeIntegrityProtectedWithNew5gNasSecCtx)
 	require.NoError(t, err)
 	return packet
+}
+
+// protect ciphers and integrity-protects a downlink NAS message with NEA2/NIA2 and the keys
+// of the UE (TS 33.501, Annex D), without the NAS codec that the tests exercise.
+func protect(ue *context.UEContext, plain []byte, count uint32) []byte {
+	counter := make([]byte, 16)
+	binary.BigEndian.PutUint32(counter, count)
+	counter[4] = 1<<3 | 1<<2 // bearer 1 (3GPP access), downlink
+	payload := append([]byte(nil), plain...)
+	block, _ := aes.NewCipher(ue.UeSecurity.KnasEnc[:])
+	cipher.NewCTR(block, counter).XORKeyStream(payload, payload)
+	seq := byte(count)
+	block, _ = aes.NewCipher(ue.UeSecurity.KnasInt[:])
+	mac, err := cmac.Sum(append(append(counter[:8:8], seq), payload...), block, 16)
+	if err != nil {
+		panic(err)
+	}
+	return append([]byte{0x7e, 2, mac[0], mac[1], mac[2], mac[3], seq}, payload...)
 }
