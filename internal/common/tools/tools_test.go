@@ -1,3 +1,7 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * © Copyright 2026 Valentin D'Emmanuele
+ */
 package tools
 
 import (
@@ -42,18 +46,17 @@ func TestUEGnbSelectionAndHandoverSequence(t *testing.T) {
 }
 
 func TestUEGnbSelectionPreservesConfiguredID(t *testing.T) {
-	// CreateGnbs uses the configured ID verbatim for the first gNB and
-	// gnbIdGenerator's uppercase hexadecimal spelling for subsequent gNBs.
+	// gNB IDs are canonical uppercase hexadecimal whatever the configured spelling.
 	for _, configuredID := range []string{"00000a", "00000A"} {
 		t.Run(configuredID, func(t *testing.T) {
 			for ueID := 1; ueID <= 3; ueID++ {
 				sim := UESimulationConfig{
 					UeId: ueID,
-					Gnbs: map[string]*gnbContext.GNBContext{configuredID: nil, "00000B": nil},
+					Gnbs: map[string]*gnbContext.GNBContext{"00000A": nil, "00000B": nil},
 					Cfg:  config.Config{GNodeB: config.GNodeB{PlmnList: config.PlmnList{GnbId: configuredID}}},
 				}
 				for offset := 0; offset < 4; offset++ {
-					want := configuredID
+					want := "00000A"
 					if (ueID-1+offset)%2 != 0 {
 						want = "00000B"
 					}

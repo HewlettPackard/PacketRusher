@@ -1,6 +1,7 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  * © Copyright 2023 Hewlett Packard Enterprise Development LP
+ * © Copyright 2026 Valentin D'Emmanuele
  */
 package context
 
@@ -15,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"my5G-RANTester/config"
 	"my5G-RANTester/internal/control_test_engine/gnb/gtp"
 	ngapCodec "my5G-RANTester/lib/ngap"
 
@@ -58,6 +60,7 @@ type ControlInfo struct {
 	mnc            string
 	tac            string
 	gnbId          string
+	identity       config.GNBIdentity
 	gnbIpPort      netip.AddrPort
 	inboundChannel chan UEMessage
 	n2             atomic.Pointer[sctp.SCTPConn]
@@ -79,6 +82,7 @@ func (gnb *GNBContext) NewRanGnbContext(gnbId, mcc, mnc, tac, sst, sd string, n2
 	gnb.controlInfo.mnc = mnc
 	gnb.controlInfo.tac = tac
 	gnb.controlInfo.gnbId = gnbId
+	gnb.controlInfo.identity, _ = config.ParseGNBIdentity(gnbId, 0, 0)
 	gnb.controlInfo.inboundChannel = make(chan UEMessage, 100)
 	gnb.sliceInfo.sd = sd
 	gnb.sliceInfo.sst = sst
@@ -450,12 +454,22 @@ func (gnb *GNBContext) GetPagedUEs() []PagedUE {
 }
 
 func (gnb *GNBContext) GetGnbIdInBytes() []byte {
-	// changed for bytes.
-	resu, err := hex.DecodeString(gnb.controlInfo.gnbId)
+	return gnb.controlInfo.identity.Bytes()
+}
+
+// ConfigureIdentity sets the gNB ID width and cell suffix; the default is 24 bits and cell 0.
+func (gnb *GNBContext) ConfigureIdentity(bits uint8, cell uint16) error {
+	id, err := config.ParseGNBIdentity(gnb.controlInfo.gnbId, bits, cell)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
-	return resu
+	gnb.controlInfo.identity = id
+	return nil
+}
+
+func (gnb *GNBContext) GetGNBIDBitString() aper.BitString {
+	id := gnb.controlInfo.identity
+	return aper.BitString{Bytes: id.Bytes(), BitLength: uint64(id.BitLength)}
 }
 
 func (gnb *GNBContext) getTac() string {
@@ -496,12 +510,9 @@ func (gnb *GNBContext) GetPLMNIdentity() *ngapType.PLMNIdentity {
 }
 
 func (gnb *GNBContext) GetNRCellIdentity() *ngapType.NRCellIdentity {
-	nci := gnb.GetGnbIdInBytes()
-	var slice = make([]byte, 2)
-
 	return &ngapType.NRCellIdentity{
 		Value: aper.BitString{
-			Bytes:     append(nci, slice...),
+			Bytes:     gnb.controlInfo.identity.CellBytes(),
 			BitLength: 36,
 		},
 	}

@@ -146,3 +146,16 @@ gNB IDs and N2/N3 addresses.
 For automatic tunnel MTU calculation and the `ue.tunnelmtu` override, see [Tunnel MTU](docs/tunnel-mtu.md).
 
 For the current codec APIs and validation commands, see [Dependency migration](docs/dependency-migration.md).
+
+### gNB and NR cell identities
+
+`gnodeb.plmnlist.gnbid` is a hexadecimal gNB ID. `gnbidlength` sets its width in bits (22 to 32, default 24) and
+`cellid` the cell suffix filling the remaining bits of the 36-bit NR cell identity (default 0):
+
+```yaml
+gnodeb:
+  plmnlist:
+    gnbid: "01ABCDE"
+    gnbidlength: 25
+    cellid: 3
+```
