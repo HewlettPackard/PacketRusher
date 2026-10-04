@@ -79,10 +79,12 @@ static int gtp5g_dev_init(struct net_device *dev)
 
     gtp->dev = dev;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 7, 0)
     dev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
     if (!dev->tstats) {
         return -ENOMEM;
     }
+#endif
 
     return 0;
 }
@@ -92,7 +94,9 @@ static void gtp5g_dev_uninit(struct net_device *dev)
     struct gtp5g_dev *gtp = netdev_priv(dev);
 
     gtp5g_encap_disable(gtp->sk1u);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 7, 0)
     free_percpu(dev->tstats);
+#endif
 }
 
 /**
