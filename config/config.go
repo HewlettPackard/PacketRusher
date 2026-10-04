@@ -37,6 +37,38 @@ const (
 	TunnelShared
 )
 
+// TunnelBackend is the datapath carrying the user plane of the UEs' tunnels.
+type TunnelBackend string
+
+const (
+	TunnelBackendGtp5g     TunnelBackend = "gtp5g"
+	TunnelBackendUserspace TunnelBackend = "userspace"
+)
+
+// tunnelBackends lists the backends by order of preference for "auto".
+var tunnelBackends = []struct {
+	name      TunnelBackend
+	available func() bool
+}{
+	{TunnelBackendGtp5g, func() bool { _, err := os.Stat("/sys/module/gtp5g"); return err == nil }},
+	{TunnelBackendUserspace, func() bool { return true }},
+}
+
+// ResolveTunnelBackend returns the backend that --tunnel-backend designates: with
+// "auto" the first available one, otherwise the named one, which must be available.
+func ResolveTunnelBackend(name string) (TunnelBackend, error) {
+	for _, backend := range tunnelBackends {
+		if (name == "auto" || name == string(backend.name)) && backend.available() {
+			log.Info("[TESTER] Using the ", backend.name, " tunnel backend")
+			return backend.name, nil
+		}
+		if name == string(backend.name) {
+			return "", fmt.Errorf("the %s tunnel backend was requested but is not available on this host", name)
+		}
+	}
+	return "", fmt.Errorf("unknown tunnel backend %q: use auto, gtp5g or userspace", name)
+}
+
 var config *Config
 
 type Config struct {
@@ -83,6 +115,9 @@ type Ue struct {
 	Ciphering              Ciphering  `yaml:"ciphering"`
 	TunnelMode             TunnelMode `yaml:"-"`
 	TunnelMTU              int        `yaml:"tunnelmtu"`
+
+	// TunnelBackend is resolved from --tunnel-backend when a tunnel is requested.
+	TunnelBackend TunnelBackend `yaml:"-"`
 }
 
 type Hplmn struct {

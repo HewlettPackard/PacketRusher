@@ -26,6 +26,13 @@ jobs:
         run: go build -o packetrusher ./cmd
       - name: Run race suite
         run: go test -v -race ./... -timeout=180s
+      - name: Run the tunnel tests that need root
+        run: |
+          sudo modprobe vrf || sudo apt-get install -y "linux-modules-extra-$(uname -r)"
+          go test -c -o tunnel-tests/ ./internal/control_test_engine/ue/gtp/...
+          for test in tunnel-tests/*.test; do
+            sudo unshare --net sh -c "ip link set lo up && PACKETRUSHER_TUN_TEST=1 $test -test.v"
+          done
 
       - name: Run patched native NAS codec tests
         run: go test -v -race github.com/free5gc/nas/ie/... github.com/free5gc/nas/message/... github.com/free5gc/nas/internal/... -timeout=180s

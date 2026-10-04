@@ -182,3 +182,17 @@ sessions), `idle`, `reconnect`, `xn-handover` and `ng-handover` (to the `--targe
   {"ue": 1, "action": "deregister"}
 ]}
 ```
+### GTP-U tunnel backends
+
+The global `--tunnel-backend` flag selects what carries the user plane of the UEs:
+
+- `gtp5g`: the [gtp5g](https://github.com/free5gc/gtp5g) kernel module.
+- `userspace`: PacketRusher itself, with one TUN device per UE; no kernel module is needed.
+- `auto` (default): `gtp5g` when its module is loaded, `userspace` otherwise.
+
+Only `auto` falls back: a backend requested by name that is not available is an error.
+
+```bash
+sudo ./packetrusher --tunnel-backend userspace multi-ue -n 10 --tunnel
+```
+The userspace backend is slower than gtp5g and keeps one TUN device, hence one file descriptor, open per UE.
