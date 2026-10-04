@@ -126,7 +126,8 @@ host (Linux 7.0):
 | `userspace` | 1.1 / 1.4 | 0.9 / 1.3 |
 | `userspace` with `--dedicatedGnb` | 1.1 / 1.4 | 3.6 / 6.2 |
 
-One TCP stream is bound by one core: a single UE with four streams reaches the figures of four UEs.
+One TCP stream is bound by one core: a single UE with four streams reaches the figures of four UEs. `test/real-core/throughput.sh`
+measures your own setup: see its header.
 
 Each UE has its address on a `val<MSIN>` device and its packets go through `gtp0<MSIN>` or `gtp1<MSIN>`, which
 alternate at each handover: the UE keeps its address and its connections. To send traffic, bind to the address of
