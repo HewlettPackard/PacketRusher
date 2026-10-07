@@ -85,6 +85,9 @@ type UEContext struct {
 
 	// registrationStart is when the pending registration attempt began, for the results.
 	registrationStart time.Time
+
+	// backoff holds the timers network rejects started (establishment_backoff.go).
+	backoff [backoffTimers]backoffState
 }
 
 type Amf struct {

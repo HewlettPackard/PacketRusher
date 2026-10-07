@@ -215,6 +215,12 @@ The first UE uses the configured gNB ID and N2/N3 addresses, and each following 
 one after the last. Handovers advance through the same sequence. With `--dedicatedGnb`, ascending MSINs therefore
 use ascending gNB IDs and N2/N3 addresses.
 
+### Network back-off timers
+
+A rejected PDU session establishment is retried after 1, 5, 25, 125 and 625 s. With the environment variable
+`PR_HONOUR_BACKOFF=1`, a UE follows the Back-off timer value the network sends with the reject instead
+(TS 24.501 6.4.1.4.2 and 6.4.1.4.3), and holds its other PDU session requests while a timer runs.
+
 ### Versions and releases
 
 `packetrusher --version` prints the release tag, or the source commit for other builds. Docker builds have no
