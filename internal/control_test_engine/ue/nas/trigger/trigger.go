@@ -16,6 +16,7 @@ import (
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/nas_control/mm_5gs"
 	"my5G-RANTester/internal/control_test_engine/ue/nas/message/sender"
+	"time"
 
 	nasMessage "github.com/free5gc/nas/ie"
 	nas "github.com/free5gc/nas/message"
@@ -57,7 +58,39 @@ func InitPduSessionRequest(ue *context.UEContext) {
 		return
 	}
 
-	InitPduSessionRequestInner(ue, pduSession)
+	RequestPduSessionWhenAllowed(ue, pduSession)
+}
+
+// RequestPduSessionWhenAllowed sends the PDU session establishment request unless a
+// back-off the network set still applies (TS 24.501 6.4.1.4.2, 6.4.1.4.3). A running
+// timer holds the request until it ends; the request is then checked again, and skipped
+// if its session was released, replaced or answered meanwhile, or the UE is no longer
+// connected to a gNB. A deactivated timer drops the request and deletes its session.
+// Without a back-off, which is always the case unless PR_HONOUR_BACKOFF is set, the
+// request is sent straight away. Call it from the UE's goroutine.
+func RequestPduSessionWhenAllowed(ue *context.UEContext, pduSession *context.UEPDUSession) {
+	remaining, deactivated := ue.EstablishmentBackoff()
+	switch {
+	case deactivated:
+		log.Warn("[UE][NAS] Not requesting PDU Session ", pduSession.Id, ": the network deactivated a back-off timer")
+		_ = ue.DeletePduSession(pduSession.Id)
+	case remaining > 0:
+		log.Info("[UE][NAS] Holding PDU Session ", pduSession.Id, " request for ", remaining.Round(time.Second), ", the network's back-off")
+		state := pduSession.GetStateSM()
+		ue.RunOnUEAfter(remaining, func() {
+			current, _ := ue.GetPduSession(pduSession.Id)
+			if current != pduSession || pduSession.GetStateSM() != state {
+				return
+			}
+			if ue.GetGnbRx() == nil {
+				log.Info("[UE][NAS] Not requesting PDU Session ", pduSession.Id, " after the network's back-off: no gNB connection")
+				return
+			}
+			RequestPduSessionWhenAllowed(ue, pduSession)
+		})
+	default:
+		InitPduSessionRequestInner(ue, pduSession)
+	}
 }
 
 func InitPduSessionRequestInner(ue *context.UEContext, pduSession *context.UEPDUSession) {

@@ -23,14 +23,25 @@ const maxRejectRetries = 5
 // UE's NAS count is read and updated without a lock. It is skipped if the session was
 // released, replaced or accepted while it waited, or if the UE is no longer connected to
 // a gNB. A retry still waiting when the UE terminates is not sent.
+//
+// With PR_HONOUR_BACKOFF=1, a Back-off timer value IE in the reject starts, stops or
+// deactivates the timer its cause belongs to first, whatever happens to this session. The
+// retry then also waits for every timer that still runs. After a deactivated timer the
+// session is deleted, since it will not be requested again.
 func handleEstablishmentReject(ue *context.UEContext, reject *message.PDUSessEstRej) {
 	pduSessionId := reject.PDUSessId
+	recordNetworkBackoff(ue, reject)
 	pduSession, err := ue.GetPduSession(pduSessionId)
 	if err != nil {
 		log.Error("[UE][NAS] Cannot retry PDU Session Request for PDU Session ", pduSessionId, " after Reject as ", err)
 		return
 	}
 	pduSession.EstablishmentFailed()
+	if _, deactivated := ue.EstablishmentBackoff(); deactivated {
+		log.Error("[UE][NAS] A back-off timer is deactivated; not retrying PDU Session ", pduSessionId)
+		_ = ue.DeletePduSession(pduSessionId)
+		return
+	}
 	if pduSession.T3580Retries >= maxRejectRetries {
 		log.Error("[UE][NAS] We re-tried five times to create PDU Session ", pduSessionId, ", Aborting.")
 		return
@@ -42,6 +53,6 @@ func handleEstablishmentReject(ue *context.UEContext, reject *message.PDUSessEst
 		if current != pduSession || pduSession.GetStateSM() != context.SM5G_PDU_SESSION_ACTIVE_PENDING || ue.GetGnbRx() == nil {
 			return
 		}
-		trigger.InitPduSessionRequestInner(ue, pduSession)
+		trigger.RequestPduSessionWhenAllowed(ue, pduSession)
 	})
 }
