@@ -154,6 +154,22 @@ The SMF only allocates an interface identifier: the UE sends a Router Solicitati
 sudo ./packetrusher --tunnel-backend userspace ue
 ```
 
+### Registration Request flood
+
+`multi-ue --disconnectAfterRegistrationRequest` (`--darr`) makes each UE send its Registration Request, then
+drop its radio link at once, without waiting for the network to answer: the gNB takes the UE's context down,
+and the AMF is left with a registration that never progresses past authentication. UEs are still started
+`--timeBetweenRegistration` ms apart, which sets the rate of Registration Requests:
+
+```bash
+./packetrusher multi-ue -n 1000 --timeBetweenRegistration 10 --disconnectAfterRegistrationRequest
+```
+
+With `--loop`, each UE sends a new Registration Request `--timeBeforeReregistration` ms after its previous one, up to
+`--loopCount` times. No PDU session is established, so the timers of deregistration, handovers and idle have no
+effect. In the [procedure results](#procedure-results), these registrations are started but never succeed: they
+count as `pending`.
+
 ### Runtime UE controls and JSON scenarios
 
 `multi-ue --control-socket` creates a Unix socket to trigger procedures on the UEs of a running test, and

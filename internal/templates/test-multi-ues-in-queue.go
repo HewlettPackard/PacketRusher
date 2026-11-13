@@ -20,7 +20,7 @@ import (
 	log "my5G-RANTester/internal/log"
 )
 
-func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend config.TunnelBackend, dedicatedGnb bool, loop bool, loopCount int, timeBeforeReregistration int, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int, numGnbs int, controlSocket string) error {
+func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend config.TunnelBackend, dedicatedGnb bool, loop bool, loopCount int, timeBeforeReregistration int, timeBetweenRegistration int, timeBeforeDeregistration int, timeBeforeNgapHandover int, timeBeforeXnHandover int, timeBeforeIdle int, timeBeforeReconnecting int, numPduSessions int, numGnbs int, controlSocket string, disconnectAfterRegistrationRequest bool) error {
 	if tunnelMode != config.TunnelDisabled {
 		if !dedicatedGnb && tunnelMode != config.TunnelShared {
 			log.Fatal("You cannot use the --tunnel option, without using the --dedicatedGnb option")
@@ -94,6 +94,8 @@ func TestMultiUesInQueue(numUes int, tunnelMode config.TunnelMode, tunnelBackend
 		RegistrationLoop:         loop,
 		LoopCount:                loopCount,
 		TimeBeforeReregistration: timeBeforeReregistration,
+
+		DisconnectAfterRegistrationRequest: disconnectAfterRegistrationRequest,
 	}
 
 	stopSignal := true

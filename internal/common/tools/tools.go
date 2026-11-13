@@ -95,6 +95,9 @@ type UESimulationConfig struct {
 	RegistrationLoop         bool
 	LoopCount                int
 	TimeBeforeReregistration int
+	// DisconnectAfterRegistrationRequest drops the UE's radio link as soon as it has
+	// sent its Registration Request, without waiting for the network to answer.
+	DisconnectAfterRegistrationRequest bool
 }
 
 // gnbID selects the initial gNB and subsequent handover targets in the same
@@ -175,6 +178,12 @@ func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimul
 			ueRx := make(chan procedures.UeTesterMessage)
 			ueTx := ue.NewUE(ueCfg, simConfig.UeId, ueRx, simConfig.Gnbs[simConfig.gnbID(0)].GetInboundChannel(), wg)
 			pending := []procedures.UeTesterMessage{{Type: procedures.Registration}}
+			if simConfig.DisconnectAfterRegistrationRequest {
+				// The UE handles its commands in order: it sends the Registration
+				// Request, then Kill stops it and closes its link to the gNB, which
+				// drops the UE's context there.
+				pending = append(pending, procedures.UeTesterMessage{Type: procedures.Kill})
+			}
 
 			after := func(milliseconds int) <-chan time.Time {
 				if milliseconds <= 0 {
