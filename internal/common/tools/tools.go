@@ -98,6 +98,8 @@ type UESimulationConfig struct {
 	// DisconnectAfterRegistrationRequest drops the UE's radio link as soon as it has
 	// sent its Registration Request, without waiting for the network to answer.
 	DisconnectAfterRegistrationRequest bool
+	// Sucis holds prepared SUCI overrides; UE n uses entry (n-1) modulo len. Empty keeps the generated SUCI.
+	Sucis [][]byte
 }
 
 // gnbID selects the initial gNB and subsequent handover targets in the same
@@ -160,6 +162,9 @@ func noUe(request *procedures.ControlRequest, state string) procedures.ControlRe
 func SimulateSingleUE(simConfig UESimulationConfig, wg *sync.WaitGroup) *UESimulation {
 	ueCfg := simConfig.Cfg
 	ueCfg.Ue.Msin = IncrementMsin(simConfig.UeId, simConfig.Cfg.Ue.Msin)
+	if len(simConfig.Sucis) > 0 {
+		ueCfg.Ue.SuciOverride = simConfig.Sucis[(simConfig.UeId-1)%len(simConfig.Sucis)]
+	}
 	log.Info("[TESTER] TESTING REGISTRATION USING IMSI ", ueCfg.Ue.Msin, " UE")
 
 	simulation := &UESimulation{commands: make(chan procedures.UeTesterMessage), done: make(chan struct{})}

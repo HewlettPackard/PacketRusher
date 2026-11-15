@@ -44,6 +44,9 @@ type MobileId5GS struct {
 	CipherVal    []byte
 	MACTag       []byte
 	SUCINAI      []uint8
+
+	// Raw, when set, is sent verbatim as the identity value (testing only).
+	Raw []byte
 }
 
 type SUPIType uint8
@@ -133,6 +136,9 @@ func (i *MobileId5GS) UnmarshalBinary(b []byte) error {
 
 // MarshalBinary returns the value part, not including IEI and length.
 func (i *MobileId5GS) MarshalBinary() ([]byte, error) {
+	if i.Raw != nil {
+		return append([]byte(nil), i.Raw...), nil
+	}
 	switch i.TypeOfId {
 	case IdType_5GS_None:
 		return i.marshalBinary_None()

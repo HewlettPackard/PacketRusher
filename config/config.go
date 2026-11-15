@@ -151,6 +151,8 @@ type Ue struct {
 	Ciphering              Ciphering  `yaml:"ciphering"`
 	TunnelMode             TunnelMode `yaml:"-"`
 	TunnelMTU              int        `yaml:"tunnelmtu"`
+	// SuciOverride, when set, replaces the generated SUCI with these raw 5GS mobile identity bytes.
+	SuciOverride []byte `yaml:"-"`
 
 	// PDUSessionType is IPv4 (the default), IPv6 or IPv4v6.
 	PDUSessionType PDUSessionType `yaml:"pdusessiontype"`

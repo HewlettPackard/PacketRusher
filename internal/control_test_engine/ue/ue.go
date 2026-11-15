@@ -50,6 +50,12 @@ func NewUE(conf config.Config, id int, ueMgrChannel chan procedures.UeTesterMess
 		gnbInboundChannel,
 		id)
 
+	if len(conf.Ue.SuciOverride) > 0 {
+		if err := ue.SetSuciOverride(conf.Ue.SuciOverride); err != nil {
+			log.Fatal("[UE][CONFIG] Invalid SUCI override: ", err)
+		}
+	}
+
 	go func() {
 		// starting communication with GNB and listen.
 		service.InitConn(ue, ue.GetGnbInboundChannel())

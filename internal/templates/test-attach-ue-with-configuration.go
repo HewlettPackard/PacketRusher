@@ -12,5 +12,5 @@ func TestAttachUeWithConfiguration(tunnelEnabled bool, tunnelBackend config.Tunn
 	if tunnelEnabled {
 		tunnelMode = config.TunnelVrf
 	}
-	return TestMultiUesInQueue(1, tunnelMode, tunnelBackend, true, false, 0, 200, 500, 0, 0, 0, 0, 0, 1, 0, "", false)
+	return TestMultiUesInQueue(1, tunnelMode, tunnelBackend, true, false, 0, 200, 500, 0, 0, 0, 0, 0, 1, 0, "", false, "")
 }

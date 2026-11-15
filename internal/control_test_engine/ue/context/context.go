@@ -546,6 +546,18 @@ func (ue *UEContext) EncodeSuci() nasType.MobileId5GS {
 	return suci
 }
 
+// SetSuciOverride replaces the generated SUCI with the given raw 5GS mobile
+// identity bytes (without IEI or length).
+func (ue *UEContext) SetSuciOverride(raw []byte) error {
+	if len(raw) == 0 {
+		return errors.New("empty SUCI override")
+	}
+	// The bytes are sent verbatim, whether or not they form a valid identity.
+	suci := nasType.MobileId5GS{TypeOfId: raw[0] & 0x07, Raw: append([]byte(nil), raw...)}
+	ue.UeSecurity.Suci = suci
+	return nil
+}
+
 func (ue *UEContext) GetAmfRegionId() uint8 {
 	return ue.UeSecurity.Guti.AMFRegionID
 }

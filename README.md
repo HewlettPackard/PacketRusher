@@ -170,6 +170,63 @@ With `--loop`, each UE sends a new Registration Request `--timeBeforeReregistrat
 effect. In the [procedure results](#procedure-results), these registrations are started but never succeed: they
 count as `pending`.
 
+### Sending prepared or malformed SUCIs
+
+`multi-ue --suciFile <path>` replaces the SUCI PacketRusher would normally generate from `ue.msin` and the
+other `config.yml` identity fields with one taken from a file, line by line: UE *n* sends the identity on
+line *n*, wrapping around if there are more UEs than lines. Each line is a hex-encoded 5GS mobile identity
+(the SUCI's bytes, without the IEI or length octet that precede it on the wire), with optional spaces,
+colons and a `0x` prefix, blank lines, and `#` comments all ignored:
+
+```bash
+./packetrusher multi-ue -n 5 --suciFile sucis.txt
+```
+
+A line does **not** need to decode as a valid SUCI. Whatever bytes are on the line are sent verbatim in the
+Registration Request's mobile identity field, so you can test an AMF's handling of malformed, truncated, or
+random identities as well as well-formed ones with a chosen MCC/MNC, routing indicator, protection scheme,
+key ID, or scheme output.
+
+[`dev/gen_suci_file.py`](dev/gen_suci_file.py) builds these files. It has no dependencies beyond Python 3.
+
+Generate sequential null-scheme SUCIs, counting the MSIN up from a starting value:
+
+```bash
+dev/gen_suci_file.py --mcc 999 --mnc 70 --msin 0000000120 --count 5 -o sucis.txt
+```
+
+Build one line per row of a CSV (columns `mcc,mnc,routing_indicator,scheme,key_id,msin,scheme_output`; leave
+`msin` or `scheme_output` empty as needed, `scheme_output` wins if both are given), useful when every line
+should differ in more than the MSIN:
+
+```bash
+dev/gen_suci_file.py --csv rows.csv -o sucis.txt
+```
+
+Send several SUCIs for the same SUPI, each with its own protection-scheme output, by repeating each MSIN
+`--repeat` times and randomising the scheme output per line (the UE still sends whichever line its position
+maps to, so UEs 1-3 above would each present a different SUCI for the same subscriber):
+
+```bash
+dev/gen_suci_file.py --scheme 1 --count 5 --repeat 3 --random-scheme-output 40-48
+```
+
+Send pure random bit streams with no SUCI structure at all, to fuzz the AMF's identity parsing (`--seed`
+makes the file reproducible):
+
+```bash
+dev/gen_suci_file.py --random-raw 20 --length 1-64 --seed 1
+```
+
+Check what a file contains, including lines that don't decode as a valid identity:
+
+```bash
+dev/gen_suci_file.py --decode sucis.txt
+```
+
+`--suciFile` only replaces the identity in the initial Registration Request; a UE that already holds a
+5G-GUTI from a previous registration still presents that GUTI, as it would without the option.
+
 ### Runtime UE controls and JSON scenarios
 
 `multi-ue --control-socket` creates a Unix socket to trigger procedures on the UEs of a running test, and
